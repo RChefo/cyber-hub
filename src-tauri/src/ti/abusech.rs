@@ -11,6 +11,7 @@ use super::indicator::{HashType, Indicator, Kind};
 use super::model::{min_max, tidy, Level, Parsed, Report, Score, Table, Verdict};
 
 /// A public, harmless test hash (EICAR test file, SHA-256) used to validate an Auth-Key.
+#[cfg(any(test, feature = "provisioning"))]
 pub const PROBE_SHA256: &str = "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f";
 
 const AUTH_STATUSES: &[&str] = &["unknown_auth_key", "no_api_key", "user_blacklisted", "unauthorized"];
@@ -184,6 +185,7 @@ pub async fn bazaar_lookup(client: &reqwest::Client, base: &str, key: &str, ind:
     bazaar_parse(&resp.body)
 }
 
+#[cfg(any(test, feature = "provisioning"))]
 /// Validate an abuse.ch Auth-Key with one MalwareBazaar query for a harmless public hash.
 pub async fn validate(client: &reqwest::Client, base: &str, key: &str) -> Result<Option<String>, ApiError> {
     let resp = http::send(client.post(format!("{base}/")).header("Auth-Key", key).form(&[("query", "get_info"), ("hash", PROBE_SHA256)]), key).await?;

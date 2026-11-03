@@ -1,5 +1,5 @@
 import { Button, Tabs } from "@heroui/react";
-import { Database, History, Radio, Search, Settings, ShieldAlert, Trash2 } from "lucide-react";
+import { Database, History, Radio, Search, ShieldAlert, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useApp } from "@/app/store";
 import { SeverityBarChart } from "@/components/charts/SeverityBarChart";
@@ -38,7 +38,7 @@ function ResultRow({ r, cachedAt, onOpen }: { r: CveRecord; cachedAt?: string; o
 }
 
 export default function IntelPage() {
-  const { runtime, prefs, setPref, navigate } = useApp();
+  const { runtime, prefs, setPref } = useApp();
   const confirm = useConfirm();
   const live = prefs["cve.preferLive"] !== false;
   const [query, setQuery] = useState("");
@@ -128,7 +128,7 @@ export default function IntelPage() {
         </div>
         <p className="mt-2 text-[12.5px] text-muted">
           {live
-            ? "Live mode sends your query to services.nvd.nist.gov. Without an API key NVD allows about 5 requests per 30 seconds."
+            ? "Live mode sends your query to services.nvd.nist.gov. Without a provisioned NVD key, NVD allows about 5 requests per 30 seconds."
             : "Cache mode searches only CVE records already stored on this workstation. Nothing leaves your machine."}
         </p>
       </div>
@@ -140,10 +140,6 @@ export default function IntelPage() {
               <ErrorBlock message={error} />
               {rateLimited && (
                 <div className="flex gap-2">
-                  <Button size="sm" variant="tertiary" onPress={() => navigate("settings")}>
-                    <Settings className="size-3.5" />
-                    Add an NVD API key
-                  </Button>
                   <Button size="sm" variant="ghost" onPress={() => run(query, false)}>
                     Search the local cache instead
                   </Button>

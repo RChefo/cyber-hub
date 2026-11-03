@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TiProviderResult, TiReport } from "@/lib/types";
-import { compareRows, correlate, sortResults, summaryParts } from "./model";
+import { availability, compareRows, correlate, sortResults, summaryParts } from "./model";
 
 const report = (over: Partial<TiReport>): TiReport => ({
   verdict: null,
@@ -78,5 +78,23 @@ describe("compareRows", () => {
     expect(providers).toEqual(["VirusTotal", "AlienVault OTX"]);
     expect(rows.find((r) => r.label.startsWith("Verdict"))!.cells).toEqual(["3 of 70 engines: malicious", "—"]);
     expect(rows.find((r) => r.label === "Retrieved")!.cells[0]).toBe("2026-11-03 10:00 (live)");
+  });
+});
+
+describe("availability", () => {
+  const at = "2026-11-03T10:00:00Z";
+  it("never asks the user for credentials", () => {
+    const a = availability({ configured: false, enabled: true, health: null });
+    expect(a.label).toBe("Not configured");
+    expect(a.detail).toMatch(/provisioned by the application owner/);
+    expect(a.detail).not.toMatch(/settings|enter|add|key/i);
+  });
+  it("reports the observed service state", () => {
+    expect(availability({ configured: true, enabled: false, health: null }).label).toBe("Turned off");
+    expect(availability({ configured: true, enabled: true, health: null }).label).toBe("Available");
+    expect(availability({ configured: true, enabled: true, health: { state: "rate_limited", message: "Shodan quota or rate limit reached.", at, quota: null } }).tone).toBe("warning");
+    const rejected = availability({ configured: true, enabled: true, health: { state: "rejected", message: "x", at, quota: null } });
+    expect(rejected.label).toBe("Credentials rejected");
+    expect(rejected.detail).toMatch(/application owner/);
   });
 });

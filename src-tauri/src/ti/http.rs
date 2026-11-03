@@ -37,7 +37,7 @@ impl ApiError {
     pub fn message(&self, provider: &str) -> String {
         match self {
             ApiError::NotFound => format!("{provider} has no record of this indicator."),
-            ApiError::Unauthorized => format!("{provider} rejected the API key. Check or replace it in Settings."),
+            ApiError::Unauthorized => format!("{provider} rejected the configured credentials. The application owner needs to update them."),
             ApiError::Quota(m) => {
                 let m = m.trim().trim_end_matches('.');
                 if m.is_empty() {

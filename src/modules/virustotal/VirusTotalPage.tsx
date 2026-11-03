@@ -16,7 +16,7 @@ import { FileAnalysis } from "./FileAnalysis";
 import { labelOf, ReportView } from "./ReportView";
 
 export default function VirusTotalPage() {
-  const { runtime, navigate, route } = useApp();
+  const { runtime, route } = useApp();
   const keyStatus = useQuery(["vt"], api.vtKeyStatus, [], runtime);
   const recent = useQuery(["vt"], () => api.vtRecent(25), [], runtime);
   const confirm = useConfirm();
@@ -71,13 +71,8 @@ export default function VirusTotalPage() {
         <EmptyBlock
           className="mb-3"
           icon={KeyRound}
-          title="Add a VirusTotal API key to start"
-          description="The key is stored in your operating system's credential store and used only by the Cyber Hub backend. It is never shown again after saving."
-          action={
-            <Button size="sm" variant="primary" onPress={() => navigate("settings")}>
-              Open Settings
-            </Button>
-          }
+          title="VirusTotal is not available on this installation"
+          description="VirusTotal has not been configured: its credentials have not been provisioned by the application owner, so lookups and file analysis are unavailable. There is nothing to set up here."
         />
       )}
       {keyStatus.error && <ErrorBlock className="mb-3" message={keyStatus.error} />}
@@ -167,7 +162,7 @@ export default function VirusTotalPage() {
               variant="ghost"
               isDisabled={!recent.data?.length}
               onPress={async () => {
-                if (await confirm.ask({ title: "Clear VirusTotal cache?", body: "Cached reports and the recent lookups list are deleted. Your API key is kept.", confirmLabel: "Clear cache" })) {
+                if (await confirm.ask({ title: "Clear VirusTotal cache?", body: "Cached reports and the recent lookups list are deleted.", confirmLabel: "Clear cache" })) {
                   await api.vtCacheClear().catch((e) => notify.error("Could not clear the cache", e));
                   invalidate("vt");
                   setResult(null);

@@ -13,7 +13,7 @@ use serde_json::Value;
 use tauri::State;
 
 use crate::commands::activity::log;
-use crate::commands::system::read_secret;
+use crate::commands::system::{read_secret, NVD_KEY};
 use crate::db::Db;
 use crate::error::{validation, AppError, AppResult};
 use crate::util::{clean, http_url, now};
@@ -363,16 +363,17 @@ pub async fn cve_search(db: State<'_, Db>, query: String, live: bool) -> AppResu
             .append_pair("startIndex", "0");
     }
 
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).user_agent(USER_AGENT).build()?;
+    // no redirects: a custom `apiKey` header would otherwise be forwarded to another host
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).user_agent(USER_AGENT).redirect(reqwest::redirect::Policy::none()).build()?;
     let mut req = client.get(url);
-    if let Some(key) = read_secret("nvd_api_key") {
+    if let Some(key) = read_secret(NVD_KEY) {
         req = req.header("apiKey", key);
     }
     let resp = req.send().await?;
     let status = resp.status();
     if status.as_u16() == 403 || status.as_u16() == 429 {
         return Err(AppError::Network(
-            "NVD rate limit reached. Wait 30 seconds, add an NVD API key in Settings, or search the local cache.".into(),
+            "NVD rate limit reached. Wait 30 seconds or search the local cache.".into(),
         ));
     }
     if !status.is_success() {

@@ -1,4 +1,4 @@
-import type { TiLevel, TiProviderResult, TiStatus, TiSummary, VtKind } from "@/lib/types";
+import type { TiLevel, TiProviderResult, TiProviderStatus, TiStatus, TiSummary, VtKind } from "@/lib/types";
 
 export type Tone = "default" | "accent" | "success" | "warning" | "danger";
 
@@ -14,7 +14,7 @@ export const STATUS_META: Record<TiStatus, { tone: Tone; label: string }> = {
   found: { tone: "accent", label: "Has data" },
   not_found: { tone: "default", label: "No record" },
   unsupported: { tone: "default", label: "Not applicable" },
-  no_key: { tone: "warning", label: "No key" },
+  no_key: { tone: "default", label: "Not configured" },
   disabled: { tone: "default", label: "Turned off" },
   rate_limited: { tone: "warning", label: "Rate limited" },
   error: { tone: "danger", label: "Failed" },
@@ -99,4 +99,25 @@ export function compareRows(results: TiProviderResult[]): { providers: string[];
     { label: "Retrieved", cells: withData.map((r) => cell(r, (x) => (x.fetchedAt ? `${x.fetchedAt.replace("T", " ").slice(0, 16)} (${x.source})` : null))) },
   ];
   return { providers: withData.map((r) => r.providerName), rows };
+}
+
+/**
+ * Read-only service availability for a provider, as shown to users. Credentials are managed by
+ * the application owner, so "not configured" never asks the user to do anything.
+ */
+export function availability(p: Pick<TiProviderStatus, "configured" | "enabled" | "health">): { tone: Tone; label: string; detail: string | null } {
+  if (!p.configured) return { tone: "default", label: "Not configured", detail: "Unavailable: its credentials have not been provisioned by the application owner." };
+  if (!p.enabled) return { tone: "default", label: "Turned off", detail: "Turned off in Settings; it is not sent any indicators." };
+  const h = p.health;
+  if (!h) return { tone: "success", label: "Available", detail: null };
+  switch (h.state) {
+    case "ok":
+      return { tone: "success", label: "Available", detail: null };
+    case "rate_limited":
+      return { tone: "warning", label: "Rate limited", detail: h.message };
+    case "rejected":
+      return { tone: "danger", label: "Credentials rejected", detail: "The provider rejected the configured credentials. The application owner needs to update them." };
+    default:
+      return { tone: "warning", label: "Last request failed", detail: h.message };
+  }
 }

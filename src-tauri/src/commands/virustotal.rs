@@ -76,7 +76,7 @@ pub fn api_error(e: ApiError) -> AppError {
 }
 
 fn key() -> AppResult<String> {
-    read_secret(KEY_NAME).ok_or_else(|| validation("Add a VirusTotal API key in Settings → Threat intelligence providers."))
+    read_secret(KEY_NAME).ok_or_else(|| validation(crate::commands::threat_intel::not_configured(ProviderId::Virustotal)))
 }
 
 #[derive(Debug, Serialize)]
@@ -222,7 +222,7 @@ pub async fn vt_cache_clear(db: State<'_, Db>) -> AppResult<()> {
 
 #[tauri::command]
 pub async fn vt_key_status() -> AppResult<bool> {
-    Ok(read_secret(KeyId::Virustotal.secret_name()).is_some())
+    Ok(crate::commands::system::secret_configured(KeyId::Virustotal.secret_name()))
 }
 
 /* ─────────────── file analysis ─────────────── */

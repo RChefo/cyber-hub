@@ -15,7 +15,11 @@ coverage
 *.sqlite
 *.sqlite3
 
-# secrets and environment
+# secrets and environment (provider credentials are provisioned with `cyberhub-keys`;
+# local secrets files must never be committed — see docs/PROVISIONING.md)
+secrets.local.*
+*.secrets
+*.secrets.env
 .env
 .env.*
 !.env.example

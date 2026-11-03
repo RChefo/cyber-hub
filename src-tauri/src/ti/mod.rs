@@ -184,16 +184,15 @@ impl ProviderId {
         }
     }
 
-    /// Documented access conditions, shown in Settings.
-    pub fn access_note(self) -> &'static str {
+    /// Service limits shown in Settings. Deliberately no credential instructions: credentials
+    /// are provisioned by the application owner.
+    pub fn service_note(self) -> &'static str {
         match self {
-            ProviderId::Virustotal => "Free community key: 4 requests/minute, daily and monthly caps. Lookups and uploads become part of the VirusTotal dataset.",
-            ProviderId::Abuseipdb => "Free account: 1,000 IP checks per day. Remaining quota is shown after each lookup.",
-            ProviderId::Otx => "Free account key. OTX does not publish a request limit; Cyber Hub stays under 30/minute.",
-            ProviderId::Urlhaus | ProviderId::Malwarebazaar | ProviderId::Threatfox => {
-                "Free abuse.ch Auth-Key (one key for URLhaus, MalwareBazaar and ThreatFox) under fair use. Commercial use may require a paid abuse.ch / Spamhaus subscription."
-            }
-            ProviderId::Shodan => "Every Shodan account has an API key. Host lookups do not use query credits; all plans are limited to 1 request/second.",
+            ProviderId::Virustotal => "Public API: 4 requests per minute plus daily caps. Indicators looked up and files uploaded can become part of the VirusTotal dataset.",
+            ProviderId::Abuseipdb => "Up to 1,000 IP checks per day; the remaining quota is shown after a lookup.",
+            ProviderId::Otx => "No published request limit; Cyber Hub stays under 30 requests per minute.",
+            ProviderId::Urlhaus | ProviderId::Malwarebazaar | ProviderId::Threatfox => "abuse.ch community API under fair use.",
+            ProviderId::Shodan => "1 request per second; host lookups do not use query credits.",
         }
     }
 }
@@ -201,6 +200,7 @@ impl ProviderId {
 impl KeyId {
     pub const ALL: [KeyId; 5] = [KeyId::Virustotal, KeyId::Abuseipdb, KeyId::Otx, KeyId::Abusech, KeyId::Shodan];
 
+    #[cfg(any(test, feature = "provisioning"))]
     pub fn as_str(self) -> &'static str {
         match self {
             KeyId::Virustotal => "virustotal",
@@ -211,6 +211,7 @@ impl KeyId {
         }
     }
 
+    #[cfg(any(test, feature = "provisioning"))]
     pub fn parse(s: &str) -> Option<KeyId> {
         Self::ALL.into_iter().find(|k| k.as_str() == s)
     }
@@ -226,6 +227,7 @@ impl KeyId {
         }
     }
 
+    #[cfg(any(test, feature = "provisioning"))]
     pub fn label(self) -> &'static str {
         match self {
             KeyId::Virustotal => "VirusTotal API key",
@@ -236,10 +238,12 @@ impl KeyId {
         }
     }
 
+    #[cfg(any(test, feature = "provisioning"))]
     pub fn providers(self) -> Vec<ProviderId> {
         ProviderId::ALL.into_iter().filter(|p| p.key() == self).collect()
     }
 
+    #[cfg(any(test, feature = "provisioning"))]
     pub fn signup_url(self) -> &'static str {
         match self {
             KeyId::Virustotal => "https://www.virustotal.com/gui/my-apikey",
@@ -251,6 +255,7 @@ impl KeyId {
     }
 
     /// Local format check before a key is sent anywhere.
+    #[cfg(any(test, feature = "provisioning"))]
     pub fn check_format(self, key: &str) -> Result<(), String> {
         let ok = match self {
             KeyId::Virustotal => key.len() == 64 && key.chars().all(|c| c.is_ascii_hexdigit()),
@@ -263,6 +268,24 @@ impl KeyId {
         } else {
             Err(format!("This does not look like a {} (8–256 letters, digits, '-', '_' or '.').", self.label()))
         }
+    }
+}
+
+/// One read-only request proving a credential works, using a fixed public probe (never user
+/// data). Returns quota / plan information where the provider reports it. Used only by the
+/// developer provisioning tool and tests; no IPC command reaches it.
+#[cfg(any(test, feature = "provisioning"))]
+pub async fn probe(k: KeyId, client: &reqwest::Client, key: &str) -> Result<Option<String>, http::ApiError> {
+    match k {
+        KeyId::Virustotal => match crate::vt::get(client, &ProviderId::Virustotal.base(), "/ip_addresses/8.8.8.8", key).await {
+            Ok(_) | Err(http::ApiError::NotFound) => Ok(None),
+            Err(http::ApiError::Quota(_)) => Ok(Some("credentials accepted; VirusTotal reports the quota is used up for now".into())),
+            Err(e) => Err(e),
+        },
+        KeyId::Abuseipdb => abuseipdb::validate(client, &ProviderId::Abuseipdb.base(), key).await,
+        KeyId::Otx => otx::validate(client, &ProviderId::Otx.base(), key).await,
+        KeyId::Abusech => abusech::validate(client, &ProviderId::Malwarebazaar.base(), key).await,
+        KeyId::Shodan => shodan::validate(client, &ProviderId::Shodan.base(), key).await,
     }
 }
 

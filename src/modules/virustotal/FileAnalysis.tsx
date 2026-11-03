@@ -239,7 +239,7 @@ export function FileAnalysis({ hasKey }: { hasKey: boolean }) {
             </Button>
           }
         >
-          {!hasKey && <p className="text-[13px] text-muted">Add a VirusTotal API key in Settings to run lookups.</p>}
+          {!hasKey && <p className="text-[13px] text-muted">VirusTotal is not configured on this installation, so lookups and uploads are unavailable.</p>}
           {hashLoading && !hashResult && <InlineSpinner label="Looking up the hash…" />}
           {hashError && <ErrorBlock message={hashError} onRetry={() => checkHash(true)} />}
           {hashResult && (

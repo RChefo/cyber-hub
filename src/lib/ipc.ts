@@ -171,9 +171,6 @@ export const api = {
   tiDetect: (query: string) => call<T.VtDetected>("ti_detect", { query }),
   tiProviders: () => call<T.TiProvidersOverview>("ti_providers"),
   tiProviderSetEnabled: (providerId: string, enabled: boolean) => call<void>("ti_provider_set_enabled", { providerId, enabled }),
-  tiKeySet: (keyId: string, value: string) => call<T.TiKeyCheck>("ti_key_set", { keyId, value }),
-  tiKeyTest: (keyId: string) => call<T.TiKeyCheck>("ti_key_test", { keyId }),
-  tiKeyDelete: (keyId: string) => call<void>("ti_key_delete", { keyId }),
   tiLookup: (query: string, providers: string[] | null, refresh = false) => call<T.TiInvestigation>("ti_lookup", { query, providers, refresh }),
   tiHistory: (limit = 30) => call<T.TiHistoryEntry[]>("ti_history", { limit }),
   tiHistoryClear: () => call<void>("ti_history_clear"),
@@ -187,7 +184,4 @@ export const api = {
   // system
   systemInfo: () => call<T.SystemInfo>("system_info"),
   openTerminal: (cwd?: string | null) => call<string>("open_terminal", { cwd: cwd ?? null }),
-  secretSet: (name: string, value: string) => call<void>("secret_set", { name, value }),
-  secretExists: (name: string) => call<boolean>("secret_exists", { name }),
-  secretDelete: (name: string) => call<void>("secret_delete", { name }),
 };

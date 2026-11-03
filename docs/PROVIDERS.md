@@ -1,6 +1,6 @@
 # Threat-intelligence providers
 
-Cyber Hub queries each provider from the Rust backend with the user's own key, stored in the OS credential store. Every provider is optional and can be turned off in Settings → Threat intelligence providers. Requirements below are taken from each provider's public API documentation (checked November 2026); plans and limits can change, so check the provider before relying on them.
+Cyber Hub queries each provider from the Rust backend with credentials provisioned by the application owner and kept in the OS credential store ([PROVISIONING.md](PROVISIONING.md)). End users do not manage keys. Every provider is optional and can be turned off in Settings → Threat intelligence providers, which also shows read-only availability. Requirements below are taken from each provider's public API documentation (checked November 2026); plans and limits can change, so check the provider before relying on them.
 
 ## Integrated
 

@@ -10,6 +10,9 @@ mod db;
 mod detect;
 mod error;
 mod process;
+/// Developer-only credential provisioning (`cyberhub-keys`); not compiled into the app.
+#[cfg(feature = "provisioning")]
+pub mod provision;
 mod redact;
 mod scope;
 mod targets;
@@ -131,9 +134,6 @@ pub fn run() {
             // threat intelligence providers
             threat_intel::ti_providers,
             threat_intel::ti_provider_set_enabled,
-            threat_intel::ti_key_set,
-            threat_intel::ti_key_test,
-            threat_intel::ti_key_delete,
             threat_intel::ti_detect,
             threat_intel::ti_lookup,
             threat_intel::ti_history,
@@ -146,9 +146,6 @@ pub fn run() {
             // system
             system::system_info,
             system::open_terminal,
-            system::secret_set,
-            system::secret_exists,
-            system::secret_delete,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Cyber Hub")

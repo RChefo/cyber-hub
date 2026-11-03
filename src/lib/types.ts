@@ -474,36 +474,32 @@ export interface TiInvestigation {
   saved: boolean;
 }
 
+export interface TiHealth {
+  state: "ok" | "rate_limited" | "rejected" | "error";
+  /** sanitized; never contains a credential */
+  message: string | null;
+  at: string;
+  quota: string | null;
+}
+
 export interface TiProviderStatus {
   id: string;
   name: string;
   description: string;
   kinds: VtKind[];
-  keyId: string;
-  keyStored: boolean;
+  /** credentials provisioned by the application owner (the value is never sent to the UI) */
+  configured: boolean;
   enabled: boolean;
-  accessNote: string;
+  serviceNote: string;
   docsUrl: string;
   rateLimit: string;
-}
-
-export interface TiKeyStatus {
-  id: string;
-  label: string;
-  stored: boolean;
-  providers: string[];
-  signupUrl: string;
+  /** last observed outcome of a real lookup since the app started */
+  health: TiHealth | null;
 }
 
 export interface TiProvidersOverview {
   providers: TiProviderStatus[];
-  keys: TiKeyStatus[];
-}
-
-export interface TiKeyCheck {
-  ok: boolean;
-  message: string;
-  quota: string | null;
+  nvdConfigured: boolean;
 }
 
 export interface TiHistoryEntry {

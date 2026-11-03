@@ -29,7 +29,7 @@ import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { TiInvestigation, TiProviderResult, TiProviderStatus, TiSummary, VtDetected } from "@/lib/types";
 import { cn, debounce, formatRelative } from "@/lib/utils";
-import { compareRows, correlate, LEVEL_META, sortResults, STATUS_META, summaryParts } from "./model";
+import { availability, compareRows, correlate, LEVEL_META, sortResults, STATUS_META, summaryParts } from "./model";
 
 const KIND_LABEL: Record<string, string> = { ip: "IP address", domain: "Domain", url: "URL", file: "File hash" };
 
@@ -266,9 +266,9 @@ function ProviderPicker({ providers, selected, onToggle, kind }: { providers: Ti
     <div className="flex flex-wrap items-center gap-1.5">
       {providers.map((p) => {
         const applicable = !kind || p.kinds.includes(kind as never);
-        const usable = p.enabled && p.keyStored;
+        const usable = p.enabled && p.configured;
         const on = selected.has(p.id) && usable;
-        const reason = !p.enabled ? "off" : !p.keyStored ? "no key" : !applicable ? "n/a" : null;
+        const reason = !p.enabled ? "off" : !p.configured ? "not configured" : !applicable ? "n/a" : null;
         return (
           <button
             key={p.id}
@@ -276,7 +276,7 @@ function ProviderPicker({ providers, selected, onToggle, kind }: { providers: Ti
             aria-pressed={on}
             disabled={!usable}
             onClick={() => onToggle(p.id)}
-            title={!p.enabled ? "Turned off in Settings" : !p.keyStored ? "Add a key in Settings" : !applicable ? `${p.name} does not look up this type` : on ? "Click to skip" : "Click to include"}
+            title={!p.enabled ? "Turned off in Settings" : !p.configured ? "Unavailable: not configured by the application owner" : !applicable ? `${p.name} does not look up this type` : on ? "Click to skip" : "Click to include"}
             className={cn(
               "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12.5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-focus",
               on && applicable ? "bg-accent-soft text-accent-soft-foreground" : "bg-white/[0.04] text-muted",
@@ -309,7 +309,7 @@ export default function ThreatIntelPage() {
 
   const providers = overview.data?.providers ?? [];
   const selected = useMemo(() => new Set(providers.filter((p) => !skipped.has(p.id)).map((p) => p.id)), [providers, skipped]);
-  const usable = providers.filter((p) => p.enabled && p.keyStored && selected.has(p.id) && (!detected.ok || p.kinds.includes(detected.ok.kind)));
+  const usable = providers.filter((p) => p.enabled && p.configured && selected.has(p.id) && (!detected.ok || p.kinds.includes(detected.ok.kind)));
 
   const detect = useMemo(
     () =>
@@ -372,7 +372,7 @@ export default function ThreatIntelPage() {
 
   const sorted = result ? sortResults(result.results) : [];
   const related = result ? correlate(result.results, result.indicator) : [];
-  const noKeys = overview.data && !overview.data.keys.some((k) => k.stored);
+  const noneConfigured = overview.data && !overview.data.providers.some((p) => p.configured);
 
   return (
     <div>
@@ -387,17 +387,12 @@ export default function ThreatIntelPage() {
         }
       />
 
-      {noKeys && (
+      {noneConfigured && (
         <EmptyBlock
           className="mb-3"
           icon={Radar}
-          title="Connect at least one provider"
-          description="Add API keys in Settings → Threat intelligence providers. AbuseIPDB, OTX, abuse.ch and Shodan offer free keys; each is stored in your system keychain."
-          action={
-            <Button size="sm" variant="primary" onPress={() => navigate("settings")}>
-              Open Settings
-            </Button>
-          }
+          title="Threat intelligence is not available on this installation"
+          description="No intelligence provider has been configured. Provider credentials are provisioned by the application owner; there is nothing to set up here."
         />
       )}
 
@@ -552,7 +547,7 @@ export default function ThreatIntelPage() {
             </>
           )}
 
-          {!result && !loading && !error && !noKeys && (
+          {!result && !loading && !error && !noneConfigured && (
             <EmptyBlock
               icon={Radar}
               title="Investigate an indicator"
@@ -630,10 +625,10 @@ export default function ThreatIntelPage() {
               {providers.map((p) => (
                 <li key={p.id} className="flex items-center justify-between gap-2 text-[12.5px]">
                   <span className="flex items-center gap-2">
-                    <StatusDot tone={p.enabled && p.keyStored ? "success" : p.enabled ? "warning" : "default"} />
+                    <StatusDot tone={availability(p).tone} />
                     {p.name}
                   </span>
-                  <span className="text-muted">{!p.enabled ? "Off" : p.keyStored ? "Ready" : "No key"}</span>
+                  <span className="text-muted">{availability(p).label}</span>
                 </li>
               ))}
             </ul>

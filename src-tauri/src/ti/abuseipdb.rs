@@ -82,6 +82,7 @@ pub async fn lookup(client: &reqwest::Client, base: &str, key: &str, ind: &Indic
     Ok((parse(&resp.body)?, quota(&resp)))
 }
 
+#[cfg(any(test, feature = "provisioning"))]
 /// Validate a key with one check of a fixed public address. Returns the quota line.
 pub async fn validate(client: &reqwest::Client, base: &str, key: &str) -> Result<Option<String>, ApiError> {
     let resp = http::send(request(client, base, key, "8.8.8.8", 1), key).await?;

@@ -129,13 +129,16 @@ fn dirs_home() -> Option<PathBuf> {
 }
 
 /* ─────────────── secrets (OS keychain) ─────────────── */
+//
+// Credentials are provisioned by the application owner with the developer-only
+// `cyberhub-keys` tool (see docs/PROVISIONING.md). The app itself only reads them, inside
+// the Rust functions that call a provider. No IPC command can read, list, set or delete a
+// credential; the web view only learns whether a service is configured.
 
-const SERVICE: &str = "dev.cyberhub.workstation";
-/// Every secret Cyber Hub may store (used by backend code).
-const KNOWN_SECRETS: &[&str] = &["nvd_api_key", "virustotal_api_key", "abuseipdb_api_key", "otx_api_key", "abusech_auth_key", "shodan_api_key"];
-/// Secrets the generic UI commands may set / check / delete. Threat-intelligence keys are
-/// managed only through `ti_key_set` (verifies before storing) and `ti_key_delete`.
-const UI_SECRETS: &[&str] = &["nvd_api_key"];
+pub const SERVICE: &str = "dev.cyberhub.workstation";
+pub const NVD_KEY: &str = "nvd_api_key";
+/// Every credential Cyber Hub may use.
+pub const KNOWN_SECRETS: &[&str] = &[NVD_KEY, "virustotal_api_key", "abuseipdb_api_key", "otx_api_key", "abusech_auth_key", "shodan_api_key"];
 
 fn entry(name: &str) -> AppResult<keyring::Entry> {
     if !KNOWN_SECRETS.contains(&name) {
@@ -144,22 +147,24 @@ fn entry(name: &str) -> AppResult<keyring::Entry> {
     keyring::Entry::new(SERVICE, name).map_err(|e| AppError::Secret(e.to_string()))
 }
 
-fn ui_entry(name: &str) -> AppResult<keyring::Entry> {
-    if !UI_SECRETS.contains(&name) {
-        return Err(validation("Unknown secret name"));
-    }
-    entry(name)
-}
-
 /// Backend-only read. Secret values are never returned to the web view.
 pub fn read_secret(name: &str) -> Option<String> {
     entry(name).ok()?.get_password().ok().filter(|v| !v.is_empty())
 }
 
+/// Whether a credential is present (never its value).
+pub fn secret_configured(name: &str) -> bool {
+    read_secret(name).is_some()
+}
+
+/// Write a credential. Only compiled into the developer provisioning tool.
+#[cfg(feature = "provisioning")]
 pub fn store_secret(name: &str, value: &str) -> AppResult<()> {
     entry(name)?.set_password(value).map_err(|e| AppError::Secret(e.to_string()))
 }
 
+/// Delete a credential. Only compiled into the developer provisioning tool.
+#[cfg(feature = "provisioning")]
 pub fn delete_secret(name: &str) -> AppResult<()> {
     match entry(name)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
@@ -167,27 +172,29 @@ pub fn delete_secret(name: &str) -> AppResult<()> {
     }
 }
 
-/// Secrets are write-only from the frontend: values are never returned.
-#[tauri::command]
-pub async fn secret_set(name: String, value: String) -> AppResult<()> {
-    let v = value.trim();
-    if v.is_empty() || v.len() > 512 {
-        return Err(validation("Secret must be 1-512 characters"));
+#[cfg(test)]
+mod tests {
+    /// Guard: the web view must not be able to read, list, set, test or delete credentials.
+    /// Fails if such a command is ever registered in the IPC handler list again.
+    #[test]
+    fn no_credential_commands_are_exposed_over_ipc() {
+        let lib = include_str!("../lib.rs");
+        let start = lib.find("generate_handler![").expect("handler list");
+        let handlers = &lib[start..start + lib[start..].find("])").expect("end of handler list")];
+        let names: Vec<&str> = handlers.lines().map(str::trim).filter(|l| l.contains("::")).collect();
+        assert!(names.len() > 50, "handler list parsed");
+        for name in names {
+            let n = name.to_ascii_lowercase();
+            for banned in ["secret", "_key_set", "_key_test", "_key_delete", "credential", "provision", "keychain"] {
+                assert!(!n.contains(banned), "credential command exposed over IPC: {name}");
+            }
+        }
+        // the only credential-related information the UI gets is "configured or not"
+        assert!(handlers.contains("vt_key_status") && handlers.contains("ti_providers"));
     }
-    ui_entry(&name)?.set_password(v).map_err(|e| AppError::Secret(e.to_string()))
-}
 
-#[tauri::command]
-pub async fn secret_exists(name: String) -> AppResult<bool> {
-    match ui_entry(&name)?.get_password() {
-        Ok(_) => Ok(true),
-        Err(keyring::Error::NoEntry) => Ok(false),
-        Err(e) => Err(AppError::Secret(e.to_string())),
+    #[test]
+    fn unknown_secret_names_are_refused() {
+        assert!(super::read_secret("not_a_known_secret").is_none());
     }
-}
-
-#[tauri::command]
-pub async fn secret_delete(name: String) -> AppResult<()> {
-    ui_entry(&name)?;
-    delete_secret(&name)
 }

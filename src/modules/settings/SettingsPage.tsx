@@ -1,71 +1,15 @@
 import { Button } from "@heroui/react";
-import { FolderOpen, KeyRound, ShieldCheck, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { FolderOpen, ShieldCheck, Trash2 } from "lucide-react";
 import { useApp } from "@/app/store";
-import { ToneChip } from "@/components/ui/Badges";
 import { CopyButton, Kbd } from "@/components/ui/Code";
 import { useConfirm } from "@/components/ui/Dialogs";
-import { SwitchInput, TextInput } from "@/components/ui/Fields";
+import { SwitchInput } from "@/components/ui/Fields";
 import { PageHeader, Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
-import { invalidate, useQuery } from "@/lib/query";
+import { invalidate } from "@/lib/query";
 import { formatBytes, modKey } from "@/lib/utils";
 import { ProvidersPanel } from "./ProvidersPanel";
-
-function NvdKeyPanel() {
-  const { runtime } = useApp();
-  const exists = useQuery(["system"], () => api.secretExists("nvd_api_key"), [], runtime);
-  const [value, setValue] = useState("");
-  const [saving, setSaving] = useState(false);
-  const confirm = useConfirm();
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      await api.secretSet("nvd_api_key", value);
-      setValue("");
-      exists.reload();
-      notify.success("NVD API key saved to the system keychain");
-    } catch (e) {
-      notify.error("Could not save the key", e);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Panel
-      title="NVD API key"
-      description="Optional. Raises the NVD rate limit for live CVE searches. Stored in your operating system's credential store — never in the database, never shown again."
-      actions={exists.data !== undefined && <ToneChip tone={exists.data ? "success" : "default"}>{exists.data ? "Key stored" : "No key"}</ToneChip>}
-    >
-      <div className="flex flex-wrap items-end gap-2">
-        <TextInput label={exists.data ? "Replace key" : "API key"} type="password" value={value} onChange={setValue} placeholder="Paste your NVD API key" className="min-w-[320px] flex-1" mono />
-        <Button variant="primary" isDisabled={!value.trim() || !runtime} isPending={saving} onPress={save}>
-          <KeyRound className="size-3.5" />
-          Save key
-        </Button>
-        {exists.data && (
-          <Button
-            variant="danger-soft"
-            onPress={async () => {
-              if (await confirm.ask({ title: "Remove the NVD API key?", body: "Live CVE searches will use the anonymous rate limit.", confirmLabel: "Remove key" })) {
-                await api.secretDelete("nvd_api_key").catch((e) => notify.error("Could not remove the key", e));
-                exists.reload();
-              }
-            }}
-          >
-            Remove
-          </Button>
-        )}
-      </div>
-      <p className="mt-2 text-[12px] text-muted">Request a free key at nvd.nist.gov/developers/request-an-api-key.</p>
-      {exists.error && <p className="mt-2 text-[12.5px] text-danger-soft-foreground">{exists.error}</p>}
-      {confirm.element}
-    </Panel>
-  );
-}
 
 function DataPanel() {
   const { system, runtime } = useApp();
@@ -180,17 +124,17 @@ export default function SettingsPage() {
   const { system, catalog } = useApp();
   return (
     <div>
-      <PageHeader title="Settings" description="Preferences, credentials and local data. Cyber Hub has no account, no telemetry and no background network activity." />
+      <PageHeader title="Settings" description="Preferences, service status and local data. Cyber Hub has no account, no telemetry and no background network activity." />
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <PreferencesPanel />
-        <NvdKeyPanel />
-        <ProvidersPanel />
-        <DataPanel />
+        <div className="flex flex-col gap-3">
+          <PreferencesPanel />
+          <DataPanel />
+        </div>
         <div className="flex flex-col gap-3">
           <Panel title="Privacy and safety">
             <ul className="flex flex-col gap-2 text-[13px] text-muted">
               {[
-                "Local-first: all data stays in the local SQLite database and OS keychain.",
+                "Local-first: all data stays in the local SQLite database. Service credentials are provisioned by the application owner, kept in the OS credential store and never shown in the app.",
                 "No telemetry and no automatic uploads. Network requests happen only when you press a button that says it sends one (live CVE search, threat-intelligence lookup, DNS lookup, header fetch, opening links).",
                 "Threat-intelligence lookups only read provider data. A file is uploaded to VirusTotal only from File analysis, after a warning and a system confirmation for that file; URLs are never submitted for scanning.",
                 "Tools never run automatically. Every run shows the exact program and arguments and needs confirmation.",
@@ -227,6 +171,7 @@ export default function SettingsPage() {
             </dl>
           </Panel>
         </div>
+        <ProvidersPanel />
       </div>
     </div>
   );

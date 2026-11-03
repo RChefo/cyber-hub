@@ -30,6 +30,7 @@ pub async fn lookup(client: &reqwest::Client, base: &str, key: &str, ind: &Indic
     }
 }
 
+#[cfg(any(test, feature = "provisioning"))]
 /// Validate a key and describe the plan (`/api-info`; costs no credits).
 pub async fn validate(client: &reqwest::Client, base: &str, key: &str) -> Result<Option<String>, ApiError> {
     let resp = http::send(client.get(format!("{base}/api-info")).query(&[("key", key)]), key).await?;

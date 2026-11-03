@@ -1,14 +1,16 @@
-//! Threat-intelligence commands: provider status and keys, multi-provider lookups, history,
-//! saved indicators and report export.
+//! Threat-intelligence commands: provider status, multi-provider lookups, history, saved
+//! indicators and report export.
 //!
-//! * Every provider runs independently and concurrently; one provider's failure, missing key
-//!   or rate limit never prevents the others from returning results.
-//! * Keys live in the OS credential store and are only read here. `ti_key_set` verifies a
-//!   key with one read-only request before storing it; keys are never returned.
+//! * Every provider runs independently and concurrently; one provider's failure, missing
+//!   credential or rate limit never prevents the others from returning results.
+//! * Credentials are provisioned by the application owner (developer-only `cyberhub-keys`
+//!   tool, see docs/PROVISIONING.md) and only read here. No command can read, set, test or
+//!   delete a credential; the UI only learns whether a provider is configured.
 //! * Results are cached per provider (`ti_cache`; VirusTotal keeps using `vt_cache`).
 //! * No command submits, reports or changes anything at a provider.
 
 use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use rusqlite::{params, OptionalExtension};
@@ -17,7 +19,7 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::commands::activity::log;
-use crate::commands::system::{delete_secret, read_secret, store_secret};
+use crate::commands::system::{read_secret, secret_configured, NVD_KEY};
 use crate::commands::virustotal::{self, ttl_end, VtState};
 use crate::db::Db;
 use crate::error::{validation, AppError, AppResult};
@@ -29,9 +31,37 @@ use crate::ti::{abusech, abuseipdb, otx, shodan, KeyId, ProviderId};
 use crate::util::{clean, now};
 use crate::vt;
 
+/// Last observed outcome of a real lookup, per provider (since the app started). Messages are
+/// the same sanitized texts shown on results; they never contain a credential.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Health {
+    /// "ok" | "rate_limited" | "rejected" | "error"
+    pub state: &'static str,
+    pub message: Option<String>,
+    pub at: String,
+    pub quota: Option<String>,
+}
+
+/// What a lookup result says about the service, if anything (cache hits and skipped
+/// providers say nothing new).
+pub fn observed_state(r: &ProviderResult) -> Option<&'static str> {
+    if r.source.as_deref() == Some("cache") {
+        return None;
+    }
+    match r.status {
+        Status::Found | Status::NotFound => Some("ok"),
+        Status::RateLimited => Some("rate_limited"),
+        Status::Error if r.message.as_deref().is_some_and(|m| m.contains("rejected the configured credentials")) => Some("rejected"),
+        Status::Error => Some("error"),
+        Status::Unsupported | Status::Disabled | Status::NoKey => None,
+    }
+}
+
 pub struct TiState {
     http: reqwest::Client,
     limiters: HashMap<ProviderId, RateLimiter>,
+    health: Mutex<HashMap<ProviderId, Health>>,
 }
 
 impl TiState {
@@ -44,16 +74,24 @@ impl TiState {
                 (p, RateLimiter::new(max, window))
             })
             .collect();
-        Ok(Self { http: crate::ti::http::client(Duration::from_secs(20)).map_err(AppError::Internal)?, limiters })
+        Ok(Self {
+            http: crate::ti::http::client(Duration::from_secs(20)).map_err(AppError::Internal)?,
+            limiters,
+            health: Mutex::new(HashMap::new()),
+        })
+    }
+
+    fn record(&self, p: ProviderId, r: &ProviderResult) {
+        let Some(state) = observed_state(r) else { return };
+        if let Ok(mut h) = self.health.lock() {
+            let quota = r.quota.clone().or_else(|| h.get(&p).and_then(|x| x.quota.clone()));
+            h.insert(p, Health { state, message: if state == "ok" { None } else { r.message.clone() }, at: now(), quota });
+        }
     }
 }
 
 fn provider(id: &str) -> AppResult<ProviderId> {
     ProviderId::parse(id).ok_or_else(|| validation("Unknown provider"))
-}
-
-fn parse_key(id: &str) -> AppResult<KeyId> {
-    KeyId::parse(id).ok_or_else(|| validation("Unknown provider key"))
 }
 
 fn enabled_map(db: &Db) -> AppResult<HashMap<String, bool>> {
@@ -64,7 +102,7 @@ fn enabled_map(db: &Db) -> AppResult<HashMap<String, bool>> {
     })
 }
 
-/* ─────────────── provider status and keys ─────────────── */
+/* ─────────────── provider status (read-only) ─────────────── */
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,35 +111,29 @@ pub struct ProviderStatus {
     pub name: &'static str,
     pub description: &'static str,
     pub kinds: &'static [&'static str],
-    pub key_id: &'static str,
-    pub key_stored: bool,
+    /// credentials have been provisioned by the application owner (the value is never exposed)
+    pub configured: bool,
     pub enabled: bool,
-    pub access_note: &'static str,
+    pub service_note: &'static str,
     pub docs_url: &'static str,
     pub rate_limit: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KeyStatus {
-    pub id: &'static str,
-    pub label: &'static str,
-    pub stored: bool,
-    pub providers: Vec<&'static str>,
-    pub signup_url: &'static str,
+    /// last observed outcome of a real lookup since the app started
+    pub health: Option<Health>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProvidersOverview {
     pub providers: Vec<ProviderStatus>,
-    pub keys: Vec<KeyStatus>,
+    /// NVD works without a key at a lower rate; this only says whether the owner provisioned one
+    pub nvd_configured: bool,
 }
 
 #[tauri::command]
-pub async fn ti_providers(db: State<'_, Db>) -> AppResult<ProvidersOverview> {
+pub async fn ti_providers(db: State<'_, Db>, tist: State<'_, TiState>) -> AppResult<ProvidersOverview> {
     let enabled = enabled_map(&db)?;
-    let stored: HashMap<KeyId, bool> = KeyId::ALL.into_iter().map(|k| (k, read_secret(k.secret_name()).is_some())).collect();
+    let configured: HashMap<KeyId, bool> = KeyId::ALL.into_iter().map(|k| (k, secret_configured(k.secret_name()))).collect();
+    let health = tist.health.lock().map(|h| h.clone()).unwrap_or_default();
     Ok(ProvidersOverview {
         providers: ProviderId::ALL
             .into_iter()
@@ -112,19 +144,16 @@ pub async fn ti_providers(db: State<'_, Db>) -> AppResult<ProvidersOverview> {
                     name: p.name(),
                     description: p.description(),
                     kinds: p.kinds(),
-                    key_id: p.key().as_str(),
-                    key_stored: stored[&p.key()],
+                    configured: configured[&p.key()],
                     enabled: enabled.get(p.as_str()).copied().unwrap_or(true),
-                    access_note: p.access_note(),
+                    service_note: p.service_note(),
                     docs_url: p.docs_url(),
                     rate_limit: RateLimiter::new(max, window).describe(),
+                    health: health.get(&p).cloned(),
                 }
             })
             .collect(),
-        keys: KeyId::ALL
-            .into_iter()
-            .map(|k| KeyStatus { id: k.as_str(), label: k.label(), stored: stored[&k], providers: k.providers().into_iter().map(ProviderId::name).collect(), signup_url: k.signup_url() })
-            .collect(),
+        nvd_configured: secret_configured(NVD_KEY),
     })
 }
 
@@ -139,83 +168,6 @@ pub async fn ti_provider_set_enabled(db: State<'_, Db>, provider_id: String, ena
         )?;
         Ok(())
     })
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KeyCheck {
-    pub ok: bool,
-    pub message: String,
-    /// quota / plan information reported by the provider, if any
-    pub quota: Option<String>,
-}
-
-/// One read-only request that proves the key works. Never sends user data.
-async fn validate(k: KeyId, key: &str, vtst: &VtState, tist: &TiState) -> Result<Option<String>, ApiError> {
-    match k {
-        KeyId::Virustotal => match vt::get(&vtst.http, &vtst.base, "/ip_addresses/8.8.8.8", key).await {
-            Ok(_) | Err(ApiError::NotFound) => Ok(None),
-            Err(ApiError::Quota(_)) => Ok(Some("Key accepted; VirusTotal reports the quota is used up for now".into())),
-            Err(e) => Err(e),
-        },
-        KeyId::Abuseipdb => abuseipdb::validate(&tist.http, &ProviderId::Abuseipdb.base(), key).await,
-        KeyId::Otx => otx::validate(&tist.http, &ProviderId::Otx.base(), key).await,
-        KeyId::Abusech => abusech::validate(&tist.http, &ProviderId::Malwarebazaar.base(), key).await,
-        KeyId::Shodan => shodan::validate(&tist.http, &ProviderId::Shodan.base(), key).await,
-    }
-}
-
-fn limiter_for(k: KeyId, vtst: &VtState, tist: &TiState) -> AppResult<()> {
-    let p = match k {
-        KeyId::Abusech => ProviderId::Malwarebazaar,
-        _ => k.providers()[0],
-    };
-    let limiter = if p == ProviderId::Virustotal { &vtst.limiter } else { &tist.limiters[&p] };
-    limiter.try_acquire(Instant::now()).map_err(|wait| AppError::RateLimited(format!("Too many {} requests; try again in {wait} s.", p.name())))
-}
-
-fn key_error(k: KeyId, e: ApiError) -> AppError {
-    let name = match k {
-        KeyId::Abusech => "abuse.ch",
-        _ => k.providers()[0].name(),
-    };
-    let msg = e.message(name);
-    match e {
-        ApiError::Network(_) | ApiError::Server(_) | ApiError::Unexpected(_) => AppError::Network(msg),
-        ApiError::Quota(_) => AppError::RateLimited(msg),
-        _ => AppError::Validation(msg),
-    }
-}
-
-/// Verify a key with one read-only request, then store it. The key is never echoed back.
-#[tauri::command]
-pub async fn ti_key_set(vtst: State<'_, VtState>, tist: State<'_, TiState>, key_id: String, value: String) -> AppResult<KeyCheck> {
-    let k = parse_key(&key_id)?;
-    let key = value.trim().to_string();
-    k.check_format(&key).map_err(AppError::Validation)?;
-    limiter_for(k, &vtst, &tist)?;
-    let quota = validate(k, &key, &vtst, &tist).await.map_err(|e| key_error(k, e))?;
-    store_secret(k.secret_name(), &key)?;
-    Ok(KeyCheck { ok: true, message: format!("{} verified and saved to the system keychain.", k.label()), quota })
-}
-
-/// Re-check the stored key (connection status and quota).
-#[tauri::command]
-pub async fn ti_key_test(vtst: State<'_, VtState>, tist: State<'_, TiState>, key_id: String) -> AppResult<KeyCheck> {
-    let k = parse_key(&key_id)?;
-    let Some(key) = read_secret(k.secret_name()) else {
-        return Ok(KeyCheck { ok: false, message: "No key stored.".into(), quota: None });
-    };
-    limiter_for(k, &vtst, &tist)?;
-    Ok(match validate(k, &key, &vtst, &tist).await {
-        Ok(quota) => KeyCheck { ok: true, message: "Connected; the key was accepted.".into(), quota },
-        Err(e) => KeyCheck { ok: false, message: key_error(k, e).to_string(), quota: None },
-    })
-}
-
-#[tauri::command]
-pub async fn ti_key_delete(key_id: String) -> AppResult<()> {
-    delete_secret(parse_key(&key_id)?.secret_name())
 }
 
 /* ─────────────── lookups ─────────────── */
@@ -305,8 +257,19 @@ async fn call(p: ProviderId, tist: &TiState, key: &str, ind: &Indicator) -> Resu
     }
 }
 
-/// Run one provider. Never returns an error: every outcome is a status in the result.
+pub fn not_configured(p: ProviderId) -> String {
+    format!("{} is not configured: its credentials have not been provisioned by the application owner, so this service is unavailable.", p.name())
+}
+
+/// Run one provider and record the observed service state.
 async fn run_one(db: &Db, vtst: &VtState, tist: &TiState, p: ProviderId, ind: &Indicator, refresh: bool, enabled: bool) -> ProviderResult {
+    let r = run_provider(db, vtst, tist, p, ind, refresh, enabled).await;
+    tist.record(p, &r);
+    r
+}
+
+/// Run one provider. Never returns an error: every outcome is a status in the result.
+async fn run_provider(db: &Db, vtst: &VtState, tist: &TiState, p: ProviderId, ind: &Indicator, refresh: bool, enabled: bool) -> ProviderResult {
     if !p.supports(ind) {
         return base_result(p, Status::Unsupported, Some(unsupported_message(p, ind)));
     }
@@ -317,7 +280,7 @@ async fn run_one(db: &Db, vtst: &VtState, tist: &TiState, p: ProviderId, ind: &I
 
     if p == ProviderId::Virustotal {
         if !has_key && (refresh || virustotal::cached(db, ind).ok().flatten().is_none()) {
-            return base_result(p, Status::NoKey, Some("Add a VirusTotal API key in Settings.".into()));
+            return base_result(p, Status::NoKey, Some(not_configured(p)));
         }
         return match virustotal::fetch(db, vtst, ind, refresh, false).await {
             Ok(lr) => {
@@ -338,8 +301,7 @@ async fn run_one(db: &Db, vtst: &VtState, tist: &TiState, p: ProviderId, ind: &I
         }
     }
     let Some(key) = read_secret(p.key().secret_name()) else {
-        let what = if p.key() == KeyId::Abusech { "an abuse.ch Auth-Key" } else { "an API key" };
-        return base_result(p, Status::NoKey, Some(format!("Add {what} for {} in Settings.", p.name())));
+        return base_result(p, Status::NoKey, Some(not_configured(p)));
     };
     if let Err(wait) = tist.limiters[&p].try_acquire(Instant::now()) {
         return base_result(p, Status::RateLimited, Some(format!("Cyber Hub limits {} to {}. Try again in {wait} s.", p.name(), tist.limiters[&p].describe())));
@@ -776,6 +738,22 @@ mod tests {
         assert_eq!(md_escape("a|b\n<script>x</script>"), "a\\|b &lt;script&gt;x&lt;/script&gt;");
         // provider-written text cannot create links, images or headings
         assert_eq!(md_escape("![](https://x/b.png)\r## VirusTotal\u{2028}clean"), "\\!\\[\\]\\(https://x/b.png\\) \\#\\# VirusTotal clean");
+    }
+
+    #[test]
+    fn availability_is_recorded_only_for_real_requests() {
+        let mut live = res(ProviderId::Otx, Status::NotFound, None);
+        live.source = Some("live".into());
+        assert_eq!(observed_state(&live), Some("ok"));
+        let mut cached = live.clone();
+        cached.source = Some("cache".into());
+        assert_eq!(observed_state(&cached), None);
+        assert_eq!(observed_state(&res(ProviderId::Shodan, Status::NoKey, None)), None);
+        let mut rejected = res(ProviderId::Abuseipdb, Status::Error, None);
+        rejected.message = Some(ApiError::Unauthorized.message("AbuseIPDB"));
+        assert_eq!(observed_state(&rejected), Some("rejected"));
+        let msg = not_configured(ProviderId::Shodan);
+        assert!(msg.contains("not been provisioned by the application owner") && !msg.contains("Settings") && !msg.contains("enter"));
     }
 
     #[test]
