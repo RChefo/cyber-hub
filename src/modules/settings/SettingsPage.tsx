@@ -11,6 +11,7 @@ import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import { formatBytes, modKey } from "@/lib/utils";
+import { ProvidersPanel } from "./ProvidersPanel";
 
 function NvdKeyPanel() {
   const { runtime } = useApp();
@@ -61,85 +62,6 @@ function NvdKeyPanel() {
       </div>
       <p className="mt-2 text-[12px] text-muted">Request a free key at nvd.nist.gov/developers/request-an-api-key.</p>
       {exists.error && <p className="mt-2 text-[12.5px] text-danger-soft-foreground">{exists.error}</p>}
-      {confirm.element}
-    </Panel>
-  );
-}
-
-function VirusTotalKeyPanel() {
-  const { runtime, navigate } = useApp();
-  const exists = useQuery(["vt"], api.vtKeyStatus, [], runtime);
-  const [value, setValue] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const confirm = useConfirm();
-  const trimmed = value.trim();
-  const wellFormed = /^[0-9a-fA-F]{64}$/.test(trimmed);
-
-  const save = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      await api.vtKeySet(trimmed);
-      setValue("");
-      invalidate("vt");
-      notify.success("VirusTotal API key verified and saved to the system keychain");
-    } catch (e) {
-      // backend errors never contain the key
-      setError(errorMessage(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Panel
-      title="VirusTotal API key"
-      description="Required for VirusTotal reputation lookups. Stored in your operating system's credential store and used only by the Cyber Hub backend — never in the database, never shown again."
-      actions={exists.data !== undefined && <ToneChip tone={exists.data ? "success" : "default"}>{exists.data ? "Key stored" : "No key"}</ToneChip>}
-    >
-      <div className="flex flex-wrap items-end gap-2">
-        <TextInput
-          label={exists.data ? "Replace key" : "API key"}
-          type="password"
-          value={value}
-          onChange={(v) => {
-            setValue(v);
-            setError(null);
-          }}
-          placeholder="Paste your 64-character VirusTotal API key"
-          className="min-w-[320px] flex-1"
-          mono
-        />
-        <Button variant="primary" isDisabled={!wellFormed || !runtime} isPending={saving} onPress={save}>
-          <KeyRound className="size-3.5" />
-          Verify and save
-        </Button>
-        {exists.data && (
-          <Button
-            variant="danger-soft"
-            onPress={async () => {
-              if (await confirm.ask({ title: "Remove the VirusTotal API key?", body: "VirusTotal lookups stop working until you add a key again. Cached reports are kept.", confirmLabel: "Remove key" })) {
-                await api.vtKeyDelete().catch((e) => notify.error("Could not remove the key", e));
-                invalidate("vt");
-              }
-            }}
-          >
-            Remove
-          </Button>
-        )}
-      </div>
-      {trimmed && !wellFormed && <p className="mt-2 text-[12.5px] text-warning-soft-foreground">A VirusTotal API key is 64 hexadecimal characters.</p>}
-      {error && <p className="mt-2 text-[12.5px] text-danger-soft-foreground">{error}</p>}
-      {exists.error && <p className="mt-2 text-[12.5px] text-danger-soft-foreground">{exists.error}</p>}
-      <p className="mt-2 text-[12px] text-muted">
-        Saving checks the key with one lookup of 8.8.8.8, which counts toward your VirusTotal quota. Find your key under your profile at virustotal.com.{" "}
-        {exists.data && (
-          <button type="button" className="text-accent underline-offset-2 hover:underline focus-visible:underline" onClick={() => navigate("virustotal")}>
-            Open VirusTotal lookups
-          </button>
-        )}
-      </p>
       {confirm.element}
     </Panel>
   );
@@ -261,18 +183,16 @@ export default function SettingsPage() {
       <PageHeader title="Settings" description="Preferences, credentials and local data. Cyber Hub has no account, no telemetry and no background network activity." />
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <PreferencesPanel />
-        <div className="flex flex-col gap-3">
-          <NvdKeyPanel />
-          <VirusTotalKeyPanel />
-        </div>
+        <NvdKeyPanel />
+        <ProvidersPanel />
         <DataPanel />
         <div className="flex flex-col gap-3">
           <Panel title="Privacy and safety">
             <ul className="flex flex-col gap-2 text-[13px] text-muted">
               {[
                 "Local-first: all data stays in the local SQLite database and OS keychain.",
-                "No telemetry and no automatic uploads. Network requests happen only when you press a button that says it sends one (live CVE search, VirusTotal lookup, DNS lookup, header fetch, opening links).",
-                "VirusTotal lookups only read existing reports. Files are never uploaded and URLs are never submitted for scanning.",
+                "No telemetry and no automatic uploads. Network requests happen only when you press a button that says it sends one (live CVE search, threat-intelligence lookup, DNS lookup, header fetch, opening links).",
+                "Threat-intelligence lookups only read provider data. A file is uploaded to VirusTotal only from File analysis, after a warning and a system confirmation for that file; URLs are never submitted for scanning.",
                 "Tools never run automatically. Every run shows the exact program and arguments and needs confirmation.",
                 "Tools that touch targets run only inside an active project and only against in-scope targets.",
                 "Commands run without a shell, so injected pipes or redirection have no effect.",

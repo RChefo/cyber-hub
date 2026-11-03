@@ -1,100 +1,25 @@
-//! VirusTotal API v3 provider — reputation lookups only.
+//! VirusTotal API v3 provider.
 //!
-//! * Lookups are read-only GET requests (`/ip_addresses`, `/domains`, `/urls/{id}`, `/files`).
-//!   Nothing is ever uploaded or submitted for scanning.
+//! * Reputation lookups are read-only GET requests (`/ip_addresses`, `/domains`, `/urls/{id}`,
+//!   `/files`). File uploads live in `vtfile.rs` and always require a native confirmation.
 //! * The API key is read from the OS credential store by the caller and sent only in the
 //!   `x-apikey` header to the fixed API base. It never appears in URLs, errors or storage.
-//! * Private / reserved IP addresses and internal domain names are refused before any
-//!   request, so local network details are not disclosed.
-//! * A client-side limiter keeps requests within the public API allowance.
+//! * Indicator detection (and refusal of private / internal values) is shared with the other
+//!   providers (`ti::indicator`).
 
-use std::collections::VecDeque;
-use std::net::IpAddr;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
-
-use once_cell::sync::Lazy;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const API_BASE: &str = "https://www.virustotal.com/api/v3";
+use crate::ti::http::{self, ApiError, Response};
+pub use crate::ti::indicator::{detect, Indicator, Kind};
+use crate::ti::model;
+
 pub const GUI_BASE: &str = "https://www.virustotal.com/gui";
 /// Fresh-cache lifetime for a report.
 pub const REPORT_TTL_SECS: i64 = 24 * 3600;
 /// Fresh-cache lifetime for "VirusTotal has no record of this".
 pub const NOT_FOUND_TTL_SECS: i64 = 3600;
-/// Public API allowance: 4 requests per minute.
-pub const PUBLIC_RATE_PER_MIN: usize = 4;
-
-/* ───────────────────────── indicators ───────────────────────── */
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Kind {
-    Ip,
-    Domain,
-    Url,
-    File,
-}
-
-impl Kind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Kind::Ip => "ip",
-            Kind::Domain => "domain",
-            Kind::Url => "url",
-            Kind::File => "file",
-        }
-    }
-    pub fn label(self) -> &'static str {
-        match self {
-            Kind::Ip => "IP address",
-            Kind::Domain => "Domain",
-            Kind::Url => "URL",
-            Kind::File => "File hash",
-        }
-    }
-
-    /// Lower-case form for use inside a sentence ("VirusTotal URL lookup").
-    pub fn noun(self) -> &'static str {
-        match self {
-            Kind::Ip => "IP address",
-            Kind::Domain => "domain",
-            Kind::Url => "URL",
-            Kind::File => "file hash",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Indicator {
-    pub kind: Kind,
-    /// normalized value (lower-case hash/domain, canonical IP, URL as entered)
-    pub value: String,
-    /// API path below the base, e.g. `/ip_addresses/8.8.8.8`
-    #[serde(skip)]
-    pub path: String,
-    /// hash type for files
-    pub hash_type: Option<&'static str>,
-}
-
-impl Indicator {
-    pub fn cache_key(&self) -> String {
-        format!("{}:{}", self.kind.as_str(), self.value)
-    }
-}
-
-static DOMAIN_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^(?i)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$").unwrap());
-static HEX_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[0-9a-fA-F]+$").unwrap());
-
-/// Suffixes that only exist on private networks or are reserved; never sent to VirusTotal.
-const INTERNAL_SUFFIXES: &[&str] = &[
-    "local", "localhost", "internal", "intranet", "lan", "home", "corp", "home.arpa", "test", "invalid", "example",
-    "localdomain",
-];
+pub const NAME: &str = "VirusTotal";
 
 /// RFC 4648 base64url without padding (VirusTotal URL identifiers).
 pub fn base64url_nopad(input: &[u8]) -> String {
@@ -111,114 +36,15 @@ pub fn base64url_nopad(input: &[u8]) -> String {
     out
 }
 
-/// True for addresses that are not routable on the public Internet.
-pub fn is_non_public(ip: &IpAddr) -> bool {
-    match ip.to_canonical() {
-        IpAddr::V4(v4) => {
-            let o = v4.octets();
-            v4.is_private()
-                || v4.is_loopback()
-                || v4.is_link_local()
-                || v4.is_unspecified()
-                || v4.is_broadcast()
-                || v4.is_multicast()
-                || v4.is_documentation()
-                || (o[0] == 100 && (64..=127).contains(&o[1])) // CGNAT 100.64.0.0/10
-                || o[0] == 0
-                || o[0] >= 240
-                || (o[0] == 198 && (o[1] == 18 || o[1] == 19)) // benchmarking
-        }
-        IpAddr::V6(v6) => {
-            let s = v6.segments();
-            v6.is_loopback()
-                || v6.is_unspecified()
-                || v6.is_multicast()
-                || (s[0] & 0xfe00) == 0xfc00 // unique local fc00::/7
-                || (s[0] & 0xffc0) == 0xfe80 // link local
-                || (s[0] == 0x2001 && s[1] == 0x0db8) // documentation
-        }
+/// API path below the base for a lookup, e.g. `/ip_addresses/8.8.8.8`. URLs are looked up
+/// by their identifier, computed locally; they are never submitted for scanning.
+pub fn path(ind: &Indicator) -> String {
+    match ind.kind {
+        Kind::Ip => format!("/ip_addresses/{}", ind.value),
+        Kind::Domain => format!("/domains/{}", ind.value),
+        Kind::Url => format!("/urls/{}", base64url_nopad(ind.value.as_bytes())),
+        Kind::File => format!("/files/{}", ind.value),
     }
-}
-
-/// Detect and validate the indicator type. Pure: no I/O.
-pub fn detect(input: &str) -> Result<Indicator, String> {
-    let s = input.trim();
-    if s.is_empty() {
-        return Err("Enter an IP address, domain, URL or file hash".into());
-    }
-    if s.len() > 2048 || s.chars().any(|c| c.is_control()) {
-        return Err("The value is too long or contains control characters".into());
-    }
-
-    // file hashes
-    if HEX_RE.is_match(s) {
-        let hash_type = match s.len() {
-            32 => Some("MD5"),
-            40 => Some("SHA-1"),
-            64 => Some("SHA-256"),
-            _ => None,
-        };
-        if let Some(t) = hash_type {
-            let h = s.to_ascii_lowercase();
-            return Ok(Indicator { kind: Kind::File, path: format!("/files/{h}"), value: h, hash_type: Some(t) });
-        }
-    }
-
-    // URLs (looked up by identifier; never submitted for scanning)
-    if s.contains("://") {
-        let u = url::Url::parse(s).map_err(|_| "This URL is not valid".to_string())?;
-        if !matches!(u.scheme(), "http" | "https") {
-            return Err("Only http and https URLs can be looked up".into());
-        }
-        match u.host() {
-            None => return Err("The URL has no host".into()),
-            Some(url::Host::Ipv4(ip)) if is_non_public(&IpAddr::V4(ip)) => {
-                return Err("URLs on private or reserved addresses are not sent to VirusTotal".into())
-            }
-            Some(url::Host::Ipv6(ip)) if is_non_public(&IpAddr::V6(ip)) => {
-                return Err("URLs on private or reserved addresses are not sent to VirusTotal".into())
-            }
-            Some(url::Host::Domain(d)) if is_internal_domain(d) => {
-                return Err("URLs on internal host names are not sent to VirusTotal".into())
-            }
-            _ => {}
-        }
-        return Ok(Indicator {
-            kind: Kind::Url,
-            path: format!("/urls/{}", base64url_nopad(s.as_bytes())),
-            value: s.to_string(),
-            hash_type: None,
-        });
-    }
-
-    // IP addresses
-    if let Ok(ip) = s.trim_matches(['[', ']']).parse::<IpAddr>() {
-        let ip = ip.to_canonical();
-        if is_non_public(&ip) {
-            return Err("Private, loopback and reserved addresses are not sent to VirusTotal".into());
-        }
-        let v = ip.to_string();
-        return Ok(Indicator { kind: Kind::Ip, path: format!("/ip_addresses/{v}"), value: v, hash_type: None });
-    }
-
-    // domains
-    let d = s.trim_end_matches('.').to_ascii_lowercase();
-    if DOMAIN_RE.is_match(&d) {
-        if is_internal_domain(&d) {
-            return Err("Internal or reserved domain names are not sent to VirusTotal".into());
-        }
-        return Ok(Indicator { kind: Kind::Domain, path: format!("/domains/{d}"), value: d, hash_type: None });
-    }
-
-    if HEX_RE.is_match(s) {
-        return Err("Hashes must be MD5 (32), SHA-1 (40) or SHA-256 (64) hexadecimal characters".into());
-    }
-    Err("Enter a public IP address, a domain, an http(s) URL, or an MD5, SHA-1 or SHA-256 hash".into())
-}
-
-fn is_internal_domain(d: &str) -> bool {
-    let d = d.trim_end_matches('.').to_ascii_lowercase();
-    !d.contains('.') || INTERNAL_SUFFIXES.iter().any(|s| d == *s || d.ends_with(&format!(".{s}")))
 }
 
 /* ───────────────────────── reports ───────────────────────── */
@@ -421,155 +247,87 @@ pub fn is_fresh(fetched_at: &str, not_found: bool, now: chrono::DateTime<chrono:
         .unwrap_or(false)
 }
 
-/* ───────────────────────── rate limiting ───────────────────────── */
+/* ───────────────────────── HTTP ───────────────────────── */
 
-pub struct RateLimiter {
-    max: usize,
-    window: Duration,
-    hits: Mutex<VecDeque<Instant>>,
-}
-
-impl RateLimiter {
-    pub fn new(max: usize, window: Duration) -> Self {
-        Self { max, window, hits: Mutex::new(VecDeque::new()) }
-    }
-
-    /// Ok when a request may be made now; Err(seconds to wait) otherwise.
-    pub fn try_acquire(&self, now: Instant) -> Result<(), u64> {
-        let mut hits = self.hits.lock().map_err(|_| 60u64)?;
-        while hits.front().is_some_and(|t| now.duration_since(*t) >= self.window) {
-            hits.pop_front();
-        }
-        if hits.len() >= self.max {
-            let oldest = *hits.front().expect("non-empty");
-            let wait = self.window.saturating_sub(now.duration_since(oldest));
-            return Err(wait.as_secs().max(1));
-        }
-        hits.push_back(now);
-        Ok(())
+pub fn map_error(resp: &Response, key: &str) -> ApiError {
+    let code = resp.body.pointer("/error/code").and_then(Value::as_str).unwrap_or("");
+    let msg = http::scrub(&http::short(resp.body.pointer("/error/message").and_then(Value::as_str).unwrap_or(""), 300), key);
+    match (resp.status, code) {
+        (404, _) | (_, "NotFoundError") => ApiError::NotFound,
+        (401, _) | (_, "WrongCredentialsError") | (_, "AuthenticationRequiredError") => ApiError::Unauthorized,
+        (429, _) | (_, "QuotaExceededError") | (_, "TooManyRequestsError") => ApiError::Quota(msg),
+        (403, _) => ApiError::Forbidden(msg),
+        (400, _) | (413, _) => ApiError::BadRequest(msg),
+        (s, _) => ApiError::Server(s),
     }
 }
 
-/* ───────────────────────── HTTP client ───────────────────────── */
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum VtError {
-    /// VirusTotal has no record of this indicator
-    NotFound,
-    /// key missing, wrong or not authorized
-    Unauthorized,
-    /// quota or rate limit exceeded (message from VirusTotal)
-    Quota(String),
-    Forbidden(String),
-    BadRequest(String),
-    Server(u16),
-    Network(String),
-}
-
-impl VtError {
-    pub fn user_message(&self) -> String {
-        match self {
-            VtError::NotFound => "VirusTotal has no record of this indicator.".into(),
-            VtError::Unauthorized => "VirusTotal rejected the API key. Check or replace it in Settings.".into(),
-            VtError::Quota(m) => {
-                let m = m.trim().trim_end_matches('.');
-                if m.is_empty() {
-                    "VirusTotal quota or rate limit reached. Try again later.".into()
-                } else {
-                    format!("VirusTotal quota or rate limit reached ({m}). Try again later.")
-                }
-            }
-            VtError::Forbidden(m) => format!("VirusTotal refused the request: {m}"),
-            VtError::BadRequest(m) => format!("VirusTotal did not accept the request: {m}"),
-            VtError::Server(code) => format!("VirusTotal is unavailable (HTTP {code}). Try again later."),
-            VtError::Network(m) => format!("Could not reach VirusTotal: {m}"),
-        }
-    }
-}
-
-pub struct Client {
-    base: String,
-    http: reqwest::Client,
-}
-
-/// Remove any occurrence of the key from text that may be shown or stored.
-pub fn scrub(text: &str, key: &str) -> String {
-    if key.len() >= 8 {
-        text.replace(key, "••••••")
+/// GET `{base}{path}` with the key in the `x-apikey` header.
+pub async fn get(client: &reqwest::Client, base: &str, path: &str, key: &str) -> Result<Value, ApiError> {
+    let resp = http::send(client.get(format!("{base}{path}")).header("x-apikey", key).header("accept", "application/json"), key).await?;
+    if resp.status == 200 {
+        Ok(resp.body)
     } else {
-        text.to_string()
+        Err(map_error(&resp, key))
     }
 }
 
-impl Client {
-    pub fn new(base: &str) -> Result<Self, String> {
-        let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(20))
-            .redirect(reqwest::redirect::Policy::none())
-            .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .map_err(|e| e.to_string())?;
-        Ok(Self { base: base.trim_end_matches('/').to_string(), http })
-    }
+/* ───────────────────────── threat-intel view ───────────────────────── */
 
-    /// GET `{base}{path}` with the key in the `x-apikey` header.
-    pub async fn get(&self, path: &str, key: &str) -> Result<Value, VtError> {
-        let url = format!("{}{}", self.base, path);
-        let resp = self
-            .http
-            .get(&url)
-            .header("x-apikey", key)
-            .header("accept", "application/json")
-            .send()
-            .await
-            .map_err(|e| VtError::Network(scrub(&e.without_url().to_string(), key)))?;
-        let status = resp.status().as_u16();
-        let body: Value = resp.json().await.unwrap_or(Value::Null);
-        if status == 200 {
-            return Ok(body);
-        }
-        let code = body.pointer("/error/code").and_then(Value::as_str).unwrap_or("");
-        let msg = scrub(body.pointer("/error/message").and_then(Value::as_str).unwrap_or(""), key);
-        Err(match (status, code) {
-            (404, _) | (_, "NotFoundError") => VtError::NotFound,
-            (401, _) | (_, "WrongCredentialsError") | (_, "AuthenticationRequiredError") => VtError::Unauthorized,
-            (429, _) | (_, "QuotaExceededError") | (_, "TooManyRequestsError") => VtError::Quota(msg),
-            (403, _) => VtError::Forbidden(msg),
-            (400, _) => VtError::BadRequest(msg),
-            (s, _) => VtError::Server(s),
-        })
+/// The report in the provider-neutral shape. Level: any malicious engine → Malicious; any
+/// suspicious → Suspicious; harmless verdicts only → Clean; no verdicts → Unknown.
+pub fn to_ti(r: &Report) -> model::Report {
+    use model::{Fact, Level, Score, Table, Verdict};
+    let st = &r.stats;
+    let of = if r.engines_total > 0 { format!(" of {}", r.engines_total) } else { String::new() };
+    let verdict = if st.malicious > 0 {
+        Verdict { level: Level::Malicious, label: format!("{}{of} engines: malicious", st.malicious) }
+    } else if st.suspicious > 0 {
+        Verdict { level: Level::Suspicious, label: format!("{}{of} engines: suspicious", st.suspicious) }
+    } else if st.harmless > 0 {
+        Verdict { level: Level::Clean, label: format!("No detections; {} engines rated it harmless", st.harmless) }
+    } else {
+        Verdict { level: Level::Unknown, label: "No engine verdicts".into() }
+    };
+    let mut scores = vec![Score {
+        label: "Engines flagging (malicious + suspicious)".into(),
+        value: (st.malicious + st.suspicious) as f64,
+        max: Some(r.engines_total as f64),
+        display: format!("{}/{}", st.malicious + st.suspicious, r.engines_total),
+    }];
+    if let Some(rep) = r.reputation {
+        scores.push(Score { label: "VirusTotal community reputation".into(), value: rep as f64, max: None, display: rep.to_string() });
+    }
+    let mut tables = Vec::new();
+    if !r.flagged.is_empty() {
+        tables.push(Table {
+            title: "Flagging engines".into(),
+            columns: vec!["Engine".into(), "Category".into(), "Result".into()],
+            rows: r.flagged.iter().take(30).map(|f| vec![f.engine.clone(), f.category.clone(), f.result.clone().unwrap_or_default()]).collect(),
+            note: None,
+        });
+    }
+    model::Report {
+        verdict: Some(verdict),
+        scores,
+        categories: r.categories.clone(),
+        families: r.threat_label.iter().cloned().collect(),
+        tags: r.tags.clone(),
+        first_seen: None,
+        last_seen: r.last_analysis_date.and_then(|t| chrono::DateTime::from_timestamp(t, 0)).map(|d| d.to_rfc3339()),
+        facts: r.details.iter().map(|d| Fact { label: d.label.clone(), value: d.value.clone() }).collect(),
+        tables,
+        related: vec![],
+        permalink: Some(r.permalink.clone()),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Read, Write};
-    use std::net::TcpListener;
+    use crate::ti::http::mock;
 
-    #[test]
-    fn detects_indicator_types() {
-        assert_eq!(detect("8.8.8.8").unwrap().kind, Kind::Ip);
-        assert_eq!(detect("2001:4860:4860::8888").unwrap().path, "/ip_addresses/2001:4860:4860::8888");
-        assert_eq!(detect("Example.COM.").unwrap().value, "example.com");
-        assert_eq!(detect("https://example.com/a?b=1").unwrap().kind, Kind::Url);
-        let md5 = detect("44D88612FEA8A8F36DE82E1278ABB02F").unwrap();
-        assert_eq!((md5.kind, md5.hash_type, md5.value.as_str()), (Kind::File, Some("MD5"), "44d88612fea8a8f36de82e1278abb02f"));
-        assert_eq!(detect(&"a".repeat(40)).unwrap().hash_type, Some("SHA-1"));
-        assert_eq!(detect(&"b".repeat(64)).unwrap().hash_type, Some("SHA-256"));
-    }
-
-    #[test]
-    fn refuses_private_internal_and_invalid_values() {
-        for v in [
-            "10.0.0.5", "192.168.1.1", "127.0.0.1", "169.254.1.1", "100.64.0.1", "::1", "fd00::1", "fe80::1", "::ffff:10.0.0.1",
-            "printer.local", "intranet", "srv.corp", "app.internal", "http://10.0.0.5/admin", "http://nas.lan/", "ftp://example.com/",
-            "", "not a thing", "abc123", &"c".repeat(50), "http://\u{7}x.com",
-        ] {
-            assert!(detect(v).is_err(), "should refuse {v:?}");
-        }
-        assert!(detect(&"d".repeat(50)).unwrap_err().contains("MD5"));
-    }
+    const KEY: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     #[test]
     fn url_identifier_is_base64url_without_padding() {
@@ -578,7 +336,7 @@ mod tests {
         assert_eq!(base64url_nopad(b"fo"), "Zm8");
         assert_eq!(base64url_nopad(b"foo"), "Zm9v");
         assert_eq!(base64url_nopad(&[0xfb, 0xff]), "-_8");
-        assert_eq!(detect("http://example.com/").unwrap().path, "/urls/aHR0cDovL2V4YW1wbGUuY29tLw");
+        assert_eq!(path(&detect("http://example.com/").unwrap()), "/urls/aHR0cDovL2V4YW1wbGUuY29tLw");
     }
 
     fn file_fixture() -> Value {
@@ -654,82 +412,43 @@ mod tests {
     }
 
     #[test]
-    fn rate_limiter_allows_window_budget() {
-        let l = RateLimiter::new(4, Duration::from_secs(60));
-        let t0 = Instant::now();
-        for i in 0..4 {
-            assert!(l.try_acquire(t0 + Duration::from_secs(i)).is_ok());
-        }
-        let wait = l.try_acquire(t0 + Duration::from_secs(10)).unwrap_err();
-        assert!((49..=50).contains(&wait), "{wait}");
-        assert!(l.try_acquire(t0 + Duration::from_secs(61)).is_ok());
+    fn maps_to_the_provider_neutral_view() {
+        let ind = detect("44d88612fea8a8f36de82e1278abb02f").unwrap();
+        let t = to_ti(&parse_report(&ind, &file_fixture()).unwrap());
+        let v = t.verdict.unwrap();
+        assert_eq!((v.level, v.label.as_str()), (model::Level::Malicious, "2 of 6 engines: malicious"));
+        assert_eq!(t.scores[0].display, "3/6");
+        assert_eq!(t.families, vec!["virus.eicar/test"]);
+        assert_eq!(t.tables[0].rows.len(), 3);
     }
-
-    /// Minimal one-shot HTTP server returning a canned response; returns the raw request.
-    fn mock_server(status: u16, body: &'static str) -> (String, std::thread::JoinHandle<String>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let base = format!("http://{}", listener.local_addr().unwrap());
-        let handle = std::thread::spawn(move || {
-            let (mut sock, _) = listener.accept().unwrap();
-            let mut buf = [0u8; 4096];
-            let n = sock.read(&mut buf).unwrap();
-            let req = String::from_utf8_lossy(&buf[..n]).to_string();
-            let resp = format!(
-                "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            );
-            sock.write_all(resp.as_bytes()).unwrap();
-            req
-        });
-        (base, handle)
-    }
-
-    const KEY: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     #[tokio::test]
     async fn sends_key_only_in_header_and_parses_success() {
-        let (base, h) = mock_server(200, r#"{"data":{"id":"8.8.8.8","attributes":{"last_analysis_stats":{"harmless":1}}}}"#);
-        let c = Client::new(&base).unwrap();
+        let srv = mock::serve(vec![mock::ok(r#"{"data":{"id":"8.8.8.8","attributes":{"last_analysis_stats":{"harmless":1}}}}"#)]);
+        let c = http::client(std::time::Duration::from_secs(5)).unwrap();
         let ind = detect("8.8.8.8").unwrap();
-        let body = c.get(&ind.path, KEY).await.unwrap();
+        let body = get(&c, &srv.base, &path(&ind), KEY).await.unwrap();
         assert_eq!(parse_report(&ind, &body).unwrap().stats.harmless, 1);
-        let req = h.join().unwrap();
-        let first_line = req.lines().next().unwrap().to_string();
-        assert_eq!(first_line, "GET /ip_addresses/8.8.8.8 HTTP/1.1");
-        assert!(!first_line.contains(KEY), "key must never be in the URL");
-        assert!(req.to_ascii_lowercase().contains(&format!("x-apikey: {KEY}")));
+        let seen = srv.seen.lock().unwrap()[0].clone();
+        assert_eq!(seen.first_line(), "GET /ip_addresses/8.8.8.8 HTTP/1.1");
+        assert_eq!(seen.header("x-apikey").as_deref(), Some(KEY));
     }
 
     #[tokio::test]
     async fn maps_api_errors_without_leaking_the_key() {
-        let cases: [(u16, &'static str, VtError); 5] = [
-            (404, r#"{"error":{"code":"NotFoundError","message":"not found"}}"#, VtError::NotFound),
-            (401, r#"{"error":{"code":"WrongCredentialsError","message":"Wrong API key"}}"#, VtError::Unauthorized),
-            (429, r#"{"error":{"code":"QuotaExceededError","message":"Quota exceeded"}}"#, VtError::Quota("Quota exceeded".into())),
-            (400, r#"{"error":{"code":"InvalidArgumentError","message":"bad 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}"#, VtError::BadRequest("bad ••••••".into())),
-            (503, "<html>down</html>", VtError::Server(503)),
+        let cases: Vec<(u16, String, ApiError)> = vec![
+            (404, r#"{"error":{"code":"NotFoundError","message":"not found"}}"#.into(), ApiError::NotFound),
+            (401, r#"{"error":{"code":"WrongCredentialsError","message":"Wrong API key"}}"#.into(), ApiError::Unauthorized),
+            (429, r#"{"error":{"code":"QuotaExceededError","message":"Quota exceeded"}}"#.into(), ApiError::Quota("Quota exceeded".into())),
+            (400, format!(r#"{{"error":{{"code":"InvalidArgumentError","message":"bad {KEY}"}}}}"#), ApiError::BadRequest("bad ••••••".into())),
+            (503, "<html>down</html>".into(), ApiError::Server(503)),
         ];
-        for (status, body, expected) in cases {
-            let (base, h) = mock_server(status, body);
-            let err = Client::new(&base).unwrap().get("/domains/example.com", KEY).await.unwrap_err();
-            h.join().unwrap();
+        let srv = mock::serve(cases.iter().map(|(s, b, _)| mock::status(*s, b)).collect());
+        let c = http::client(std::time::Duration::from_secs(5)).unwrap();
+        for (_, _, expected) in cases {
+            let err = get(&c, &srv.base, "/domains/example.com", KEY).await.unwrap_err();
             assert_eq!(err, expected);
-            assert!(!err.user_message().contains(KEY));
+            assert!(!err.message(NAME).contains(KEY));
         }
-    }
-
-    #[tokio::test]
-    async fn network_errors_do_not_leak_the_key() {
-        // nothing listens on this port
-        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let err = Client::new(&format!("http://127.0.0.1:{port}")).unwrap().get("/domains/example.com", KEY).await.unwrap_err();
-        assert!(matches!(err, VtError::Network(_)));
-        assert!(!err.user_message().contains(KEY));
-    }
-
-    #[test]
-    fn quota_messages_read_cleanly() {
-        assert_eq!(VtError::Quota("Quota exceeded.".into()).user_message(), "VirusTotal quota or rate limit reached (Quota exceeded). Try again later.");
-        assert_eq!(VtError::Quota(" ".into()).user_message(), "VirusTotal quota or rate limit reached. Try again later.");
     }
 }

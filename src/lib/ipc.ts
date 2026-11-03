@@ -151,13 +151,38 @@ export const api = {
 
   // VirusTotal — requests are made by the backend with the key from the OS credential store.
   // The key is write-only: it can be saved (after verification) or removed, never read.
-  vtDetect: (query: string) => call<T.VtDetected>("vt_detect", { query }),
   vtLookup: (query: string, refresh = false) => call<T.VtLookupResult>("vt_lookup", { query, refresh }),
   vtRecent: (limit = 20) => call<T.VtRecentLookup[]>("vt_recent", { limit }),
   vtCacheClear: () => call<void>("vt_cache_clear"),
   vtKeyStatus: () => call<boolean>("vt_key_status"),
-  vtKeySet: (value: string) => call<void>("vt_key_set", { value }),
-  vtKeyDelete: () => call<void>("vt_key_delete"),
+  /** opens the native file picker in the backend and hashes the file locally */
+  vtFilePick: () => call<T.VtPickedFile | null>("vt_file_pick"),
+  vtFileForget: (handle: string) => call<void>("vt_file_forget", { handle }),
+  /** the backend shows a native confirmation before anything is uploaded */
+  vtFileUpload: (handle: string, onEvent: (e: T.VtUploadEvent) => void) => {
+    const channel = new Channel<T.VtUploadEvent>();
+    channel.onmessage = onEvent;
+    return call<T.VtUploadResult>("vt_file_upload", { handle, onEvent: channel });
+  },
+  vtFileCancel: (handle: string) => call<boolean>("vt_file_cancel", { handle }),
+  vtAnalysis: (analysisId: string) => call<T.VtAnalysisStatus>("vt_analysis", { analysisId }),
+
+  // threat intelligence providers
+  tiDetect: (query: string) => call<T.VtDetected>("ti_detect", { query }),
+  tiProviders: () => call<T.TiProvidersOverview>("ti_providers"),
+  tiProviderSetEnabled: (providerId: string, enabled: boolean) => call<void>("ti_provider_set_enabled", { providerId, enabled }),
+  tiKeySet: (keyId: string, value: string) => call<T.TiKeyCheck>("ti_key_set", { keyId, value }),
+  tiKeyTest: (keyId: string) => call<T.TiKeyCheck>("ti_key_test", { keyId }),
+  tiKeyDelete: (keyId: string) => call<void>("ti_key_delete", { keyId }),
+  tiLookup: (query: string, providers: string[] | null, refresh = false) => call<T.TiInvestigation>("ti_lookup", { query, providers, refresh }),
+  tiHistory: (limit = 30) => call<T.TiHistoryEntry[]>("ti_history", { limit }),
+  tiHistoryClear: () => call<void>("ti_history_clear"),
+  tiCacheClear: () => call<void>("ti_cache_clear"),
+  tiSavedList: () => call<T.TiSavedIndicator[]>("ti_saved_list"),
+  tiSavedAdd: (query: string, note = "") => call<void>("ti_saved_add", { query, note }),
+  tiSavedRemove: (query: string) => call<void>("ti_saved_remove", { query }),
+  /** writes through a native save dialog; returns the file name or null when cancelled */
+  tiExport: (query: string, format: "md" | "json") => call<string | null>("ti_export", { query, format }),
 
   // system
   systemInfo: () => call<T.SystemInfo>("system_info"),

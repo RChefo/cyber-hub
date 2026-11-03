@@ -5,6 +5,7 @@ import {
   Boxes,
   FolderKanban,
   LayoutDashboard,
+  Radar,
   Search,
   Settings,
   ShieldAlert,
@@ -25,6 +26,7 @@ export type PageId =
   | "resources"
   | "intel"
   | "virustotal"
+  | "threatintel"
   | "utilities"
   | "settings";
 
@@ -58,7 +60,8 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { id: "dorks", label: "Dorks Studio", icon: Search, description: "Advanced search query builder" },
       { id: "resources", label: "Cyber Resources", icon: BookMarked, description: "Curated security websites" },
       { id: "intel", label: "Vulnerability Intel", icon: ShieldAlert, description: "CVE search and details" },
-      { id: "virustotal", label: "VirusTotal", icon: ShieldCheck, description: "Reputation of IPs, domains, URLs and file hashes" },
+      { id: "threatintel", label: "Threat Intel", icon: Radar, description: "Look up an indicator across intelligence providers" },
+      { id: "virustotal", label: "VirusTotal", icon: ShieldCheck, description: "Reputation lookups and file analysis" },
     ],
   },
   {

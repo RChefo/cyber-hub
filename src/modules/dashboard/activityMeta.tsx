@@ -7,12 +7,14 @@ import {
   FolderKanban,
   ListChecks,
   Play,
+  Radar,
   Rocket,
   ScanLine,
   Search,
   ShieldAlert,
   ShieldCheck,
   Syringe,
+  Upload,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -35,6 +37,8 @@ export const ACTIVITY_META: Record<string, { icon: LucideIcon; color: FeaturedIc
   utility: { icon: Wrench, color: "gray", label: "Utilities" },
   payload_copy: { icon: Syringe, color: "gray", label: "Payloads" },
   vt_lookup: { icon: ShieldCheck, color: "brand", label: "VirusTotal" },
+  vt_upload: { icon: Upload, color: "warning", label: "VirusTotal uploads" },
+  ti_lookup: { icon: Radar, color: "brand", label: "Threat intel" },
 };
 
 export function ActivityIcon({ kind }: { kind: string }) {

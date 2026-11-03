@@ -13,12 +13,14 @@ mod process;
 mod redact;
 mod scope;
 mod targets;
+mod ti;
 mod util;
 mod vt;
+mod vtfile;
 
 use tauri::Manager;
 
-use commands::{activity, intel, library, projects, system, tools, virustotal, wordlists};
+use commands::{activity, intel, library, projects, system, threat_intel, tools, virustotal, wordlists};
 
 pub fn run() {
     tauri::Builder::default()
@@ -32,6 +34,7 @@ pub fn run() {
             app.manage(database);
             app.manage(process::ProcessManager::default());
             app.manage(virustotal::VtState::new()?);
+            app.manage(threat_intel::TiState::new()?);
             // remove target-file snapshots left behind by a crash
             tools::clean_runtime_dir(app.handle());
             Ok(())
@@ -116,13 +119,30 @@ pub fn run() {
             intel::cve_cache_stats,
             intel::cve_history_clear,
             // VirusTotal (requests are made only here, with the key from the OS credential store)
-            virustotal::vt_detect,
             virustotal::vt_lookup,
             virustotal::vt_recent,
             virustotal::vt_cache_clear,
             virustotal::vt_key_status,
-            virustotal::vt_key_set,
-            virustotal::vt_key_delete,
+            virustotal::vt_file_pick,
+            virustotal::vt_file_forget,
+            virustotal::vt_file_upload,
+            virustotal::vt_file_cancel,
+            virustotal::vt_analysis,
+            // threat intelligence providers
+            threat_intel::ti_providers,
+            threat_intel::ti_provider_set_enabled,
+            threat_intel::ti_key_set,
+            threat_intel::ti_key_test,
+            threat_intel::ti_key_delete,
+            threat_intel::ti_detect,
+            threat_intel::ti_lookup,
+            threat_intel::ti_history,
+            threat_intel::ti_history_clear,
+            threat_intel::ti_cache_clear,
+            threat_intel::ti_saved_list,
+            threat_intel::ti_saved_add,
+            threat_intel::ti_saved_remove,
+            threat_intel::ti_export,
             // system
             system::system_info,
             system::open_terminal,

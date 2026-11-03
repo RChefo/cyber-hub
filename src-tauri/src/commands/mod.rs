@@ -3,6 +3,7 @@ pub mod intel;
 pub mod library;
 pub mod projects;
 pub mod system;
+pub mod threat_intel;
 pub mod tools;
 pub mod virustotal;
 pub mod wordlists;

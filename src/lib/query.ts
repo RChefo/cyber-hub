@@ -23,6 +23,7 @@ export type Tag =
   | "wordlists"
   | "cve"
   | "vt"
+  | "ti"
   | "system";
 
 const versions = new Map<Tag, number>();

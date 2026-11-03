@@ -132,9 +132,9 @@ fn dirs_home() -> Option<PathBuf> {
 
 const SERVICE: &str = "dev.cyberhub.workstation";
 /// Every secret Cyber Hub may store (used by backend code).
-const KNOWN_SECRETS: &[&str] = &["nvd_api_key", crate::commands::virustotal::KEY_NAME];
-/// Secrets the generic UI commands may set / check / delete. The VirusTotal key is managed
-/// only through `vt_key_set` (verifies before storing) and `vt_key_delete`.
+const KNOWN_SECRETS: &[&str] = &["nvd_api_key", "virustotal_api_key", "abuseipdb_api_key", "otx_api_key", "abusech_auth_key", "shodan_api_key"];
+/// Secrets the generic UI commands may set / check / delete. Threat-intelligence keys are
+/// managed only through `ti_key_set` (verifies before storing) and `ti_key_delete`.
 const UI_SECRETS: &[&str] = &["nvd_api_key"];
 
 fn entry(name: &str) -> AppResult<keyring::Entry> {

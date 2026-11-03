@@ -42,6 +42,7 @@ pub struct Activity {
 const ACTIVITY_KINDS: &[&str] = &[
     "tool_run", "tool_install", "tool_launch", "tool_scan", "command_copy", "command_saved", "dork_search",
     "dork_saved", "resource_open", "project", "finding", "wordlist", "cve_search", "utility", "payload_copy", "vt_lookup",
+    "vt_upload", "ti_lookup",
 ];
 
 #[tauri::command]
@@ -133,7 +134,7 @@ pub async fn activity_daily(db: State<'_, Db>, days: Option<i64>) -> AppResult<V
 const PREF_KEYS: &[&str] = &[
     "dashboard.layout", "dashboard.hidden", "ui.sidebarCollapsed", "ui.reducedMotion", "ui.density",
     "terminal.preferred", "tools.lastScan", "dorks.defaultEngine", "onboarding.dismissed",
-    "cve.preferLive", "user.displayName", "notifications.lastSeen",
+    "cve.preferLive", "user.displayName", "notifications.lastSeen", "vt.uploadLimitMb",
 ];
 
 #[tauri::command]
@@ -154,6 +155,9 @@ pub async fn prefs_get_all(db: State<'_, Db>) -> AppResult<HashMap<String, serde
 pub async fn prefs_set(db: State<'_, Db>, key: String, value: serde_json::Value) -> AppResult<()> {
     if !PREF_KEYS.contains(&key.as_str()) {
         return Err(validation(format!("Unknown preference '{key}'")));
+    }
+    if key == "vt.uploadLimitMb" && !value.as_f64().is_some_and(|v| (1.0..=650.0).contains(&v)) {
+        return Err(validation("The upload limit must be between 1 and 650 MB"));
     }
     let raw = serde_json::to_string(&value)?;
     if raw.len() > 64 * 1024 {

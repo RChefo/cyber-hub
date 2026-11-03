@@ -241,6 +241,41 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_vt_cache_time ON vt_cache(fetched_at DESC);
     "#,
+    // 3 — threat-intelligence providers: per-provider cache, search history, saved indicators,
+    //     provider enablement
+    r#"
+    CREATE TABLE ti_cache (
+        provider TEXT NOT NULL,
+        indicator_key TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('ip','domain','url','file')),
+        indicator TEXT NOT NULL,
+        found INTEGER NOT NULL,
+        data TEXT NOT NULL,
+        quota TEXT,
+        fetched_at TEXT NOT NULL,
+        PRIMARY KEY (provider, indicator_key)
+    );
+    CREATE TABLE ti_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL CHECK (kind IN ('ip','domain','url','file')),
+        indicator TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        searched_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_ti_history_time ON ti_history(searched_at DESC);
+    CREATE TABLE ti_saved (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL CHECK (kind IN ('ip','domain','url','file')),
+        indicator TEXT NOT NULL UNIQUE,
+        note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+    );
+    CREATE TABLE ti_provider_settings (
+        provider TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    "#,
 ];
 
 impl Db {

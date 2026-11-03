@@ -27,9 +27,18 @@ Tauri commands (src-tauri/src/commands/*)      ← input validation, no raw SQL 
 | `commands/wordlists.rs` | native file/folder/save dialogs opened by the backend, index by reference or managed copy, folder scan, preview (64 MB read cap), export, safe delete (managed folder only) |
 | `commands/intel.rs` | DNS lookup (hickory-resolver), HTTP header inspection (reqwest, no redirects, body never read), NVD CVE search and cache |
 | `commands/system.rs` | system info (sysinfo), open terminal (no command passed), OS-keychain secrets (write-only from the UI) |
-| `commands/virustotal.rs` + `vt.rs` | VirusTotal API v3 reputation lookups: indicator detection and refusal of private targets, HTTP client (key only in the `x-apikey` header, no redirects, 20 s timeout), report parsing, local rate limiter, `vt_cache`, key management |
+| `commands/virustotal.rs` + `vt.rs` + `vtfile.rs` | VirusTotal API v3: cached reputation lookups (`vt_cache`), file analysis (backend file picker → opaque handle, local hashing, native confirmation, verified snapshot, streamed multipart upload with progress and cancellation, upload-URL flow for > 32 MB, analysis polling) |
+| `commands/threat_intel.rs` + `ti/` | Threat-intelligence providers: `ti/indicator.rs` (shared detection, refusal of private targets), `ti/http.rs` (client without redirects, size-capped bodies, key scrubbing, error model), `ti/limit.rs` (per-provider rate limiter), `ti/model.rs` (normalized result), adapters `abuseipdb.rs`, `otx.rs`, `abusech.rs` (URLhaus, MalwareBazaar, ThreatFox), `shodan.rs`, and `ti/mod.rs` (fixed bases, key groups, limits, cache lifetimes). Commands: provider status, key set/test/delete, concurrent multi-provider lookups, history, saved indicators, Markdown/JSON export |
 
 Every command returns `Result<T, AppError>`. `AppError` serializes as `{ kind, message }` so the UI can render specific error states (`validation`, `scope`, `network`, `not_found`, …).
+
+### Threat-intelligence lookups
+
+1. The UI sends `ti_lookup { query, providers?, refresh }`. The backend detects and validates the indicator (`ti::indicator::detect`) and refuses private or internal values.
+2. For every requested provider, concurrently (`tokio::join!`): not applicable to this type → `unsupported`; turned off → `disabled`; fresh cache entry → cached result; no key → `no_key`; local limit exhausted → `rate_limited`; otherwise one request to the fixed endpoint, parsed into `ti::model::Report` (verdict in the provider's wording, scores, categories, families, tags, first/last seen, facts, tables, related indicators, permalink).
+3. Errors become per-provider statuses. Results with or without a record are cached; errors are not.
+4. `summarize` lists which providers reported malicious, suspicious, benign, informational, no record, failed or skipped. It is a grouping, not a score.
+5. The search is stored in `ti_history` and the activity log. Exports are rendered from stored results only.
 
 ### Execution engine
 
@@ -43,9 +52,9 @@ Every command returns `Result<T, AppError>`. `AppError` serializes as `{ kind, m
 5. Output is read in bounded chunks, streamed to a `tauri::ipc::Channel` and buffered (2 MB cap, redacted) into the `executions` row on exit. Cancellation terminates the whole tree; the snapshot directory is removed when the run ends. On app exit all running trees are killed and the runtime directory is cleared.
 6. Managed installs reuse the engine with `kind = "install"` after their own native confirmation. Program = resolved package manager, args = exact catalog recipe. A finish hook re-detects the tool or marks it `installation_failed`.
 
-### Data model (migrations 1–2)
+### Data model (migrations 1–3)
 
-`user_preferences`, `favorites`, `tool_categories`, `tools`, `tool_installations`, `resources` (custom), `resource_visits`, `projects`, `project_targets`, `findings`, `command_categories`, `commands`, `command_history`, `saved_dorks`, `dork_history`, `payloads` (custom), `wordlists`, `activity_logs`, `executions`, `cve_cache`, `cve_search_history`, `tasks`. Migration 2 adds `vt_cache` (VirusTotal reports keyed by type and indicator, with fetch time and a not-found flag).
+`user_preferences`, `favorites`, `tool_categories`, `tools`, `tool_installations`, `resources` (custom), `resource_visits`, `projects`, `project_targets`, `findings`, `command_categories`, `commands`, `command_history`, `saved_dorks`, `dork_history`, `payloads` (custom), `wordlists`, `activity_logs`, `executions`, `cve_cache`, `cve_search_history`, `tasks`. Migration 2 adds `vt_cache` (VirusTotal reports keyed by type and indicator, with fetch time and a not-found flag). Migration 3 adds `ti_cache` (normalized results per provider and indicator), `ti_history` (searches with per-provider outcome lists), `ti_saved` (saved indicators with a note) and `ti_provider_settings` (enable/disable per provider).
 
 Foreign keys are enforced (`PRAGMA foreign_keys = ON`). Deleting a project cascades to targets, findings and tasks, and nulls references in history. The database lives at `<app data dir>/cyberhub.db` (on Windows: `%APPDATA%\dev.cyberhub.workstation`).
 

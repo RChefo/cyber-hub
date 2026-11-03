@@ -390,3 +390,134 @@ export interface VtRecentLookup {
   fetchedAt: string;
   fresh: boolean;
 }
+
+export interface VtPickedFile {
+  /** opaque backend handle; the web view never sees the file path */
+  handle: string;
+  name: string;
+  size: number;
+  sha256: string;
+  sha1: string;
+  md5: string;
+  uploadMode: "direct" | "upload_url";
+  limitBytes: number;
+  withinLimit: boolean;
+}
+
+export interface VtUploadEvent {
+  phase: "confirming" | "preparing" | "uploading" | "processing";
+  sent: number;
+  total: number;
+}
+
+export interface VtUploadResult {
+  analysisId: string;
+  sha256: string;
+}
+
+export interface VtAnalysisStatus {
+  status: "queued" | "in-progress" | "completed";
+  stats: VtStats;
+  date: number | null;
+  sha256: string | null;
+}
+
+/* ─────────────── Threat intelligence providers ─────────────── */
+
+export type TiLevel = "malicious" | "suspicious" | "clean" | "info" | "unknown";
+export type TiStatus = "found" | "not_found" | "unsupported" | "no_key" | "disabled" | "rate_limited" | "error";
+
+export interface TiReport {
+  verdict: { level: TiLevel; label: string } | null;
+  scores: { label: string; value: number; max: number | null; display: string }[];
+  categories: string[];
+  families: string[];
+  tags: string[];
+  firstSeen: string | null;
+  lastSeen: string | null;
+  facts: { label: string; value: string }[];
+  tables: { title: string; columns: string[]; rows: string[][]; note: string | null }[];
+  related: { kind: VtKind; value: string; relation: string }[];
+  permalink: string | null;
+}
+
+export interface TiProviderResult {
+  provider: string;
+  providerName: string;
+  status: TiStatus;
+  report: TiReport | null;
+  message: string | null;
+  source: "live" | "cache" | null;
+  fetchedAt: string | null;
+  freshUntil: string | null;
+  quota: string | null;
+}
+
+export interface TiSummary {
+  malicious: string[];
+  suspicious: string[];
+  clean: string[];
+  informational: string[];
+  noVerdict: string[];
+  noRecord: string[];
+  failed: string[];
+  skipped: string[];
+}
+
+export interface TiInvestigation {
+  kind: VtKind;
+  indicator: string;
+  hashType: string | null;
+  results: TiProviderResult[];
+  summary: TiSummary;
+  searchedAt: string;
+  saved: boolean;
+}
+
+export interface TiProviderStatus {
+  id: string;
+  name: string;
+  description: string;
+  kinds: VtKind[];
+  keyId: string;
+  keyStored: boolean;
+  enabled: boolean;
+  accessNote: string;
+  docsUrl: string;
+  rateLimit: string;
+}
+
+export interface TiKeyStatus {
+  id: string;
+  label: string;
+  stored: boolean;
+  providers: string[];
+  signupUrl: string;
+}
+
+export interface TiProvidersOverview {
+  providers: TiProviderStatus[];
+  keys: TiKeyStatus[];
+}
+
+export interface TiKeyCheck {
+  ok: boolean;
+  message: string;
+  quota: string | null;
+}
+
+export interface TiHistoryEntry {
+  id: number;
+  kind: VtKind;
+  indicator: string;
+  summary: TiSummary;
+  searchedAt: string;
+}
+
+export interface TiSavedIndicator {
+  id: number;
+  kind: VtKind;
+  indicator: string;
+  note: string;
+  createdAt: string;
+}

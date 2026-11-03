@@ -37,7 +37,8 @@ Other scripts:
 | Payloads & Wordlists | 64 reference detection payloads plus your own, with encode-on-copy. A wordlist index that references files in place or copies them into a managed folder, with preview, search, export and favorites. |
 | Dorks Studio | Visual operator builder, raw mode, live preview, 37 templates, saved queries, history, open in Google. |
 | Cyber Resources | 46 curated sites, custom links, favorites, recently visited. |
-| VirusTotal | Reputation lookups for public IPs, domains, URLs and MD5/SHA-1/SHA-256 hashes with automatic type detection: verdict, vendor statistics, reputation, last analysis, flagged engines and threat details. Cached locally for 24 h with manual refresh. Read-only: nothing is uploaded or submitted. The API key is set in Settings, stays in the OS keychain and is used only by the backend. |
+| Threat Intel | One search across VirusTotal, AbuseIPDB, AlienVault OTX, URLhaus, MalwareBazaar, ThreatFox and Shodan (each optional, with your own key). Per-provider verdicts in the provider's own terms, scores, malware families, categories, timestamps and source links. A side-by-side comparison, related indicators merged across providers with one-click pivots, saved indicators, search history, and Markdown/JSON reports. See [docs/PROVIDERS.md](docs/PROVIDERS.md). |
+| VirusTotal | Reputation lookups with automatic type detection, and File analysis: pick a file, hash it locally, check the hash, and only if you choose, upload it publicly after a warning and a system confirmation. Supports ≤ 32 MB and larger files via a one-time upload URL, with progress, cancellation and analysis tracking. |
 | Vulnerability Intel | NVD CVE API 2.0 search (live or local cache, clearly labeled), CVSS 4.0/3.x/2.0 with vector breakdown, CWE names, affected products, references, CISA KEV flag, add as finding. |
 | Projects | Assessments with authorized scope (domains, wildcards, IPs, CIDRs, URLs, exclusions), findings with evidence references, notes, tool run history, Markdown report export. |
 | Security Utilities | Transform workbench, Base64, URL, Hex, JWT inspector, hash identifier, hash calculator, regex tester, JSON/XML/HTML formatters, URL parser, IP/CIDR calculator, User-Agent parser, DNS lookup, HTTP header analyzer. |
@@ -46,7 +47,8 @@ Other scripts:
 ## Documentation
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): layers, data model, execution engine, frontend structure, UI library usage
-- [docs/SECURITY.md](docs/SECURITY.md): threat model, scope enforcement semantics, privileges, known limitations
+- [docs/SECURITY.md](docs/SECURITY.md): threat model, scope enforcement semantics, provider and upload safeguards, privileges, known limitations
+- [docs/PROVIDERS.md](docs/PROVIDERS.md): threat-intelligence providers, their requirements and limits, and deferred candidates
 - [docs/PLATFORMS.md](docs/PLATFORMS.md): per-OS dependencies, validation status, platform-specific behavior
 
 ## Security at a glance
@@ -55,7 +57,8 @@ Other scripts:
 * Scope-required tools run only inside an active project; every target on the command line **and inside target files** (e.g. `nmap -iL`) is validated, and target files are executed from validated snapshots.
 * No shell, closed stdin, absolute executable paths, whole process trees cancelled, credentials redacted before storage.
 * Minimal Tauri capabilities (no shell/fs/dialog/HTTP for the web view), strict CSP, `freezePrototype` on.
-* API keys (NVD, VirusTotal) live in the OS keychain and are never returned to the web view; VirusTotal requests are made only by the Rust backend.
+* API keys (NVD and every threat-intelligence provider) live in the OS keychain and are never returned to the web view; provider requests are made only by the Rust backend to fixed endpoints.
+* Files are uploaded to VirusTotal only after a public-sharing warning, an in-page acknowledgement and a native confirmation for that file. The original file is never modified.
 
 Details and accepted risks: [docs/SECURITY.md](docs/SECURITY.md).
 
@@ -63,8 +66,8 @@ Details and accepted risks: [docs/SECURITY.md](docs/SECURITY.md).
 
 | Platform | Status |
 |---|---|
-| Windows 11 | Verified in the running app (detection, scoped runs incl. target files, native confirmations, cancellation, frameless window and its controls, VirusTotal against a local mock API, all pages with a frozen prototype) plus all automated tests. |
-| Linux | Automated verification in a Debian 12 container: typecheck, 84 frontend tests, 44 backend tests, frontend and backend builds. The GUI has not been run on Linux. |
+| Windows 11 | Verified in the running app (detection, scoped runs incl. target files, native confirmations, cancellation, frameless window and its controls, all threat-intelligence providers and VirusTotal file uploads against a local mock API, all pages with a frozen prototype) plus all automated tests. |
+| Linux | Automated verification in a Debian 12 container: typecheck, 88 frontend tests, 77 backend tests, frontend and backend builds. The GUI has not been run on Linux. |
 | macOS | Not built or tested. |
 
 Installers have not been rebuilt since the hardening pass. See [docs/PLATFORMS.md](docs/PLATFORMS.md).
