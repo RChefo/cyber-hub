@@ -1,0 +1,36 @@
+# dependencies and build output
+node_modules
+dist
+src-tauri/target
+src-tauri/gen/schemas
+*.tsbuildinfo
+coverage
+.vite
+
+# local data: Cyber Hub stores user data in the OS app-data directory, never in the repo;
+# these patterns keep accidental copies out of version control
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# secrets and environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# logs and OS / editor files
+*.log
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# local design reference (third-party screenshot, not part of the product)
+docs/reference/

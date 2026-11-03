@@ -1,0 +1,10 @@
+# Store text with LF in the repository so checkouts behave the same on Windows, macOS and Linux.
+* text=auto eol=lf
+
+# binary assets
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary

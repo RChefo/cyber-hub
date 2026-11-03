@@ -1,0 +1,243 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Cyber Hub design tokens.
+ * HeroUI establishes the design system; we only override its dark-theme variables
+ * so every HeroUI component (and the vendored components that read the same
+ * tokens) inherits the Cyber Hub palette.
+ */
+@layer theme {
+  .dark,
+  [data-theme="dark"] {
+    color-scheme: dark;
+
+    /*
+     * Border-free layering: separation comes from background tiers + soft shadows.
+     *   page #0b0d10 < sidebar/inset #101318 < card #15181f < raised #1b1f27 < #222732
+     */
+    --background: #0b0d10;
+    --foreground: #e8ebf0;
+
+    --surface: #15181f;
+    --surface-foreground: var(--foreground);
+    --surface-secondary: #1b1f27;
+    --surface-secondary-foreground: var(--foreground);
+    --surface-tertiary: #222732;
+    --surface-tertiary-foreground: var(--foreground);
+
+    --overlay: #1a1e26;
+    --overlay-foreground: var(--foreground);
+
+    --muted: #8a93a3;
+
+    --default: #1f242e;
+    --default-foreground: #dfe3ea;
+
+    --accent: #4c8dff;
+    --accent-foreground: #ffffff;
+    --success: #3fb68b;
+    --success-foreground: #06140f;
+    --warning: #e0a43a;
+    --warning-foreground: #1a1203;
+    --danger: #e5484d;
+    --danger-foreground: #ffffff;
+
+    /* Fields are told apart by a lighter fill, not a stroke. Focus and invalid states
+       still draw a border (field-border-focus / field-border-invalid) for accessibility. */
+    --field-background: #1e222b;
+    --field-foreground: var(--foreground);
+    --field-placeholder: #6b7383;
+    --field-border: transparent;
+    --field-border-width: 1px;
+
+    --segment: #2a303c;
+    --segment-foreground: var(--foreground);
+
+    /* No decorative container strokes anywhere: the border tokens are transparent so every
+       `border-border` (HeroUI, vendored and Cyber Hub components) disappears while layout
+       metrics stay identical. Row dividers inside lists use --separator. */
+    --border: transparent;
+    --separator: rgba(255, 255, 255, 0.05);
+    --focus: var(--accent);
+    --link: #8fb6ff;
+    --backdrop: rgba(4, 6, 10, 0.72);
+
+    --surface-hover: #1c2028;
+    --background-secondary: #101318;
+    --background-tertiary: #13161c;
+
+    --default-hover: #262c38;
+    --accent-hover: #6aa1ff;
+    --success-hover: #4cc79a;
+    --warning-hover: #ebb14d;
+    --danger-hover: #ee5c61;
+
+    --accent-soft: rgba(76, 141, 255, 0.13);
+    --accent-soft-foreground: #8fb6ff;
+    --accent-soft-hover: rgba(76, 141, 255, 0.2);
+    --success-soft: rgba(63, 182, 139, 0.13);
+    --success-soft-foreground: #6fd1ad;
+    --success-soft-hover: rgba(63, 182, 139, 0.2);
+    --warning-soft: rgba(224, 164, 58, 0.13);
+    --warning-soft-foreground: #f0c06d;
+    --warning-soft-hover: rgba(224, 164, 58, 0.2);
+    --danger-soft: rgba(229, 72, 77, 0.13);
+    --danger-soft-foreground: #f2878a;
+    --danger-soft-hover: rgba(229, 72, 77, 0.2);
+    --default-soft: rgba(255, 255, 255, 0.04);
+    --default-soft-hover: rgba(255, 255, 255, 0.07);
+
+    --border-secondary: transparent;
+    --border-tertiary: transparent;
+    --separator-secondary: rgba(255, 255, 255, 0.07);
+    --separator-tertiary: rgba(255, 255, 255, 0.09);
+
+    --surface-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.35), 0 10px 28px -14px rgba(0, 0, 0, 0.6);
+    --overlay-shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.45), 0 22px 56px -12px rgba(0, 0, 0, 0.8);
+    --field-shadow: none;
+
+    --radius: 0.5rem;
+    --field-radius: 0.5rem;
+    --tooltip-delay: 500ms;
+    --tooltip-close-delay: 100ms;
+  }
+}
+
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", Consolas, monospace;
+
+  /* Severity scale used by findings and CVSS. Muted, not neon. */
+  --color-sev-critical: #d93d4a;
+  --color-sev-high: #f07a32;
+  --color-sev-medium: #f2cc60;
+  --color-sev-low: #4c8dff;
+  --color-sev-info: #8a93a3;
+}
+
+/* Bridge for vendored shadcn / EvilCharts components that expect the shadcn token name. */
+@theme inline {
+  --color-muted-foreground: var(--muted);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+    user-select: none;
+  }
+  input,
+  textarea,
+  pre,
+  code,
+  [data-selectable] {
+    user-select: text;
+  }
+  ::selection {
+    background: rgba(76, 141, 255, 0.35);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Component refinements on top of HeroUI defaults (same tokens, calmer weight). */
+@layer components {
+  .button {
+    font-weight: 500;
+  }
+  [data-slot="tabs"] [role="tab"] {
+    white-space: nowrap;
+  }
+  /* Single-line select values: truncate instead of wrapping into the next field. */
+  [data-slot="select-value"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Commands must render exactly as typed: no ligatures (e.g. `--` must never become an em dash). */
+.font-mono,
+code,
+pre,
+kbd {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
+/*
+ * Panels: the layered surface used for every card, widget and section.
+ * No stroke — elevation is expressed by fill + shadow only.
+ */
+@utility panel {
+  background: var(--surface);
+  border: 0;
+  border-radius: 0.75rem;
+  box-shadow: var(--surface-shadow);
+}
+
+/* Recessed area inside a panel (code, previews, nested rows). */
+@utility panel-inset {
+  background: var(--background-secondary);
+  border: 0;
+  border-radius: 0.625rem;
+}
+
+/* Nested item inside a panel (list rows, option tiles): a faint lift instead of an outline. */
+@utility tile {
+  background: rgba(255, 255, 255, 0.025);
+  border-radius: 0.5rem;
+}
+
+/*
+ * Safety net: decorative translucent strokes written as utilities in any module
+ * (border-white/10, border-border/50, divide-white/…) render transparent too.
+ * Semantic strokes (danger/invalid/accent selection) and focus rings are untouched.
+ */
+@layer utilities {
+  [class*="border-white/"],
+  [class*="border-border"] {
+    border-color: transparent !important;
+  }
+  [class*="outline-border"],
+  [class*="ring-border"] {
+    --tw-ring-color: transparent;
+    outline-color: transparent;
+  }
+}
+
+@utility scroll-area {
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

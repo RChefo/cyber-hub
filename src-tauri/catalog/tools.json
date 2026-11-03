@@ -1,0 +1,4588 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "id": "web",
+      "name": "Web Application Security",
+      "icon": "globe",
+      "description": "Intercepting proxies, scanners, fuzzers and injection testing for web apps and APIs."
+    },
+    {
+      "id": "network",
+      "name": "Network Security",
+      "icon": "network",
+      "description": "Port scanning, packet capture and low-level network diagnostics."
+    },
+    {
+      "id": "osint",
+      "name": "OSINT",
+      "icon": "eye",
+      "description": "Open-source intelligence gathering on organizations, people and infrastructure."
+    },
+    {
+      "id": "recon",
+      "name": "Reconnaissance",
+      "icon": "radar",
+      "description": "Attack-surface mapping: subdomains, DNS and technology fingerprinting."
+    },
+    {
+      "id": "vuln",
+      "name": "Vulnerability Assessment",
+      "icon": "shield-alert",
+      "description": "Vulnerability scanners and exploit references for known weaknesses."
+    },
+    {
+      "id": "password",
+      "name": "Password Auditing",
+      "icon": "key-round",
+      "description": "Hash cracking, credential strength auditing and wordlist generation."
+    },
+    {
+      "id": "forensics",
+      "name": "Digital Forensics",
+      "icon": "microscope",
+      "description": "Disk, memory and file forensics plus metadata analysis."
+    },
+    {
+      "id": "malware",
+      "name": "Malware Analysis",
+      "icon": "bug",
+      "description": "Static analysis, signature matching and capability detection for suspicious files."
+    },
+    {
+      "id": "wireless",
+      "name": "Wireless Security",
+      "icon": "wifi",
+      "description": "Wi-Fi and wireless protocol assessment and monitoring."
+    },
+    {
+      "id": "cloud",
+      "name": "Cloud Security",
+      "icon": "cloud",
+      "description": "Cloud posture assessment, container and IaC scanning."
+    },
+    {
+      "id": "reversing",
+      "name": "Reverse Engineering",
+      "icon": "cpu",
+      "description": "Disassemblers, decompilers and debuggers for binaries and apps."
+    },
+    {
+      "id": "crypto",
+      "name": "Cryptography",
+      "icon": "lock",
+      "description": "TLS configuration testing, certificates and data transformation."
+    },
+    {
+      "id": "linux",
+      "name": "Linux Security",
+      "icon": "terminal",
+      "description": "Host hardening audits, rootkit detection and privilege-escalation review."
+    },
+    {
+      "id": "ad",
+      "name": "Active Directory Security",
+      "icon": "building-2",
+      "description": "Active Directory enumeration, attack-path analysis and Windows protocol testing."
+    }
+  ],
+  "tools": [
+    {
+      "id": "burpsuite",
+      "name": "Burp Suite",
+      "category": "web",
+      "description": "Industry-standard intercepting proxy for manual web application testing, with repeater, intruder and scanner (Professional) modules.",
+      "website": "https://portswigger.net/burp",
+      "docs": "https://portswigger.net/burp/documentation",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "gui",
+      "tags": [
+        "proxy",
+        "web",
+        "manual-testing"
+      ],
+      "detect": {
+        "binaries": [
+          "BurpSuiteCommunity",
+          "BurpSuitePro",
+          "burpsuite"
+        ],
+        "paths": {
+          "windows": [
+            "{LOCALAPPDATA}\\Programs\\BurpSuiteCommunity\\BurpSuiteCommunity.exe",
+            "{ProgramFiles}\\BurpSuiteCommunity\\BurpSuiteCommunity.exe",
+            "{LOCALAPPDATA}\\Programs\\BurpSuitePro\\BurpSuitePro.exe",
+            "{ProgramFiles}\\BurpSuitePro\\BurpSuitePro.exe"
+          ],
+          "macos": [
+            "/Applications/Burp Suite Community Edition.app",
+            "/Applications/Burp Suite Professional.app"
+          ],
+          "linux": [
+            "{HOME}/BurpSuiteCommunity/BurpSuiteCommunity",
+            "{HOME}/BurpSuitePro/BurpSuitePro"
+          ]
+        }
+      },
+      "install": {
+        "windows": [
+          "Download the Community Edition installer from https://portswigger.net/burp/releases",
+          "Or: winget install --id PortSwigger.BurpSuite.Community -e"
+        ],
+        "macos": [
+          "Download the macOS installer from https://portswigger.net/burp/releases",
+          "Or: brew install --cask burp-suite"
+        ],
+        "linux": [
+          "Download the Linux installer (.sh) from https://portswigger.net/burp/releases",
+          "chmod +x burpsuite_community_linux_*.sh && ./burpsuite_community_linux_*.sh"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows"
+          ],
+          "manager": "winget",
+          "args": [
+            "install",
+            "--id",
+            "PortSwigger.BurpSuite.Community",
+            "-e",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+            "--disable-interactivity"
+          ]
+        },
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "--cask",
+            "burp-suite"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Configure browser proxy",
+          "command": "Proxy listener: 127.0.0.1:8080",
+          "description": "Point your browser or tool at Burp's default proxy listener."
+        },
+        {
+          "title": "Export CA certificate",
+          "command": "http://burpsuite/cert",
+          "description": "Open in a proxied browser to download Burp's CA certificate for HTTPS interception."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "zap",
+      "name": "OWASP ZAP",
+      "category": "web",
+      "description": "Free, open-source intercepting proxy and automated web application scanner maintained by the ZAP project (formerly OWASP ZAP).",
+      "website": "https://www.zaproxy.org",
+      "docs": "https://www.zaproxy.org/docs/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "gui",
+      "tags": [
+        "proxy",
+        "scanner",
+        "web",
+        "open-source"
+      ],
+      "detect": {
+        "binaries": [
+          "zaproxy",
+          "zap",
+          "zap.sh"
+        ],
+        "paths": {
+          "windows": [
+            "{ProgramFiles}\\ZAP\\Zed Attack Proxy\\ZAP.exe",
+            "{ProgramFiles(x86)}\\ZAP\\Zed Attack Proxy\\ZAP.exe"
+          ],
+          "macos": [
+            "/Applications/ZAP.app",
+            "/Applications/OWASP ZAP.app"
+          ],
+          "linux": [
+            "/usr/share/zaproxy/zap.sh",
+            "/opt/zaproxy/zap.sh"
+          ]
+        }
+      },
+      "install": {
+        "windows": [
+          "Download the Windows installer from https://www.zaproxy.org/download/",
+          "Or: winget install --id ZAP.ZAP -e"
+        ],
+        "macos": [
+          "Download the macOS installer from https://www.zaproxy.org/download/",
+          "Or: brew install --cask zap"
+        ],
+        "linux": [
+          "sudo apt install zaproxy   # Kali / Debian-based",
+          "Or download the cross-platform package from https://www.zaproxy.org/download/"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows"
+          ],
+          "manager": "winget",
+          "args": [
+            "install",
+            "--id",
+            "ZAP.ZAP",
+            "-e",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+            "--disable-interactivity"
+          ]
+        },
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "--cask",
+            "zap"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Java (bundled on Windows/macOS installers)",
+          "binaries": [
+            "java"
+          ],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Baseline scan (Docker)",
+          "command": "docker run -t zaproxy/zap-stable zap-baseline.py -t {url}",
+          "description": "Passive baseline scan of an authorized target URL."
+        },
+        {
+          "title": "Headless daemon",
+          "command": "zap.sh -daemon -port 8090",
+          "description": "Run ZAP without UI for API-driven automation."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "sqlmap",
+      "name": "sqlmap",
+      "category": "web",
+      "description": "Automatic SQL injection detection and exploitation tool supporting a wide range of database engines and injection techniques.",
+      "website": "https://sqlmap.org",
+      "docs": "https://github.com/sqlmapproject/sqlmap/wiki/Usage",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "sqli",
+        "injection",
+        "database"
+      ],
+      "detect": {
+        "binaries": [
+          "sqlmap",
+          "sqlmap.py"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "pipx install sqlmap",
+          "Or: git clone --depth 1 https://github.com/sqlmapproject/sqlmap.git"
+        ],
+        "macos": [
+          "brew install sqlmap",
+          "Or: pipx install sqlmap"
+        ],
+        "linux": [
+          "sudo apt install sqlmap",
+          "Or: pipx install sqlmap"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "sqlmap"
+          ]
+        },
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "pipx",
+          "args": [
+            "install",
+            "sqlmap"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Python 3",
+          "binaries": [
+            "python3",
+            "python",
+            "py"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Test a URL parameter",
+          "command": "sqlmap -u \"{url}\" --batch",
+          "description": "Detect SQL injection in the URL's query parameters with default answers."
+        },
+        {
+          "title": "Test a saved request",
+          "command": "sqlmap -r request.txt --batch --level 2",
+          "description": "Use a raw HTTP request captured from a proxy."
+        },
+        {
+          "title": "Enumerate databases",
+          "command": "sqlmap -u \"{url}\" --batch --dbs",
+          "description": "List databases once an injection point is confirmed."
+        }
+      ],
+      "requiresScope": true,
+      "builder": "sqlmap"
+    },
+    {
+      "id": "nuclei",
+      "name": "Nuclei",
+      "category": "web",
+      "description": "Fast, template-based vulnerability scanner from ProjectDiscovery with thousands of community-maintained YAML templates.",
+      "website": "https://github.com/projectdiscovery/nuclei",
+      "docs": "https://docs.projectdiscovery.io/tools/nuclei/overview",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "scanner",
+        "templates",
+        "web",
+        "projectdiscovery"
+      ],
+      "detect": {
+        "binaries": [
+          "nuclei"
+        ],
+        "versionArgs": [
+          "-version",
+          "-duc"
+        ],
+        "versionRegex": "[Vv]ersion:?\\s*v?(\\d+\\.\\d+(?:\\.\\d+)*)"
+      },
+      "install": {
+        "windows": [
+          "go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest",
+          "Or download a release binary from https://github.com/projectdiscovery/nuclei/releases"
+        ],
+        "macos": [
+          "brew install nuclei"
+        ],
+        "linux": [
+          "go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest",
+          "Or: sudo apt install nuclei   # Kali"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "nuclei"
+          ]
+        },
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "go",
+          "args": [
+            "install",
+            "-v",
+            "github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Go toolchain (for go install)",
+          "binaries": [
+            "go"
+          ],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Scan a single target",
+          "command": "nuclei -u {url}",
+          "description": "Run the default template set against one URL."
+        },
+        {
+          "title": "Scan by severity",
+          "command": "nuclei -u {url} -severity high,critical",
+          "description": "Only run high and critical severity templates."
+        },
+        {
+          "title": "Scan a target list",
+          "command": "nuclei -l targets.txt -o results.txt",
+          "description": "Scan every URL in a file and save results."
+        }
+      ],
+      "requiresScope": true,
+      "builder": "nuclei"
+    },
+    {
+      "id": "ffuf",
+      "name": "ffuf",
+      "category": "web",
+      "description": "Fast web fuzzer written in Go for content discovery, virtual host discovery and parameter fuzzing.",
+      "website": "https://github.com/ffuf/ffuf",
+      "docs": "https://github.com/ffuf/ffuf#usage",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "fuzzing",
+        "content-discovery",
+        "web"
+      ],
+      "detect": {
+        "binaries": [
+          "ffuf"
+        ],
+        "versionArgs": [
+          "-V"
+        ]
+      },
+      "install": {
+        "windows": [
+          "go install github.com/ffuf/ffuf/v2@latest",
+          "Or download a release binary from https://github.com/ffuf/ffuf/releases"
+        ],
+        "macos": [
+          "brew install ffuf"
+        ],
+        "linux": [
+          "sudo apt install ffuf",
+          "Or: go install github.com/ffuf/ffuf/v2@latest"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "ffuf"
+          ]
+        },
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "go",
+          "args": [
+            "install",
+            "-v",
+            "github.com/ffuf/ffuf/v2@latest"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Go toolchain (for go install)",
+          "binaries": [
+            "go"
+          ],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Directory discovery",
+          "command": "ffuf -u {url}/FUZZ -w {wordlist}",
+          "description": "Fuzz paths using the FUZZ keyword."
+        },
+        {
+          "title": "Filter by status",
+          "command": "ffuf -u {url}/FUZZ -w {wordlist} -mc 200,204,301,302,307,401,403",
+          "description": "Only show matching status codes."
+        },
+        {
+          "title": "Virtual host discovery",
+          "command": "ffuf -u {url} -H \"Host: FUZZ.{domain}\" -w {wordlist} -fs 0",
+          "description": "Fuzz the Host header to discover virtual hosts."
+        }
+      ],
+      "requiresScope": true,
+      "builder": "ffuf"
+    },
+    {
+      "id": "gobuster",
+      "name": "Gobuster",
+      "category": "web",
+      "description": "Brute-forcing tool for URIs (directories and files), DNS subdomains, virtual hosts and cloud buckets.",
+      "website": "https://github.com/OJ/gobuster",
+      "docs": "https://github.com/OJ/gobuster#usage",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "content-discovery",
+        "dns",
+        "web"
+      ],
+      "detect": {
+        "binaries": [
+          "gobuster"
+        ],
+        "versionArgs": [
+          "version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "go install github.com/OJ/gobuster/v3@latest",
+          "Or download a release from https://github.com/OJ/gobuster/releases"
+        ],
+        "macos": [
+          "brew install gobuster"
+        ],
+        "linux": [
+          "sudo apt install gobuster",
+          "Or: go install github.com/OJ/gobuster/v3@latest"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "gobuster"
+          ]
+        },
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "go",
+          "args": [
+            "install",
+            "-v",
+            "github.com/OJ/gobuster/v3@latest"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Go toolchain (for go install)",
+          "binaries": [
+            "go"
+          ],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Directory mode",
+          "command": "gobuster dir -u {url} -w {wordlist}",
+          "description": "Enumerate directories and files."
+        },
+        {
+          "title": "DNS mode",
+          "command": "gobuster dns -d {domain} -w {wordlist}",
+          "description": "Brute-force subdomains."
+        },
+        {
+          "title": "Vhost mode",
+          "command": "gobuster vhost -u {url} -w {wordlist} --append-domain",
+          "description": "Discover virtual hosts."
+        }
+      ],
+      "requiresScope": true,
+      "builder": "gobuster"
+    },
+    {
+      "id": "nikto",
+      "name": "Nikto",
+      "category": "web",
+      "description": "Open-source web server scanner that checks for dangerous files, outdated server software and common misconfigurations.",
+      "website": "https://github.com/sullo/nikto",
+      "docs": "https://github.com/sullo/nikto/wiki",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "scanner",
+        "web-server",
+        "misconfiguration"
+      ],
+      "detect": {
+        "binaries": [
+          "nikto",
+          "nikto.pl"
+        ],
+        "versionArgs": [
+          "-Version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Install Strawberry Perl, then: git clone https://github.com/sullo/nikto.git",
+          "Run with: perl nikto/program/nikto.pl -h {url}"
+        ],
+        "macos": [
+          "brew install nikto"
+        ],
+        "linux": [
+          "sudo apt install nikto"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "nikto"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Perl",
+          "binaries": [
+            "perl"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Scan a host",
+          "command": "nikto -h {url}",
+          "description": "Run the default checks against a web server."
+        },
+        {
+          "title": "Save HTML report",
+          "command": "nikto -h {url} -o report.html -Format htm",
+          "description": "Write results to an HTML report."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "httpx",
+      "name": "httpx",
+      "category": "web",
+      "description": "Fast multi-purpose HTTP toolkit from ProjectDiscovery for probing live hosts, status codes, titles and technologies.",
+      "website": "https://github.com/projectdiscovery/httpx",
+      "docs": "https://docs.projectdiscovery.io/tools/httpx/overview",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "http",
+        "probing",
+        "projectdiscovery"
+      ],
+      "detect": {
+        "binaries": [
+          "httpx"
+        ],
+        "versionArgs": [
+          "-version",
+          "-duc"
+        ],
+        "versionRegex": "[Vv]ersion:?\\s*v?(\\d+\\.\\d+(?:\\.\\d+)*)"
+      },
+      "install": {
+        "windows": [
+          "go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest"
+        ],
+        "macos": [
+          "go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest",
+          "Note: the Homebrew 'httpx' formula is a different (Python) tool."
+        ],
+        "linux": [
+          "go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest",
+          "Note: Debian's python3-httpx provides a different 'httpx' command."
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "go",
+          "args": [
+            "install",
+            "-v",
+            "github.com/projectdiscovery/httpx/cmd/httpx@latest"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Go toolchain (for go install)",
+          "binaries": [
+            "go"
+          ],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Probe a host list",
+          "command": "httpx -l hosts.txt -sc -title -td",
+          "description": "Show status code, title and detected technologies."
+        },
+        {
+          "title": "Probe one target",
+          "command": "httpx -u {url} -sc -cl -server",
+          "description": "Status code, content length and server header."
+        }
+      ],
+      "requiresScope": true,
+      "builder": "httpx"
+    },
+    {
+      "id": "dalfox",
+      "name": "Dalfox",
+      "category": "web",
+      "description": "Parameter analysis and XSS scanning tool focused on finding and verifying reflected and DOM-based cross-site scripting.",
+      "website": "https://github.com/hahwul/dalfox",
+      "docs": "https://dalfox.hahwul.com/docs/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "xss",
+        "scanner",
+        "web"
+      ],
+      "detect": {
+        "binaries": [
+          "dalfox"
+        ],
+        "versionArgs": [
+          "version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "go install github.com/hahwul/dalfox/v2@latest"
+        ],
+        "macos": [
+          "go install github.com/hahwul/dalfox/v2@latest"
+        ],
+        "linux": [
+          "go install github.com/hahwul/dalfox/v2@latest",
+          "Or: sudo snap install dalfox"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "go",
+          "args": [
+            "install",
+            "-v",
+            "github.com/hahwul/dalfox/v2@latest"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Go toolchain (for go install)",
+          "binaries": [
+            "go"
+          ],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Scan a URL",
+          "command": "dalfox url \"{url}\"",
+          "description": "Analyze parameters and test for XSS."
+        },
+        {
+          "title": "Scan from file",
+          "command": "dalfox file urls.txt -o xss.txt",
+          "description": "Scan multiple URLs and save findings."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "feroxbuster",
+      "name": "feroxbuster",
+      "category": "web",
+      "description": "Fast, recursive content discovery tool written in Rust.",
+      "website": "https://github.com/epi052/feroxbuster",
+      "docs": "https://epi052.github.io/feroxbuster-docs/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "content-discovery",
+        "recursive",
+        "web"
+      ],
+      "detect": {
+        "binaries": [
+          "feroxbuster"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download the Windows release zip from https://github.com/epi052/feroxbuster/releases",
+          "Or: winget install epi052.feroxbuster (if available)"
+        ],
+        "macos": [
+          "brew install feroxbuster"
+        ],
+        "linux": [
+          "sudo apt install feroxbuster"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "feroxbuster"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Recursive scan",
+          "command": "feroxbuster -u {url} -w {wordlist}",
+          "description": "Discover content recursively."
+        },
+        {
+          "title": "Limit depth",
+          "command": "feroxbuster -u {url} -w {wordlist} -d 2 -x php,txt",
+          "description": "Limit recursion depth and add extensions."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "wpscan",
+      "name": "WPScan",
+      "category": "web",
+      "description": "WordPress security scanner that enumerates versions, plugins, themes and users and checks them against the WPScan vulnerability database.",
+      "website": "https://wpscan.com",
+      "docs": "https://github.com/wpscanteam/wpscan/wiki/WPScan-User-Documentation",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "wordpress",
+        "cms",
+        "scanner"
+      ],
+      "detect": {
+        "binaries": [
+          "wpscan"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "macos": [
+          "brew install wpscanteam/tap/wpscan",
+          "Or: gem install wpscan"
+        ],
+        "linux": [
+          "sudo apt install wpscan",
+          "Or: gem install wpscan"
+        ]
+      },
+      "managed": [],
+      "dependencies": [
+        {
+          "name": "Ruby",
+          "binaries": [
+            "ruby"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Basic scan",
+          "command": "wpscan --url {url}",
+          "description": "Fingerprint WordPress core, theme and plugins."
+        },
+        {
+          "title": "Enumerate plugins",
+          "command": "wpscan --url {url} -e vp,vt",
+          "description": "Enumerate vulnerable plugins and themes (API token recommended)."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "katana",
+      "name": "Katana",
+      "category": "web",
+      "description": "Next-generation crawling and spidering framework from ProjectDiscovery with headless and standard modes.",
+      "website": "https://github.com/projectdiscovery/katana",
+      "docs": "https://docs.projectdiscovery.io/tools/katana/overview",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "crawler",
+        "spider",
+        "projectdiscovery"
+      ],
+      "detect": {
+        "binaries": [
+          "katana"
+        ],
+        "versionArgs": [
+          "-version",
+          "-duc"
+        ],
+        "versionRegex": "[Vv]ersion:?\\s*v?(\\d+\\.\\d+(?:\\.\\d+)*)"
+      },
+      "install": {
+        "windows": [
+          "go install github.com/projectdiscovery/katana/cmd/katana@latest"
+        ],
+        "macos": [
+          "go install github.com/projectdiscovery/katana/cmd/katana@latest"
+        ],
+        "linux": [
+          "go install github.com/projectdiscovery/katana/cmd/katana@latest"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "go",
+          "args": [
+            "install",
+            "-v",
+            "github.com/projectdiscovery/katana/cmd/katana@latest"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Go toolchain (for go install)",
+          "binaries": [
+            "go"
+          ],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Crawl a site",
+          "command": "katana -u {url}",
+          "description": "Crawl and list discovered endpoints."
+        },
+        {
+          "title": "Limit depth with JS parsing",
+          "command": "katana -u {url} -d 3 -jc",
+          "description": "Crawl three levels deep and parse JavaScript files."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "nmap",
+      "name": "Nmap",
+      "category": "network",
+      "description": "The standard network mapper for host discovery, port scanning, service and OS detection, with the Nmap Scripting Engine (NSE).",
+      "website": "https://nmap.org",
+      "docs": "https://nmap.org/book/man.html",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "port-scanning",
+        "discovery",
+        "nse"
+      ],
+      "detect": {
+        "binaries": [
+          "nmap"
+        ],
+        "paths": {
+          "windows": [
+            "{ProgramFiles(x86)}\\Nmap\\nmap.exe",
+            "{ProgramFiles}\\Nmap\\nmap.exe"
+          ]
+        },
+        "versionArgs": [
+          "--version"
+        ],
+        "versionRegex": "Nmap version (\\d+\\.\\d+(?:\\.\\d+)*)"
+      },
+      "install": {
+        "windows": [
+          "Download the installer from https://nmap.org/download.html (includes Npcap)",
+          "Or: winget install --id Insecure.Nmap -e"
+        ],
+        "macos": [
+          "brew install nmap",
+          "Or use the official .dmg from https://nmap.org/download.html"
+        ],
+        "linux": [
+          "sudo apt install nmap   # Debian/Ubuntu/Kali",
+          "sudo dnf install nmap   # Fedora/RHEL"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows"
+          ],
+          "manager": "winget",
+          "args": [
+            "install",
+            "--id",
+            "Insecure.Nmap",
+            "-e",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+            "--disable-interactivity"
+          ]
+        },
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "nmap"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Service/version scan",
+          "command": "nmap -sV -sC {target}",
+          "description": "Detect service versions and run default scripts."
+        },
+        {
+          "title": "All TCP ports",
+          "command": "nmap -p- --min-rate 1000 {target}",
+          "description": "Scan all 65535 TCP ports."
+        },
+        {
+          "title": "Ping sweep",
+          "command": "nmap -sn {target}",
+          "description": "Discover live hosts without port scanning."
+        }
+      ],
+      "requiresScope": true,
+      "builder": "nmap"
+    },
+    {
+      "id": "wireshark",
+      "name": "Wireshark",
+      "category": "network",
+      "description": "The world's most widely used network protocol analyzer for live capture and deep inspection of hundreds of protocols.",
+      "website": "https://www.wireshark.org",
+      "docs": "https://www.wireshark.org/docs/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "gui",
+      "tags": [
+        "packet-capture",
+        "protocol-analysis",
+        "pcap"
+      ],
+      "detect": {
+        "binaries": [
+          "Wireshark",
+          "wireshark"
+        ],
+        "paths": {
+          "windows": [
+            "{ProgramFiles}\\Wireshark\\Wireshark.exe"
+          ],
+          "macos": [
+            "/Applications/Wireshark.app"
+          ]
+        }
+      },
+      "install": {
+        "windows": [
+          "Download the installer from https://www.wireshark.org/download.html (includes Npcap)",
+          "Or: winget install --id WiresharkFoundation.Wireshark -e"
+        ],
+        "macos": [
+          "brew install --cask wireshark",
+          "Or download the .dmg from https://www.wireshark.org/download.html"
+        ],
+        "linux": [
+          "sudo apt install wireshark",
+          "sudo usermod -aG wireshark $USER   # capture without root"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows"
+          ],
+          "manager": "winget",
+          "args": [
+            "install",
+            "--id",
+            "WiresharkFoundation.Wireshark",
+            "-e",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+            "--disable-interactivity"
+          ]
+        },
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "--cask",
+            "wireshark"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Display filter: HTTP",
+          "command": "http.request",
+          "description": "Show only HTTP requests."
+        },
+        {
+          "title": "Display filter: host",
+          "command": "ip.addr == {target}",
+          "description": "Show traffic to/from one host."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "tshark",
+      "name": "TShark",
+      "category": "network",
+      "description": "Terminal-based version of Wireshark for capturing and analyzing packets from the command line.",
+      "website": "https://www.wireshark.org",
+      "docs": "https://www.wireshark.org/docs/man-pages/tshark.html",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "packet-capture",
+        "cli",
+        "pcap"
+      ],
+      "detect": {
+        "binaries": [
+          "tshark"
+        ],
+        "paths": {
+          "windows": [
+            "{ProgramFiles}\\Wireshark\\tshark.exe"
+          ],
+          "macos": [
+            "/Applications/Wireshark.app/Contents/MacOS/tshark"
+          ]
+        },
+        "versionArgs": [
+          "--version"
+        ],
+        "versionRegex": "TShark \\(Wireshark\\) (\\d+\\.\\d+(?:\\.\\d+)*)"
+      },
+      "install": {
+        "windows": [
+          "Installed together with Wireshark (select TShark in the installer)."
+        ],
+        "macos": [
+          "brew install --cask wireshark   # includes tshark",
+          "Or: brew install wireshark"
+        ],
+        "linux": [
+          "sudo apt install tshark"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "List interfaces",
+          "command": "tshark -D",
+          "description": "List capture interfaces."
+        },
+        {
+          "title": "Read a capture",
+          "command": "tshark -r capture.pcap -Y http.request",
+          "description": "Apply a display filter to a pcap file."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "netcat",
+      "name": "Netcat / Ncat",
+      "category": "network",
+      "description": "Swiss-army knife for reading and writing raw TCP/UDP connections; Ncat is the modern Nmap-project implementation.",
+      "website": "https://nmap.org/ncat/",
+      "docs": "https://nmap.org/ncat/guide/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "tcp",
+        "udp",
+        "connectivity"
+      ],
+      "detect": {
+        "binaries": [
+          "ncat",
+          "nc"
+        ],
+        "paths": {
+          "windows": [
+            "{ProgramFiles(x86)}\\Nmap\\ncat.exe",
+            "{ProgramFiles}\\Nmap\\ncat.exe"
+          ]
+        }
+      },
+      "install": {
+        "windows": [
+          "Installed with Nmap (Ncat component)."
+        ],
+        "macos": [
+          "nc ships with macOS; for Ncat: brew install nmap"
+        ],
+        "linux": [
+          "sudo apt install ncat   # or netcat-openbsd"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Test a TCP port",
+          "command": "ncat -zv {target} 443",
+          "description": "Check whether a port accepts connections."
+        },
+        {
+          "title": "Grab a banner",
+          "command": "ncat {target} 22",
+          "description": "Connect and read the service banner."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "masscan",
+      "name": "Masscan",
+      "category": "network",
+      "description": "Internet-scale asynchronous TCP port scanner capable of very high packet rates.",
+      "website": "https://github.com/robertdavidgraham/masscan",
+      "docs": "https://github.com/robertdavidgraham/masscan#usage",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "port-scanning",
+        "high-speed"
+      ],
+      "detect": {
+        "binaries": [
+          "masscan"
+        ],
+        "versionArgs": [
+          "--version"
+        ],
+        "versionRegex": "Masscan version (\\d+\\.\\d+(?:\\.\\d+)*)"
+      },
+      "install": {
+        "windows": [
+          "Build from source with Visual Studio: https://github.com/robertdavidgraham/masscan"
+        ],
+        "macos": [
+          "brew install masscan"
+        ],
+        "linux": [
+          "sudo apt install masscan"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "masscan"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Scan common ports",
+          "command": "masscan {target} -p80,443,8080 --rate 1000",
+          "description": "Scan selected ports at a controlled rate."
+        },
+        {
+          "title": "All ports",
+          "command": "masscan {target} -p0-65535 --rate 500",
+          "description": "Scan all ports (keep rates low on production networks)."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "tcpdump",
+      "name": "tcpdump",
+      "category": "network",
+      "description": "Classic command-line packet analyzer for capturing and filtering network traffic using BPF expressions.",
+      "website": "https://www.tcpdump.org",
+      "docs": "https://www.tcpdump.org/manpages/tcpdump.1.html",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "packet-capture",
+        "bpf",
+        "cli"
+      ],
+      "detect": {
+        "binaries": [
+          "tcpdump"
+        ],
+        "versionArgs": [
+          "--version"
+        ],
+        "versionRegex": "tcpdump version (\\d+\\.\\d+(?:\\.\\d+)*)"
+      },
+      "install": {
+        "macos": [
+          "Preinstalled on macOS."
+        ],
+        "linux": [
+          "sudo apt install tcpdump"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Capture on interface",
+          "command": "sudo tcpdump -i eth0 -w capture.pcap",
+          "description": "Write packets to a pcap file."
+        },
+        {
+          "title": "Filter by host and port",
+          "command": "sudo tcpdump -i any host {target} and port 443",
+          "description": "Capture traffic for one host and port."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "rustscan",
+      "name": "RustScan",
+      "category": "network",
+      "description": "Fast port scanner that finds open ports quickly and hands them to Nmap for detailed scanning.",
+      "website": "https://github.com/bee-san/RustScan",
+      "docs": "https://github.com/bee-san/RustScan/wiki",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "port-scanning",
+        "fast",
+        "nmap"
+      ],
+      "detect": {
+        "binaries": [
+          "rustscan"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "cargo install rustscan",
+          "Or download a release from https://github.com/bee-san/RustScan/releases"
+        ],
+        "macos": [
+          "brew install rustscan"
+        ],
+        "linux": [
+          "cargo install rustscan",
+          "Or install the .deb from the releases page"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "rustscan"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Nmap (for follow-up scans)",
+          "binaries": [
+            "nmap"
+          ],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Scan and pass to Nmap",
+          "command": "rustscan -a {target} -- -sV",
+          "description": "Find open ports, then run Nmap service detection."
+        },
+        {
+          "title": "Custom batch size",
+          "command": "rustscan -a {target} -b 1000 --ulimit 5000",
+          "description": "Tune concurrency."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "naabu",
+      "name": "Naabu",
+      "category": "network",
+      "description": "Fast port scanner from ProjectDiscovery written in Go, designed for reliability and pipeline integration.",
+      "website": "https://github.com/projectdiscovery/naabu",
+      "docs": "https://docs.projectdiscovery.io/tools/naabu/overview",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "port-scanning",
+        "projectdiscovery"
+      ],
+      "detect": {
+        "binaries": [
+          "naabu"
+        ],
+        "versionArgs": [
+          "-version",
+          "-duc"
+        ],
+        "versionRegex": "[Vv]ersion:?\\s*v?(\\d+\\.\\d+(?:\\.\\d+)*)"
+      },
+      "install": {
+        "windows": [
+          "Download a release from https://github.com/projectdiscovery/naabu/releases (requires Npcap)"
+        ],
+        "macos": [
+          "brew install libpcap && go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest"
+        ],
+        "linux": [
+          "sudo apt install libpcap-dev && go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest"
+        ]
+      },
+      "managed": [],
+      "dependencies": [
+        {
+          "name": "libpcap / Npcap",
+          "binaries": [],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Top ports",
+          "command": "naabu -host {target} -top-ports 100",
+          "description": "Scan the 100 most common ports."
+        },
+        {
+          "title": "Pipe to httpx",
+          "command": "naabu -host {target} -silent | httpx -silent",
+          "description": "Find open ports and probe for HTTP services."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "theharvester",
+      "name": "theHarvester",
+      "category": "osint",
+      "description": "Gathers emails, names, subdomains, IPs and URLs from public sources such as search engines and certificate logs.",
+      "website": "https://github.com/laramies/theHarvester",
+      "docs": "https://github.com/laramies/theHarvester/wiki",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "emails",
+        "subdomains",
+        "osint"
+      ],
+      "detect": {
+        "binaries": [
+          "theHarvester",
+          "theharvester"
+        ]
+      },
+      "install": {
+        "macos": [
+          "git clone https://github.com/laramies/theHarvester && cd theHarvester",
+          "Follow the installation steps in the project wiki (uses uv / Python 3.12+)."
+        ],
+        "linux": [
+          "sudo apt install theharvester   # Kali",
+          "Or follow https://github.com/laramies/theHarvester/wiki/Installation"
+        ]
+      },
+      "managed": [],
+      "dependencies": [
+        {
+          "name": "Python 3",
+          "binaries": [
+            "python3",
+            "python",
+            "py"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Search public sources",
+          "command": "theHarvester -d {domain} -b crtsh,duckduckgo",
+          "description": "Collect hosts and emails for a domain."
+        },
+        {
+          "title": "Limit results",
+          "command": "theHarvester -d {domain} -b all -l 200",
+          "description": "Query all supported sources with a result limit."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "sherlock",
+      "name": "Sherlock",
+      "category": "osint",
+      "description": "Hunts down social media accounts by username across hundreds of websites.",
+      "website": "https://github.com/sherlock-project/sherlock",
+      "docs": "https://sherlockproject.xyz",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "username",
+        "social-media",
+        "osint"
+      ],
+      "detect": {
+        "binaries": [
+          "sherlock"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "pipx install sherlock-project"
+        ],
+        "macos": [
+          "pipx install sherlock-project",
+          "Or: brew install sherlock"
+        ],
+        "linux": [
+          "pipx install sherlock-project",
+          "Or: sudo apt install sherlock"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "pipx",
+          "args": [
+            "install",
+            "sherlock-project"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Python 3",
+          "binaries": [
+            "python3",
+            "python",
+            "py"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Search a username",
+          "command": "sherlock {username}",
+          "description": "Check which sites have an account with this username."
+        },
+        {
+          "title": "Save to CSV",
+          "command": "sherlock {username} --csv",
+          "description": "Export results as CSV."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "spiderfoot",
+      "name": "SpiderFoot",
+      "category": "osint",
+      "description": "OSINT automation framework with 200+ modules and a web UI for correlating data about IPs, domains, emails and names.",
+      "website": "https://github.com/smicallef/spiderfoot",
+      "docs": "https://github.com/smicallef/spiderfoot#readme",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "automation",
+        "osint",
+        "web-ui"
+      ],
+      "detect": {
+        "binaries": [
+          "spiderfoot",
+          "sf.py"
+        ]
+      },
+      "install": {
+        "windows": [
+          "git clone https://github.com/smicallef/spiderfoot.git && cd spiderfoot",
+          "pip install -r requirements.txt",
+          "python sf.py -l 127.0.0.1:5001"
+        ],
+        "macos": [
+          "git clone https://github.com/smicallef/spiderfoot.git && cd spiderfoot",
+          "pip3 install -r requirements.txt"
+        ],
+        "linux": [
+          "sudo apt install spiderfoot   # Kali",
+          "Or clone the repository and install requirements"
+        ]
+      },
+      "managed": [],
+      "dependencies": [
+        {
+          "name": "Python 3",
+          "binaries": [
+            "python3",
+            "python",
+            "py"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Start web UI",
+          "command": "spiderfoot -l 127.0.0.1:5001",
+          "description": "Launch the local web interface."
+        },
+        {
+          "title": "CLI scan",
+          "command": "spiderfoot -s {domain} -u passive",
+          "description": "Run a passive scan from the command line."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "shodan",
+      "name": "Shodan",
+      "category": "osint",
+      "description": "Search engine for Internet-connected devices, exposing banners, open services and known vulnerabilities.",
+      "website": "https://www.shodan.io",
+      "docs": "https://help.shodan.io",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "web",
+      "tags": [
+        "search-engine",
+        "iot",
+        "exposure"
+      ],
+      "install": {
+        "windows": [
+          "Web service — no installation required. Optional CLI: pipx install shodan"
+        ],
+        "macos": [
+          "Web service — no installation required. Optional CLI: pipx install shodan"
+        ],
+        "linux": [
+          "Web service — no installation required. Optional CLI: pipx install shodan"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Search your org's exposure",
+          "command": "org:\"{organization}\"",
+          "description": "Shodan search filter for an organization."
+        },
+        {
+          "title": "Hostname filter",
+          "command": "hostname:{domain}",
+          "description": "Find services whose hostname matches your domain."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "censys",
+      "name": "Censys Search",
+      "category": "osint",
+      "description": "Internet-wide scan data and certificate search for discovering hosts, services and certificates.",
+      "website": "https://search.censys.io",
+      "docs": "https://docs.censys.com",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "web",
+      "tags": [
+        "search-engine",
+        "certificates",
+        "exposure"
+      ],
+      "install": {
+        "windows": [
+          "Web service — no installation required."
+        ],
+        "macos": [
+          "Web service — no installation required."
+        ],
+        "linux": [
+          "Web service — no installation required."
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Hosts by name",
+          "command": "services.tls.certificates.leaf_data.subject.common_name: \"{domain}\"",
+          "description": "Find hosts presenting certificates for your domain."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "maltego",
+      "name": "Maltego",
+      "category": "osint",
+      "description": "Graphical link-analysis platform for visualizing relationships between people, organizations, domains and infrastructure.",
+      "website": "https://www.maltego.com",
+      "docs": "https://docs.maltego.com",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "gui",
+      "tags": [
+        "link-analysis",
+        "graph",
+        "osint"
+      ],
+      "detect": {
+        "binaries": [
+          "maltego"
+        ],
+        "paths": {
+          "windows": [
+            "{ProgramFiles}\\Maltego\\bin\\maltego.exe",
+            "{ProgramFiles(x86)}\\Maltego\\bin\\maltego.exe"
+          ],
+          "macos": [
+            "/Applications/Maltego.app"
+          ]
+        }
+      },
+      "install": {
+        "windows": [
+          "Download from https://www.maltego.com/downloads/"
+        ],
+        "macos": [
+          "Download from https://www.maltego.com/downloads/"
+        ],
+        "linux": [
+          "sudo apt install maltego   # Kali",
+          "Or download the .deb/.rpm from https://www.maltego.com/downloads/"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Start a graph",
+          "command": "New Graph → add a Domain entity → run 'To DNS Name' transforms",
+          "description": "Typical starting workflow for domain mapping."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "amass",
+      "name": "OWASP Amass",
+      "category": "recon",
+      "description": "In-depth attack surface mapping and asset discovery using passive sources, DNS enumeration and graph storage.",
+      "website": "https://github.com/owasp-amass/amass",
+      "docs": "https://github.com/owasp-amass/amass/blob/master/doc/user_guide.md",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "subdomains",
+        "attack-surface",
+        "dns"
+      ],
+      "detect": {
+        "binaries": [
+          "amass"
+        ],
+        "versionArgs": [
+          "-version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download a release zip from https://github.com/owasp-amass/amass/releases"
+        ],
+        "macos": [
+          "brew install amass"
+        ],
+        "linux": [
+          "sudo apt install amass",
+          "Or: sudo snap install amass"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "amass"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Passive enumeration",
+          "command": "amass enum -passive -d {domain}",
+          "description": "Enumerate subdomains from passive sources only."
+        },
+        {
+          "title": "Active enumeration",
+          "command": "amass enum -active -d {domain} -o amass.txt",
+          "description": "Include DNS resolution and zone-transfer attempts."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "subfinder",
+      "name": "Subfinder",
+      "category": "recon",
+      "description": "Passive subdomain discovery tool from ProjectDiscovery that queries many online sources.",
+      "website": "https://github.com/projectdiscovery/subfinder",
+      "docs": "https://docs.projectdiscovery.io/tools/subfinder/overview",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "subdomains",
+        "passive",
+        "projectdiscovery"
+      ],
+      "detect": {
+        "binaries": [
+          "subfinder"
+        ],
+        "versionArgs": [
+          "-version",
+          "-duc"
+        ],
+        "versionRegex": "[Vv]ersion:?\\s*v?(\\d+\\.\\d+(?:\\.\\d+)*)"
+      },
+      "install": {
+        "windows": [
+          "go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"
+        ],
+        "macos": [
+          "brew install subfinder"
+        ],
+        "linux": [
+          "go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest",
+          "Or: sudo apt install subfinder   # Kali"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "subfinder"
+          ]
+        },
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "go",
+          "args": [
+            "install",
+            "-v",
+            "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Go toolchain (for go install)",
+          "binaries": [
+            "go"
+          ],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Enumerate subdomains",
+          "command": "subfinder -d {domain}",
+          "description": "List subdomains from passive sources."
+        },
+        {
+          "title": "All sources, silent",
+          "command": "subfinder -d {domain} -all -silent -o subs.txt",
+          "description": "Use every source and save results."
+        }
+      ],
+      "requiresScope": true,
+      "builder": "subfinder"
+    },
+    {
+      "id": "dnsx",
+      "name": "dnsx",
+      "category": "recon",
+      "description": "Fast multi-purpose DNS toolkit for resolving, brute-forcing and querying many record types at scale.",
+      "website": "https://github.com/projectdiscovery/dnsx",
+      "docs": "https://docs.projectdiscovery.io/tools/dnsx/overview",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "dns",
+        "resolution",
+        "projectdiscovery"
+      ],
+      "detect": {
+        "binaries": [
+          "dnsx"
+        ],
+        "versionArgs": [
+          "-version",
+          "-duc"
+        ],
+        "versionRegex": "[Vv]ersion:?\\s*v?(\\d+\\.\\d+(?:\\.\\d+)*)"
+      },
+      "install": {
+        "windows": [
+          "go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@latest"
+        ],
+        "macos": [
+          "go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@latest"
+        ],
+        "linux": [
+          "go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@latest"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "go",
+          "args": [
+            "install",
+            "-v",
+            "github.com/projectdiscovery/dnsx/cmd/dnsx@latest"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Go toolchain (for go install)",
+          "binaries": [
+            "go"
+          ],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Resolve a list",
+          "command": "dnsx -l subs.txt -a -resp",
+          "description": "Resolve A records and print responses."
+        },
+        {
+          "title": "Query record types",
+          "command": "echo {domain} | dnsx -mx -txt -resp",
+          "description": "Show MX and TXT records."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "whatweb",
+      "name": "WhatWeb",
+      "category": "recon",
+      "description": "Web technology fingerprinting tool with 1,800+ plugins that identifies CMSs, frameworks, servers and analytics.",
+      "website": "https://github.com/urbanadventurer/WhatWeb",
+      "docs": "https://github.com/urbanadventurer/WhatWeb/wiki",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "fingerprinting",
+        "technology",
+        "web"
+      ],
+      "detect": {
+        "binaries": [
+          "whatweb"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "macos": [
+          "brew install whatweb"
+        ],
+        "linux": [
+          "sudo apt install whatweb"
+        ]
+      },
+      "managed": [],
+      "dependencies": [
+        {
+          "name": "Ruby",
+          "binaries": [
+            "ruby"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Fingerprint a site",
+          "command": "whatweb {url}",
+          "description": "Identify technologies used by a site."
+        },
+        {
+          "title": "Verbose output",
+          "command": "whatweb -v -a 1 {url}",
+          "description": "Detailed, stealthy (aggression level 1) output."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "assetfinder",
+      "name": "assetfinder",
+      "category": "recon",
+      "description": "Lightweight tool that finds domains and subdomains related to a given domain from passive sources.",
+      "website": "https://github.com/tomnomnom/assetfinder",
+      "docs": "https://github.com/tomnomnom/assetfinder#readme",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "subdomains",
+        "passive"
+      ],
+      "detect": {
+        "binaries": [
+          "assetfinder"
+        ]
+      },
+      "install": {
+        "windows": [
+          "go install github.com/tomnomnom/assetfinder@latest"
+        ],
+        "macos": [
+          "go install github.com/tomnomnom/assetfinder@latest"
+        ],
+        "linux": [
+          "go install github.com/tomnomnom/assetfinder@latest",
+          "Or: sudo apt install assetfinder   # Kali"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "go",
+          "args": [
+            "install",
+            "-v",
+            "github.com/tomnomnom/assetfinder@latest"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Go toolchain (for go install)",
+          "binaries": [
+            "go"
+          ],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Subdomains only",
+          "command": "assetfinder --subs-only {domain}",
+          "description": "List subdomains of the target domain."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "searchsploit",
+      "name": "SearchSploit",
+      "category": "vuln",
+      "description": "Command-line search for the offline copy of Exploit Database, useful for matching versions to public exploits and advisories.",
+      "website": "https://www.exploit-db.com/searchsploit",
+      "docs": "https://www.exploit-db.com/searchsploit",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "exploit-db",
+        "offline",
+        "research"
+      ],
+      "detect": {
+        "binaries": [
+          "searchsploit"
+        ]
+      },
+      "install": {
+        "macos": [
+          "brew install exploitdb"
+        ],
+        "linux": [
+          "sudo apt install exploitdb   # Kali",
+          "Or: git clone https://gitlab.com/exploit-database/exploitdb.git"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Search by product",
+          "command": "searchsploit apache 2.4",
+          "description": "Find entries for a product and version."
+        },
+        {
+          "title": "Show path / copy",
+          "command": "searchsploit -m {edb_id}",
+          "description": "Copy an entry to the current directory for review."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "openvas",
+      "name": "Greenbone OpenVAS",
+      "category": "vuln",
+      "description": "Full-featured open-source vulnerability scanner (Greenbone Community Edition) with a large feed of network vulnerability tests.",
+      "website": "https://www.openvas.org",
+      "docs": "https://greenbone.github.io/docs/latest/",
+      "os": [
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "scanner",
+        "network",
+        "vulnerability"
+      ],
+      "detect": {
+        "binaries": [
+          "gvm-start",
+          "gvmd",
+          "openvas"
+        ]
+      },
+      "install": {
+        "linux": [
+          "sudo apt install gvm   # Kali",
+          "sudo gvm-setup",
+          "sudo gvm-check-setup",
+          "Or use the official container setup: https://greenbone.github.io/docs/latest/22.4/container/"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Start services",
+          "command": "sudo gvm-start",
+          "description": "Start the Greenbone services and web UI (https://127.0.0.1:9392)."
+        },
+        {
+          "title": "Verify setup",
+          "command": "sudo gvm-check-setup",
+          "description": "Check the installation and feed status."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "hashcat",
+      "name": "Hashcat",
+      "category": "password",
+      "description": "GPU-accelerated password recovery tool supporting hundreds of hash types; used to audit password strength of hashes you are authorized to test.",
+      "website": "https://hashcat.net/hashcat/",
+      "docs": "https://hashcat.net/wiki/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "hash-cracking",
+        "gpu",
+        "password"
+      ],
+      "detect": {
+        "binaries": [
+          "hashcat"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download the binaries from https://hashcat.net/hashcat/ and extract them (7-Zip)",
+          "Install current GPU drivers (CUDA/OpenCL)"
+        ],
+        "macos": [
+          "brew install hashcat"
+        ],
+        "linux": [
+          "sudo apt install hashcat"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "hashcat"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Show example hashes",
+          "command": "hashcat --example-hashes",
+          "description": "List supported hash modes with sample hashes."
+        },
+        {
+          "title": "Wordlist audit",
+          "command": "hashcat -m {mode} -a 0 {hashfile} {wordlist}",
+          "description": "Audit hashes against a wordlist (straight mode)."
+        },
+        {
+          "title": "Show results",
+          "command": "hashcat -m {mode} {hashfile} --show",
+          "description": "Display hashes already recovered in the potfile."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "john",
+      "name": "John the Ripper",
+      "category": "password",
+      "description": "Open-source password security auditing tool (jumbo edition) with broad hash-format support and companion *2john extractors.",
+      "website": "https://www.openwall.com/john/",
+      "docs": "https://www.openwall.com/john/doc/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "hash-cracking",
+        "password",
+        "audit"
+      ],
+      "detect": {
+        "binaries": [
+          "john"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download the jumbo Windows build from https://www.openwall.com/john/ and add the run folder to PATH"
+        ],
+        "macos": [
+          "brew install john-jumbo"
+        ],
+        "linux": [
+          "sudo apt install john"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "john-jumbo"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Wordlist audit",
+          "command": "john --wordlist={wordlist} {hashfile}",
+          "description": "Audit hashes using a wordlist."
+        },
+        {
+          "title": "Show recovered",
+          "command": "john --show {hashfile}",
+          "description": "Show passwords recovered so far."
+        },
+        {
+          "title": "List formats",
+          "command": "john --list=formats",
+          "description": "List supported hash formats."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "hydra",
+      "name": "THC Hydra",
+      "category": "password",
+      "description": "Network login auditing tool supporting many protocols; used to verify credential policies on systems you are authorized to test.",
+      "website": "https://github.com/vanhauser-thc/thc-hydra",
+      "docs": "https://github.com/vanhauser-thc/thc-hydra#readme",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "login-audit",
+        "network",
+        "password"
+      ],
+      "detect": {
+        "binaries": [
+          "hydra"
+        ]
+      },
+      "install": {
+        "macos": [
+          "brew install hydra"
+        ],
+        "linux": [
+          "sudo apt install hydra"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "hydra"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Module help",
+          "command": "hydra -U {service}",
+          "description": "Show options for a protocol module."
+        },
+        {
+          "title": "Credential policy check",
+          "command": "hydra -L {userlist} -P {wordlist} -t 4 {target} {service}",
+          "description": "Check accounts against a password list at a low task count."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "cewl",
+      "name": "CeWL",
+      "category": "password",
+      "description": "Custom wordlist generator that spiders a website and collects words, useful for organization-specific password audits.",
+      "website": "https://github.com/digininja/CeWL",
+      "docs": "https://github.com/digininja/CeWL#readme",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "wordlist",
+        "spider"
+      ],
+      "detect": {
+        "binaries": [
+          "cewl"
+        ]
+      },
+      "install": {
+        "macos": [
+          "gem install cewl (see README for dependencies)"
+        ],
+        "linux": [
+          "sudo apt install cewl"
+        ]
+      },
+      "managed": [],
+      "dependencies": [
+        {
+          "name": "Ruby",
+          "binaries": [
+            "ruby"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Generate wordlist",
+          "command": "cewl -d 2 -m 5 -w {output} {url}",
+          "description": "Spider to depth 2 and keep words of 5+ characters."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "autopsy",
+      "name": "Autopsy",
+      "category": "forensics",
+      "description": "Graphical digital forensics platform built on The Sleuth Kit for disk image analysis, timelines and artifact extraction.",
+      "website": "https://www.autopsy.com/",
+      "docs": "https://sleuthkit.org/autopsy/docs/user-docs/latest/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "gui",
+      "tags": [
+        "disk-forensics",
+        "timeline",
+        "gui"
+      ],
+      "detect": {
+        "binaries": [
+          "autopsy",
+          "autopsy64"
+        ],
+        "paths": {
+          "macos": [
+            "/Applications/Autopsy.app"
+          ]
+        }
+      },
+      "install": {
+        "windows": [
+          "Download the MSI installer from https://www.autopsy.com/download/"
+        ],
+        "macos": [
+          "Follow the macOS instructions at https://github.com/sleuthkit/autopsy/blob/develop/Running_Linux_OSX.md"
+        ],
+        "linux": [
+          "Follow https://github.com/sleuthkit/autopsy/blob/develop/Running_Linux_OSX.md (requires Java and The Sleuth Kit)"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Launch",
+          "command": "autopsy",
+          "description": "Start the Autopsy GUI and create a case."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "volatility3",
+      "name": "Volatility 3",
+      "category": "forensics",
+      "description": "Memory forensics framework for extracting processes, network connections and artifacts from RAM captures.",
+      "website": "https://volatilityfoundation.org/",
+      "docs": "https://volatility3.readthedocs.io/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "memory-forensics",
+        "dfir"
+      ],
+      "detect": {
+        "binaries": [
+          "vol",
+          "vol.py",
+          "volatility3"
+        ]
+      },
+      "install": {
+        "windows": [
+          "pipx install volatility3"
+        ],
+        "macos": [
+          "pipx install volatility3"
+        ],
+        "linux": [
+          "pipx install volatility3"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "pipx",
+          "args": [
+            "install",
+            "volatility3"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Python 3",
+          "binaries": [
+            "python3",
+            "python",
+            "py"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "OS information",
+          "command": "vol -f {memdump} windows.info",
+          "description": "Identify the Windows build of a memory image."
+        },
+        {
+          "title": "Process list",
+          "command": "vol -f {memdump} windows.pslist",
+          "description": "List processes in the image."
+        },
+        {
+          "title": "Linux processes",
+          "command": "vol -f {memdump} linux.pslist",
+          "description": "List processes from a Linux memory image."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "binwalk",
+      "name": "Binwalk",
+      "category": "forensics",
+      "description": "Firmware analysis tool for identifying and extracting embedded files and file systems from binary images.",
+      "website": "https://github.com/ReFirmLabs/binwalk",
+      "docs": "https://github.com/ReFirmLabs/binwalk/wiki",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "firmware",
+        "carving"
+      ],
+      "detect": {
+        "binaries": [
+          "binwalk"
+        ]
+      },
+      "install": {
+        "macos": [
+          "brew install binwalk"
+        ],
+        "linux": [
+          "sudo apt install binwalk"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "binwalk"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Signature scan",
+          "command": "binwalk {file}",
+          "description": "Identify embedded file signatures."
+        },
+        {
+          "title": "Extract",
+          "command": "binwalk -e {file}",
+          "description": "Extract known embedded content."
+        },
+        {
+          "title": "Entropy",
+          "command": "binwalk -E {file}",
+          "description": "Entropy analysis to spot compressed or encrypted regions."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "exiftool",
+      "name": "ExifTool",
+      "category": "forensics",
+      "description": "Reads, writes and edits metadata in a wide range of image, audio, video and document formats.",
+      "website": "https://exiftool.org/",
+      "docs": "https://exiftool.org/exiftool_pod.html",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "metadata",
+        "osint",
+        "files"
+      ],
+      "detect": {
+        "binaries": [
+          "exiftool"
+        ],
+        "versionArgs": [
+          "-ver"
+        ]
+      },
+      "install": {
+        "windows": [
+          "winget install OliverBetz.ExifTool",
+          "Or download from https://exiftool.org/"
+        ],
+        "macos": [
+          "brew install exiftool"
+        ],
+        "linux": [
+          "sudo apt install libimage-exiftool-perl"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows"
+          ],
+          "manager": "winget",
+          "args": [
+            "install",
+            "--id",
+            "OliverBetz.ExifTool",
+            "-e",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+            "--disable-interactivity"
+          ]
+        },
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "exiftool"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Read metadata",
+          "command": "exiftool {file}",
+          "description": "Show all metadata."
+        },
+        {
+          "title": "GPS only",
+          "command": "exiftool -gps:all {file}",
+          "description": "Show GPS tags."
+        },
+        {
+          "title": "Strip metadata (copy)",
+          "command": "exiftool -all= -o {output} {file}",
+          "description": "Write a metadata-free copy."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "sleuthkit",
+      "name": "The Sleuth Kit",
+      "category": "forensics",
+      "description": "Command-line library and tools for file system forensic analysis of disk images.",
+      "website": "https://www.sleuthkit.org/sleuthkit/",
+      "docs": "https://wiki.sleuthkit.org/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "disk-forensics",
+        "filesystem"
+      ],
+      "detect": {
+        "binaries": [
+          "fls",
+          "mmls"
+        ],
+        "versionArgs": [
+          "-V"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download the Windows binaries from https://www.sleuthkit.org/sleuthkit/download.php"
+        ],
+        "macos": [
+          "brew install sleuthkit"
+        ],
+        "linux": [
+          "sudo apt install sleuthkit"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "sleuthkit"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Partition layout",
+          "command": "mmls {image}",
+          "description": "Display the partition table."
+        },
+        {
+          "title": "List files",
+          "command": "fls -r -o {offset} {image}",
+          "description": "Recursively list files in a partition."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "yara",
+      "name": "YARA",
+      "category": "malware",
+      "description": "Pattern-matching engine for identifying and classifying malware samples with textual or binary rules.",
+      "website": "https://virustotal.github.io/yara/",
+      "docs": "https://yara.readthedocs.io/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "signatures",
+        "detection"
+      ],
+      "detect": {
+        "binaries": [
+          "yara",
+          "yara64"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download a release from https://github.com/VirusTotal/yara/releases"
+        ],
+        "macos": [
+          "brew install yara"
+        ],
+        "linux": [
+          "sudo apt install yara"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "yara"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Scan a file",
+          "command": "yara {rules} {file}",
+          "description": "Match rules against a file."
+        },
+        {
+          "title": "Recursive scan",
+          "command": "yara -r {rules} {directory}",
+          "description": "Scan a directory recursively."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "capa",
+      "name": "capa",
+      "category": "malware",
+      "description": "Mandiant tool that identifies capabilities in executables (persistence, network communication, etc.) mapped to ATT&CK.",
+      "website": "https://github.com/mandiant/capa",
+      "docs": "https://github.com/mandiant/capa#readme",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "static-analysis",
+        "attack"
+      ],
+      "detect": {
+        "binaries": [
+          "capa"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download a standalone release from https://github.com/mandiant/capa/releases"
+        ],
+        "macos": [
+          "Download a standalone release from https://github.com/mandiant/capa/releases"
+        ],
+        "linux": [
+          "Download a standalone release from https://github.com/mandiant/capa/releases"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Analyze",
+          "command": "capa {file}",
+          "description": "Summarize capabilities of a sample."
+        },
+        {
+          "title": "Verbose",
+          "command": "capa -vv {file}",
+          "description": "Show matched rule details."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "floss",
+      "name": "FLOSS",
+      "category": "malware",
+      "description": "FLARE Obfuscated String Solver: extracts static, stack and obfuscated strings from binaries.",
+      "website": "https://github.com/mandiant/flare-floss",
+      "docs": "https://github.com/mandiant/flare-floss#readme",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "strings",
+        "static-analysis"
+      ],
+      "detect": {
+        "binaries": [
+          "floss"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download a standalone release from https://github.com/mandiant/flare-floss/releases"
+        ],
+        "macos": [
+          "Download a standalone release from https://github.com/mandiant/flare-floss/releases"
+        ],
+        "linux": [
+          "Download a standalone release from https://github.com/mandiant/flare-floss/releases"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Extract strings",
+          "command": "floss {file}",
+          "description": "Extract all string types."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "clamav",
+      "name": "ClamAV",
+      "category": "malware",
+      "description": "Open-source antivirus engine for detecting trojans, viruses and other malicious threats.",
+      "website": "https://www.clamav.net/",
+      "docs": "https://docs.clamav.net/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "antivirus",
+        "scanning"
+      ],
+      "detect": {
+        "binaries": [
+          "clamscan"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download the installer from https://www.clamav.net/downloads"
+        ],
+        "macos": [
+          "brew install clamav"
+        ],
+        "linux": [
+          "sudo apt install clamav"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "clamav"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Update signatures",
+          "command": "freshclam",
+          "description": "Download the latest signature database."
+        },
+        {
+          "title": "Scan directory",
+          "command": "clamscan -r -i {directory}",
+          "description": "Recursively scan and print infected files only."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "aircrack-ng",
+      "name": "Aircrack-ng",
+      "category": "wireless",
+      "description": "Suite for assessing Wi-Fi network security: monitoring, capture analysis and key strength testing.",
+      "website": "https://www.aircrack-ng.org/",
+      "docs": "https://www.aircrack-ng.org/doku.php?id=Main",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "wifi",
+        "802.11"
+      ],
+      "detect": {
+        "binaries": [
+          "aircrack-ng"
+        ]
+      },
+      "install": {
+        "macos": [
+          "brew install aircrack-ng"
+        ],
+        "linux": [
+          "sudo apt install aircrack-ng"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "aircrack-ng"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "List interfaces",
+          "command": "sudo airmon-ng",
+          "description": "Show wireless interfaces and drivers."
+        },
+        {
+          "title": "Analyze capture",
+          "command": "aircrack-ng {capture}",
+          "description": "Inspect a capture file for handshakes."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "kismet",
+      "name": "Kismet",
+      "category": "wireless",
+      "description": "Wireless network and device detector, sniffer and wardriving tool with a web UI.",
+      "website": "https://www.kismetwireless.net/",
+      "docs": "https://www.kismetwireless.net/docs/",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "wifi",
+        "bluetooth",
+        "monitoring"
+      ],
+      "detect": {
+        "binaries": [
+          "kismet"
+        ]
+      },
+      "install": {
+        "macos": [
+          "See https://www.kismetwireless.net/packages/"
+        ],
+        "linux": [
+          "sudo apt install kismet"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Start",
+          "command": "kismet",
+          "description": "Start Kismet and open the web UI at http://localhost:2501."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "bettercap",
+      "name": "bettercap",
+      "category": "wireless",
+      "description": "Network monitoring and assessment framework for Wi-Fi, BLE and Ethernet reconnaissance in authorized labs.",
+      "website": "https://www.bettercap.org/",
+      "docs": "https://www.bettercap.org/docs/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "wifi",
+        "ble",
+        "network"
+      ],
+      "detect": {
+        "binaries": [
+          "bettercap"
+        ],
+        "versionArgs": [
+          "-version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download a release from https://github.com/bettercap/bettercap/releases (requires Npcap)"
+        ],
+        "macos": [
+          "brew install bettercap"
+        ],
+        "linux": [
+          "sudo apt install bettercap"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "bettercap"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Interactive session",
+          "command": "sudo bettercap -iface {interface}",
+          "description": "Start an interactive session on an interface."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "prowler",
+      "name": "Prowler",
+      "category": "cloud",
+      "description": "Cloud security posture assessment for AWS, Azure, GCP and Kubernetes against CIS, NIST and other frameworks.",
+      "website": "https://prowler.com/",
+      "docs": "https://docs.prowler.com/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "aws",
+        "azure",
+        "gcp",
+        "compliance"
+      ],
+      "detect": {
+        "binaries": [
+          "prowler"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "pipx install prowler"
+        ],
+        "macos": [
+          "brew install prowler",
+          "Or: pipx install prowler"
+        ],
+        "linux": [
+          "pipx install prowler"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "pipx",
+          "args": [
+            "install",
+            "prowler"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Python 3",
+          "binaries": [
+            "python3",
+            "python",
+            "py"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "AWS assessment",
+          "command": "prowler aws",
+          "description": "Run all AWS checks with the current credentials."
+        },
+        {
+          "title": "Compliance framework",
+          "command": "prowler aws --compliance cis_2.0_aws",
+          "description": "Evaluate against a compliance framework."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "scoutsuite",
+      "name": "ScoutSuite",
+      "category": "cloud",
+      "description": "Multi-cloud security auditing tool that gathers configuration data and highlights risk areas in an HTML report.",
+      "website": "https://github.com/nccgroup/ScoutSuite",
+      "docs": "https://github.com/nccgroup/ScoutSuite/wiki",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "aws",
+        "azure",
+        "gcp",
+        "audit"
+      ],
+      "detect": {
+        "binaries": [
+          "scout"
+        ]
+      },
+      "install": {
+        "windows": [
+          "pipx install scoutsuite"
+        ],
+        "macos": [
+          "pipx install scoutsuite"
+        ],
+        "linux": [
+          "pipx install scoutsuite"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "pipx",
+          "args": [
+            "install",
+            "scoutsuite"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Python 3",
+          "binaries": [
+            "python3",
+            "python",
+            "py"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "AWS audit",
+          "command": "scout aws",
+          "description": "Audit the AWS account for the current profile."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "trivy",
+      "name": "Trivy",
+      "category": "cloud",
+      "description": "Scanner for vulnerabilities, misconfigurations, secrets and SBOMs in containers, file systems, repos and Kubernetes.",
+      "website": "https://trivy.dev/",
+      "docs": "https://trivy.dev/latest/docs/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "containers",
+        "sbom",
+        "iac"
+      ],
+      "detect": {
+        "binaries": [
+          "trivy"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download a release from https://github.com/aquasecurity/trivy/releases"
+        ],
+        "macos": [
+          "brew install trivy"
+        ],
+        "linux": [
+          "See https://trivy.dev/latest/getting-started/installation/"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "trivy"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Scan image",
+          "command": "trivy image {image}",
+          "description": "Scan a container image."
+        },
+        {
+          "title": "Scan project",
+          "command": "trivy fs {directory}",
+          "description": "Scan a local directory for vulnerable dependencies."
+        },
+        {
+          "title": "IaC misconfigurations",
+          "command": "trivy config {directory}",
+          "description": "Scan Terraform and Kubernetes files."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "ghidra",
+      "name": "Ghidra",
+      "category": "reversing",
+      "description": "NSA's software reverse engineering suite with disassembly, decompilation, scripting and collaborative analysis.",
+      "website": "https://ghidra-sre.org/",
+      "docs": "https://github.com/NationalSecurityAgency/ghidra/blob/master/GhidraDocs/GettingStarted.md",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "gui",
+      "tags": [
+        "decompiler",
+        "disassembler"
+      ],
+      "detect": {
+        "binaries": [
+          "ghidraRun",
+          "ghidra"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download from https://github.com/NationalSecurityAgency/ghidra/releases, extract and add the folder to PATH",
+          "Requires JDK 21"
+        ],
+        "macos": [
+          "brew install --cask ghidra",
+          "Requires JDK 21"
+        ],
+        "linux": [
+          "Download from https://github.com/NationalSecurityAgency/ghidra/releases and extract",
+          "Requires JDK 21"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "--cask",
+            "ghidra"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Java (JDK/JRE)",
+          "binaries": [
+            "java"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Launch",
+          "command": "ghidraRun",
+          "description": "Start Ghidra."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "radare2",
+      "name": "radare2",
+      "category": "reversing",
+      "description": "Portable UNIX-like reverse engineering framework and command-line toolset.",
+      "website": "https://rada.re/n/",
+      "docs": "https://book.rada.re/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "disassembler",
+        "debugger"
+      ],
+      "detect": {
+        "binaries": [
+          "radare2",
+          "r2"
+        ],
+        "versionArgs": [
+          "-v"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download a release from https://github.com/radareorg/radare2/releases"
+        ],
+        "macos": [
+          "brew install radare2"
+        ],
+        "linux": [
+          "See https://github.com/radareorg/radare2#installation"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "radare2"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Analyze binary",
+          "command": "r2 -A {file}",
+          "description": "Open with full analysis."
+        },
+        {
+          "title": "Binary info",
+          "command": "rabin2 -I {file}",
+          "description": "Show binary headers and protections."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "x64dbg",
+      "name": "x64dbg",
+      "category": "reversing",
+      "description": "Open-source x64/x32 debugger for Windows focused on malware analysis and reverse engineering.",
+      "website": "https://x64dbg.com/",
+      "docs": "https://help.x64dbg.com/",
+      "os": [
+        "windows"
+      ],
+      "kind": "gui",
+      "tags": [
+        "debugger",
+        "windows"
+      ],
+      "detect": {
+        "binaries": [
+          "x64dbg",
+          "x96dbg"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download a snapshot from https://github.com/x64dbg/x64dbg/releases and add release\\x64 to PATH"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Launch",
+          "command": "x64dbg",
+          "description": "Start the debugger."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "jadx",
+      "name": "JADX",
+      "category": "reversing",
+      "description": "Dex-to-Java decompiler producing readable Java source from Android APK and DEX files.",
+      "website": "https://github.com/skylot/jadx",
+      "docs": "https://github.com/skylot/jadx#readme",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "android",
+        "decompiler"
+      ],
+      "detect": {
+        "binaries": [
+          "jadx"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download a release from https://github.com/skylot/jadx/releases"
+        ],
+        "macos": [
+          "brew install jadx"
+        ],
+        "linux": [
+          "Download a release from https://github.com/skylot/jadx/releases"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "jadx"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Java (JDK/JRE)",
+          "binaries": [
+            "java"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Decompile APK",
+          "command": "jadx -d {output} {apk}",
+          "description": "Decompile an APK into a directory."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "openssl",
+      "name": "OpenSSL",
+      "category": "crypto",
+      "description": "Toolkit for TLS and general-purpose cryptography: certificates, keys, digests and connection testing.",
+      "website": "https://www.openssl.org/",
+      "docs": "https://docs.openssl.org/master/man1/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "tls",
+        "certificates",
+        "crypto"
+      ],
+      "detect": {
+        "binaries": [
+          "openssl"
+        ],
+        "versionArgs": [
+          "version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Bundled with Git for Windows (usr\\bin\\openssl.exe), or see https://wiki.openssl.org/index.php/Binaries"
+        ],
+        "macos": [
+          "brew install openssl@3"
+        ],
+        "linux": [
+          "sudo apt install openssl"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Inspect certificate",
+          "command": "openssl s_client -connect {host}:443 -servername {host}",
+          "description": "Connect and print the server certificate chain."
+        },
+        {
+          "title": "File digest",
+          "command": "openssl dgst -sha256 {file}",
+          "description": "Compute a SHA-256 digest."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "testssl",
+      "name": "testssl.sh",
+      "category": "crypto",
+      "description": "Command-line tool checking a server's TLS/SSL ciphers, protocols and known cryptographic flaws.",
+      "website": "https://testssl.sh/",
+      "docs": "https://testssl.sh/doc/testssl.1.html",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "tls",
+        "audit"
+      ],
+      "detect": {
+        "binaries": [
+          "testssl.sh",
+          "testssl"
+        ]
+      },
+      "install": {
+        "macos": [
+          "brew install testssl"
+        ],
+        "linux": [
+          "git clone --depth 1 https://github.com/testssl/testssl.sh.git"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "testssl"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Bash",
+          "binaries": [
+            "bash"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Full check",
+          "command": "testssl.sh {host}:443",
+          "description": "Run all default checks."
+        },
+        {
+          "title": "Protocols only",
+          "command": "testssl.sh -p {host}:443",
+          "description": "Check supported protocols."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "sslscan",
+      "name": "sslscan",
+      "category": "crypto",
+      "description": "Fast scanner listing a TLS server's supported protocols, ciphers and certificate details.",
+      "website": "https://github.com/rbsec/sslscan",
+      "docs": "https://github.com/rbsec/sslscan#readme",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "tls",
+        "ciphers"
+      ],
+      "detect": {
+        "binaries": [
+          "sslscan"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download a release from https://github.com/rbsec/sslscan/releases"
+        ],
+        "macos": [
+          "brew install sslscan"
+        ],
+        "linux": [
+          "sudo apt install sslscan"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "sslscan"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Scan host",
+          "command": "sslscan {host}:443",
+          "description": "List protocols and ciphers."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "cyberchef",
+      "name": "CyberChef",
+      "category": "crypto",
+      "description": "GCHQ's web app for encoding, decoding, encryption, compression and data analysis. Cyber Hub also includes a local transformation workspace.",
+      "website": "https://gchq.github.io/CyberChef/",
+      "docs": "https://github.com/gchq/CyberChef/wiki",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "web",
+      "tags": [
+        "encoding",
+        "data",
+        "web"
+      ],
+      "install": {
+        "windows": [
+          "Web application, no installation required"
+        ],
+        "macos": [
+          "Web application, no installation required"
+        ],
+        "linux": [
+          "Web application, no installation required"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [],
+      "requiresScope": false
+    },
+    {
+      "id": "lynis",
+      "name": "Lynis",
+      "category": "linux",
+      "description": "Security auditing tool for Linux, macOS and UNIX hosts that checks hardening and compliance.",
+      "website": "https://cisofy.com/lynis/",
+      "docs": "https://cisofy.com/documentation/lynis/",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "hardening",
+        "audit",
+        "compliance"
+      ],
+      "detect": {
+        "binaries": [
+          "lynis"
+        ],
+        "versionArgs": [
+          "show",
+          "version"
+        ]
+      },
+      "install": {
+        "macos": [
+          "brew install lynis"
+        ],
+        "linux": [
+          "sudo apt install lynis"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos"
+          ],
+          "manager": "brew",
+          "args": [
+            "install",
+            "lynis"
+          ]
+        }
+      ],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "System audit",
+          "command": "sudo lynis audit system",
+          "description": "Audit the local host."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "chkrootkit",
+      "name": "chkrootkit",
+      "category": "linux",
+      "description": "Locally checks for signs of known rootkits on UNIX systems.",
+      "website": "https://www.chkrootkit.org/",
+      "docs": "https://www.chkrootkit.org/README",
+      "os": [
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "rootkit",
+        "integrity"
+      ],
+      "detect": {
+        "binaries": [
+          "chkrootkit"
+        ]
+      },
+      "install": {
+        "linux": [
+          "sudo apt install chkrootkit"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Run checks",
+          "command": "sudo chkrootkit",
+          "description": "Run all checks."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "rkhunter",
+      "name": "Rootkit Hunter",
+      "category": "linux",
+      "description": "Scans for rootkits, backdoors and local exploits by comparing file hashes and checking suspicious settings.",
+      "website": "https://rkhunter.sourceforge.net/",
+      "docs": "https://sourceforge.net/p/rkhunter/wiki/Home/",
+      "os": [
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "rootkit",
+        "integrity"
+      ],
+      "detect": {
+        "binaries": [
+          "rkhunter"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "linux": [
+          "sudo apt install rkhunter"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Update properties",
+          "command": "sudo rkhunter --propupd",
+          "description": "Record current file properties as a baseline."
+        },
+        {
+          "title": "Check system",
+          "command": "sudo rkhunter --check --sk",
+          "description": "Run checks without pausing."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "peass",
+      "name": "PEASS-ng",
+      "category": "linux",
+      "description": "Privilege-escalation awareness scripts (LinPEAS/WinPEAS) that enumerate local misconfigurations during authorized assessments.",
+      "website": "https://github.com/peass-ng/PEASS-ng",
+      "docs": "https://github.com/peass-ng/PEASS-ng#readme",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "script",
+      "tags": [
+        "privilege-escalation",
+        "enumeration"
+      ],
+      "install": {
+        "windows": [
+          "Download winPEAS from the GitHub releases page"
+        ],
+        "macos": [
+          "Download linpeas.sh from the GitHub releases page"
+        ],
+        "linux": [
+          "Download linpeas.sh from the GitHub releases page"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [
+        {
+          "title": "Local enumeration",
+          "command": "sh linpeas.sh",
+          "description": "Enumerate the local host (only on systems in scope)."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "bloodhound",
+      "name": "BloodHound",
+      "category": "ad",
+      "description": "Graph-based analysis of Active Directory and Entra ID relationships to identify and remediate attack paths.",
+      "website": "https://bloodhound.specterops.io/",
+      "docs": "https://bloodhound.specterops.io/get-started/introduction",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "gui",
+      "tags": [
+        "active-directory",
+        "graph",
+        "attack-paths"
+      ],
+      "detect": {
+        "binaries": [
+          "BloodHound",
+          "bloodhound"
+        ]
+      },
+      "install": {
+        "windows": [
+          "BloodHound Community Edition runs via Docker; see the quickstart at https://bloodhound.specterops.io/"
+        ],
+        "macos": [
+          "BloodHound Community Edition runs via Docker; see the quickstart at https://bloodhound.specterops.io/"
+        ],
+        "linux": [
+          "BloodHound Community Edition runs via Docker; see the quickstart at https://bloodhound.specterops.io/"
+        ]
+      },
+      "managed": [],
+      "dependencies": [],
+      "commands": [],
+      "requiresScope": false
+    },
+    {
+      "id": "netexec",
+      "name": "NetExec",
+      "category": "ad",
+      "description": "Network service assessment tool (successor of CrackMapExec) for SMB, LDAP, WinRM, MSSQL and more.",
+      "website": "https://www.netexec.wiki/",
+      "docs": "https://www.netexec.wiki/",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "smb",
+        "ldap",
+        "active-directory"
+      ],
+      "detect": {
+        "binaries": [
+          "netexec",
+          "nxc"
+        ],
+        "versionArgs": [
+          "--version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download a release from https://github.com/Pennyw0rth/NetExec/releases"
+        ],
+        "macos": [
+          "pipx install git+https://github.com/Pennyw0rth/NetExec"
+        ],
+        "linux": [
+          "pipx install git+https://github.com/Pennyw0rth/NetExec"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "macos",
+            "linux"
+          ],
+          "manager": "pipx",
+          "args": [
+            "install",
+            "git+https://github.com/Pennyw0rth/NetExec"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Python 3",
+          "binaries": [
+            "python3",
+            "python",
+            "py"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "SMB host info",
+          "command": "nxc smb {target}",
+          "description": "Fingerprint SMB hosts (OS, signing, domain)."
+        },
+        {
+          "title": "List shares",
+          "command": "nxc smb {target} -u {user} -p {password} --shares",
+          "description": "List shares with provided credentials."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "impacket",
+      "name": "Impacket",
+      "category": "ad",
+      "description": "Python classes and example scripts for working with network protocols such as SMB, MSRPC, Kerberos and LDAP.",
+      "website": "https://github.com/fortra/impacket",
+      "docs": "https://github.com/fortra/impacket#readme",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "smb",
+        "kerberos",
+        "python"
+      ],
+      "detect": {
+        "binaries": [
+          "impacket-smbclient",
+          "smbclient.py"
+        ]
+      },
+      "install": {
+        "windows": [
+          "pipx install impacket"
+        ],
+        "macos": [
+          "pipx install impacket"
+        ],
+        "linux": [
+          "pipx install impacket"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "pipx",
+          "args": [
+            "install",
+            "impacket"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Python 3",
+          "binaries": [
+            "python3",
+            "python",
+            "py"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "SMB client",
+          "command": "impacket-smbclient {domain}/{user}@{target}",
+          "description": "Interactive SMB client."
+        },
+        {
+          "title": "Lookup SIDs",
+          "command": "impacket-lookupsid {domain}/{user}@{target}",
+          "description": "Enumerate users and groups via SID lookup."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "responder",
+      "name": "Responder",
+      "category": "ad",
+      "description": "LLMNR/NBT-NS/mDNS analyzer used to assess name-resolution poisoning exposure on internal networks.",
+      "website": "https://github.com/lgandx/Responder",
+      "docs": "https://github.com/lgandx/Responder#readme",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "llmnr",
+        "network",
+        "active-directory"
+      ],
+      "detect": {
+        "binaries": [
+          "responder",
+          "Responder.py"
+        ]
+      },
+      "install": {
+        "macos": [
+          "git clone https://github.com/lgandx/Responder"
+        ],
+        "linux": [
+          "sudo apt install responder"
+        ]
+      },
+      "managed": [],
+      "dependencies": [
+        {
+          "name": "Python 3",
+          "binaries": [
+            "python3",
+            "python",
+            "py"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Analyze mode (passive)",
+          "command": "sudo responder -I {interface} -A",
+          "description": "Listen and report requests without poisoning."
+        }
+      ],
+      "requiresScope": false
+    },
+    {
+      "id": "kerbrute",
+      "name": "Kerbrute",
+      "category": "ad",
+      "description": "Kerberos pre-authentication tool for validating Active Directory usernames during authorized assessments.",
+      "website": "https://github.com/ropnop/kerbrute",
+      "docs": "https://github.com/ropnop/kerbrute#readme",
+      "os": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "kerberos",
+        "active-directory"
+      ],
+      "detect": {
+        "binaries": [
+          "kerbrute"
+        ],
+        "versionArgs": [
+          "version"
+        ]
+      },
+      "install": {
+        "windows": [
+          "Download a release from https://github.com/ropnop/kerbrute/releases"
+        ],
+        "macos": [
+          "go install github.com/ropnop/kerbrute@latest"
+        ],
+        "linux": [
+          "go install github.com/ropnop/kerbrute@latest"
+        ]
+      },
+      "managed": [
+        {
+          "os": [
+            "windows",
+            "macos",
+            "linux"
+          ],
+          "manager": "go",
+          "args": [
+            "install",
+            "-v",
+            "github.com/ropnop/kerbrute@latest"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "Go toolchain (for go install)",
+          "binaries": [
+            "go"
+          ],
+          "optional": true
+        }
+      ],
+      "commands": [
+        {
+          "title": "Validate usernames",
+          "command": "kerbrute userenum -d {domain} --dc {dc} {userlist}",
+          "description": "Check which usernames exist."
+        }
+      ],
+      "requiresScope": true
+    },
+    {
+      "id": "evil-winrm",
+      "name": "Evil-WinRM",
+      "category": "ad",
+      "description": "WinRM shell for administrators and testers to manage Windows hosts with valid credentials.",
+      "website": "https://github.com/Hackplayers/evil-winrm",
+      "docs": "https://github.com/Hackplayers/evil-winrm#readme",
+      "os": [
+        "macos",
+        "linux"
+      ],
+      "kind": "cli",
+      "tags": [
+        "winrm",
+        "windows",
+        "remote-management"
+      ],
+      "detect": {
+        "binaries": [
+          "evil-winrm"
+        ]
+      },
+      "install": {
+        "macos": [
+          "gem install evil-winrm"
+        ],
+        "linux": [
+          "sudo apt install evil-winrm",
+          "Or: gem install evil-winrm"
+        ]
+      },
+      "managed": [],
+      "dependencies": [
+        {
+          "name": "Ruby",
+          "binaries": [
+            "ruby"
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "title": "Connect",
+          "command": "evil-winrm -i {target} -u {user}",
+          "description": "Open a WinRM session (prompts for password)."
+        }
+      ],
+      "requiresScope": true
+    }
+  ]
+}
