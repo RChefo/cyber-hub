@@ -31,12 +31,26 @@ The web view is treated as **untrusted for consequential actions**. Everything t
 | Redaction | Before anything is persisted (run arguments, stored output, command history, activity details) credentials are redacted: options named like passwords/tokens/secrets/cookies/API keys, URL user-info, `Authorization`/`Cookie`/API-key headers, secret-named `key=value` pairs, `domain/user:password@host`, and JWTs. Redaction is lossy by design. |
 | Temporary files | Validated target files are snapshotted into `<app data>/runtime/run-*`, read by the tool from there, and deleted when the run ends; the whole `runtime` directory is cleared at startup and exit. |
 | File system | The web view never supplies file paths. Wordlist import, the extra wordlist folder and wordlist export use native dialogs opened by the backend. Preview reads only indexed files (≤ 64 MB). Deleting a wordlist file is limited to the managed folder (canonical-path check). |
-| Tauri capabilities | The main window gets only: `opener:allow-open-url` restricted to `http(s)://*`, and `core:window:allow-start-dragging` / `allow-toggle-maximize` / `allow-internal-toggle-maximize` for the frameless window. No `core:default`, no shell, no fs, no dialog permissions. |
+| Tauri capabilities | The main window gets only: `opener:allow-open-url` restricted to `http(s)://*`; for the frameless window and its controls `core:window:allow-start-dragging`, `allow-minimize`, `allow-toggle-maximize`, `allow-internal-toggle-maximize`, `allow-is-maximized` and `allow-close`; and `core:event:allow-listen` / `allow-unlisten` so the maximize/restore button can follow resize events. No `core:default`, no shell, no fs, no dialog, no HTTP permissions. |
 | `freezePrototype` | **Enabled.** `Object.prototype` is frozen in the web view. Chart dependencies that relied on the JavaScript "override mistake" are patched at install time (`scripts/patch-deps.mjs`, exact-statement rewrites to `Object.defineProperty`, verified by a self-test that loads them with a frozen prototype; the install fails if any patch no longer applies). |
 | CSP | `default-src 'self'`; scripts from self only; no remote origins for connect/img/font; `frame-ancestors 'none'`; `form-action 'none'`. `style-src` allows inline styles (required by HeroUI / motion). |
-| Secrets | The NVD API key lives in the OS credential store (Windows Credential Manager, macOS Keychain, Secret Service). The UI can set/delete/check it, never read it. |
-| Network | No telemetry, no update pings. Requests happen only on explicit actions: live CVE search (services.nvd.nist.gov), DNS lookup (system resolver), HTTP header fetch (the URL entered; redirects not followed; body not read), opening links. |
+| Secrets | The NVD and VirusTotal API keys live in the OS credential store (Windows Credential Manager, macOS Keychain, Secret Service). The UI can set, delete and check them, never read them. The VirusTotal key has dedicated commands (`vt_key_set` / `vt_key_status` / `vt_key_delete`) and cannot be reached through the generic secret commands. |
+| Network | No telemetry, no update pings. Requests happen only on explicit actions: live CVE search (services.nvd.nist.gov), VirusTotal lookup (www.virustotal.com, see below), DNS lookup (system resolver), HTTP header fetch (the URL entered; redirects not followed; body not read), opening links. |
 | Preferences | Settable keys are allow-listed; the wordlist folder can only be set through the native folder picker. |
+
+## VirusTotal integration
+
+| Concern | Control |
+|---|---|
+| API key | Kept in the OS credential store under `virustotal_api_key`. It is read only inside the Rust command that makes the request and is sent only in the `x-apikey` header to the fixed base URL `https://www.virustotal.com/api/v3`. It never crosses IPC and is never written to SQLite, history or logs. HTTP errors are stripped of URLs (`without_url`) and scrubbed for the key before they reach the UI. `x-apikey` headers are also covered by the output redaction rules. |
+| Key management | Settings → VirusTotal API key: save (format check for 64 hex characters, then one verification lookup of `8.8.8.8`; the key is stored only if VirusTotal accepts it), replace, remove. After saving only "Key stored" is shown. |
+| No arbitrary requests | The web view passes only the indicator text. The backend detects the type, builds the API path itself and uses its own stored key. No command accepts a key, URL or header for a lookup, and the web view has no HTTP permission. A debug-only override (`CYBERHUB_VT_BASE_URL`, accepted only for `http://127.0.0.1:` / `http://localhost:`) exists for testing against a local mock; it is compiled out of release builds (`cfg(debug_assertions)`). |
+| Read-only lookups | Only `GET /ip_addresses/{ip}`, `/domains/{domain}`, `/urls/{id}` (the URL identifier is computed locally) and `/files/{hash}`. Files are never uploaded and URLs are never submitted for analysis; an unknown indicator shows "no record". Any future upload or submission must add its own explicit confirmation. |
+| Private data | Private, loopback, link-local, CGNAT, documentation and other reserved IP addresses, URLs on such addresses, single-label names and internal suffixes (`.local`, `.internal`, `.corp`, `.lan`, `.home.arpa`, …) are refused before any request. Only http(s) URLs are accepted. |
+| Rate limits | A local limiter allows 4 lookups per minute (the public API limit); VirusTotal quota errors are reported as such. Results are cached in `vt_cache` for 24 h (not-found results for 1 h); "Refresh from VirusTotal" bypasses the cache explicitly. |
+| History | Each live lookup is recorded in the activity log (type, indicator truncated to 120 characters, verdict counts); cache hits are not. Clearing the cache keeps the key. |
+
+Tests: `src-tauri/src/vt.rs` (type detection, refusals, URL identifiers, report parsing, cache freshness, rate limiter, and a local mock HTTP server that checks the key is sent only in the header and never appears in any error).
 
 ## Scope enforcement
 
@@ -81,6 +95,7 @@ Tests: `src-tauri/src/scope.rs` and `src-tauri/src/targets.rs` (target files, ex
 | **Existing history** recorded before redaction was added is not rewritten. | Clear it in Settings → Local data if needed. |
 | **Process output** is shown live without redaction (it is ephemeral); stored output is redacted. | — |
 | **Live CVE searches** send the query text to NVD. | Labeled in the UI; a local-cache mode exists. |
+| **VirusTotal lookups** send the indicator (IP, domain, URL or hash) to VirusTotal, where it may be visible to other VirusTotal users. Lookups are recorded in the local activity log. | Only on an explicit Look up or Refresh; private addresses and internal names are refused; the UI says what is sent. |
 | **Third-party advisories** (`cargo audit`): 0 vulnerabilities; 8 informational warnings (unmaintained D-Bus crates and an unsound `glib` iterator in Tauri's Linux GTK stack, transitive only). | Monitor upstream Tauri / keyring releases. |
 | **Installers are unsigned** (when built). | Code signing is a release task. |
 | **Payloads** are well-known, non-destructive detection probes for authorized testing; Cyber Hub never sends them anywhere. | — |

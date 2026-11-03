@@ -1,7 +1,7 @@
 /** DTOs returned by the Rust backend (src-tauri/src/commands/*). Keep in sync. */
 
 export interface AppError {
-  kind: "database" | "io" | "validation" | "not_found" | "scope" | "network" | "secret" | "cancelled" | "internal" | "runtime";
+  kind: "database" | "io" | "validation" | "not_found" | "scope" | "network" | "secret" | "cancelled" | "rate_limited" | "internal" | "runtime";
   message: string;
 }
 
@@ -330,4 +330,63 @@ export interface SystemInfo {
   dataDir: string;
   dbSchemaVersion: number;
   runningProcesses: number;
+}
+
+/* ─────────────── VirusTotal ─────────────── */
+
+export type VtKind = "ip" | "domain" | "url" | "file";
+
+export interface VtDetected {
+  kind: VtKind;
+  label: string;
+  value: string;
+  hashType: string | null;
+}
+
+export interface VtStats {
+  malicious: number;
+  suspicious: number;
+  harmless: number;
+  undetected: number;
+  timeout: number;
+}
+
+export interface VtReport {
+  kind: VtKind;
+  indicator: string;
+  stats: VtStats;
+  enginesTotal: number;
+  reputation: number | null;
+  /** unix seconds */
+  lastAnalysisDate: number | null;
+  votesHarmless: number | null;
+  votesMalicious: number | null;
+  flagged: { engine: string; category: "malicious" | "suspicious" | string; result: string | null }[];
+  threatLabel: string | null;
+  tags: string[];
+  categories: string[];
+  details: { label: string; value: string }[];
+  permalink: string;
+}
+
+export interface VtLookupResult {
+  kind: VtKind;
+  indicator: string;
+  hashType: string | null;
+  /** null when VirusTotal has no record of the indicator */
+  report: VtReport | null;
+  source: "live" | "cache";
+  fetchedAt: string;
+  freshUntil: string;
+}
+
+export interface VtRecentLookup {
+  kind: VtKind;
+  indicator: string;
+  malicious: number | null;
+  suspicious: number | null;
+  enginesTotal: number | null;
+  notFound: boolean;
+  fetchedAt: string;
+  fresh: boolean;
 }

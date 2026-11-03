@@ -27,6 +27,7 @@ Tauri commands (src-tauri/src/commands/*)      ← input validation, no raw SQL 
 | `commands/wordlists.rs` | native file/folder/save dialogs opened by the backend, index by reference or managed copy, folder scan, preview (64 MB read cap), export, safe delete (managed folder only) |
 | `commands/intel.rs` | DNS lookup (hickory-resolver), HTTP header inspection (reqwest, no redirects, body never read), NVD CVE search and cache |
 | `commands/system.rs` | system info (sysinfo), open terminal (no command passed), OS-keychain secrets (write-only from the UI) |
+| `commands/virustotal.rs` + `vt.rs` | VirusTotal API v3 reputation lookups: indicator detection and refusal of private targets, HTTP client (key only in the `x-apikey` header, no redirects, 20 s timeout), report parsing, local rate limiter, `vt_cache`, key management |
 
 Every command returns `Result<T, AppError>`. `AppError` serializes as `{ kind, message }` so the UI can render specific error states (`validation`, `scope`, `network`, `not_found`, …).
 
@@ -42,9 +43,9 @@ Every command returns `Result<T, AppError>`. `AppError` serializes as `{ kind, m
 5. Output is read in bounded chunks, streamed to a `tauri::ipc::Channel` and buffered (2 MB cap, redacted) into the `executions` row on exit. Cancellation terminates the whole tree; the snapshot directory is removed when the run ends. On app exit all running trees are killed and the runtime directory is cleared.
 6. Managed installs reuse the engine with `kind = "install"` after their own native confirmation. Program = resolved package manager, args = exact catalog recipe. A finish hook re-detects the tool or marks it `installation_failed`.
 
-### Data model (migration 1)
+### Data model (migrations 1–2)
 
-`user_preferences`, `favorites`, `tool_categories`, `tools`, `tool_installations`, `resources` (custom), `resource_visits`, `projects`, `project_targets`, `findings`, `command_categories`, `commands`, `command_history`, `saved_dorks`, `dork_history`, `payloads` (custom), `wordlists`, `activity_logs`, `executions`, `cve_cache`, `cve_search_history`, `tasks`.
+`user_preferences`, `favorites`, `tool_categories`, `tools`, `tool_installations`, `resources` (custom), `resource_visits`, `projects`, `project_targets`, `findings`, `command_categories`, `commands`, `command_history`, `saved_dorks`, `dork_history`, `payloads` (custom), `wordlists`, `activity_logs`, `executions`, `cve_cache`, `cve_search_history`, `tasks`. Migration 2 adds `vt_cache` (VirusTotal reports keyed by type and indicator, with fetch time and a not-found flag).
 
 Foreign keys are enforced (`PRAGMA foreign_keys = ON`). Deleting a project cascades to targets, findings and tasks, and nulls references in history. The database lives at `<app data dir>/cyberhub.db` (on Windows: `%APPDATA%\dev.cyberhub.workstation`).
 
@@ -95,7 +96,7 @@ The script fails the install if an expected statement is missing (dependency cha
 
 ### Window
 
-The window is frameless (`decorations: false`, `shadow: false`). The top bar (`data-tauri-drag-region`) moves the window and double-click toggles maximize; edges and corners resize natively. There are no custom minimize/close buttons: use the taskbar, Win+↓ / Win+↑, or Alt+F4.
+The window is frameless (`decorations: false`, `shadow: false`). The top bar (`data-tauri-drag-region`) moves the window and double-click toggles maximize; edges and corners resize natively. Minimize, maximize/restore and close buttons sit at the far right of the top bar (`src/app/WindowControls.tsx`). They use Tauri's window API (`minimize`, `toggleMaximize`, `close`), so the same code serves Windows, macOS and Linux. The maximize icon switches to restore by re-reading `isMaximized()` on every resize event, which keeps it correct when the window is maximized by double-click, snapping or keyboard shortcuts. The buttons are not drag regions, so pressing them never starts a window drag.
 
 ### Visual system
 

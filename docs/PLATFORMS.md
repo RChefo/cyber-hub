@@ -4,8 +4,8 @@
 
 | Platform | What was verified | What was NOT verified |
 |---|---|---|
-| **Windows 11 x64** (dev machine) | Dev build and the running app: real detection (Nmap 7.99 at its Program Files path, Ncat, OpenSSL from Git for Windows), version probing; end-to-end Nmap runs inside an authorized loopback scope, including `-iL` target files read from validated snapshots; native confirmation dialog (approve and cancel); cancelling a live run kills the process; process-tree kill of a grandchild (automated test); all pages render with `freezePrototype` enabled; frameless window: drag to move, double-click maximize/restore, all edges and corners resize, Win+↓ minimizes; DNS lookup and live NVD search; typecheck, 80 frontend tests, 31 backend tests, `npm audit`, `cargo audit`. | Installer builds after this hardening pass (the earlier MSI/NSIS were built before it and are outdated). |
-| **Linux** — Debian 12 (bookworm) container, Rust 1.99.1, Node 22 | `npm ci` (incl. the `freezePrototype` dependency patch and its self-test), typecheck, 80 frontend tests, Vite production build, `cargo test` — all 31 backend tests including the Unix process-group kill test and PATH resolution — and a warning-free `cargo build` of the Tauri backend against WebKitGTK 4.1. | The GUI was not launched (no display in the container); window behavior, native dialogs, Secret Service storage and real tool runs on Linux are untested. Kali WSL on this machine has no Rust/Node toolchain and no password-less sudo, so it could not be used. |
+| **Windows 11 x64** (dev machine) | Dev build and the running app: real detection (Nmap 7.99 at its Program Files path, Ncat, OpenSSL from Git for Windows), version probing; end-to-end Nmap runs inside an authorized loopback scope, including `-iL` target files read from validated snapshots; native confirmation dialog (approve and cancel); cancelling a live run kills the process; process-tree kill of a grandchild (automated test); all pages render with `freezePrototype` enabled; frameless window: drag to move, double-click maximize/restore, all edges and corners resize, Win+↓ minimizes; window controls with real clicks: minimize, maximize/restore (icon follows double-click and OS restore), close, tooltips and hover states, pressing a control never moves the window; VirusTotal against a local mock API (no real quota used): key rejection and verified save, IP/domain/URL/hash lookups, not-found, quota and local rate-limit errors, cache hit and manual refresh, refusal of private/internal indicators without a request, key removal, and a scan of the database, app-data files and dev log that found no trace of the key; DNS lookup and live NVD search; typecheck, 84 frontend tests, 44 backend tests, `npm audit`, `cargo audit`. | Installer builds after this hardening pass (the earlier MSI/NSIS were built before it and are outdated). VirusTotal against the real API (no key was used, to avoid spending quota). |
+| **Linux** — Debian 12 (bookworm) container, Rust 1.99.1, Node 22 | `npm ci` (incl. the `freezePrototype` dependency patch and its self-test), typecheck, 84 frontend tests, Vite production build, `cargo test` — all 44 backend tests including the Unix process-group kill test and PATH resolution — and a warning-free `cargo build` of the Tauri backend against WebKitGTK 4.1. | The GUI was not launched (no display in the container); window behavior, native dialogs, Secret Service storage and real tool runs on Linux are untested. Kali WSL on this machine has no Rust/Node toolchain and no password-less sudo, so it could not be used. |
 | **macOS** | Nothing — no macOS machine was available. | Everything. The code has macOS adapters (see below) and CI is prepared to build and test on `macos-latest`. |
 
 `.github/workflows/ci.yml` runs typecheck, frontend tests, a frontend build and `cargo test` on Windows, macOS and Ubuntu (no installer packaging). It has not been run yet because the repository has not been pushed.
@@ -32,7 +32,7 @@ Installers (`npm run tauri build`) are a release step and are not part of develo
 ### macOS
 
 * Xcode Command Line Tools, Rust, Node 20+.
-* Keychain is used for the NVD API key.
+* Keychain is used for the NVD and VirusTotal API keys.
 * Helper: `/usr/bin/open` (GUI tool launch, Terminal).
 
 ### Linux (Debian / Ubuntu)
@@ -41,7 +41,7 @@ Installers (`npm run tauri build`) are a release step and are not part of develo
 sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-1-dev pkg-config build-essential
 ```
 
-* A running Secret Service (GNOME Keyring, KWallet) is needed to store the NVD API key.
+* A running Secret Service (GNOME Keyring, KWallet) is needed to store the NVD and VirusTotal API keys.
 * Process trees use process groups (`libc::killpg`).
 * To reproduce the container verification: `docker run --rm -v "$PWD:/src:ro" rust:1-bookworm bash -c "<install deps above>; cp -r /src /work; cd /work && npm ci && npx vitest run && cd src-tauri && cargo test"`.
 
@@ -58,7 +58,8 @@ sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-
 | Secrets | Credential Manager | Keychain | Secret Service (D-Bus) |
 | App data | `%APPDATA%\dev.cyberhub.workstation` | `~/Library/Application Support/dev.cyberhub.workstation` | `~/.local/share/dev.cyberhub.workstation` |
 | Managed installers | winget, pipx, go | brew/cask, pipx, go | pipx, go (apt/sudo shown as instructions only) |
-| Frameless window | verified (move, maximize, resize, minimize) | untested (no traffic-light buttons when undecorated) | untested |
+| Frameless window | verified (move, maximize, resize, minimize) | untested (native traffic-light buttons are hidden when undecorated; the in-app controls replace them) | untested |
+| Window controls (minimize, maximize/restore, close) | verified in the running app | untested (same Tauri API) | untested (same Tauri API) |
 
 ### Unsupported or limited functionality
 

@@ -22,6 +22,9 @@ pub enum AppError {
     /// the user declined a native confirmation dialog
     #[error("{0}")]
     Cancelled(String),
+    /// a remote API or client-side limiter refused the request for now
+    #[error("{0}")]
+    RateLimited(String),
     #[error("{0}")]
     Internal(String),
 }
@@ -37,6 +40,7 @@ impl AppError {
             AppError::Network(_) => "network",
             AppError::Secret(_) => "secret",
             AppError::Cancelled(_) => "cancelled",
+            AppError::RateLimited(_) => "rate_limited",
             AppError::Internal(_) => "internal",
         }
     }

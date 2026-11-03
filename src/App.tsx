@@ -17,6 +17,7 @@ const PAGES: Record<PageId, React.LazyExoticComponent<ComponentType>> = {
   dorks: lazy(() => import("@/modules/dorks/DorksStudio")),
   resources: lazy(() => import("@/modules/resources/ResourcesPage")),
   intel: lazy(() => import("@/modules/intel/IntelPage")),
+  virustotal: lazy(() => import("@/modules/virustotal/VirusTotalPage")),
   utilities: lazy(() => import("@/modules/utilities/UtilitiesPage")),
   settings: lazy(() => import("@/modules/settings/SettingsPage")),
 };

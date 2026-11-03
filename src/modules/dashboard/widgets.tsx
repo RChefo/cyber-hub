@@ -248,7 +248,7 @@ const FEED_FILTERS: { id: string; label: string; kinds: string[] | null }[] = [
   { id: "all", label: "All activity", kinds: null },
   { id: "tools", label: "Tools", kinds: ["tool_run", "tool_install", "tool_launch", "tool_scan"] },
   { id: "projects", label: "Projects & findings", kinds: ["project", "finding"] },
-  { id: "research", label: "Research", kinds: ["dork_search", "dork_saved", "resource_open", "cve_search"] },
+  { id: "research", label: "Research", kinds: ["dork_search", "dork_saved", "resource_open", "cve_search", "vt_lookup"] },
   { id: "commands", label: "Commands & utilities", kinds: ["command_copy", "command_saved", "utility", "payload_copy", "wordlist"] },
 ];
 

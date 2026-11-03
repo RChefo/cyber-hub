@@ -8,6 +8,7 @@ import { useQuery } from "@/lib/query";
 import { formatRelative, modKey } from "@/lib/utils";
 import { navItem } from "./routes";
 import { useApp } from "./store";
+import { WindowControls } from "./WindowControls";
 
 function RunningIndicator() {
   const { runtime, navigate } = useApp();
@@ -140,6 +141,7 @@ export function Topbar() {
           </Dropdown.Popover>
         </Dropdown>
       </div>
+      <WindowControls />
     </header>
   );
 }

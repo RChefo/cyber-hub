@@ -149,6 +149,16 @@ export const api = {
   cveCacheStats: () => call<[number, string | null]>("cve_cache_stats"),
   cveHistoryClear: () => call<void>("cve_history_clear"),
 
+  // VirusTotal — requests are made by the backend with the key from the OS credential store.
+  // The key is write-only: it can be saved (after verification) or removed, never read.
+  vtDetect: (query: string) => call<T.VtDetected>("vt_detect", { query }),
+  vtLookup: (query: string, refresh = false) => call<T.VtLookupResult>("vt_lookup", { query, refresh }),
+  vtRecent: (limit = 20) => call<T.VtRecentLookup[]>("vt_recent", { limit }),
+  vtCacheClear: () => call<void>("vt_cache_clear"),
+  vtKeyStatus: () => call<boolean>("vt_key_status"),
+  vtKeySet: (value: string) => call<void>("vt_key_set", { value }),
+  vtKeyDelete: () => call<void>("vt_key_delete"),
+
   // system
   systemInfo: () => call<T.SystemInfo>("system_info"),
   openTerminal: (cwd?: string | null) => call<string>("open_terminal", { cwd: cwd ?? null }),

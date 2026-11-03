@@ -14,10 +14,11 @@ mod redact;
 mod scope;
 mod targets;
 mod util;
+mod vt;
 
 use tauri::Manager;
 
-use commands::{activity, intel, library, projects, system, tools, wordlists};
+use commands::{activity, intel, library, projects, system, tools, virustotal, wordlists};
 
 pub fn run() {
     tauri::Builder::default()
@@ -30,6 +31,7 @@ pub fn run() {
             tools::sync_catalog(&database)?;
             app.manage(database);
             app.manage(process::ProcessManager::default());
+            app.manage(virustotal::VtState::new()?);
             // remove target-file snapshots left behind by a crash
             tools::clean_runtime_dir(app.handle());
             Ok(())
@@ -113,6 +115,14 @@ pub fn run() {
             intel::cve_history,
             intel::cve_cache_stats,
             intel::cve_history_clear,
+            // VirusTotal (requests are made only here, with the key from the OS credential store)
+            virustotal::vt_detect,
+            virustotal::vt_lookup,
+            virustotal::vt_recent,
+            virustotal::vt_cache_clear,
+            virustotal::vt_key_status,
+            virustotal::vt_key_set,
+            virustotal::vt_key_delete,
             // system
             system::system_info,
             system::open_terminal,

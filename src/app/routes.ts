@@ -8,6 +8,7 @@ import {
   Search,
   Settings,
   ShieldAlert,
+  ShieldCheck,
   SquareTerminal,
   Syringe,
   Wrench,
@@ -23,6 +24,7 @@ export type PageId =
   | "dorks"
   | "resources"
   | "intel"
+  | "virustotal"
   | "utilities"
   | "settings";
 
@@ -56,6 +58,7 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { id: "dorks", label: "Dorks Studio", icon: Search, description: "Advanced search query builder" },
       { id: "resources", label: "Cyber Resources", icon: BookMarked, description: "Curated security websites" },
       { id: "intel", label: "Vulnerability Intel", icon: ShieldAlert, description: "CVE search and details" },
+      { id: "virustotal", label: "VirusTotal", icon: ShieldCheck, description: "Reputation of IPs, domains, URLs and file hashes" },
     ],
   },
   {

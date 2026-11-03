@@ -11,6 +11,7 @@ import {
   ScanLine,
   Search,
   ShieldAlert,
+  ShieldCheck,
   Syringe,
   Wrench,
   type LucideIcon,
@@ -33,6 +34,7 @@ export const ACTIVITY_META: Record<string, { icon: LucideIcon; color: FeaturedIc
   cve_search: { icon: ShieldAlert, color: "gray", label: "CVE searches" },
   utility: { icon: Wrench, color: "gray", label: "Utilities" },
   payload_copy: { icon: Syringe, color: "gray", label: "Payloads" },
+  vt_lookup: { icon: ShieldCheck, color: "brand", label: "VirusTotal" },
 };
 
 export function ActivityIcon({ kind }: { kind: string }) {

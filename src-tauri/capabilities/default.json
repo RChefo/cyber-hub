@@ -1,12 +1,17 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Minimal privileges for the Cyber Hub main window. App commands are validated in Rust; the web view gets no core plugin defaults, no shell, no filesystem and no dialog access (file pickers and confirmations are opened by the backend). Only: opening http(s) links, and moving/maximizing the frameless window.",
+  "description": "Minimal privileges for the Cyber Hub main window. App commands are validated in Rust; the web view gets no core plugin defaults, no shell, no filesystem and no dialog access (file pickers and confirmations are opened by the backend). Only: opening http(s) links, and moving/minimizing/maximizing/closing the frameless window (plus listening to its resize events to keep the maximize/restore control in sync).",
   "windows": ["main"],
   "permissions": [
     "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-close",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
     {
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "https://*" }, { "url": "http://*" }]

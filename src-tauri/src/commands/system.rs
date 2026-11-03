@@ -131,17 +131,40 @@ fn dirs_home() -> Option<PathBuf> {
 /* ─────────────── secrets (OS keychain) ─────────────── */
 
 const SERVICE: &str = "dev.cyberhub.workstation";
-const SECRET_NAMES: &[&str] = &["nvd_api_key"];
+/// Every secret Cyber Hub may store (used by backend code).
+const KNOWN_SECRETS: &[&str] = &["nvd_api_key", crate::commands::virustotal::KEY_NAME];
+/// Secrets the generic UI commands may set / check / delete. The VirusTotal key is managed
+/// only through `vt_key_set` (verifies before storing) and `vt_key_delete`.
+const UI_SECRETS: &[&str] = &["nvd_api_key"];
 
 fn entry(name: &str) -> AppResult<keyring::Entry> {
-    if !SECRET_NAMES.contains(&name) {
+    if !KNOWN_SECRETS.contains(&name) {
         return Err(validation("Unknown secret name"));
     }
     keyring::Entry::new(SERVICE, name).map_err(|e| AppError::Secret(e.to_string()))
 }
 
+fn ui_entry(name: &str) -> AppResult<keyring::Entry> {
+    if !UI_SECRETS.contains(&name) {
+        return Err(validation("Unknown secret name"));
+    }
+    entry(name)
+}
+
+/// Backend-only read. Secret values are never returned to the web view.
 pub fn read_secret(name: &str) -> Option<String> {
-    entry(name).ok()?.get_password().ok()
+    entry(name).ok()?.get_password().ok().filter(|v| !v.is_empty())
+}
+
+pub fn store_secret(name: &str, value: &str) -> AppResult<()> {
+    entry(name)?.set_password(value).map_err(|e| AppError::Secret(e.to_string()))
+}
+
+pub fn delete_secret(name: &str) -> AppResult<()> {
+    match entry(name)?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(AppError::Secret(e.to_string())),
+    }
 }
 
 /// Secrets are write-only from the frontend: values are never returned.
@@ -151,12 +174,12 @@ pub async fn secret_set(name: String, value: String) -> AppResult<()> {
     if v.is_empty() || v.len() > 512 {
         return Err(validation("Secret must be 1-512 characters"));
     }
-    entry(&name)?.set_password(v).map_err(|e| AppError::Secret(e.to_string()))
+    ui_entry(&name)?.set_password(v).map_err(|e| AppError::Secret(e.to_string()))
 }
 
 #[tauri::command]
 pub async fn secret_exists(name: String) -> AppResult<bool> {
-    match entry(&name)?.get_password() {
+    match ui_entry(&name)?.get_password() {
         Ok(_) => Ok(true),
         Err(keyring::Error::NoEntry) => Ok(false),
         Err(e) => Err(AppError::Secret(e.to_string())),
@@ -165,8 +188,6 @@ pub async fn secret_exists(name: String) -> AppResult<bool> {
 
 #[tauri::command]
 pub async fn secret_delete(name: String) -> AppResult<()> {
-    match entry(&name)?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(AppError::Secret(e.to_string())),
-    }
+    ui_entry(&name)?;
+    delete_secret(&name)
 }

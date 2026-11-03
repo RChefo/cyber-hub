@@ -15,7 +15,7 @@ static SECRET_OPTION: Lazy<Regex> = Lazy::new(|| {
 static URL_USERINFO: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)([a-z][a-z0-9+.-]*://[^/\s:@]+):([^@\s/]+)@").unwrap());
 /// Header-style secrets: `Authorization: Bearer x`, `Cookie: a=b`, `X-Api-Key: x`
 static HEADER: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)\b(authorization|proxy-authorization|cookie|set-cookie|x-api-key|x-auth-token|x-access-token|api-key)(\s*[:=]\s*)([^\r\n]+)").unwrap()
+    Regex::new(r"(?i)\b(authorization|proxy-authorization|cookie|set-cookie|x-apikey|x-api-key|x-auth-token|x-access-token|api-key)(\s*[:=]\s*)([^\r\n]+)").unwrap()
 });
 /// key=value pairs with secret-looking keys (query strings, form bodies, cookies)
 static KV: Lazy<Regex> = Lazy::new(|| {

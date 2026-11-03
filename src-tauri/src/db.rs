@@ -229,6 +229,18 @@ const MIGRATIONS: &[&str] = &[
         created_at TEXT NOT NULL
     );
     "#,
+    // 2 — VirusTotal reputation cache (also serves as lookup history)
+    r#"
+    CREATE TABLE vt_cache (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('ip','domain','url','file')),
+        indicator TEXT NOT NULL,
+        data TEXT,
+        not_found INTEGER NOT NULL DEFAULT 0,
+        fetched_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_vt_cache_time ON vt_cache(fetched_at DESC);
+    "#,
 ];
 
 impl Db {
