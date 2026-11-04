@@ -276,6 +276,25 @@ const MIGRATIONS: &[&str] = &[
         updated_at TEXT NOT NULL
     );
     "#,
+    // 4 — MCP audit log (one row per MCP tool call; arguments are redacted)
+    r#"
+    CREATE TABLE mcp_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL,
+        client TEXT NOT NULL,
+        connection INTEGER NOT NULL,
+        tool TEXT NOT NULL,
+        arguments TEXT NOT NULL,
+        project_id INTEGER,
+        approval TEXT NOT NULL,
+        approval_id TEXT,
+        execution_id INTEGER,
+        result TEXT NOT NULL,
+        message TEXT NOT NULL DEFAULT '',
+        duration_ms INTEGER NOT NULL
+    );
+    CREATE INDEX idx_mcp_audit_time ON mcp_audit(id DESC);
+    "#,
 ];
 
 impl Db {

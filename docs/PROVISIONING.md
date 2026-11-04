@@ -84,6 +84,10 @@ Inside the app, Settings → Threat intelligence providers shows each provider's
 * **Shared keys and quotas.** Every provisioned machine uses your provider accounts and quotas, and is subject to each provider's terms (several free tiers are for non-commercial use only).
 * **Giving end users working integrations without handing them your keys** requires a server you operate: an API gateway that holds the keys, authenticates installations and enforces rate limits. Cyber Hub would then call your gateway instead of the providers. That is not implemented.
 
+## MCP clients
+
+MCP clients ([MCP.md](MCP.md)) never receive credentials and cannot provision, test or remove them. `cyberhub-mcp` holds no credentials and does not include the provisioning tool; provider requests made on behalf of an MCP client are performed by the Cyber Hub app with the provisioned credentials, after the user's policy and approvals allow them.
+
 ## Development and tests
 
 * Automated tests never use real credentials or real provider APIs: they use local mock servers and fake constants.

@@ -9,6 +9,7 @@ mod confirm;
 mod db;
 mod detect;
 mod error;
+pub mod mcp;
 mod process;
 /// Developer-only credential provisioning (`cyberhub-keys`); not compiled into the app.
 #[cfg(feature = "provisioning")]
@@ -23,7 +24,7 @@ mod vtfile;
 
 use tauri::Manager;
 
-use commands::{activity, intel, library, projects, system, threat_intel, tools, virustotal, wordlists};
+use commands::{activity, intel, library, mcp as mcp_commands, projects, system, threat_intel, tools, virustotal, wordlists};
 
 pub fn run() {
     tauri::Builder::default()
@@ -38,8 +39,21 @@ pub fn run() {
             app.manage(process::ProcessManager::default());
             app.manage(virustotal::VtState::new()?);
             app.manage(threat_intel::TiState::new()?);
+            app.manage(std::sync::Arc::new(mcp::bridge::Bridge::default()));
+            app.manage(mcp::ops::LiveRuns::default());
             // remove target-file snapshots left behind by a crash
             tools::clean_runtime_dir(app.handle());
+            // MCP bridge: off unless the user turned it on in Settings → Integrations → MCP
+            let enabled = mcp_commands::enabled_pref(&app.state::<db::Db>());
+            let _ = std::fs::remove_dir_all(dir.join("mcp")); // stale connection files from a crash
+            if enabled {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = mcp_commands::start_bridge(&handle).await {
+                        eprintln!("Cyber Hub: MCP bridge not started: {e}");
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -89,6 +103,8 @@ pub fn run() {
             projects::finding_upsert,
             projects::finding_delete,
             projects::project_tool_history,
+            projects::project_report,
+            projects::project_report_export,
             // tools & execution engine
             tools::tools_catalog,
             tools::tools_detection_list,
@@ -143,6 +159,15 @@ pub fn run() {
             threat_intel::ti_saved_add,
             threat_intel::ti_saved_remove,
             threat_intel::ti_export,
+            // MCP integration (Settings → Integrations → MCP; not reachable from MCP clients)
+            mcp_commands::mcp_status,
+            mcp_commands::mcp_set_enabled,
+            mcp_commands::mcp_set_policy,
+            mcp_commands::mcp_pending,
+            mcp_commands::mcp_decide,
+            mcp_commands::mcp_audit,
+            mcp_commands::mcp_audit_clear,
+            mcp_commands::mcp_client_configs,
             // system
             system::system_info,
             system::open_terminal,
@@ -159,6 +184,8 @@ pub fn run() {
                     std::thread::sleep(std::time::Duration::from_millis(500));
                 }
                 tools::clean_runtime_dir(app);
+                // close the MCP bridge and remove its connection files
+                app.state::<std::sync::Arc<mcp::bridge::Bridge>>().stop();
             }
         });
 }

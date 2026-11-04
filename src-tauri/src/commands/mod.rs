@@ -1,6 +1,7 @@
 pub mod activity;
 pub mod intel;
 pub mod library;
+pub mod mcp;
 pub mod projects;
 pub mod system;
 pub mod threat_intel;

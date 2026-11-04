@@ -24,6 +24,7 @@ export type Tag =
   | "cve"
   | "vt"
   | "ti"
+  | "mcp"
   | "system";
 
 const versions = new Map<Tag, number>();

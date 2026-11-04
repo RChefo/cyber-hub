@@ -371,7 +371,12 @@ fn validate_exec(db: &Db, req: &ExecRequest, snapshot_dir: Option<&std::path::Pa
 /// Dry-run validation for the execution preview. Reads (but never writes) target files.
 #[tauri::command]
 pub async fn exec_validate(db: State<'_, Db>, request: ExecRequest) -> AppResult<ExecValidation> {
-    Ok(validate_exec(&db, &request, None)?.info)
+    preview_execution(&db, &request)
+}
+
+/// Dry-run validation shared by the GUI preview and MCP `cyberhub_preview_run`.
+pub fn preview_execution(db: &Db, request: &ExecRequest) -> AppResult<ExecValidation> {
+    Ok(validate_exec(db, request, None)?.info)
 }
 
 fn runtime_dir(app: &AppHandle) -> AppResult<PathBuf> {
@@ -409,19 +414,30 @@ fn confirmation_text(tool: &str, v: &Validated) -> String {
 
 #[tauri::command]
 pub async fn exec_start(app: AppHandle, db: State<'_, Db>, request: ExecRequest, on_event: Channel<ExecEvent>) -> AppResult<i64> {
+    start_execution(&app, &db, request, on_event, None).await
+}
+
+/// The single execution path used by the GUI and by MCP clients: validation, scope
+/// enforcement, native OS confirmation, target-file snapshots and process-tree management.
+/// `requester` names an AI client (self-reported MCP client name) shown in the native dialog.
+pub async fn start_execution(app: &AppHandle, db: &Db, request: ExecRequest, on_event: Channel<ExecEvent>, requester: Option<&str>) -> AppResult<i64> {
     if !request.confirmed {
         return Err(validation("Execution must be explicitly confirmed"));
     }
     let tool_name = catalog::tool(&request.tool_id).map(|t| t.name.clone()).unwrap_or_else(|| request.tool_id.clone());
     // Validate once without side effects to build the confirmation text…
-    let preview = validate_exec(&db, &request, None)?;
-    // …then require a native OS confirmation the web view cannot click on its own.
-    if !confirm::native(&app, "Confirm tool execution", confirmation_text(&tool_name, &preview), "Run").await {
+    let preview = validate_exec(db, &request, None)?;
+    let mut text = confirmation_text(&tool_name, &preview);
+    if let Some(who) = requester {
+        text = format!("Requested by an AI client through MCP: {who} (name reported by the client).\n\n{text}");
+    }
+    // …then require a native OS confirmation the web view (or an MCP client) cannot click.
+    if !confirm::native(app, "Confirm tool execution", text, "Run").await {
         return Err(AppError::Cancelled("Execution was cancelled in the confirmation dialog".into()));
     }
     // Re-validate for the real run: target files are snapshotted into a private directory.
-    let run_dir = runtime_dir(&app)?.join(format!("run-{}-{}", std::process::id(), chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()));
-    let validated = match validate_exec(&db, &request, Some(&run_dir)) {
+    let run_dir = runtime_dir(app)?.join(format!("run-{}-{}", std::process::id(), chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()));
+    let validated = match validate_exec(db, &request, Some(&run_dir)) {
         Ok(v) => v,
         Err(e) => {
             let _ = std::fs::remove_dir_all(&run_dir);
@@ -444,7 +460,7 @@ pub async fn exec_start(app: AppHandle, db: State<'_, Db>, request: ExecRequest,
         Ok(())
     })?;
     process::start(
-        &app,
+        app,
         SpawnSpec {
             tool_id: request.tool_id.clone(),
             kind: "run",
@@ -513,6 +529,36 @@ pub async fn exec_list(db: State<'_, Db>, pm: State<'_, ProcessManager>, limit: 
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
+    })
+}
+
+/// One execution record (no output), with the live/stale status logic used by `exec_list`.
+pub fn execution_record(db: &Db, pm: &ProcessManager, id: i64) -> AppResult<Option<ExecutionRecord>> {
+    let running = pm.running_ids();
+    db.with(|c| {
+        Ok(c.query_row(
+            "SELECT id, tool_id, kind, program, args, project_id, status, exit_code, truncated, started_at, finished_at FROM executions WHERE id = ?1",
+            params![id],
+            |r| {
+                let status: String = r.get(6)?;
+                Ok(ExecutionRecord {
+                    id,
+                    tool_id: r.get(1)?,
+                    kind: r.get(2)?,
+                    program: r.get(3)?,
+                    args: serde_json::from_str(&r.get::<_, String>(4)?).unwrap_or_default(),
+                    project_id: r.get(5)?,
+                    running: running.contains(&id),
+                    status: if status == "running" && !running.contains(&id) { "error".into() } else { status },
+                    exit_code: r.get(7)?,
+                    output: None,
+                    truncated: r.get::<_, i64>(8)? != 0,
+                    started_at: r.get(9)?,
+                    finished_at: r.get(10)?,
+                })
+            },
+        )
+        .optional()?)
     })
 }
 

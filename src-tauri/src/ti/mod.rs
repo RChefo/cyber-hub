@@ -200,7 +200,7 @@ impl ProviderId {
 impl KeyId {
     pub const ALL: [KeyId; 5] = [KeyId::Virustotal, KeyId::Abuseipdb, KeyId::Otx, KeyId::Abusech, KeyId::Shodan];
 
-    #[cfg(any(test, feature = "provisioning"))]
+    #[cfg(feature = "provisioning")]
     pub fn as_str(self) -> &'static str {
         match self {
             KeyId::Virustotal => "virustotal",
@@ -211,7 +211,7 @@ impl KeyId {
         }
     }
 
-    #[cfg(any(test, feature = "provisioning"))]
+    #[cfg(feature = "provisioning")]
     pub fn parse(s: &str) -> Option<KeyId> {
         Self::ALL.into_iter().find(|k| k.as_str() == s)
     }
@@ -243,7 +243,7 @@ impl KeyId {
         ProviderId::ALL.into_iter().filter(|p| p.key() == self).collect()
     }
 
-    #[cfg(any(test, feature = "provisioning"))]
+    #[cfg(feature = "provisioning")]
     pub fn signup_url(self) -> &'static str {
         match self {
             KeyId::Virustotal => "https://www.virustotal.com/gui/my-apikey",
@@ -274,7 +274,7 @@ impl KeyId {
 /// One read-only request proving a credential works, using a fixed public probe (never user
 /// data). Returns quota / plan information where the provider reports it. Used only by the
 /// developer provisioning tool and tests; no IPC command reaches it.
-#[cfg(any(test, feature = "provisioning"))]
+#[cfg(feature = "provisioning")]
 pub async fn probe(k: KeyId, client: &reqwest::Client, key: &str) -> Result<Option<String>, http::ApiError> {
     match k {
         KeyId::Virustotal => match crate::vt::get(client, &ProviderId::Virustotal.base(), "/ip_addresses/8.8.8.8", key).await {

@@ -517,3 +517,75 @@ export interface TiSavedIndicator {
   note: string;
   createdAt: string;
 }
+
+/* ─────────────── MCP integration ─────────────── */
+
+export type McpPolicy = "allow" | "ask" | "deny";
+
+export interface McpPolicyRow {
+  category: string;
+  label: string;
+  policy: McpPolicy;
+  options: McpPolicy[];
+  tools: string[];
+}
+
+export interface McpConnection {
+  id: number;
+  /** self-reported by the MCP client */
+  client: string;
+  connectedAt: string;
+  requests: number;
+  lastRequestAt: string | null;
+}
+
+export interface McpStatus {
+  enabled: boolean;
+  running: boolean;
+  address: string | null;
+  startedAt: string | null;
+  transport: string;
+  serverPath: string | null;
+  toolCount: number;
+  resourceCount: number;
+  promptCount: number;
+  connections: McpConnection[];
+  pending: number;
+  policy: McpPolicyRow[];
+}
+
+export interface McpPending {
+  id: string;
+  client: string;
+  connection: number;
+  tool: string;
+  category: string;
+  summary: string;
+  details: { label: string; value: string }[];
+  projectId: number | null;
+  createdAt: string;
+  expiresInSecs: number;
+}
+
+export interface McpAuditRow {
+  id: number;
+  at: string;
+  client: string;
+  connection: number;
+  tool: string;
+  arguments: string;
+  projectId: number | null;
+  approval: string;
+  approvalId: string | null;
+  executionId: number | null;
+  result: string;
+  message: string;
+  durationMs: number;
+}
+
+export interface McpClientConfigs {
+  claudeCodeCommand: string;
+  claudeCodeJson: string;
+  claudeDesktopJson: string;
+  claudeDesktopConfigPath: string | null;
+}

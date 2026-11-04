@@ -17,7 +17,7 @@ import type { Finding, Project, ProjectStatus } from "@/lib/types";
 import { formatDate, formatDateTime, formatRelative, shellQuote } from "@/lib/utils";
 import { FindingsTab } from "./FindingsTab";
 import { ProjectFormModal, STATUS_OPTIONS } from "./ProjectFormModal";
-import { buildMarkdownReport, countBySeverity } from "./report";
+import { countBySeverity } from "./report";
 import { ScopeTab } from "./ScopeTab";
 
 type TabId = "overview" | "scope" | "findings" | "notes" | "commands" | "evidence";
@@ -314,9 +314,13 @@ export function ProjectDetail({ id }: { id: number }) {
   };
 
   const exportReport = async () => {
-    const md = buildMarkdownReport(p, f);
-    setReport(md);
-    await copyText(md, "Markdown report copied to clipboard");
+    try {
+      const md = await api.projectReport(p.id);
+      setReport(md);
+      await copyText(md, "Markdown report copied to clipboard");
+    } catch (e) {
+      notify.error("Could not build the report", e);
+    }
   };
 
   const tabs: { id: TabId; label: string }[] = [

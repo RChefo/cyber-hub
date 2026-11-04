@@ -42,6 +42,7 @@ Other scripts:
 | Vulnerability Intel | NVD CVE API 2.0 search (live or local cache, clearly labeled), CVSS 4.0/3.x/2.0 with vector breakdown, CWE names, affected products, references, CISA KEV flag, add as finding. |
 | Projects | Assessments with authorized scope (domains, wildcards, IPs, CIDRs, URLs, exclusions), findings with evidence references, notes, tool run history, Markdown report export. |
 | Security Utilities | Transform workbench, Base64, URL, Hex, JWT inspector, hash identifier, hash calculator, regex tester, JSON/XML/HTML formatters, URL parser, IP/CIDR calculator, User-Agent parser, DNS lookup, HTTP header analyzer. |
+| MCP integration | Claude Code, Claude Desktop and other MCP clients can use Cyber Hub's real functionality through `cyberhub-mcp`: 34 tools, 7 resources and 6 prompts. Sensitive operations (runs, uploads, exports, local writes and, by default, external lookups) wait for your approval inside Cyber Hub, and every call is recorded. See [docs/MCP.md](docs/MCP.md). |
 | Global search | `Ctrl/⌘ + K` across tools, commands, resources, projects, dorks, payloads, wordlists, utilities and pages. |
 
 ## Documentation
@@ -50,6 +51,7 @@ Other scripts:
 - [docs/SECURITY.md](docs/SECURITY.md): threat model, scope enforcement semantics, provider and upload safeguards, privileges, known limitations
 - [docs/PROVIDERS.md](docs/PROVIDERS.md): threat-intelligence providers, their requirements and limits, and deferred candidates
 - [docs/PROVISIONING.md](docs/PROVISIONING.md): how the application owner provisions and checks service credentials
+- [docs/MCP.md](docs/MCP.md): MCP architecture, tools, resources, prompts, approvals, client setup and troubleshooting
 - [docs/PLATFORMS.md](docs/PLATFORMS.md): per-OS dependencies, validation status, platform-specific behavior
 
 ## Security at a glance
@@ -58,6 +60,7 @@ Other scripts:
 * Scope-required tools run only inside an active project; every target on the command line **and inside target files** (e.g. `nmap -iL`) is validated, and target files are executed from validated snapshots.
 * No shell, closed stdin, absolute executable paths, whole process trees cancelled, credentials redacted before storage.
 * Minimal Tauri capabilities (no shell/fs/dialog/HTTP for the web view), strict CSP, `freezePrototype` on.
+* MCP clients reach Cyber Hub only through an authenticated loopback bridge that is off by default. They use the same scope engine and native confirmations as the GUI and cannot approve their own sensitive requests.
 * Service credentials are provisioned by the application owner with a developer-only tool ([docs/PROVISIONING.md](docs/PROVISIONING.md)), stored in the OS credential store and read only by the Rust backend. No UI or IPC command can read or change them, and none are shipped in binaries or installers.
 * Files are uploaded to VirusTotal only after a public-sharing warning, an in-page acknowledgement and a native confirmation for that file. The original file is never modified.
 
@@ -68,7 +71,7 @@ Details and accepted risks: [docs/SECURITY.md](docs/SECURITY.md).
 | Platform | Status |
 |---|---|
 | Windows 11 | Verified in the running app (detection, scoped runs incl. target files, native confirmations, cancellation, frameless window and its controls, all threat-intelligence providers and VirusTotal file uploads against a local mock API, all pages with a frozen prototype) plus all automated tests. |
-| Linux | Automated verification in a Debian 12 container: typecheck, 90 frontend tests, 80 backend tests, frontend and backend builds. The GUI has not been run on Linux. |
+| Linux | Automated verification in a Debian 12 container: typecheck, 87 frontend tests, 111 backend tests, frontend and backend builds. The GUI has not been run on Linux. |
 | macOS | Not built or tested. |
 
 Installers have not been rebuilt since the hardening pass. See [docs/PLATFORMS.md](docs/PLATFORMS.md).

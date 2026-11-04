@@ -103,6 +103,9 @@ export const api = {
     call<number>("finding_upsert", { input }),
   findingDelete: (id: number) => call<void>("finding_delete", { id }),
   projectToolHistory: (projectId: number) => call<T.ProjectExecution[]>("project_tool_history", { projectId }),
+  projectReport: (id: number) => call<string>("project_report", { id }),
+  /** native save dialog; returns the file name or null when cancelled */
+  projectReportExport: (id: number) => call<string | null>("project_report_export", { id }),
 
   // tools & execution engine
   toolsCatalog: () => call<ToolCatalog>("tools_catalog"),
@@ -180,6 +183,16 @@ export const api = {
   tiSavedRemove: (query: string) => call<void>("ti_saved_remove", { query }),
   /** writes through a native save dialog; returns the file name or null when cancelled */
   tiExport: (query: string, format: "md" | "json") => call<string | null>("ti_export", { query, format }),
+
+  // MCP integration (decisions and policy are only reachable from this window, never from MCP clients)
+  mcpStatus: () => call<T.McpStatus>("mcp_status"),
+  mcpSetEnabled: (enabled: boolean) => call<void>("mcp_set_enabled", { enabled }),
+  mcpSetPolicy: (category: string, policy: T.McpPolicy) => call<void>("mcp_set_policy", { category, policy }),
+  mcpPending: () => call<T.McpPending[]>("mcp_pending"),
+  mcpDecide: (id: string, approve: boolean) => call<boolean>("mcp_decide", { id, approve }),
+  mcpAudit: (limit = 50) => call<T.McpAuditRow[]>("mcp_audit", { limit }),
+  mcpAuditClear: () => call<void>("mcp_audit_clear"),
+  mcpClientConfigs: () => call<T.McpClientConfigs>("mcp_client_configs"),
 
   // system
   systemInfo: () => call<T.SystemInfo>("system_info"),

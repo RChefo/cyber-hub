@@ -9,6 +9,7 @@ import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate } from "@/lib/query";
 import { formatBytes, modKey } from "@/lib/utils";
+import { McpPanel } from "./McpPanel";
 import { ProvidersPanel } from "./ProvidersPanel";
 
 function DataPanel() {
@@ -172,6 +173,7 @@ export default function SettingsPage() {
           </Panel>
         </div>
         <ProvidersPanel />
+        <McpPanel />
       </div>
     </div>
   );
