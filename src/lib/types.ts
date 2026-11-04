@@ -548,6 +548,8 @@ export interface McpStatus {
   startedAt: string | null;
   transport: string;
   serverPath: string | null;
+  /** why the server path is missing or will not stay valid (AppImage, macOS App Translocation) */
+  serverPathNote: string | null;
   toolCount: number;
   resourceCount: number;
   promptCount: number;

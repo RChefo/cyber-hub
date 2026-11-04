@@ -201,7 +201,7 @@ export function ScopeTab({ project, onChanged }: { project: Project; onChanged: 
           </ul>
           <div className="panel-inset mt-3 px-3 py-2 text-[12.5px] text-muted">
             Tools that send traffic only run when this project is <span className="text-foreground">active</span> and every target on the command line is in scope.
-            Targets loaded from files (for example <code className="font-mono">-iL</code>) are not inspected.
+            Target files named in arguments (for example <code className="font-mono">-iL</code>) are read too: every entry in them must be in scope, and the run uses a checked copy.
           </div>
         </Panel>
       </div>

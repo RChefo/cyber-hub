@@ -105,12 +105,17 @@ Every MCP tool call is recorded, including refused and unknown ones (MCP page �
 
 ## Connecting a client
 
-Build the server once (it is placed next to the Cyber Hub executable):
+`cyberhub-mcp` is installed with Cyber Hub as a Tauri sidecar, in the same folder as the Cyber Hub executable:
 
-```sh
-cd src-tauri
-cargo build --release --bin cyberhub-mcp     # or without --release for development
-```
+| Platform | Installed path |
+|---|---|
+| Windows (MSI) | `C:\Program Files\Cyber Hub\cyberhub-mcp.exe` (or the folder chosen during setup) |
+| Windows (NSIS setup, per user) | `%LOCALAPPDATA%\Cyber Hub\cyberhub-mcp.exe` (or the folder chosen during setup) |
+| macOS | `/Applications/Cyber Hub.app/Contents/MacOS/cyberhub-mcp` |
+| Linux (.deb, .rpm) | `/usr/bin/cyberhub-mcp` |
+| Linux (AppImage) | inside the AppImage's temporary mount; see the limitation below |
+
+Cyber Hub finds it next to its own executable and never uses the working directory or PATH. The **Connect** section shows the path actually in use. During development, `cargo build --bin cyberhub-mcp` puts it next to the debug app in `src-tauri/target/debug`.
 
 Then turn on **Allow MCP clients** on the MCP page. Its **Connect** section shows the exact executable path and copy buttons for the snippets below, filled with that path.
 
@@ -151,8 +156,16 @@ The configuration contains only the executable path. It carries no keys, tokens 
 * **Bridge frames** are authenticated by the handshake, not individually; the loopback connection is trusted for its lifetime.
 * **Live output** of a run is available through MCP for runs started through MCP. The stored, redacted output is available for every run once it ends.
 * **Approved operations continue if the client disconnects.** Requests that are still waiting are cancelled.
-* **Installed builds:** the current installer configuration bundles only the Cyber Hub app. `cyberhub-mcp` must be built and placed next to `cyber-hub(.exe)` (or bundled as a Tauri sidecar in a future installer).
-* **Platforms:** Windows was tested end to end with a scripted MCP client and with Claude Code; Claude Desktop was not available for testing. Linux builds and passes the unit tests in a container; macOS was not built or tested.
+* **Unscoped tools:** tools that are not target-based scanners in the catalog (for example OpenSSL, hashcat, tshark) are not scope-checked. Their approval shows a warning saying so, and the native confirmation repeats it. Approval details and the native confirmation show the arguments exactly as the client sent them, unredacted, so nothing can be hidden from you; the audit log stores them redacted.
+* **Working folder:** tools run in a private folder in Cyber Hub's app data (`work`), so a relative file name in an argument never reads from or writes to the installation folder.
+* **Audit retention:** the newest 1,000 ordinary entries are kept. Entries tied to an approval or a run are kept separately (newest 5,000), so a client cannot push the record of approved actions out by flooding cheap calls.
+* **Clients share one trust level:** every client on the bridge holds the same key. A client can read the output of any run if it knows the run ID, and the client name is self-reported. Approval IDs are random 96-bit values that are never listed to clients.
+* **Approved runs keep running after the client disconnects,** and `cyberhub_cancel_run` can stop any run started through MCP, whichever client started it. A native confirmation that is still open stays open until you answer it.
+* **Installed builds:** `cyberhub-mcp` is bundled as a Tauri sidecar (`bundle.externalBin`). `tauri build` runs `scripts/build-sidecar.mjs` first, which compiles it for the target platform (without the provisioning feature) and stages it as `src-tauri/binaries/cyberhub-mcp-<target triple>`. Installers containing the sidecar have not been built yet. The bundling was checked through the configuration and an equivalent release layout in a folder with spaces in its path, not through a real installer.
+* **AppImage:** the sidecar runs from the AppImage's temporary mount, whose path changes on every start, so client configurations break after a restart. The MCP page warns about this. Use the .deb or .rpm package for MCP.
+* **macOS App Translocation:** if Cyber Hub is opened from a quarantined download location, macOS may run it from a random temporary path. The MCP page warns about this; move the app to Applications first.
+* **Uninstalling:** the uninstallers remove `cyberhub-mcp` with the app. If an MCP client is still running it, close that client first, because a running executable cannot be deleted on Windows. Client configurations (Claude Code, Claude Desktop) are not changed by the uninstaller; remove the `cyberhub` entry there. The bridge key and info files exist only while MCP is on and Cyber Hub is running; they are deleted when MCP is turned off or the app exits, and any left by a crash are removed at the next start. App data, including the audit log, is kept unless you delete it (the Windows NSIS uninstaller offers to).
+* **Platforms:** Windows was tested end to end with a scripted MCP client and with Claude Code, including an equivalent installed layout in a folder with spaces; Claude Desktop was not available for testing. Linux builds, stages the sidecar with executable permissions and passes the unit tests in a container; macOS was not built or tested.
 
 ## Troubleshooting
 
@@ -166,3 +179,5 @@ The configuration contains only the executable path. It carries no keys, tokens 
 | Nothing appears under MCP page → Activity | The client did not reach the app (see the first row). |
 | "Arguments that refer to local files … are not accepted" | Pass targets directly, or start the file-based run in Cyber Hub. |
 | "Only runs started through MCP can be cancelled" | Cancel that run in Cyber Hub. |
+| "cyberhub-mcp is missing from the Cyber Hub installation folder" | Reinstall Cyber Hub. |
+| The client fails to start the server after Cyber Hub was updated or moved | Copy the setup command again from the MCP page → Connect; the path may have changed. |

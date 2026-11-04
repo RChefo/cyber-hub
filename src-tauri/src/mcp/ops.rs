@@ -391,6 +391,10 @@ async fn handle(app: AppHandle, conn: ConnCtx, tool: String, args: Value) -> Res
                     match bridge.approvals.request(NewRequest { connection: conn.id, client: conn.client.label(), tool: spec.name.into(), category, summary, details, checks, project_id }) {
                         Err(m) => Err(err("busy", m)),
                         Ok((id, rx)) => {
+                            // it may have disconnected while the request was being created
+                            if !bridge.is_connected(conn.id) {
+                                bridge.approvals.cancel_connection(conn.id);
+                            }
                             audit.approval_id = Some(id.clone());
                             let _ = app.emit(EVENT_APPROVALS, bridge.approvals.pending_count());
                             // draw the user's attention to Cyber Hub (taskbar flash / dock bounce)
@@ -472,9 +476,25 @@ fn write_audit(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value, a: &Au
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![crate::util::now(), conn.client.label(), conn.id as i64, tool, redacted_args(args), project_id, a.approval, a.approval_id, a.execution_id, status, message, took.as_millis() as i64, a.category.map(|c| c.as_str())],
         )?;
-        c.execute("DELETE FROM mcp_audit WHERE id NOT IN (SELECT id FROM mcp_audit ORDER BY id DESC LIMIT 1000)", [])?;
+        prune_audit(c)?;
         Ok(())
     });
+}
+
+/// Keep the newest 1,000 ordinary entries. Entries tied to an approval or a run are kept up to
+/// 5,000, so a client cannot push the record of approved actions out by flooding cheap calls.
+pub(crate) fn prune_audit(c: &rusqlite::Connection) -> rusqlite::Result<()> {
+    c.execute(
+        "DELETE FROM mcp_audit WHERE approval_id IS NULL AND execution_id IS NULL AND id NOT IN
+           (SELECT id FROM mcp_audit WHERE approval_id IS NULL AND execution_id IS NULL ORDER BY id DESC LIMIT 1000)",
+        [],
+    )?;
+    c.execute(
+        "DELETE FROM mcp_audit WHERE (approval_id IS NOT NULL OR execution_id IS NOT NULL) AND id NOT IN
+           (SELECT id FROM mcp_audit WHERE approval_id IS NOT NULL OR execution_id IS NOT NULL ORDER BY id DESC LIMIT 5000)",
+        [],
+    )?;
+    Ok(())
 }
 
 /* ───────────────────────── local paths ───────────────────────── */
@@ -485,11 +505,12 @@ fn write_audit(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value, a: &Au
 /// the answer reveals nothing about whether a file exists.
 pub fn refuse_local_paths(args: &[String]) -> Result<(), ErrorBody> {
     for a in args {
+        let attached = a.starts_with('-') && !a.contains('=') && attached_path(a);
         let value = if a.starts_with('-') { a.split_once('=').map(|(_, v)| v).unwrap_or("") } else { a.as_str() };
-        if value.is_empty() {
+        if !attached && value.is_empty() {
             continue;
         }
-        if looks_like_path(value) {
+        if attached || looks_like_path(value) {
             return Err(err(
                 "invalid_params",
                 "Arguments that refer to local files (target lists, wordlists, request or configuration files) are not accepted from MCP clients. Pass targets directly, or start file-based runs in Cyber Hub.",
@@ -499,7 +520,23 @@ pub fn refuse_local_paths(args: &[String]) -> Result<(), ErrorBody> {
     Ok(())
 }
 
+/// An option token without `=` whose attached value is written like a path
+/// (`-rC:\x.pcap`, `-oN/tmp/out`, `-iL../list`, `-w~/words`).
+fn attached_path(opt: &str) -> bool {
+    let rest = opt.trim_start_matches('-');
+    if rest.contains("://") {
+        // an attached URL (`-uhttp://host/x`) is a target unless it is a file URL
+        return rest.to_ascii_lowercase().contains("file:");
+    }
+    // a drive letter counts only with a separator after it, so port specs like `-pU:53,T:80` pass
+    rest.contains('\\') || rest.contains('/') || rest.contains('~') || rest.as_bytes().windows(3).any(|w| w[0].is_ascii_alphabetic() && w[1] == b':' && (w[2] == b'\\' || w[2] == b'/'))
+}
+
 fn looks_like_path(v: &str) -> bool {
+    let lower = v.to_ascii_lowercase();
+    if lower.starts_with("file:") || lower.contains("file:/") || lower.contains("=file:") {
+        return true; // file URLs name local files, also inside key=value arguments
+    }
     if v.contains("://") {
         return false; // URLs are targets
     }
@@ -586,7 +623,9 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
             refuse_local_paths(&a.args)?;
             let v = tools::preview_execution(&db, &a.request(false)).map_err(app_err)?;
             let name = crate::catalog::tool(&a.tool_id).map(|t| t.name.clone()).unwrap_or(a.tool_id.clone());
-            let mut details = vec![d("Program", v.program.clone()), d("Arguments", v.args.join(" "))];
+            // the user approves exactly what the client sent, unredacted: approval details are shown
+            // only in Cyber Hub's window and are never stored or returned to clients
+            let mut details = vec![d("Program", v.program.clone()), d("Arguments", tools::display_args(&a.args))];
             if let Some(p) = a.project_id {
                 details.push(d("Project", project_name(&db, p)));
             }
@@ -600,7 +639,11 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
             if v.requires_scope {
                 checks.push(format!("{} target{} inside the project's authorized scope, exclusions applied", v.checked_targets.len(), if v.checked_targets.len() == 1 { "" } else { "s" }));
             } else {
-                checks.push("This tool takes no network targets".into());
+                details.push(d(
+                    "Warning",
+                    format!("Cyber Hub does not check targets or scope for {name}. Read the arguments and approve only if you are authorized for everything they reach."),
+                ));
+                checks.push(format!("Arguments are not scope-checked: {name} is not a target-based tool in the catalog"));
             }
             Ok((format!("Run {name}"), details, a.project_id, checks))
         }
@@ -1085,6 +1128,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn confirmations_show_arguments_exactly() {
+        let args: Vec<String> = ["-sT", "--script-args=http.useragent=a b", "", "--cookie", "session=abc"].map(String::from).into();
+        assert_eq!(tools::display_args(&args), r#"-sT "--script-args=http.useragent=a b" "" --cookie session=abc"#);
+    }
+
+    #[test]
+    fn flooding_the_audit_log_keeps_approved_actions() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            let ins = "INSERT INTO mcp_audit (at, client, connection, tool, arguments, approval, approval_id, execution_id, result, message, duration_ms)
+                       VALUES ('t', 'c', 1, ?1, '{}', 'approved', ?2, ?3, 'ok', '', 1)";
+            c.execute(ins, params!["cyberhub_run_tool", "a1", 7])?;
+            c.execute(ins, params!["cyberhub_vt_upload_file", "a2", None::<i64>])?;
+            for _ in 0..1500 {
+                c.execute(ins, params!["cyberhub_nope", None::<String>, None::<i64>])?;
+                prune_audit(c)?;
+            }
+            let kept: i64 = c.query_row("SELECT COUNT(*) FROM mcp_audit WHERE approval_id IS NOT NULL", [], |r| r.get(0))?;
+            let other: i64 = c.query_row("SELECT COUNT(*) FROM mcp_audit WHERE approval_id IS NULL", [], |r| r.get(0))?;
+            assert_eq!((kept, other), (2, 1000));
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
     fn every_catalog_tool_has_an_operation() {
         // run_op ends with a catch-all; make sure no catalog name falls into it
         let src = include_str!("ops.rs");
@@ -1111,10 +1180,28 @@ mod tests {
         let e1 = refuse_local_paths(&["-iL".into(), exists]).unwrap_err();
         let e2 = refuse_local_paths(&["-iL".into(), missing]).unwrap_err();
         assert_eq!(e1.message, e2.message, "same answer for existing and missing files");
-        for bad in ["--input-file=../targets.txt", "./hosts", "~/.ssh/id_rsa", "@targets.txt", "C:/Windows/win.ini", "/etc/passwd", "lists/hosts.txt"] {
+        for bad in [
+            "--input-file=../targets.txt",
+            "./hosts",
+            "~/.ssh/id_rsa",
+            "@targets.txt",
+            "C:/Windows/win.ini",
+            "/etc/passwd",
+            "lists/hosts.txt",
+            // attached option values and file URLs
+            r"-rC:\secret.pcap",
+            "-oN/tmp/out.txt",
+            "-iL../targets.txt",
+            "-w~/words",
+            "file:///etc/passwd",
+            "FILE:C:/x",
+            "--url=file:///c:/windows/win.ini",
+            "-ufile:///etc/passwd",
+            "--script-args=http.url=file:///C:/Windows/win.ini",
+        ] {
             assert!(refuse_local_paths(&[bad.to_string()]).is_err(), "{bad}");
         }
-        for ok in ["-sT", "-p", "1-1000", "127.0.0.1", "10.0.0.0/24", "https://example.org/a/b", "--top-ports=100", "example.org"] {
+        for ok in ["-sT", "-p", "1-1000", "127.0.0.1", "10.0.0.0/24", "https://example.org/a/b", "--top-ports=100", "example.org", "-p80,443", "-T4", "--min-rate", "-sV", "profile:8080", "-pU:53,T:21-25,80", "-uhttp://127.0.0.1/FUZZ"] {
             assert!(refuse_local_paths(&[ok.to_string()]).is_ok(), "{ok}");
         }
     }

@@ -23,6 +23,7 @@ pub fn log(
         "INSERT INTO activity_logs (kind, title, detail, ref_kind, ref_id, project_id, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7)",
         params![kind, title, detail, ref_kind, ref_id, project_id, now()],
     )?;
+    crate::db::trim_history(c, "activity_logs")?;
     Ok(())
 }
 

@@ -3,6 +3,8 @@ node_modules
 dist
 src-tauri/target
 src-tauri/gen/schemas
+# staged MCP sidecar (scripts/build-sidecar.mjs), built for each release
+src-tauri/binaries/
 *.tsbuildinfo
 coverage
 .vite

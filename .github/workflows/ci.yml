@@ -55,5 +55,8 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
+      - name: MCP sidecar staging (debug build, checks the binary and its --version)
+        run: node scripts/build-sidecar.mjs --debug
+
       - name: npm audit
         run: npm audit --audit-level=high

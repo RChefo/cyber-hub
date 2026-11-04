@@ -482,10 +482,9 @@ function ConnectView({ s }: { s: McpStatus }) {
             <CopyButton text={s.serverPath} label="Copy path" />
           </div>
         ) : (
-          <p className="text-[12.5px] text-warning-soft-foreground">
-            cyberhub-mcp was not found next to the Cyber Hub executable. Build it with <code>cargo build --bin cyberhub-mcp</code> (see docs/MCP.md); the setup commands appear here once it exists.
-          </p>
+          <p className="text-[12.5px] text-warning-soft-foreground">{s.serverPathNote ?? "cyberhub-mcp was not found next to the Cyber Hub executable."} The setup commands appear here once it exists.</p>
         )}
+        {s.serverPath && s.serverPathNote && <p className="mt-2 text-[12.5px] text-warning-soft-foreground">{s.serverPathNote}</p>}
         {!s.enabled && <p className="mt-2 text-[12.5px] text-muted">MCP is off. Clients can be configured now, but their calls are refused until you turn it on.</p>}
       </Panel>
 
@@ -563,10 +562,10 @@ export default function McpPage() {
   const projects = useQuery(["projects"], api.projectsList, [], runtime);
   const [toggling, setToggling] = useState(false);
 
-  // live status: connections, pending requests and the log, while the page is open
+  // live status: connections, pending requests and the log, while the page is open and visible
   useEffect(() => {
     if (!runtime) return;
-    const t = setInterval(() => invalidate("mcp"), 4000);
+    const t = setInterval(() => !document.hidden && invalidate("mcp"), 4000);
     return () => clearInterval(t);
   }, [runtime]);
 

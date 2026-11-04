@@ -165,14 +165,11 @@ export function ApprovalCenter({ running, projects }: { running: boolean; projec
     setNow(t);
   }, [pending.data]);
 
+  // countdown; the MCP page refreshes the list (and drops expired requests) every few seconds
   useEffect(() => {
     if (!list.length) return;
     const tick = setInterval(() => setNow(Date.now()), 1000);
-    const poll = setInterval(() => invalidate("mcp"), 5000);
-    return () => {
-      clearInterval(tick);
-      clearInterval(poll);
-    };
+    return () => clearInterval(tick);
   }, [list.length]);
 
   const names = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);

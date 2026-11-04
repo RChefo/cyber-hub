@@ -117,7 +117,14 @@ const nmap: BuilderDef = {
     { name: "O", label: "OS detection (-O, needs privileges)", type: "switch", default: false },
     { name: "Pn", label: "Skip host discovery (-Pn)", type: "switch", default: false },
     { name: "open", label: "Show only open ports (--open)", type: "switch", default: true },
-    { name: "output", label: "Save normal output to", type: "text", placeholder: "scan.txt", mono: true },
+    {
+      name: "output",
+      label: "Save normal output to",
+      type: "text",
+      placeholder: "scan.txt",
+      mono: true,
+      description: "When run in Cyber Hub, a name without a folder is saved in the work folder inside Cyber Hub's app data. The run output is also kept in Runs.",
+    },
   ],
   build(v) {
     const errors: string[] = [];

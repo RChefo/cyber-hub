@@ -23,10 +23,40 @@ use crate::mcp::ops::{self, AppDispatcher, ENABLED_PREF, EVENT_APPROVALS};
 use crate::mcp::prompts;
 
 /// Path of the `cyberhub-mcp` executable shipped next to the app binary, if present.
+///
+/// Installers place the sidecar (bundle.externalBin, scripts/build-sidecar.mjs) in the same
+/// directory as the Cyber Hub executable on every platform: the installation folder on Windows,
+/// `Cyber Hub.app/Contents/MacOS` on macOS and `/usr/bin` for the Linux packages. In development
+/// cargo builds it into the same `target/<profile>` directory. The lookup never uses the working
+/// directory or PATH.
 pub fn server_path() -> Option<std::path::PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let p = exe.parent()?.join(format!("cyberhub-mcp{}", std::env::consts::EXE_SUFFIX));
     p.is_file().then_some(p)
+}
+
+/// A warning about the server path for the MCP page: missing executable, or a path that will not
+/// survive a restart (AppImage mount, macOS App Translocation).
+pub fn server_path_note(path: Option<&std::path::Path>) -> Option<String> {
+    let appdir = std::env::var_os("APPIMAGE").and(std::env::var_os("APPDIR"));
+    path_note(path, appdir.as_deref().map(std::path::Path::new), cfg!(debug_assertions))
+}
+
+fn path_note(path: Option<&std::path::Path>, appimage_dir: Option<&std::path::Path>, dev_build: bool) -> Option<String> {
+    let Some(path) = path else {
+        return Some(if dev_build {
+            "cyberhub-mcp was not found next to the Cyber Hub executable. Build it with `cargo build --bin cyberhub-mcp` (see docs/MCP.md).".into()
+        } else {
+            "cyberhub-mcp is missing from the Cyber Hub installation folder. Reinstall Cyber Hub to restore it.".into()
+        });
+    };
+    if appimage_dir.is_some_and(|d| path.starts_with(d)) {
+        return Some("Cyber Hub is running from an AppImage, so this path is inside a temporary mount that changes every time Cyber Hub starts. MCP clients configured with it stop working after a restart. Install the .deb or .rpm package for a fixed path.".into());
+    }
+    if path.to_string_lossy().contains("/AppTranslocation/") {
+        return Some("macOS is running Cyber Hub from a temporary location (App Translocation), so this path changes. Move Cyber Hub to the Applications folder and open it again before configuring MCP clients.".into());
+    }
+    None
 }
 
 fn set_enabled_pref(db: &Db, on: bool) -> AppResult<()> {
@@ -92,6 +122,8 @@ pub struct McpStatus {
     pub started_at: Option<String>,
     pub transport: &'static str,
     pub server_path: Option<String>,
+    /// why the server path is missing or will not stay valid, if so
+    pub server_path_note: Option<String>,
     pub tool_count: usize,
     pub resource_count: usize,
     pub prompt_count: usize,
@@ -104,13 +136,15 @@ pub struct McpStatus {
 pub async fn mcp_status(db: State<'_, Db>, bridge: State<'_, Arc<Bridge>>) -> AppResult<McpStatus> {
     let info = bridge.info();
     let policy = ops::load_policy(&db);
+    let server = server_path();
     Ok(McpStatus {
         enabled: enabled_pref(&db),
         running: info.is_some(),
         address: info.as_ref().map(|(p, _)| format!("127.0.0.1:{p}")),
         started_at: info.map(|(_, s)| s),
         transport: "stdio (MCP client ↔ cyberhub-mcp) · authenticated loopback bridge (cyberhub-mcp ↔ Cyber Hub)",
-        server_path: server_path().map(|p| p.to_string_lossy().to_string()),
+        server_path: server.as_ref().map(|p| p.to_string_lossy().to_string()),
+        server_path_note: server_path_note(server.as_deref()),
         tool_count: catalog::TOOLS.len(),
         resource_count: catalog::RESOURCES.len() + 1,
         prompt_count: prompts::PROMPTS.len(),
@@ -549,7 +583,7 @@ pub fn client_configs(server: &str) -> ClientConfigs {
 /// executable is not installed next to Cyber Hub.
 #[tauri::command]
 pub async fn mcp_client_configs() -> AppResult<ClientConfigs> {
-    let p = server_path().ok_or_else(|| AppError::NotFound("cyberhub-mcp was not found next to the Cyber Hub executable. Build it with `cargo build --bin cyberhub-mcp` (see docs/MCP.md).".into()))?;
+    let p = server_path().ok_or_else(|| AppError::NotFound(server_path_note(None).unwrap_or_default()))?;
     Ok(client_configs(&p.to_string_lossy()))
 }
 
@@ -572,6 +606,21 @@ mod tests {
         if cfg!(windows) || cfg!(target_os = "macos") {
             assert!(c.claude_desktop_config_path.unwrap().ends_with("claude_desktop_config.json"));
         }
+    }
+
+    #[test]
+    fn server_path_notes() {
+        use std::path::Path;
+        let installed = if cfg!(windows) { r#"C:\Users\a b\AppData\Local\Cyber Hub\cyberhub-mcp.exe"# } else { "/usr/bin/cyberhub-mcp" };
+        assert_eq!(path_note(Some(Path::new(installed)), None, false), None);
+        assert!(path_note(None, None, false).unwrap().contains("Reinstall"));
+        assert!(path_note(None, None, true).unwrap().contains("cargo build --bin cyberhub-mcp"));
+        let mount = Path::new("/tmp/.mount_CyberHXy12/usr/bin/cyberhub-mcp");
+        assert!(path_note(Some(mount), Some(Path::new("/tmp/.mount_CyberHXy12")), false).unwrap().contains("AppImage"));
+        // AppImage variables inherited from a parent process do not affect an installed copy
+        assert_eq!(path_note(Some(Path::new("/usr/bin/cyberhub-mcp")), Some(Path::new("/tmp/.mount_CyberHXy12")), false), None);
+        let translocated = Path::new("/private/var/folders/x/T/AppTranslocation/1A2B/d/Cyber Hub.app/Contents/MacOS/cyberhub-mcp");
+        assert!(path_note(Some(translocated), None, false).unwrap().contains("Applications"));
     }
 
     fn audit_db() -> Db {

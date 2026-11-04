@@ -8,6 +8,20 @@ use rusqlite::Connection;
 
 use crate::error::{AppError, AppResult};
 
+/// History tables that are trimmed to their newest rows (table, rows kept). Several of them
+/// are written by lookups that MCP clients may make without an approval, so they must not grow
+/// without bound.
+pub const HISTORY_LIMITS: &[(&str, i64)] = &[("activity_logs", 5000), ("cve_search_history", 500), ("command_history", 2000), ("dork_history", 500)];
+
+/// Keep the newest rows of a history table listed in [`HISTORY_LIMITS`]; other names are ignored.
+pub fn trim_history(c: &Connection, table: &str) -> rusqlite::Result<usize> {
+    let Some(&(table, keep)) = HISTORY_LIMITS.iter().find(|(t, _)| *t == table) else {
+        debug_assert!(false, "{table} is not a history table");
+        return Ok(0);
+    };
+    c.execute(&format!("DELETE FROM {table} WHERE id <= (SELECT id FROM {table} ORDER BY id DESC LIMIT 1 OFFSET ?1)"), [keep])
+}
+
 pub struct Db {
     conn: Mutex<Connection>,
 }
@@ -318,6 +332,12 @@ impl Db {
         )?;
         let db = Db { conn: Mutex::new(conn) };
         db.migrate()?;
+        db.with(|c| {
+            for (table, _) in HISTORY_LIMITS {
+                trim_history(c, table)?;
+            }
+            Ok(())
+        })?;
         Ok(db)
     }
 
@@ -353,6 +373,25 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn history_tables_keep_only_their_newest_rows() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            for i in 0..520 {
+                c.execute("INSERT INTO cve_search_history (query, result_count, live, created_at) VALUES (?1, 0, 0, 't')", [format!("q{i}")])?;
+            }
+            assert_eq!(trim_history(c, "cve_search_history")?, 20);
+            let n: i64 = c.query_row("SELECT COUNT(*) FROM cve_search_history", [], |r| r.get(0))?;
+            assert_eq!(n, 500);
+            let first: String = c.query_row("SELECT query FROM cve_search_history ORDER BY id LIMIT 1", [], |r| r.get(0))?;
+            assert_eq!(first, "q20", "the oldest rows are removed");
+            // a second trim removes nothing
+            assert_eq!(trim_history(c, "cve_search_history")?, 0);
+            Ok(())
+        })
+        .unwrap();
+    }
 
     #[test]
     fn migrations_apply_cleanly() {

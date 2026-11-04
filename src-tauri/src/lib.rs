@@ -33,6 +33,17 @@ pub fn run() {
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
+            // Tools inherit Cyber Hub's working directory, and relative file names in arguments are
+            // validated against it. Use a private folder, so a relative name never resolves to (or
+            // writes into) the installation folder or wherever the app happened to be started.
+            let work = dir.join("work");
+            std::fs::create_dir_all(&work)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&work, std::fs::Permissions::from_mode(0o700))?;
+            }
+            std::env::set_current_dir(&work)?;
             let database = db::Db::open(&dir.join("cyberhub.db"))?;
             tools::sync_catalog(&database)?;
             app.manage(database);

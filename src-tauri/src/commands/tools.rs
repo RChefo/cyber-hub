@@ -390,10 +390,16 @@ pub fn clean_runtime_dir(app: &AppHandle) {
     }
 }
 
-fn confirmation_text(tool: &str, v: &Validated) -> String {
+/// Arguments as given, for confirmations: values with spaces are quoted. Not redacted, because
+/// the user must see exactly what runs; never use it for anything that is stored.
+pub fn display_args(args: &[String]) -> String {
+    args.iter().map(|a| if a.is_empty() || a.contains(' ') { format!("\"{a}\"") } else { a.clone() }).collect::<Vec<_>>().join(" ")
+}
+
+fn confirmation_text(tool: &str, args: &[String], v: &Validated) -> String {
     let mut s = String::new();
     s.push_str(&format!("Run {tool} now?\n\nProgram:\n{}\n\nArguments:\n", v.info.program));
-    let shown = v.info.args.join(" ");
+    let shown = display_args(args);
     s.push_str(if shown.is_empty() { "(none)" } else { &shown });
     if let Some(p) = &v.project_name {
         s.push_str(&format!("\n\nProject: {p}"));
@@ -407,6 +413,9 @@ fn confirmation_text(tool: &str, v: &Validated) -> String {
     }
     for w in &v.info.warnings {
         s.push_str(&format!("\n\nNote: {w}"));
+    }
+    if !v.info.requires_scope {
+        s.push_str(&format!("\n\nCyber Hub does not check targets or scope for {tool}; review the arguments yourself."));
     }
     s.push_str("\n\nOnly continue if you are authorized to test these targets.");
     s
@@ -427,7 +436,7 @@ pub async fn start_execution(app: &AppHandle, db: &Db, request: ExecRequest, on_
     let tool_name = catalog::tool(&request.tool_id).map(|t| t.name.clone()).unwrap_or_else(|| request.tool_id.clone());
     // Validate once without side effects to build the confirmation text…
     let preview = validate_exec(db, &request, None)?;
-    let mut text = confirmation_text(&tool_name, &preview);
+    let mut text = confirmation_text(&tool_name, &request.args, &preview);
     if let Some(who) = requester {
         text = format!("Requested by an AI client through MCP: {who} (name reported by the client).\n\n{text}");
     }

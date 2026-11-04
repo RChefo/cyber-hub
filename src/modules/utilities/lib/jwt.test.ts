@@ -8,7 +8,7 @@ const make = (header: object, payload: object, sig = "c2ln") =>
 describe("decodeJwt", () => {
   it("decodes the jwt.io example token", () => {
     const token =
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"; // gitleaks:allow (public jwt.io example token)
     const d = decodeJwt(token);
     expect(d.header).toEqual({ alg: "HS256", typ: "JWT" });
     expect(d.payload).toMatchObject({ sub: "1234567890", name: "John Doe", iat: 1516239022 });

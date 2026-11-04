@@ -37,6 +37,7 @@ path = "src/bin/cyberhub-keys.rs"
 required-features = ["provisioning"]
 
 [build-dependencies]
+serde_json = "1.0.154"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]

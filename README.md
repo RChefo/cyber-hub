@@ -13,7 +13,7 @@ npm ci                 # also runs scripts/patch-deps.mjs (freezePrototype compa
 npm run tauri dev      # run the desktop app with hot reload
 ```
 
-Installer packaging (`npm run tauri build`) is a release step, done once after sign-off.
+Installer packaging (`npm run tauri build`) is a release step, done once after sign-off. It first runs `scripts/build-sidecar.mjs`, which builds the MCP server `cyberhub-mcp` for the target platform and stages it as a Tauri sidecar, so the installers place it next to the app.
 
 Other scripts:
 
@@ -23,6 +23,7 @@ Other scripts:
 | `npm test` | Frontend unit tests (Vitest) |
 | `cd src-tauri && cargo test` | Backend unit tests: scope engine, target resolution and target files, redaction, process-tree termination, migrations, catalog, NVD parsing, PATH lookup |
 | `node scripts/gen-tools-catalog.mjs` | Regenerate `src-tauri/catalog/tools.json` from the catalog source |
+| `node scripts/build-sidecar.mjs [--target <triple>] [--debug]` | Build and stage the `cyberhub-mcp` sidecar (also run automatically by `tauri build`) |
 
 `npm run dev` alone starts a browser preview of the UI. It has no backend, so data-driven views show a "desktop runtime not available" state instead of fake data.
 
@@ -71,7 +72,7 @@ Details and accepted risks: [docs/SECURITY.md](docs/SECURITY.md).
 | Platform | Status |
 |---|---|
 | Windows 11 | Verified in the running app (detection, scoped runs incl. target files, native confirmations, cancellation, frameless window and its controls, all threat-intelligence providers and VirusTotal file uploads against a local mock API, all pages with a frozen prototype) plus all automated tests. |
-| Linux | Automated verification in a Debian 12 container: typecheck, 93 frontend tests, 115 backend tests, frontend and backend builds. The GUI has not been run on Linux. |
-| macOS | Not built or tested. |
+| Linux | Automated verification in a Debian 12 container: typecheck, 93 frontend tests, 119 backend tests, frontend and backend builds, and sidecar staging with executable permissions. The GUI has not been run on Linux. |
+| macOS | Not built or tested (a cross-compilation check from Windows stops at C dependencies that need the Apple SDK). |
 
-Installers have not been rebuilt since the hardening pass. See [docs/PLATFORMS.md](docs/PLATFORMS.md).
+Installers have not been rebuilt since the hardening pass and the MCP sidecar packaging. See [docs/PLATFORMS.md](docs/PLATFORMS.md).

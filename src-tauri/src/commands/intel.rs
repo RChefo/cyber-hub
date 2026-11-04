@@ -345,6 +345,7 @@ pub async fn cve_search(db: State<'_, Db>, query: String, live: bool) -> AppResu
                 "INSERT INTO cve_search_history (query, result_count, live, created_at) VALUES (?1,?2,0,?3)",
                 params![query, res.total_results, now()],
             )?;
+            crate::db::trim_history(c, "cve_search_history")?;
             Ok(())
         })?;
         return Ok(res);
@@ -400,6 +401,7 @@ pub async fn cve_search(db: State<'_, Db>, query: String, live: bool) -> AppResu
             "INSERT INTO cve_search_history (query, result_count, live, created_at) VALUES (?1,?2,1,?3)",
             params![query, total, ts],
         )?;
+        crate::db::trim_history(&tx, "cve_search_history")?;
         log(&tx, "cve_search", &format!("CVE search “{query}”"), &format!("{total} results from NVD"), None, None, None)?;
         tx.commit()?;
         Ok(())
