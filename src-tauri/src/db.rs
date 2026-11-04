@@ -321,6 +321,185 @@ const MIGRATIONS: &[&str] = &[
     r#"
     CREATE INDEX idx_executions_project ON executions(project_id, id DESC);
     "#,
+    // 7 — OSINT workspace: investigations, entities, relationships, evidence, discovery
+    // operations, timeline, saved graphs (membership + presentation) and graph versions
+    r#"
+    CREATE TABLE osint_investigations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        target_type TEXT NOT NULL,
+        target_value TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','archived','closed')),
+        tags TEXT NOT NULL DEFAULT '[]',
+        notes TEXT NOT NULL DEFAULT '',
+        authorization TEXT NOT NULL DEFAULT '',
+        project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_opened_at TEXT
+    );
+
+    CREATE TABLE osint_entities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        investigation_id INTEGER NOT NULL REFERENCES osint_investigations(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        value TEXT NOT NULL,
+        match_key TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        aliases TEXT NOT NULL DEFAULT '[]',
+        metadata TEXT NOT NULL DEFAULT '{}',
+        confidence TEXT NOT NULL DEFAULT 'medium',
+        verification TEXT NOT NULL DEFAULT 'observed',
+        flagged INTEGER NOT NULL DEFAULT 0,
+        notes TEXT NOT NULL DEFAULT '',
+        first_seen TEXT NOT NULL,
+        last_seen TEXT NOT NULL,
+        UNIQUE (investigation_id, type, match_key)
+    );
+    CREATE INDEX idx_osint_entities_type ON osint_entities(investigation_id, type);
+
+    CREATE TABLE osint_relationships (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        investigation_id INTEGER NOT NULL REFERENCES osint_investigations(id) ON DELETE CASCADE,
+        source_id INTEGER NOT NULL REFERENCES osint_entities(id) ON DELETE CASCADE,
+        target_id INTEGER NOT NULL REFERENCES osint_entities(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        directed INTEGER NOT NULL DEFAULT 1,
+        origin TEXT NOT NULL CHECK (origin IN ('observed','derived','inferred','manual','suggested')),
+        confidence TEXT NOT NULL DEFAULT 'medium',
+        confidence_reason TEXT NOT NULL DEFAULT '',
+        verification TEXT NOT NULL DEFAULT 'observed',
+        metadata TEXT NOT NULL DEFAULT '{}',
+        first_seen TEXT NOT NULL,
+        last_seen TEXT NOT NULL,
+        UNIQUE (investigation_id, source_id, target_id, type)
+    );
+    CREATE INDEX idx_osint_rel_source ON osint_relationships(source_id);
+    CREATE INDEX idx_osint_rel_target ON osint_relationships(target_id);
+    CREATE INDEX idx_osint_rel_investigation ON osint_relationships(investigation_id, type);
+
+    CREATE TABLE osint_operations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        investigation_id INTEGER NOT NULL REFERENCES osint_investigations(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL,
+        input_type TEXT NOT NULL,
+        input_value TEXT NOT NULL,
+        input_entity_id INTEGER REFERENCES osint_entities(id) ON DELETE SET NULL,
+        status TEXT NOT NULL CHECK (status IN ('running','completed','failed','cancelled')),
+        requested_by TEXT NOT NULL DEFAULT 'user',
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        result_count INTEGER NOT NULL DEFAULT 0,
+        message TEXT,
+        results TEXT,
+        imported_at TEXT,
+        imported_count INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_osint_ops ON osint_operations(investigation_id, id DESC);
+
+    CREATE TABLE osint_evidence (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        investigation_id INTEGER NOT NULL REFERENCES osint_investigations(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        source TEXT NOT NULL,
+        reference TEXT,
+        observed_at TEXT NOT NULL,
+        collected_at TEXT NOT NULL,
+        operation_id INTEGER REFERENCES osint_operations(id) ON DELETE SET NULL,
+        execution_id INTEGER REFERENCES executions(id) ON DELETE SET NULL,
+        summary TEXT NOT NULL,
+        data TEXT NOT NULL DEFAULT '{}',
+        strength TEXT NOT NULL CHECK (strength IN ('direct','corroborating','weak')),
+        fingerprint TEXT NOT NULL,
+        UNIQUE (investigation_id, fingerprint)
+    );
+    CREATE TABLE osint_entity_evidence (
+        entity_id INTEGER NOT NULL REFERENCES osint_entities(id) ON DELETE CASCADE,
+        evidence_id INTEGER NOT NULL REFERENCES osint_evidence(id) ON DELETE CASCADE,
+        PRIMARY KEY (entity_id, evidence_id)
+    );
+    CREATE INDEX idx_osint_ee_evidence ON osint_entity_evidence(evidence_id);
+    CREATE TABLE osint_relationship_evidence (
+        relationship_id INTEGER NOT NULL REFERENCES osint_relationships(id) ON DELETE CASCADE,
+        evidence_id INTEGER NOT NULL REFERENCES osint_evidence(id) ON DELETE CASCADE,
+        strength TEXT NOT NULL,
+        PRIMARY KEY (relationship_id, evidence_id)
+    );
+    CREATE INDEX idx_osint_re_evidence ON osint_relationship_evidence(evidence_id);
+
+    CREATE TABLE osint_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        investigation_id INTEGER NOT NULL REFERENCES osint_investigations(id) ON DELETE CASCADE,
+        at TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        source TEXT,
+        entity_id INTEGER REFERENCES osint_entities(id) ON DELETE SET NULL,
+        relationship_id INTEGER REFERENCES osint_relationships(id) ON DELETE SET NULL,
+        operation_id INTEGER REFERENCES osint_operations(id) ON DELETE SET NULL,
+        graph_id INTEGER,
+        data TEXT NOT NULL DEFAULT '{}'
+    );
+    CREATE INDEX idx_osint_events ON osint_events(investigation_id, at DESC);
+    CREATE INDEX idx_osint_events_entity ON osint_events(entity_id);
+
+    CREATE TABLE osint_graphs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        investigation_id INTEGER NOT NULL REFERENCES osint_investigations(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        follow_new INTEGER NOT NULL DEFAULT 1,
+        revision INTEGER NOT NULL DEFAULT 1,
+        workspace TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_opened_at TEXT
+    );
+    CREATE INDEX idx_osint_graphs ON osint_graphs(investigation_id);
+    CREATE TABLE osint_graph_nodes (
+        graph_id INTEGER NOT NULL REFERENCES osint_graphs(id) ON DELETE CASCADE,
+        entity_id INTEGER NOT NULL REFERENCES osint_entities(id) ON DELETE CASCADE,
+        x REAL,
+        y REAL,
+        pinned INTEGER NOT NULL DEFAULT 0,
+        hidden INTEGER NOT NULL DEFAULT 0,
+        group_id TEXT,
+        PRIMARY KEY (graph_id, entity_id)
+    );
+    CREATE INDEX idx_osint_graph_nodes_entity ON osint_graph_nodes(entity_id);
+    CREATE TABLE osint_graph_versions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        graph_id INTEGER NOT NULL REFERENCES osint_graphs(id) ON DELETE CASCADE,
+        number INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('save','manual','restore','import','created')),
+        label TEXT NOT NULL DEFAULT '',
+        content_hash TEXT NOT NULL,
+        snapshot TEXT NOT NULL,
+        summary TEXT NOT NULL DEFAULT '{}',
+        UNIQUE (graph_id, number)
+    );
+
+    CREATE TABLE osint_entity_merges (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        investigation_id INTEGER NOT NULL REFERENCES osint_investigations(id) ON DELETE CASCADE,
+        kept_id INTEGER NOT NULL,
+        merged_id INTEGER NOT NULL,
+        merged_type TEXT NOT NULL,
+        merged_value TEXT NOT NULL,
+        merged_at TEXT NOT NULL,
+        data TEXT NOT NULL DEFAULT '{}'
+    );
+
+    CREATE TABLE osint_source_cache (
+        provider TEXT NOT NULL,
+        query_key TEXT NOT NULL,
+        fetched_at TEXT NOT NULL,
+        data TEXT NOT NULL,
+        PRIMARY KEY (provider, query_key)
+    );
+    "#,
 ];
 
 impl Db {

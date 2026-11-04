@@ -754,6 +754,7 @@ dependencies = [
  "libc",
  "md-5",
  "once_cell",
+ "quick-xml",
  "regex",
  "reqwest",
  "rmcp",

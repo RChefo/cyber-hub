@@ -8,6 +8,7 @@ mod commands;
 mod confirm;
 mod db;
 mod detect;
+pub mod osint;
 mod error;
 pub mod mcp;
 mod process;
@@ -24,7 +25,7 @@ mod vtfile;
 
 use tauri::Manager;
 
-use commands::{activity, intel, library, mcp as mcp_commands, projects, system, threat_intel, tools, virustotal, wordlists};
+use commands::{activity, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, threat_intel, tools, virustotal, wordlists};
 
 pub fn run() {
     tauri::Builder::default()
@@ -61,6 +62,10 @@ pub fn run() {
             app.manage(threat_intel::TiState::new()?);
             app.manage(std::sync::Arc::new(mcp::bridge::Bridge::default()));
             app.manage(mcp::ops::LiveRuns::default());
+            app.manage(std::sync::Arc::new(osint::discovery::OsintState::default()));
+            app.manage(osint_commands::ImportState::default());
+            // collections interrupted by a crash or exit are marked as such
+            osint::discovery::recover_interrupted(&app.state::<db::Db>());
             // remove target-file snapshots left behind by a crash
             tools::clean_runtime_dir(app.handle());
             // MCP bridge: off unless the user turned it on on the MCP page
@@ -189,6 +194,60 @@ pub fn run() {
             mcp_commands::mcp_catalog,
             mcp_commands::mcp_clients,
             mcp_commands::mcp_client_configs,
+            // OSINT workspace
+            osint_commands::osint_registry,
+            osint_commands::osint_investigations,
+            osint_commands::osint_investigation_get,
+            osint_commands::osint_investigation_create,
+            osint_commands::osint_investigation_update,
+            osint_commands::osint_investigation_set_status,
+            osint_commands::osint_investigation_delete,
+            osint_commands::osint_compare,
+            osint_commands::osint_entities,
+            osint_commands::osint_entity,
+            osint_commands::osint_relationship,
+            osint_commands::osint_set_verification,
+            osint_commands::osint_entity_update,
+            osint_commands::osint_entity_delete,
+            osint_commands::osint_relationship_delete,
+            osint_commands::osint_entity_merge,
+            osint_commands::osint_entity_add,
+            osint_commands::osint_link,
+            osint_commands::osint_neighbors,
+            osint_commands::osint_entities_by_ids,
+            osint_commands::osint_duplicates,
+            osint_commands::osint_finding_from_entity,
+            osint_commands::osint_graphs,
+            osint_commands::osint_graph_create,
+            osint_commands::osint_graph_load,
+            osint_commands::osint_graph_save,
+            osint_commands::osint_graph_save_as,
+            osint_commands::osint_graph_duplicate,
+            osint_commands::osint_graph_rename,
+            osint_commands::osint_graph_delete,
+            osint_commands::osint_versions,
+            osint_commands::osint_version_create,
+            osint_commands::osint_version_compare,
+            osint_commands::osint_version_restore,
+            osint_commands::osint_timeline,
+            osint_commands::osint_analysis,
+            osint_commands::osint_path,
+            osint_commands::osint_suggestions,
+            osint_commands::osint_discover,
+            osint_commands::osint_operations,
+            osint_commands::osint_operation,
+            osint_commands::osint_operation_cancel,
+            osint_commands::osint_operation_import,
+            osint_commands::osint_import_sources,
+            osint_commands::osint_import_internal,
+            osint_commands::osint_export,
+            osint_commands::osint_export_image,
+            osint_commands::osint_report,
+            osint_commands::osint_report_export,
+            osint_commands::osint_import_pick,
+            osint_commands::osint_import_preview,
+            osint_commands::osint_import_apply,
+            osint_commands::osint_import_discard,
             // system
             system::system_info,
             system::open_terminal,

@@ -30,7 +30,7 @@ MCP has its own page in the sidebar (Integrations → MCP). The switch at the to
 | Overview | Server state, transport (STDIO), local bridge address, connected clients, catalog size, waiting approvals, recent activity |
 | Approvals | The Approval Center: every waiting request with the client, action, project, target, the checks Cyber Hub ran, and time left; Approve and Decline; recent decisions from the audit log |
 | Clients | Connected clients (from the running bridge) and clients seen before (from the audit log), with self-reported name and version, last activity, request counts and the latest result |
-| Tools | All 34 tools from the server catalog, grouped as below, with permission category, whether they ask you under the current policy, availability and parameters |
+| Tools | All 44 tools from the server catalog, grouped as below, with permission category, whether they ask you under the current policy, availability and parameters |
 | Resources & prompts | The resources, the scope template and the prompts, with their parameters |
 | Permissions | The policy for each category (below) |
 | Activity | The audit log, filterable by client, permission category and status, with redacted arguments per entry |
@@ -38,7 +38,7 @@ MCP has its own page in the sidebar (Integrations → MCP). The switch at the to
 
 The page reads everything from the app: the catalog comes from the same definitions `cyberhub-mcp` advertises, and clients and activity come from the bridge and the `mcp_audit` table. MCP settings are no longer in Settings.
 
-## Tools (34)
+## Tools (44)
 
 | Group | Tools | Permission category |
 |---|---|---|
@@ -54,6 +54,9 @@ The page reads everything from the app: the catalog comes from the same definiti
 | | `cyberhub_get_saved_indicators` | read |
 | | `cyberhub_save_indicator` | local write |
 | Vulnerability intelligence | `cyberhub_lookup_cve`, `cyberhub_search_vulnerabilities` (external lookup with `live: true`), `cyberhub_get_vulnerability_details` | read |
+| OSINT workspace | `cyberhub_osint_list_investigations`, `cyberhub_osint_get_investigation`, `cyberhub_osint_search_entities`, `cyberhub_osint_get_entity`, `cyberhub_osint_list_relationships`, `cyberhub_osint_find_path`, `cyberhub_osint_get_operation`, `cyberhub_osint_generate_report` | read |
+| | `cyberhub_osint_discover` (results wait for the user's review; clients cannot import them) | external lookup |
+| | `cyberhub_osint_propose_relationship` (stored as an unverified suggestion with low confidence) | local write |
 | Reports and history | `cyberhub_generate_report`, `cyberhub_get_activity`, `cyberhub_get_run_details` | read |
 | | `cyberhub_export_report` | export |
 | Approvals | `cyberhub_get_approval_status` | read |

@@ -6,6 +6,7 @@ import {
   Boxes,
   FolderKanban,
   LayoutDashboard,
+  Network,
   Radar,
   Search,
   Settings,
@@ -28,6 +29,7 @@ export type PageId =
   | "intel"
   | "virustotal"
   | "threatintel"
+  | "osint"
   | "utilities"
   | "mcp"
   | "settings";
@@ -59,6 +61,7 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Research",
     items: [
+      { id: "osint", label: "OSINT Workspace", icon: Network, description: "Investigations, entity mapping and public-source collection" },
       { id: "dorks", label: "Dorks Studio", icon: Search, description: "Advanced search query builder" },
       { id: "resources", label: "Cyber Resources", icon: BookMarked, description: "Curated security websites" },
       { id: "intel", label: "Vulnerability Intel", icon: ShieldAlert, description: "CVE search and details" },

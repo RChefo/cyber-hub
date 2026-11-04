@@ -4,6 +4,7 @@
  */
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 import type { ToolCatalog } from "@/types/catalog";
+import type * as O from "@/modules/osint/types";
 import type * as T from "./types";
 
 export const runtimeAvailable = (): boolean => isTauri();
@@ -194,6 +195,75 @@ export const api = {
   mcpClients: () => call<T.McpClientRow[]>("mcp_clients"),
   mcpAuditClear: () => call<void>("mcp_audit_clear"),
   mcpClientConfigs: () => call<T.McpClientConfigs>("mcp_client_configs"),
+
+  // OSINT workspace
+  osintRegistry: () => call<O.Registry>("osint_registry"),
+  osintInvestigations: (includeArchived = false) => call<O.Investigation[]>("osint_investigations", { includeArchived }),
+  osintInvestigationGet: (id: number, touch = false) => call<O.Investigation>("osint_investigation_get", { id, touch }),
+  osintInvestigationCreate: (input: O.InvestigationInput) => call<O.Investigation>("osint_investigation_create", { input }),
+  osintInvestigationUpdate: (id: number, input: O.InvestigationInput) => call<O.Investigation>("osint_investigation_update", { id, input }),
+  osintInvestigationSetStatus: (id: number, status: O.InvestigationStatus) => call<void>("osint_investigation_set_status", { id, status }),
+  /** asks for confirmation in a native dialog; false when the user cancelled */
+  osintInvestigationDelete: (id: number) => call<boolean>("osint_investigation_delete", { id }),
+  osintCompare: (a: number, b: number) => call<O.SharedEntity[]>("osint_compare", { a, b }),
+  osintEntities: (investigationId: number, query: O.EntityQuery) => call<O.Page<O.EntityRow>>("osint_entities", { investigationId, query }),
+  osintEntity: (id: number) => call<O.EntityDetail>("osint_entity", { id }),
+  osintRelationship: (id: number) => call<O.RelationshipDetail>("osint_relationship", { id }),
+  osintSetVerification: (kind: "entity" | "relationship", id: number, verification: O.Verification, note?: string | null) =>
+    call<void>("osint_set_verification", { kind, id, verification, note: note ?? null }),
+  osintEntityUpdate: (id: number, displayName: string | null, notes: string | null) => call<void>("osint_entity_update", { id, displayName, notes }),
+  osintEntityDelete: (id: number) => call<void>("osint_entity_delete", { id }),
+  osintRelationshipDelete: (id: number) => call<void>("osint_relationship_delete", { id }),
+  osintEntityMerge: (keep: number, merge: number) => call<void>("osint_entity_merge", { keep, merge }),
+  osintEntityAdd: (input: O.ManualEntityInput) => call<O.ChangeSummary>("osint_entity_add", { input }),
+  osintLink: (source: number, target: number, relType: string, note: string) => call<number>("osint_link", { source, target, relType, note }),
+  osintNeighbors: (investigationId: number, ids: number[], includeRejected = false, limit?: number) =>
+    call<O.Neighborhood>("osint_neighbors", { investigationId, ids, includeRejected, limit: limit ?? null }),
+  osintEntitiesByIds: (investigationId: number, ids: number[]) => call<O.Neighborhood>("osint_entities_by_ids", { investigationId, ids }),
+  osintDuplicates: (investigationId: number) => call<O.EntityBrief[][]>("osint_duplicates", { investigationId }),
+  osintFindingFromEntity: (entityId: number, title: string, severity: string, description: string) =>
+    call<number>("osint_finding_from_entity", { entityId, title, severity, description }),
+  osintGraphs: (investigationId: number | null) => call<O.GraphMeta[]>("osint_graphs", { investigationId }),
+  osintGraphCreate: (investigationId: number, name: string, description: string, followNew: boolean) =>
+    call<number>("osint_graph_create", { investigationId, name, description, followNew }),
+  osintGraphLoad: (id: number) => call<O.GraphData>("osint_graph_load", { id }),
+  osintGraphSave: (id: number, save: O.GraphSave) => call<O.SaveResult>("osint_graph_save", { id, save }),
+  osintGraphSaveAs: (from: number, name: string, nodes: O.GraphNodeState[], workspace: unknown, followNew: boolean) =>
+    call<number>("osint_graph_save_as", { from, name, nodes, workspace, followNew }),
+  osintGraphDuplicate: (from: number, name: string) => call<number>("osint_graph_duplicate", { from, name }),
+  osintGraphRename: (id: number, name: string, description?: string | null, followNew?: boolean | null) =>
+    call<void>("osint_graph_rename", { id, name, description: description ?? null, followNew: followNew ?? null }),
+  /** asks for confirmation in a native dialog; false when the user cancelled */
+  osintGraphDelete: (id: number) => call<boolean>("osint_graph_delete", { id }),
+  osintVersions: (graphId: number) => call<O.VersionRow[]>("osint_versions", { graphId }),
+  osintVersionCreate: (graphId: number, label: string) => call<number | null>("osint_version_create", { graphId, label }),
+  osintVersionCompare: (a: number, b: number | null) => call<O.Diff>("osint_version_compare", { a, b }),
+  osintVersionRestore: (versionId: number) => call<{ version: number; missing: number }>("osint_version_restore", { versionId }),
+  osintTimeline: (investigationId: number, query: O.TimelineQuery) => call<O.Page<O.TimelineEvent>>("osint_timeline", { investigationId, query }),
+  osintAnalysis: (investigationId: number, graphId: number | null, includeInferred: boolean) =>
+    call<O.Overview>("osint_analysis", { investigationId, graphId, includeInferred }),
+  osintPath: (investigationId: number, graphId: number | null, from: number, to: number, includeInferred: boolean, maxDepth?: number) =>
+    call<O.GraphPath | null>("osint_path", { investigationId, graphId, from, to, includeInferred, maxDepth: maxDepth ?? null }),
+  osintSuggestions: (investigationId: number) => call<O.Suggestion[]>("osint_suggestions", { investigationId }),
+  osintDiscover: (request: O.DiscoverRequest) =>
+    call<number>("osint_discover", { request: { autoImport: false, refresh: false, entityId: null, entityType: null, value: null, ...request } }),
+  osintOperations: (investigationId: number) => call<O.Operation[]>("osint_operations", { investigationId }),
+  osintOperation: (id: number) => call<O.OperationDetail>("osint_operation", { id }),
+  osintOperationCancel: (id: number) => call<boolean>("osint_operation_cancel", { id }),
+  osintOperationImport: (id: number, selection: O.ResultSelection | null) => call<O.ChangeSummary>("osint_operation_import", { id, selection }),
+  osintImportSources: (projectId: number | null) => call<O.ImportSource[]>("osint_import_sources", { projectId }),
+  osintImportInternal: (investigationId: number, kind: string, id: string) => call<O.ChangeSummary>("osint_import_internal", { investigationId, kind, id }),
+  /** native save dialog; returns the file name or null when cancelled */
+  osintExport: (graphId: number, format: O.ExportFormat) => call<string | null>("osint_export", { graphId, format }),
+  osintExportImage: (graphId: number, format: "png" | "svg", data: string) => call<string | null>("osint_export_image", { graphId, format, data }),
+  osintReport: (investigationId: number) => call<string>("osint_report", { investigationId }),
+  osintReportExport: (investigationId: number) => call<string | null>("osint_report_export", { investigationId }),
+  /** native open dialog + validation; nothing is imported until osintImportApply */
+  osintImportPick: (investigationId: number | null) => call<O.PendingImport | null>("osint_import_pick", { investigationId }),
+  osintImportPreview: (token: string, investigationId: number | null) => call<O.ImportPreview>("osint_import_preview", { token, investigationId }),
+  osintImportApply: (token: string, investigationId: number | null, graphName: string) =>
+    call<{ investigationId: number; graphId: number }>("osint_import_apply", { token, investigationId, graphName }),
+  osintImportDiscard: (token: string) => call<void>("osint_import_discard", { token }),
 
   // system
   systemInfo: () => call<T.SystemInfo>("system_info"),

@@ -407,7 +407,7 @@ pub struct Investigation {
     pub saved: bool,
 }
 
-async fn investigate(db: &Db, vtst: &VtState, tist: &TiState, ind: &Indicator, only: Option<&[ProviderId]>, refresh: bool) -> AppResult<Vec<ProviderResult>> {
+pub(crate) async fn investigate(db: &Db, vtst: &VtState, tist: &TiState, ind: &Indicator, only: Option<&[ProviderId]>, refresh: bool) -> AppResult<Vec<ProviderResult>> {
     let enabled = enabled_map(db)?;
     let want = |p: ProviderId| only.map_or(true, |o| o.contains(&p));
     let on = |p: ProviderId| enabled.get(p.as_str()).copied().unwrap_or(true);
@@ -555,7 +555,7 @@ pub async fn ti_saved_remove(db: State<'_, Db>, query: String) -> AppResult<()> 
 /* ─────────────── export ─────────────── */
 
 /// Latest stored results for every provider (no network).
-fn stored_results(db: &Db, ind: &Indicator) -> AppResult<Vec<ProviderResult>> {
+pub(crate) fn stored_results(db: &Db, ind: &Indicator) -> AppResult<Vec<ProviderResult>> {
     let mut out = Vec::new();
     for p in ProviderId::ALL {
         if !p.supports(ind) {

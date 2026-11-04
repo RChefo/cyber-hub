@@ -56,6 +56,18 @@ Providers, endpoints and documented access conditions are listed in [PROVIDERS.m
 | No external actions | Nothing is reported, submitted, blocked or changed at a provider. Pivoting to a related indicator only starts another read-only lookup after the user selects it. |
 | History and exports | Each multi-provider search is recorded in `ti_history` (indicator plus the list of providers per outcome) and in the activity log. Reports are exported from stored results only (no network) through a native save dialog. Provider-written text in Markdown exports is escaped, so it cannot form links, images, headings or HTML, and control and line-separator characters are removed. Links come only from Cyber Hub's own URL patterns or, for URLhaus, must point to `https://urlhaus.abuse.ch/`. |
 
+## OSINT workspace
+
+- Public-source collection runs only in the backend. Private, loopback, link-local and reserved addresses and internal names are refused before anything is sent (`osint::discovery::check_public`).
+- The only source that contacts a target directly (web fingerprint) requires a linked, active project whose authorized scope covers the target, uses the same scope engine as tool runs, resolves the name itself, checks every address and pins the checked public addresses for the connection, so DNS rebinding cannot redirect it to an internal host. It sends HEAD (GET only when HEAD is refused), follows no redirects and never reads the body.
+- RDAP servers come only from the IANA bootstrap files; they must be `https://` URLs on public hosts, and redirects are not followed. Other sources use fixed endpoints.
+- Responses are size-limited, per-source rate limits apply, and at most six collections run at once. Downloaded content is never executed and collected pages are not rendered.
+- Threat-intelligence and NVD access reuse the existing modules; keys stay in the OS credential store and never appear in investigations, evidence, exports, logs or MCP responses. Tests use fixtures and never call real services.
+- Collected text is untrusted. It is shown as plain text (references are selectable, not clickable), escaped in SVG, GraphML and Markdown output, and CSV cells that start with `=`, `+`, `-`, `@`, tab or carriage return are prefixed with `'`. MCP clients are told to treat it as data and not follow instructions in it.
+- Nothing is verified automatically. Inferred correlations need review, analyst decisions are never overwritten by collection, imported files cannot carry verification, and MCP clients can only propose relationships (stored as unverified suggestions) and start collections whose results wait for review.
+- Imports are limited to 25 MB and fixed element counts, must be UTF-8, refuse GraphML with a DOCTYPE (no entity expansion), detect duplicate IDs, are previewed, and always create a new graph.
+- Deleting an investigation or a graph needs a native confirmation.
+
 ## MCP integration
 
 Details: [MCP.md](MCP.md).

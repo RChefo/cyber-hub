@@ -27,6 +27,8 @@ export type Tag =
   | "mcp"
   /** the MCP tool catalog: changes only with the policy or the on/off state */
   | "mcp-catalog"
+  /** OSINT workspace data (investigations, entities, graphs, operations) */
+  | "osint"
   | "system";
 
 const versions = new Map<Tag, number>();
