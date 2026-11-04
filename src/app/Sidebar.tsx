@@ -1,5 +1,6 @@
 import { Button, Tooltip } from "@heroui/react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { dragRegion } from "@/lib/dragRegion";
 import { api } from "@/lib/ipc";
 import { useQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
@@ -59,7 +60,7 @@ export function Sidebar() {
       )}
       aria-label="Primary navigation"
     >
-      <div data-tauri-drag-region className={cn("flex h-14 items-center gap-2.5 px-4", collapsed && "justify-center px-0")}>
+      <div {...dragRegion()} className={cn("flex h-14 items-center gap-2.5 px-4", collapsed && "justify-center px-0")}>
         <img src="/logo.svg" alt="" className="size-7 rounded-[7px]" />
         {!collapsed && (
           <div className="leading-tight">

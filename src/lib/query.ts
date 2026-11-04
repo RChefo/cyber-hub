@@ -25,6 +25,8 @@ export type Tag =
   | "vt"
   | "ti"
   | "mcp"
+  /** the MCP tool catalog: changes only with the policy or the on/off state */
+  | "mcp-catalog"
   | "system";
 
 const versions = new Map<Tag, number>();

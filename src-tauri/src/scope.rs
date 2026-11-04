@@ -6,6 +6,7 @@
 //! - `ip`       `10.0.0.5`        matches that address
 //! - `cidr`     `10.0.0.0/24`     matches addresses and sub-networks fully contained in it
 //! - `url`      `https://app.x`   authorizes the URL's host (treated like `domain`)
+//!
 //! Out-of-scope entries (`in_scope = false`) always win over in-scope entries.
 
 use std::net::IpAddr;
@@ -310,11 +311,7 @@ pub fn loose_targets(value: &str) -> Vec<Target> {
             if let Ok(n) = IpNet::from_str(p) {
                 out.push(Target::Net(n.trunc()));
             }
-        } else if IP_RANGE_RE.is_match(p) {
-            if let Some(t) = parse_target(p) {
-                out.push(t);
-            }
-        } else if looks_like_hostname(p) {
+        } else if IP_RANGE_RE.is_match(p) || looks_like_hostname(p) {
             if let Some(t) = parse_target(p) {
                 out.push(t);
             }

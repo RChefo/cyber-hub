@@ -221,13 +221,12 @@ pub async fn wordlists_clear_directory(db: State<'_, Db>) -> AppResult<()> {
 /// Add files chosen in the native file picker. `copy` copies them into the managed directory.
 /// Returns the ids of the indexed wordlists (empty when the dialog was cancelled).
 #[tauri::command]
-pub async fn wordlists_pick(app: AppHandle, db: State<'_, Db>, copy: bool, category: Option<String>) -> AppResult<Vec<i64>> {
+pub async fn wordlists_pick(app: AppHandle, copy: bool, category: Option<String>) -> AppResult<Vec<i64>> {
     let paths = pick_files(&app).await;
     if paths.len() > 200 {
         return Err(validation("Select at most 200 files"));
     }
     let dir = managed_dir(&app)?;
-    let db_ref: &Db = &db;
     let mut ids = Vec::new();
     for src in paths {
         if !src.is_file() {
@@ -249,7 +248,12 @@ pub async fn wordlists_pick(app: AppHandle, db: State<'_, Db>, copy: bool, categ
         } else {
             src
         };
-        ids.push(index_file(db_ref, &target, category.as_deref(), copy)?);
+        // counting lines reads up to 512 MB: keep it off the async runtime
+        let (app2, category) = (app.clone(), category.clone());
+        let id = tauri::async_runtime::spawn_blocking(move || index_file(&app2.state::<Db>(), &target, category.as_deref(), copy))
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))??;
+        ids.push(id);
     }
     Ok(ids)
 }
@@ -264,17 +268,24 @@ pub async fn wordlists_scan(app: AppHandle, db: State<'_, Db>) -> AppResult<usiz
         }
         dirs.push((p, false));
     }
-    let mut count = 0;
-    for (dir, managed) in dirs {
-        for entry in std::fs::read_dir(&dir)?.flatten().take(5000) {
-            let p = entry.path();
-            if p.is_file() {
-                index_file(&db, &p, None, managed)?;
-                count += 1;
+    // indexing counts lines of every file: run it off the async runtime
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<usize> {
+        let db = app2.state::<Db>();
+        let mut count = 0;
+        for (dir, managed) in dirs {
+            for entry in std::fs::read_dir(&dir)?.flatten().take(5000) {
+                let p = entry.path();
+                if p.is_file() {
+                    index_file(&db, &p, None, managed)?;
+                    count += 1;
+                }
             }
         }
-    }
-    Ok(count)
+        Ok(count)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?
 }
 
 #[tauri::command]
@@ -338,6 +349,10 @@ pub async fn wordlist_preview(db: State<'_, Db>, id: i64, filter: Option<String>
     let filter = filter.map(|f| f.to_lowercase()).filter(|f| !f.is_empty());
     tauri::async_runtime::spawn_blocking(move || -> AppResult<WordlistPreview> {
         let file = File::open(&path)?;
+        // the indexed path may have been replaced by a pipe or device since: never block on it
+        if !file.metadata()?.is_file() {
+            return Err(validation("The wordlist is no longer a regular file"));
+        }
         let reader = BufReader::new(file.take(64 * 1024 * 1024));
         let mut lines = Vec::new();
         let mut scanned = 0i64;

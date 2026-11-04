@@ -1,8 +1,9 @@
 name: CI
 
-# Verification only: typecheck, tests and a frontend build on Windows, macOS and Linux.
-# Installer packaging (MSI / NSIS / DMG / AppImage) is intentionally NOT part of CI;
-# release builds are produced manually after sign-off.
+# Verification only: typecheck, tests and a frontend build on Windows and Linux (the supported
+# platforms; macOS is not supported).
+# Installer packaging (MSI / NSIS / DEB / RPM / AppImage) is intentionally NOT part of CI;
+# packages are not built during development.
 
 on:
   push:
@@ -17,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-24.04]
+        os: [windows-latest, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

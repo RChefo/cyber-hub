@@ -4,7 +4,7 @@ Cyber Hub's provider integrations (VirusTotal, AbuseIPDB, AlienVault OTX, the ab
 
 ## How it works
 
-* Credentials live in the **OS credential store** of the user account that runs Cyber Hub (Windows Credential Manager, macOS Keychain, Linux Secret Service), under the service name `dev.cyberhub.workstation`:
+* Credentials live in the **OS credential store** of the user account that runs Cyber Hub (Windows Credential Manager, Linux Secret Service), under the service name `dev.cyberhub.workstation`:
 
   | ID | Credential store entry | Used by |
   |---|---|---|
@@ -76,6 +76,12 @@ cyberhub-keys remove otx    # or: remove all
 `test` uses fixed public probes only (VirusTotal and AbuseIPDB `8.8.8.8`; OTX subscribed pulses; abuse.ch the EICAR test hash; Shodan `/api-info`; NVD `CVE-2021-44228`). Output is sanitized and never contains a credential.
 
 Inside the app, Settings → Threat intelligence providers shows each provider's read-only availability: Not configured, Turned off, Available, Rate limited, Credentials rejected or Last request failed. It also shows the quota a provider reported with its last real request since the app started.
+
+## Platform notes
+
+* **Windows:** entries are stored in Credential Manager (verified with the tool and the app).
+* **Linux:** entries are stored through the Secret Service D-Bus API in the default collection (verified with GNOME Keyring on Debian 12: `import`, `status`, the app reading the keys for lookups, `remove all`). The collection must exist and be unlocked, which a desktop login keyring provides. In a minimal session without a default collection the tool fails with "Secret Service: no result found" and stores nothing (seen in an Ubuntu 24.04 container). KWallet's Secret Service bridge was not tested.
+* macOS is not supported.
 
 ## Important limits of this model
 

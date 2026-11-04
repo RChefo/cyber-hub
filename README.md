@@ -2,18 +2,20 @@
 
 A local-first, cross-platform cybersecurity workstation built with **Tauri 2 (Rust)** and **React 19 + TypeScript**. It brings a curated tools library with real installation detection, a scoped execution engine, command builders, Google Dorks Studio, payloads and wordlists, security utilities, a projects workspace with findings, and CVE intelligence together in one desktop app.
 
-No account, no telemetry, no background network traffic. Everything is stored in a local SQLite database and the OS keychain.
+No account, no telemetry, no background network traffic. Everything is stored in a local SQLite database and the OS credential store.
+
+**Status:** under active development for **Windows 10/11 x64** and **Linux x64**. Cyber Hub is not released: no installers, packages or downloads are published. macOS is not supported.
 
 ## Quick start
 
-Prerequisites: Node.js 20+ (tested on 22 and 24), Rust 1.80+ (tested on 1.94 and 1.99), and the [Tauri 2 system prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS (WebView2 on Windows, Xcode CLT on macOS, WebKitGTK 4.1 + `libdbus-1-dev` on Linux).
+Prerequisites: Node.js 20+ (tested on 22 and 24), Rust 1.80+ (tested on 1.94 and 1.99), and the [Tauri 2 system prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS (WebView2 on Windows, WebKitGTK 4.1 + `libdbus-1-dev` on Linux).
 
 ```bash
 npm ci                 # also runs scripts/patch-deps.mjs (freezePrototype compatibility, self-tested)
 npm run tauri dev      # run the desktop app with hot reload
 ```
 
-Installer packaging (`npm run tauri build`) is a release step, done once after sign-off. It first runs `scripts/build-sidecar.mjs`, which builds the MCP server `cyberhub-mcp` for the target platform and stages it as a Tauri sidecar, so the installers place it next to the app.
+Installers and packages (`npm run tauri build`) are deferred until development is complete; none are built or published. When that step comes, `tauri build` first runs `scripts/build-sidecar.mjs`, which builds the MCP server `cyberhub-mcp` for the target platform and stages it as a Tauri sidecar, so the installers place it next to the app.
 
 Other scripts:
 
@@ -69,10 +71,12 @@ Details and accepted risks: [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Implementation status
 
+Development is ongoing. Current verification (details in [docs/PLATFORMS.md](docs/PLATFORMS.md)):
+
 | Platform | Status |
 |---|---|
-| Windows 11 | Verified in the running app (detection, scoped runs incl. target files, native confirmations, cancellation, frameless window and its controls, all threat-intelligence providers and VirusTotal file uploads against a local mock API, all pages with a frozen prototype) plus all automated tests. |
-| Linux | Automated verification in a Debian 12 container: typecheck, 93 frontend tests, 119 backend tests, frontend and backend builds, and sidecar staging with executable permissions. The GUI has not been run on Linux. |
-| macOS | Not built or tested (a cross-compilation check from Windows stops at C dependencies that need the Apple SDK). |
+| Windows 10/11 x64 | Verified in the running app on Windows 11: every module, scoped runs incl. target files, native confirmations, cancellation, the frameless window and its controls, VirusTotal file uploads and all threat-intelligence providers against a local mock API, MCP with Claude Code and a scripted client, single-instance behaviour, persistence across restarts; plus all automated tests (96 frontend, 122 backend, 4 provisioning-tool). |
+| Linux x64 | The real app tested on a virtual X display (Xvfb + Openbox) in Debian 12 and Ubuntu 24.04 containers, driven through Tauri's WebDriver support: every module, window behaviour, native GTK dialogs and file choosers, Secret Service provisioning (Debian), Nmap runs and cancellation, VirusTotal and threat intelligence against mocks, findings and reports, MCP, restart persistence; plus builds and all automated tests. Not tested on a physical GNOME/KDE desktop or under Wayland. |
+| macOS | Not supported. |
 
-Installers have not been rebuilt since the hardening pass and the MCP sidecar packaging. See [docs/PLATFORMS.md](docs/PLATFORMS.md).
+No installers or packages exist for the current code.

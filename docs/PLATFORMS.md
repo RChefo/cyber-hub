@@ -1,14 +1,34 @@
 # Platform notes
 
+Cyber Hub is under active development. It is not released or distributed, and no installers or packages are published.
+
+## Supported platforms
+
+| Platform | Status |
+|---|---|
+| **Windows 10/11 x64** | Supported. Developed and tested on Windows 11. |
+| **Linux x64** | Supported. Tested on Debian 12 and Ubuntu 24.04 LTS (see below for what that covered). |
+| macOS | **Not supported.** It is not built, tested, signed or packaged. A few macOS branches remain in shared code (terminal launch, `/Applications` detection) but are unmaintained. |
+
 ## Validation status
 
 | Platform | What was verified | What was NOT verified |
 |---|---|---|
-| **Windows 11 x64** (dev machine) | Dev build and the running app: real detection (Nmap 7.99 at its Program Files path, Ncat, OpenSSL from Git for Windows), version probing; end-to-end Nmap runs inside an authorized loopback scope, including `-iL` target files read from validated snapshots; native confirmation dialog (approve and cancel); cancelling a live run kills the process; process-tree kill of a grandchild (automated test); all pages render with `freezePrototype` enabled; frameless window: drag to move, double-click maximize/restore, all edges and corners resize, Win+↓ minimizes; window controls with real clicks: minimize, maximize/restore (icon follows double-click and OS restore), close, tooltips and hover states, pressing a control never moves the window; VirusTotal against a local mock API (no real quota used): key rejection and verified save, IP/domain/URL/hash lookups, not-found, quota and local rate-limit errors, cache hit and manual refresh, refusal of private/internal indicators without a request, key removal, and a scan of the database, app-data files and dev log that found no trace of the key; threat-intelligence providers against a local mock of all seven APIs. Credentials were provisioned with the developer-only `cyberhub-keys` tool: import from a git-ignored file, an unignored file refused, a wrong key rejected without replacing the stored one, `status` / `test` with quota, `remove all`. Settings showed read-only availability, including Not configured and availability observed from lookups. Also tested: concurrent IP/domain/URL/hash lookups, provider failure isolation, a disabled provider not being contacted, cache hits, compare and related-indicator views, saved indicators, Markdown export through the native save dialog, and a scan of the database, app-data files, export and dev log for every test key (none found); VirusTotal File analysis: native file picker (path never reaches the page), local hashes matching an independent computation, hash-only lookup, declining the native confirmation (no request, no snapshot), approved upload of 4 KB (`POST /files`) and 33 MB (upload-URL flow) files with analysis polling to the completed report, and snapshots removed afterwards; DNS lookup and live NVD search; typecheck, 90 frontend tests, 80 backend tests (plus 4 provisioning-tool tests), `npm audit`, `cargo audit`. Current counts: 93 frontend tests, 119 backend tests plus 4 provisioning-tool tests. **Release readiness (non-packaging):** a release build (`cargo build --release --features tauri/custom-protocol`) placed in a folder with spaces in its path (`…\Cyber Hub Install\Cyber Hub.exe` + `cyberhub-mcp.exe`) and started from another working directory: page loaded in about 0.8 s, the MCP page showed the installed sidecar path, and the generated Claude Code command worked unchanged in PowerShell, cmd and Git Bash (run with project scope, so the user configuration was untouched). Claude Code started the sidecar from that path and called a tool against the release app. Also tested: refusal of attached-path arguments; an unscoped-tool approval showing its warning and unredacted arguments; the native confirmation cancelled by keyboard and by mouse; turning MCP off with a request waiting (the client got "closed the connection", logged as cancelled, files deleted); closing the app during an approved Nmap run (process killed, run recorded as cancelled, bridge files deleted); `cyberhub-mcp` exiting at once when stdin closes and answering "not running" when MCP is off. The `scripts/build-sidecar.mjs` release staging ran on Windows (1.1 MB binary, version checked). A full GUI pass in the dev build against local mock APIs covered every module and tab with the sidebar expanded and collapsed (no runtime errors); a project with scope and exclusion; target checks; Nmap run and cancel from the Command Center; VirusTotal lookups, file pick, hash lookup and upload with snapshot cleanup; threat-intel lookups; local CVE search; findings and the Markdown report; MCP decline, expiry and discovery; window minimize, maximize/restore, drag and resize. | Installer builds after this hardening pass (the earlier MSI/NSIS were built before it and are outdated). All providers against their real APIs (no real keys were used, to avoid spending quota and uploading data). Cancelling an upload mid-transfer in the GUI (loopback uploads finish too quickly; covered by an automated test). |
-| **Linux** — Debian 12 (bookworm) container, Rust 1.99.1, Node 22 | `npm ci` (incl. the `freezePrototype` dependency patch and its self-test), typecheck, 93 frontend tests, Vite production build, `cargo test` — all 119 backend tests including the Unix process-group kill test and PATH resolution — a warning-free `cargo build` of the Tauri backend against WebKitGTK 4.1, and `scripts/build-sidecar.mjs --debug`: the staged `cyberhub-mcp-x86_64-unknown-linux-gnu` has mode `rwxr-xr-x`, reports its version and exits when stdin closes. | The GUI was not launched (no display in the container); window behavior, native dialogs, Secret Service storage and real tool runs on Linux are untested. Kali WSL on this machine has no Rust/Node toolchain and no password-less sudo, so it could not be used. |
-| **macOS** | Nothing. A cross-compilation check from Windows (`cargo check --target aarch64-apple-darwin`) stops at C build scripts (`objc2-exception-helper`) that need the Apple toolchain and SDK, so not even compilation is verified. | Everything: compilation, the sidecar, Keychain, dialogs, the frameless window, file pickers, process cleanup. The code has macOS adapters (see below) and CI is prepared to build, test and stage the sidecar on `macos-latest`. |
+| **Windows 11 x64** (dev machine) | **This pass** (dev build against local provider mocks): every module and tab with the sidebar expanded and collapsed, no runtime errors; tool detection (Nmap, Ncat, OpenSSL); a project with scope and an exclusion, target checks; an Nmap run through the native confirmation and its cancellation (process killed, run recorded as cancelled); VirusTotal lookups and refusal of a private indicator; native file picker, upload declined (Escape, no request) and approved in the native dialog, snapshot cleanup; threat-intelligence lookups across all mocked providers; a finding and the report preview; MCP enable/disable, discovery, a policy set to Block in the Permissions UI and enforced against a real client, an approval in the Approval Center, audit filters; developer provisioning into Credential Manager; frameless window: drag and double-click maximize/restore; a second launch exits and focuses the first window; close and restart with data persisting. **Earlier passes, code unchanged since:** `-iL` target files read from validated snapshots, MCP approval expiry and declines, Claude Code connecting through an installed-style sidecar path with spaces, shutdown during an active run, edge and corner resizing, the custom window controls. Automated: typecheck, 96 frontend tests, 122 backend tests plus 4 provisioning-tool tests. | Writing the report through the Windows **Save** dialog was not automated (the dialog opened and cancelling it was handled; the same Rust code wrote the file on Linux). Claude Desktop (not installed). All providers against their real APIs (no real keys were used). |
+| **Linux — Debian 12** (Docker container, virtual X display: Xvfb + Openbox window manager + GNOME Keyring, app driven through Tauri's WebDriver support: `tauri-driver` + WebKitWebDriver, native dialogs through `xdotool`) | The real app on WebKitGTK 4.1 as an unprivileged user: every module and tab, expanded and collapsed sidebar, no runtime errors; frameless window under a real window manager: custom minimize (window hidden), maximize/restore (EWMH state), title-bar drag, edge and corner resize, the 1100×700 minimum, double-click maximize/restore; a second launch exits and leaves one window; developer provisioning into the Secret Service (GNOME Keyring) against the mock, read back by the app; tool detection (`/usr/bin/nmap`, OpenSSL); project with scope and exclusion, target checks; Nmap run through the native GTK confirmation and cancellation (process gone, run recorded as cancelled); VirusTotal lookups and refusal of private and internal indicators; file analysis through the GTK file chooser with a matching SHA-256, upload declined (no request, no temp copy) and approved (upload and analysis polling, temp copy removed); threat-intelligence lookups; finding and report saved through the GTK save dialog; MCP: enable from the page, bridge files 0600 in a 0700 folder, sidecar executable, discovery, approval through the native dialog, decline, turning MCP off with a request waiting; close and restart with data persisting. Also: typecheck, frontend tests, `cargo test`, a warning-free build and sidecar staging (mode `rwxr-xr-x`). | A physical Linux desktop (GNOME/KDE on Wayland or X11): the tests ran on a virtual display, so compositor, HiDPI scaling, Wayland behaviour and desktop portals are untested. Claude Code on Linux (not installed in the container; the scripted MCP client was used). KWallet. |
+| **Linux — Ubuntu 24.04 LTS** (same container setup) | Build, app start, every module and tab with no runtime errors (expanded and collapsed sidebar), custom maximize/restore/minimize, drag, edge and corner resize, the minimum size, MCP enable and discovery through the sidecar. | Secret Service provisioning: in this container the GNOME Keyring 46 session did not provide a default collection, so provisioning failed with a clear "Secret Service: no result found" error. This is a test-environment limitation; on a desktop the login keyring provides it. Title-bar double-click (the scripted click hit the search box at that window width) and the remaining Debian flows were not repeated on Ubuntu. |
 
-`.github/workflows/ci.yml` runs typecheck, frontend tests, a frontend build and `cargo test` on Windows, macOS and Ubuntu (no installer packaging). It has not been run yet because the repository has not been pushed.
+`.github/workflows/ci.yml` runs typecheck, frontend tests, a frontend build, `cargo test` and the sidecar staging on Windows and Ubuntu (no packaging). It has not run yet because the repository has not been pushed.
+
+### Reproducing the Linux GUI tests
+
+The Linux checks above were run in Docker with:
+
+* a Debian 12 (`rust:1-bookworm`) or Ubuntu 24.04 image plus `libwebkit2gtk-4.1-dev`, `xvfb`, `openbox`, `xdotool`, `x11-utils`, `imagemagick`, `dbus-x11`, `gnome-keyring`, `libsecret-tools`, `webkit2gtk-driver`, `nmap` and `cargo install tauri-driver`;
+* an unprivileged user running `Xvfb :99`, `openbox`, `dbus-launch` and `gnome-keyring-daemon --unlock --components=secrets`;
+* a debug build with the frontend embedded (`cargo build --features tauri/custom-protocol`), started through `tauri-driver` (WebDriver on port 4444) with `CYBERHUB_MOCK_API_BASE` pointing at a local mock of the provider APIs.
+
+WebKitWebDriver reports elements under the legacy key `element-6066-11e4-a52e-4f735466cecf`, and its element clear does not update React state (select the text and type instead).
 
 ## Build and test instructions
 
@@ -22,16 +42,15 @@ cd src-tauri && cargo test
 npm run tauri dev      # run the app
 ```
 
-Installers (`npm run tauri build`) are a release step and are not part of development or CI.
+Installers and packages (`npm run tauri build`) are deferred: Cyber Hub is still in development and nothing is packaged or distributed.
 
-### Release builds and the MCP sidecar
+### Packaging and the MCP sidecar (prepared, not used yet)
 
-`tauri build` runs `npm run build && node scripts/build-sidecar.mjs` before compiling the app. The script builds `cyberhub-mcp` for the target triple (`TAURI_ENV_TARGET_TRIPLE`; both architectures plus `lipo` for `universal-apple-darwin`), without the `provisioning` feature, and stages it as `src-tauri/binaries/cyberhub-mcp-<triple>[.exe]` (git-ignored, mode 0755 on Unix, `--version` checked when it can run on the build machine). `bundle.externalBin` then installs it next to the app executable:
+`tauri build` runs `npm run build && node scripts/build-sidecar.mjs` before compiling the app. The script builds `cyberhub-mcp` for the target triple (`TAURI_ENV_TARGET_TRIPLE`; macOS targets are refused), without the `provisioning` feature, and stages it as `src-tauri/binaries/cyberhub-mcp-<triple>[.exe]` (git-ignored, mode 0755 on Unix, `--version` checked when it can run on the build machine). `bundle.externalBin` then installs it next to the app executable:
 
 | Platform | Installed as |
 |---|---|
 | Windows (MSI / NSIS) | `<install folder>\cyberhub-mcp.exe` |
-| macOS | `Cyber Hub.app/Contents/MacOS/cyberhub-mcp` (must be signed and notarized with the app) |
 | Linux .deb / .rpm | `/usr/bin/cyberhub-mcp` |
 | Linux AppImage | `usr/bin/cyberhub-mcp` inside the image; the mount path changes on every start, so MCP client configurations break after a restart (the MCP page warns) |
 
@@ -42,12 +61,6 @@ If the sidecar cannot be built for the target, the script exits with an error, s
 * Rust (MSVC toolchain), Visual Studio Build Tools with the C++ workload (SQLite is compiled from source), WebView2 runtime (preinstalled on Windows 10/11).
 * Process trees use Job Objects (`windows-sys`); no extra setup.
 
-### macOS
-
-* Xcode Command Line Tools, Rust, Node 20+.
-* Keychain holds the owner-provisioned service credentials (see PROVISIONING.md).
-* Helper: `/usr/bin/open` (GUI tool launch, Terminal).
-
 ### Linux (Debian / Ubuntu)
 
 ```bash
@@ -56,25 +69,25 @@ sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-
 
 * A running Secret Service (GNOME Keyring, KWallet) is needed for the owner-provisioned service credentials (see PROVISIONING.md).
 * Process trees use process groups (`libc::killpg`).
-* To reproduce the container verification: `docker run --rm -v "$PWD:/src:ro" rust:1-bookworm bash -c "<install deps above>; cp -r /src /work; cd /work && npm ci && npx vitest run && cd src-tauri && cargo test"`.
+* To reproduce the build and unit-test verification: `docker run --rm -v "$PWD:/src:ro" rust:1-bookworm bash -c "<install deps above>; cp -r /src /work; cd /work && npm ci && npx vitest run && cd src-tauri && cargo test"`. For the GUI tests see above.
 
 ## Platform-specific behavior
 
-| Concern | Windows | macOS | Linux |
-|---|---|---|---|
-| Executable lookup | absolute PATH entries only (PATHEXT applied); catalog candidate paths with `{ProgramFiles}`, `{ProgramFiles(x86)}`, `{LOCALAPPDATA}`, `{APPDATA}`, `{HOME}` | absolute PATH entries; `/Applications/*.app` bundles | absolute PATH entries |
-| Executables run with arguments | native `.exe`/`.com` only (no `.bat`/`.cmd`) | any regular executable | any regular executable |
-| Process tree / cancel | Job Object, `KILL_ON_JOB_CLOSE` | process group, SIGTERM → SIGKILL | process group, SIGTERM → SIGKILL |
-| Console windows | suppressed (`CREATE_NO_WINDOW`) | n/a | n/a |
-| GUI launch | the detected `.exe` | `/usr/bin/open -a <app>` | the detected binary |
-| Open terminal | Windows Terminal (`wt -d`), fallback `%SystemRoot%\…\powershell.exe` | Terminal.app via `/usr/bin/open` | first available of x-terminal-emulator, gnome-terminal, konsole, xfce4-terminal, kitty, alacritty, xterm |
-| Secrets | Credential Manager | Keychain | Secret Service (D-Bus) |
-| App data | `%APPDATA%\dev.cyberhub.workstation` | `~/Library/Application Support/dev.cyberhub.workstation` | `~/.local/share/dev.cyberhub.workstation` |
-| Managed installers | winget, pipx, go | brew/cask, pipx, go | pipx, go (apt/sudo shown as instructions only) |
-| Frameless window | verified (move, maximize, resize, minimize) | untested (native traffic-light buttons are hidden when undecorated; the in-app controls replace them) | untested |
-| Window controls (minimize, maximize/restore, close) | verified in the running app | untested (same Tauri API) | untested (same Tauri API) |
-| MCP (`cyberhub-mcp`, loopback bridge, approvals, MCP page) | verified end to end, including with Claude Code (Claude Desktop not installed, not tested); MCP page tested in the running app at 1100×700 and 1440×900; installed layout simulated with a release build in a folder with spaces | not built or tested | builds, unit tests and sidecar staging (executable permissions) in a container; not run with a GUI |
-| Tool working directory | `%APPDATA%\dev.cyberhub.workstation\work` | `~/Library/Application Support/dev.cyberhub.workstation/work` | `~/.local/share/dev.cyberhub.workstation/work` (mode 0700) |
+| Concern | Windows | Linux |
+|---|---|---|
+| Executable lookup | absolute PATH entries only (PATHEXT applied); catalog candidate paths with `{ProgramFiles}`, `{ProgramFiles(x86)}`, `{LOCALAPPDATA}`, `{APPDATA}`, `{HOME}` | absolute PATH entries |
+| Executables run with arguments | native `.exe`/`.com` only (no `.bat`/`.cmd`) | any regular executable |
+| Process tree / cancel | Job Object, `KILL_ON_JOB_CLOSE` | process group, SIGTERM → SIGKILL |
+| Console windows | suppressed (`CREATE_NO_WINDOW`) | n/a |
+| GUI launch | the detected `.exe` | the detected binary |
+| Open terminal | Windows Terminal (`wt -d`), fallback `%SystemRoot%\…\powershell.exe` | first available of x-terminal-emulator, gnome-terminal, konsole, xfce4-terminal, kitty, alacritty, xterm |
+| Secrets | Credential Manager (verified) | Secret Service over D-Bus (verified with GNOME Keyring on Debian; KWallet untested) |
+| App data | `%APPDATA%\dev.cyberhub.workstation` | `~/.local/share/dev.cyberhub.workstation` |
+| Managed installers | winget, pipx, go | pipx, go (apt/sudo shown as instructions only) |
+| Frameless window | verified (move, double-click maximize/restore, resize, minimize) | verified on a virtual display under Openbox (move, double-click maximize/restore, edge and corner resize, minimum size); untested on GNOME/KDE and Wayland |
+| Window controls (minimize, maximize/restore, close) | verified in the running app | verified (EWMH maximized/hidden states, close exits) |
+| MCP (`cyberhub-mcp`, loopback bridge, approvals, MCP page) | verified end to end, including with Claude Code (Claude Desktop not installed, not tested); installed layout simulated with a release build in a folder with spaces | verified in the GUI tests with a scripted MCP client (Claude Code not tested on Linux) |
+| Tool working directory | `%APPDATA%\dev.cyberhub.workstation\work` | `~/.local/share/dev.cyberhub.workstation/work` (mode 0700) |
 
 ### Unsupported or limited functionality
 

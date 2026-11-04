@@ -110,6 +110,24 @@ pub struct HttpInspection {
     pub elapsed_ms: u128,
 }
 
+/// Largest NVD response accepted (a full page of 2,000 CVE records is well below this).
+const MAX_NVD_BODY: usize = 32 * 1024 * 1024;
+
+/// URL as recorded in the activity log: no user name, password, query or fragment, which can
+/// carry tokens a user pasted.
+fn loggable_url(raw: &str) -> String {
+    match url::Url::parse(raw) {
+        Ok(mut u) => {
+            let _ = u.set_username("");
+            let _ = u.set_password(None);
+            u.set_query(None);
+            u.set_fragment(None);
+            u.to_string()
+        }
+        Err(_) => "(invalid URL)".into(),
+    }
+}
+
 #[tauri::command]
 pub async fn http_inspect(db: State<'_, Db>, url: String, method: Option<String>) -> AppResult<HttpInspection> {
     let parsed = http_url("URL", &url)?;
@@ -142,7 +160,7 @@ pub async fn http_inspect(db: State<'_, Db>, url: String, method: Option<String>
         elapsed_ms,
     };
     drop(resp); // body is never downloaded
-    db.with(|c| log(c, "utility", "HTTP header inspection", &out.url, None, None, None))?;
+    db.with(|c| log(c, "utility", "HTTP header inspection", &loggable_url(&out.url), None, None, None))?;
     Ok(out)
 }
 
@@ -317,7 +335,7 @@ pub fn normalize_nvd(cve: &Value) -> Option<CveRecord> {
 
 fn search_cache(db: &Db, query: &str) -> AppResult<CveSearchResult> {
     db.with(|c| {
-        let like = format!("%{}%", query.replace('%', "").replace('_', ""));
+        let like = format!("%{}%", query.replace(['%', '_'], ""));
         let mut stmt = c.prepare(
             "SELECT data, fetched_at FROM cve_cache WHERE id LIKE ?1 OR data LIKE ?1 ORDER BY id DESC LIMIT 50",
         )?;
@@ -380,7 +398,16 @@ pub async fn cve_search(db: State<'_, Db>, query: String, live: bool) -> AppResu
     if !status.is_success() {
         return Err(AppError::Network(format!("NVD returned HTTP {status}")));
     }
-    let body: Value = resp.json().await?;
+    // read with a size cap: a broken or hostile response must not exhaust memory
+    let mut resp = resp;
+    let mut raw = Vec::new();
+    while let Some(chunk) = resp.chunk().await? {
+        if raw.len() + chunk.len() > MAX_NVD_BODY {
+            return Err(AppError::Network("NVD returned an unexpectedly large response".into()));
+        }
+        raw.extend_from_slice(&chunk);
+    }
+    let body: Value = serde_json::from_slice(&raw)?;
     let total = body.get("totalResults").and_then(Value::as_i64).unwrap_or(0);
     let records: Vec<CveRecord> = body
         .get("vulnerabilities")
@@ -409,7 +436,7 @@ pub async fn cve_search(db: State<'_, Db>, query: String, live: bool) -> AppResu
     Ok(CveSearchResult { records, source: "live".into(), total_results: total, fetched_at: Some(ts), cached_at: vec![] })
 }
 
-#[tauri::command]
+/// A cached CVE record and when it was fetched (used by MCP; not an IPC command).
 pub async fn cve_get_cached(db: State<'_, Db>, id: String) -> AppResult<Option<(CveRecord, String)>> {
     db.with(|c| {
         let row: Option<(String, String)> = c
@@ -466,6 +493,13 @@ pub async fn cve_history_clear(db: State<'_, Db>) -> AppResult<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn activity_log_urls_drop_credentials_and_queries() {
+        assert_eq!(loggable_url("https://user:pw@example.org/a/b?token=abc#frag"), "https://example.org/a/b");
+        assert_eq!(loggable_url("http://example.org:8080/"), "http://example.org:8080/");
+        assert_eq!(loggable_url("not a url"), "(invalid URL)");
+    }
+
     use super::*;
 
     #[test]

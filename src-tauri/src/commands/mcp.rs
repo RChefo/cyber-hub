@@ -25,8 +25,8 @@ use crate::mcp::prompts;
 /// Path of the `cyberhub-mcp` executable shipped next to the app binary, if present.
 ///
 /// Installers place the sidecar (bundle.externalBin, scripts/build-sidecar.mjs) in the same
-/// directory as the Cyber Hub executable on every platform: the installation folder on Windows,
-/// `Cyber Hub.app/Contents/MacOS` on macOS and `/usr/bin` for the Linux packages. In development
+/// directory as the Cyber Hub executable: the installation folder on Windows and `/usr/bin` for
+/// the Linux packages. In development
 /// cargo builds it into the same `target/<profile>` directory. The lookup never uses the working
 /// directory or PATH.
 pub fn server_path() -> Option<std::path::PathBuf> {
@@ -36,7 +36,7 @@ pub fn server_path() -> Option<std::path::PathBuf> {
 }
 
 /// A warning about the server path for the MCP page: missing executable, or a path that will not
-/// survive a restart (AppImage mount, macOS App Translocation).
+/// survive a restart (AppImage mount).
 pub fn server_path_note(path: Option<&std::path::Path>) -> Option<String> {
     let appdir = std::env::var_os("APPIMAGE").and(std::env::var_os("APPDIR"));
     path_note(path, appdir.as_deref().map(std::path::Path::new), cfg!(debug_assertions))
@@ -52,9 +52,6 @@ fn path_note(path: Option<&std::path::Path>, appimage_dir: Option<&std::path::Pa
     };
     if appimage_dir.is_some_and(|d| path.starts_with(d)) {
         return Some("Cyber Hub is running from an AppImage, so this path is inside a temporary mount that changes every time Cyber Hub starts. MCP clients configured with it stop working after a restart. Install the .deb or .rpm package for a fixed path.".into());
-    }
-    if path.to_string_lossy().contains("/AppTranslocation/") {
-        return Some("macOS is running Cyber Hub from a temporary location (App Translocation), so this path changes. Move Cyber Hub to the Applications folder and open it again before configuring MCP clients.".into());
     }
     None
 }
@@ -564,13 +561,8 @@ fn shell_quote(s: &str) -> String {
 pub fn client_configs(server: &str) -> ClientConfigs {
     let code_json = serde_json::json!({ "mcpServers": { "cyberhub": { "type": "stdio", "command": server, "args": [] } } });
     let desktop_json = serde_json::json!({ "mcpServers": { "cyberhub": { "command": server, "args": [] } } });
-    let desktop_path = if cfg!(windows) {
-        dirs::config_dir().map(|d| d.join("Claude").join("claude_desktop_config.json"))
-    } else if cfg!(target_os = "macos") {
-        dirs::home_dir().map(|d| d.join("Library").join("Application Support").join("Claude").join("claude_desktop_config.json"))
-    } else {
-        None
-    };
+    // Claude Desktop exists for Windows, not for Linux
+    let desktop_path = if cfg!(windows) { dirs::config_dir().map(|d| d.join("Claude").join("claude_desktop_config.json")) } else { None };
     ClientConfigs {
         claude_code_command: format!("claude mcp add --transport stdio --scope user cyberhub -- {}", shell_quote(server)),
         claude_code_json: serde_json::to_string_pretty(&code_json).unwrap_or_default(),
@@ -603,7 +595,7 @@ mod tests {
         assert!(c.claude_code_command.starts_with("claude mcp add --transport stdio --scope user cyberhub -- "));
         assert!(c.claude_code_command.ends_with(&shell_quote(path)), "{}", c.claude_code_command);
         assert!(!c.claude_code_json.contains("key") && !c.claude_desktop_json.contains("env"), "no credentials or environment in client configs");
-        if cfg!(windows) || cfg!(target_os = "macos") {
+        if cfg!(windows) {
             assert!(c.claude_desktop_config_path.unwrap().ends_with("claude_desktop_config.json"));
         }
     }
@@ -619,8 +611,6 @@ mod tests {
         assert!(path_note(Some(mount), Some(Path::new("/tmp/.mount_CyberHXy12")), false).unwrap().contains("AppImage"));
         // AppImage variables inherited from a parent process do not affect an installed copy
         assert_eq!(path_note(Some(Path::new("/usr/bin/cyberhub-mcp")), Some(Path::new("/tmp/.mount_CyberHXy12")), false), None);
-        let translocated = Path::new("/private/var/folders/x/T/AppTranslocation/1A2B/d/Cyber Hub.app/Contents/MacOS/cyberhub-mcp");
-        assert!(path_note(Some(translocated), None, false).unwrap().contains("Applications"));
     }
 
     fn audit_db() -> Db {

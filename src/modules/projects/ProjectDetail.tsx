@@ -323,6 +323,16 @@ export function ProjectDetail({ id }: { id: number }) {
     }
   };
 
+  // the backend opens the system save dialog and writes the file; the page never sees the path
+  const saveReport = async () => {
+    try {
+      const name = await api.projectReportExport(p.id);
+      if (name) notify.success("Report saved", name);
+    } catch (e) {
+      notify.error("Could not save the report", e);
+    }
+  };
+
   const tabs: { id: TabId; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "scope", label: `Scope (${p.targets.length})` },
@@ -428,6 +438,10 @@ export function ProjectDetail({ id }: { id: number }) {
             <Button variant="tertiary" onPress={() => report && copyText(report, "Markdown report copied to clipboard")}>
               <ClipboardCopy className="size-3.5" />
               Copy again
+            </Button>
+            <Button variant="tertiary" onPress={saveReport}>
+              <FileDown className="size-3.5" />
+              Save as file…
             </Button>
             <Button variant="primary" onPress={() => setReport(null)}>
               Done

@@ -13,6 +13,10 @@ use crate::error::{AppError, AppResult};
 /// without bound.
 pub const HISTORY_LIMITS: &[(&str, i64)] = &[("activity_logs", 5000), ("cve_search_history", 500), ("command_history", 2000), ("dork_history", 500)];
 
+/// Lookup caches (keyed by indicator or CVE ID) trimmed at startup to their most recently fetched
+/// entries, so distinct lookups cannot grow the database without bound.
+const CACHE_LIMITS: &[(&str, i64)] = &[("vt_cache", 5000), ("ti_cache", 10000), ("cve_cache", 20000)];
+
 /// Keep the newest rows of a history table listed in [`HISTORY_LIMITS`]; other names are ignored.
 pub fn trim_history(c: &Connection, table: &str) -> rusqlite::Result<usize> {
     let Some(&(table, keep)) = HISTORY_LIMITS.iter().find(|(t, _)| *t == table) else {
@@ -313,6 +317,10 @@ const MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE mcp_audit ADD COLUMN category TEXT;
     "#,
+    // 6 — per-project run history and project deletion (ON DELETE SET NULL) look runs up by project
+    r#"
+    CREATE INDEX idx_executions_project ON executions(project_id, id DESC);
+    "#,
 ];
 
 impl Db {
@@ -336,6 +344,12 @@ impl Db {
             for (table, _) in HISTORY_LIMITS {
                 trim_history(c, table)?;
             }
+            for (table, keep) in CACHE_LIMITS {
+                c.execute(&format!("DELETE FROM {table} WHERE rowid NOT IN (SELECT rowid FROM {table} ORDER BY fetched_at DESC LIMIT ?1)"), [keep])?;
+            }
+            // Only one instance runs at a time, so a run still marked as running was interrupted
+            // (crash or power loss); record that instead of showing it as running forever.
+            c.execute("UPDATE executions SET status = 'error', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'", [crate::util::now()])?;
             Ok(())
         })?;
         Ok(db)
@@ -373,6 +387,37 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reopening_marks_interrupted_runs_and_indexes_runs_by_project() {
+        let path = std::env::temp_dir().join(format!("cyberhub-dbtest-{}-{}.db", std::process::id(), crate::util::now().replace(':', "")));
+        {
+            let db = Db::open(&path).unwrap();
+            db.with(|c| {
+                c.execute("INSERT INTO executions (tool_id, kind, program, args, status, started_at) VALUES ('nmap','run','nmap','[]','running','t')", [])?;
+                c.execute("INSERT INTO executions (tool_id, kind, program, args, status, started_at, finished_at) VALUES ('nmap','run','nmap','[]','succeeded','t','t2')", [])?;
+                let idx: i64 = c.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_executions_project'", [], |r| r.get(0))?;
+                assert_eq!(idx, 1);
+                Ok(())
+            })
+            .unwrap();
+        }
+        let db = Db::open(&path).unwrap();
+        let rows: Vec<(String, Option<String>)> = db
+            .with(|c| {
+                let mut st = c.prepare("SELECT status, finished_at FROM executions ORDER BY id")?;
+                let v = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<Vec<_>, _>>()?;
+                Ok(v)
+            })
+            .unwrap();
+        drop(db);
+        for ext in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{ext}", path.display()));
+        }
+        assert_eq!(rows[0].0, "error", "an interrupted run is not shown as running forever");
+        assert!(rows[0].1.is_some());
+        assert_eq!(rows[1], ("succeeded".to_string(), Some("t2".to_string())), "finished runs are untouched");
+    }
 
     #[test]
     fn history_tables_keep_only_their_newest_rows() {

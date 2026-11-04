@@ -4,8 +4,8 @@
 // Tauri expects the file at src-tauri/binaries/cyberhub-mcp-<target triple>[.exe]. The bundler
 // installs it next to the Cyber Hub executable, without the triple suffix:
 //   Windows  <install dir>\cyberhub-mcp.exe
-//   macOS    Cyber Hub.app/Contents/MacOS/cyberhub-mcp
 //   Linux    /usr/bin/cyberhub-mcp (deb, rpm), usr/bin inside the AppImage
+// Supported platforms are Windows x64 and Linux x64; macOS targets are refused.
 // The app looks for it there (src-tauri/src/commands/mcp.rs, server_path).
 //
 // `tauri build` runs this script from beforeBuildCommand with TAURI_ENV_TARGET_TRIPLE and
@@ -41,6 +41,7 @@ const hostTriple = (() => {
 })();
 const triple = argTarget || process.env.TAURI_ENV_TARGET_TRIPLE || hostTriple;
 if (!/^[a-z0-9_]+(-[a-z0-9_.]+){2,3}$/.test(triple)) throw new Error(`build-sidecar: unexpected target triple ${triple}`);
+if (triple.includes("apple-darwin")) throw new Error("build-sidecar: macOS is not a supported platform for Cyber Hub");
 
 const ext = triple.includes("windows") ? ".exe" : "";
 const profile = debug ? "debug" : "release";
@@ -63,15 +64,7 @@ function build(t) {
   return out;
 }
 
-let built;
-if (triple === "universal-apple-darwin") {
-  const parts = ["aarch64-apple-darwin", "x86_64-apple-darwin"].map(build);
-  built = join(targetDir, "universal-apple-darwin", profile, NAME);
-  mkdirSync(join(built, ".."), { recursive: true });
-  run("lipo", ["-create", "-output", built, ...parts]);
-} else {
-  built = build(triple);
-}
+const built = build(triple);
 
 const binDir = join(tauriDir, "binaries");
 mkdirSync(binDir, { recursive: true });
@@ -84,7 +77,7 @@ const size = statSync(staged).size;
 if (size < 64 * 1024) throw new Error(`build-sidecar: ${staged} is only ${size} bytes`);
 
 // When the staged binary runs on this machine, check that it is the MCP server of this version.
-const runnable = triple === hostTriple || (process.platform === "darwin" && triple.endsWith("apple-darwin"));
+const runnable = triple === hostTriple;
 if (runnable) {
   const v = spawnSync(staged, ["--version"], { encoding: "utf8" });
   const expected = `${NAME} ${JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version}`;

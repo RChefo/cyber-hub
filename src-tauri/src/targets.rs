@@ -9,6 +9,7 @@
 //!   - target list (any line names a network endpoint): **every** non-comment line must
 //!     parse strictly as targets and every entry must be in scope;
 //!   - plain data (wordlists, payload lists, binaries): allowed.
+//!
 //!   Target lists and requests are snapshotted into a private directory and the argument
 //!   is rewritten to the snapshot, so the tool reads exactly what was validated.
 //! * Any other value is scanned for endpoints (URLs, IPs, [IPv6], CIDRs, IPv4 ranges,
@@ -479,6 +480,6 @@ mod tests {
     #[test]
     fn oversized_files_are_rejected_not_skipped() {
         // validate the size guard without writing 256 MB: check the constant is enforced by metadata
-        assert!(MAX_SCAN_BYTES >= 128 * 1024 * 1024);
+        const { assert!(MAX_SCAN_BYTES >= 128 * 1024 * 1024) };
     }
 }

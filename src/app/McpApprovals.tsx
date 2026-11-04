@@ -1,7 +1,7 @@
 import { Button } from "@heroui/react";
 import { listen } from "@tauri-apps/api/event";
 import { Bot, ShieldAlert } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "@/app/store";
 import { ToneChip } from "@/components/ui/Badges";
 import { AppModal } from "@/components/ui/Dialogs";
@@ -35,13 +35,20 @@ export function McpApprovals() {
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
 
+  const lastIds = useRef("");
   const refresh = useCallback(async () => {
     try {
-      setPending(await api.mcpPending());
+      const list = await api.mcpPending();
+      setPending(list);
       const t = Date.now();
       setFetchedAt(t);
       setNow(t);
-      invalidate("mcp");
+      // other MCP views (sidebar badge, MCP page) refresh only when the waiting list changed
+      const ids = list.map((p) => p.id).join(",");
+      if (ids !== lastIds.current) {
+        lastIds.current = ids;
+        invalidate("mcp");
+      }
     } catch {
       /* the MCP bridge may be off */
     }

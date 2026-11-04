@@ -28,6 +28,15 @@ use commands::{activity, intel, library, mcp as mcp_commands, projects, system, 
 
 pub fn run() {
     tauri::Builder::default()
+        // must be registered first: a second launch exits here, before setup clears runtime and
+        // MCP files the first instance is using; its arguments are ignored, the window is focused
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -144,7 +153,6 @@ pub fn run() {
             intel::dns_lookup,
             intel::http_inspect,
             intel::cve_search,
-            intel::cve_get_cached,
             intel::cve_history,
             intel::cve_cache_stats,
             intel::cve_history_clear,

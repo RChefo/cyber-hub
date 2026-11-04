@@ -239,22 +239,41 @@ impl OutputBuf {
 }
 
 async fn pump<R: AsyncRead + Unpin>(reader: R, is_err: bool, channel: Channel<ExecEvent>, buf: Arc<Mutex<OutputBuf>>) {
+    let prefix = if is_err { "[stderr] " } else { "" };
     let mut reader = BufReader::new(reader);
     let mut raw = Vec::with_capacity(1024);
+    // The stored copy is kept per logical line: a long line arrives in chunks, and redaction
+    // must see the whole line (a secret may straddle a chunk boundary, as may a UTF-8 character).
+    let mut line_bytes: Vec<u8> = Vec::new();
+    let store = |bytes: &mut Vec<u8>| {
+        if let Ok(mut b) = buf.lock() {
+            b.push(prefix, String::from_utf8_lossy(bytes).trim_end_matches(['\r', '\n']));
+        }
+        bytes.clear();
+    };
     loop {
         raw.clear();
         // bounded read: a line longer than MAX_LINE_BYTES is delivered in chunks
         match (&mut reader).take(MAX_LINE_BYTES).read_until(b'\n', &mut raw).await {
             Ok(0) | Err(_) => break,
             Ok(_) => {
-                let line = String::from_utf8_lossy(&raw).trim_end_matches(['\r', '\n']).to_string();
-                if let Ok(mut b) = buf.lock() {
-                    b.push(if is_err { "[stderr] " } else { "" }, &line);
+                if line_bytes.len() + raw.len() <= MAX_STORED_OUTPUT {
+                    line_bytes.extend_from_slice(&raw);
+                } else if let Ok(mut b) = buf.lock() {
+                    b.truncated = true;
                 }
+                if raw.ends_with(b"\n") {
+                    store(&mut line_bytes);
+                }
+                // the live view gets every chunk as it arrives
+                let line = String::from_utf8_lossy(&raw).trim_end_matches(['\r', '\n']).to_string();
                 let ev = if is_err { ExecEvent::Stderr { line } } else { ExecEvent::Stdout { line } };
                 let _ = channel.send(ev);
             }
         }
+    }
+    if !line_bytes.is_empty() {
+        store(&mut line_bytes);
     }
 }
 
@@ -299,6 +318,12 @@ pub fn start(app: &AppHandle, spec: SpawnSpec, channel: Channel<ExecEvent>, on_f
         }
     };
     let tree = Tree::attach(&child);
+    if tree.is_none() {
+        // e.g. the tool already runs inside a job that does not allow nesting
+        let _ = channel.send(ExecEvent::Stderr {
+            line: "[Cyber Hub] Could not attach the process tree: cancelling stops the main process only, not processes it started.".into(),
+        });
+    }
 
     let (tx, rx) = oneshot::channel::<()>();
     app.state::<ProcessManager>()
@@ -336,17 +361,18 @@ pub fn start(app: &AppHandle, spec: SpawnSpec, channel: Channel<ExecEvent>, on_f
         for t in [t_out, t_err].into_iter().flatten() {
             let _ = tokio::time::timeout(Duration::from_secs(3), t).await;
         }
+        // unregister first, so an exit-time kill never uses the job handle after it is closed
+        if let Ok(mut m) = app.state::<ProcessManager>().running.lock() {
+            m.remove(&id);
+        }
         drop(tree); // Windows: closes the job (kills leftovers). Unix: kills the group.
         if let Some(d) = &cleanup {
             let _ = std::fs::remove_dir_all(d);
         }
-        if let Ok(mut m) = app.state::<ProcessManager>().running.lock() {
-            m.remove(&id);
-        }
 
         let (text, truncated) = buf.lock().map(|b| (redact::redact_text(&b.text), b.truncated)).unwrap_or_default();
         let db = app.state::<Db>();
-        let _ = db.with(|c| {
+        let recorded = db.with(|c| {
             c.execute(
                 "UPDATE executions SET status = ?2, exit_code = ?3, output = ?4, truncated = ?5, finished_at = ?6 WHERE id = ?1",
                 rusqlite::params![id, status, code, text, truncated as i64, now()],
@@ -366,6 +392,10 @@ pub fn start(app: &AppHandle, spec: SpawnSpec, channel: Channel<ExecEvent>, on_f
             )?;
             Ok(())
         });
+        if let Err(e) = recorded {
+            // the row stays 'running' and is marked as an error at the next start
+            eprintln!("Cyber Hub: could not record the end of run {id}: {e}");
+        }
         let _ = channel.send(ExecEvent::Exit { status: status.to_string(), code });
         if let Some(hook) = on_finish {
             hook(&app, status == "succeeded");
@@ -378,6 +408,21 @@ pub fn start(app: &AppHandle, spec: SpawnSpec, channel: Channel<ExecEvent>, on_f
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A secret that straddles the 16 KB chunk boundary of a long line is still redacted in the
+    /// stored output, and the stored line is not broken up.
+    #[tokio::test]
+    async fn stored_output_redacts_secrets_split_across_chunks() {
+        let mut line = "a".repeat(MAX_LINE_BYTES as usize - 12);
+        line.push_str(" password=Sup3rSecretValue99 tail\nnext line\n");
+        let buf = Arc::new(Mutex::new(OutputBuf { text: String::new(), truncated: false }));
+        let channel: Channel<ExecEvent> = Channel::new(|_| Ok(()));
+        pump(std::io::Cursor::new(line.into_bytes()), false, channel, buf.clone()).await;
+        let stored = redact::redact_text(&buf.lock().unwrap().text);
+        assert!(!stored.contains("SecretValue99"), "part of the secret leaked into stored output: {stored:.200}");
+        assert_eq!(stored.lines().count(), 2, "the long line is stored as one line");
+        assert!(stored.ends_with("next line\n"));
+    }
 
     /// Spawn a parent that starts a long-running grandchild, terminate the tree and
     /// verify the grandchild is gone (real processes, no mocks).

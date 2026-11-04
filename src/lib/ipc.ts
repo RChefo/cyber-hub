@@ -147,7 +147,6 @@ export const api = {
   dnsLookup: (name: string, recordType: string) => call<T.DnsRecord[]>("dns_lookup", { name, recordType }),
   httpInspect: (url: string, method: "GET" | "HEAD") => call<T.HttpInspection>("http_inspect", { url, method }),
   cveSearch: (query: string, live: boolean) => call<T.CveSearchResult>("cve_search", { query, live }),
-  cveGetCached: (id: string) => call<[T.CveRecord, string] | null>("cve_get_cached", { id }),
   cveHistory: () => call<T.CveHistoryItem[]>("cve_history"),
   cveCacheStats: () => call<[number, string | null]>("cve_cache_stats"),
   cveHistoryClear: () => call<void>("cve_history_clear"),

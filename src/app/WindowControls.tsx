@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Minimize / maximize-restore / close for the frameless window, using Tauri's window API
- * (works on Windows, macOS and Linux). The maximize/restore icon follows the real window
+ * (works on Windows and Linux). The maximize/restore icon follows the real window
  * state: it is re-read on every resize event, so maximizing by double-clicking the top bar,
  * snapping or keyboard shortcuts are reflected too. The buttons are not drag regions.
  */

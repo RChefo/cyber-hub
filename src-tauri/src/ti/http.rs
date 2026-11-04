@@ -163,9 +163,11 @@ pub mod mock {
         pub seen: Arc<Mutex<Vec<Seen>>>,
     }
 
-    /// Serve canned responses in order: (status, extra headers, body). After they run
-    /// out, further connections get 500.
-    pub fn serve(responses: Vec<(u16, Vec<(String, String)>, String)>) -> Server {
+    /// A canned response: status, extra headers, body.
+    pub type Canned = (u16, Vec<(String, String)>, String);
+
+    /// Serve canned responses in order. After they run out, further connections get 500.
+    pub fn serve(responses: Vec<Canned>) -> Server {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let seen = Arc::new(Mutex::new(Vec::new()));

@@ -222,7 +222,7 @@ function PolicyRow({ row, titles }: { row: McpPolicyRow; titles: Map<string, str
     setSaving(true);
     try {
       await api.mcpSetPolicy(row.category, p);
-      invalidate("mcp");
+      invalidate("mcp", "mcp-catalog");
       notify.success(`${CATEGORY_SHORT[row.category] ?? row.label}: ${POLICY_LABEL[p]}`);
     } catch (e) {
       notify.error("Could not change the permission", e);
@@ -558,7 +558,7 @@ export default function McpPage() {
   const tab = tabFromParams(route.params);
   const status = useQuery(["mcp"], api.mcpStatus, [], runtime);
   const clients = useQuery(["mcp"], api.mcpClients, [], runtime);
-  const catalog = useQuery(["mcp"], api.mcpCatalog, [], runtime);
+  const catalog = useQuery(["mcp-catalog"], api.mcpCatalog, [], runtime);
   const projects = useQuery(["projects"], api.projectsList, [], runtime);
   const [toggling, setToggling] = useState(false);
 
@@ -577,7 +577,7 @@ export default function McpPage() {
     setToggling(true);
     try {
       await api.mcpSetEnabled(on);
-      invalidate("mcp");
+      invalidate("mcp", "mcp-catalog");
       notify.success(on ? "MCP is on" : "MCP is off", on ? "AI clients on this computer can now connect." : "Connected clients were disconnected and waiting requests cancelled.");
     } catch (e) {
       notify.error("Could not change MCP", e);

@@ -1,2 +1,3 @@
 # Public example token from jwt.io (John Doe, demo secret), used as a test fixture: not a credential.
-4ba96110e880a0982c912189eb706b97ac71cafb:
+# The fixture line carries an inline `gitleaks:allow`; this entry covers the commit that added it.
+4ba96110e880a0982c912189eb706b97ac71cafb:src/modules/utilities/lib/jwt.test.ts:jwt:11

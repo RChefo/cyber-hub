@@ -3,6 +3,7 @@ import { Activity as ActivityIcon, Bell, ChevronDown, Search, Settings, SquareTe
 import { Kbd } from "@/components/ui/Code";
 import { ActivityIcon as KindIcon } from "@/modules/dashboard/activityMeta";
 import { openTerminal } from "@/lib/actions";
+import { dragRegion } from "@/lib/dragRegion";
 import { api } from "@/lib/ipc";
 import { useQuery } from "@/lib/query";
 import { formatRelative, modKey } from "@/lib/utils";
@@ -75,11 +76,11 @@ export function Topbar() {
   const item = navItem(route.page);
 
   return (
-    // data-tauri-drag-region: the window is frameless, so empty top-bar space moves the window
-    // (double-click toggles maximize). Interactive children are unaffected.
-    <header data-tauri-drag-region className="flex h-14 shrink-0 items-center gap-3 bg-background px-5">
-      <div data-tauri-drag-region className="min-w-0 flex-1">
-        <div data-tauri-drag-region className="truncate text-[14.5px] font-medium">{item.label}</div>
+    // the window is frameless, so empty top-bar space moves the window (double-click toggles
+    // maximize). Interactive children are unaffected.
+    <header {...dragRegion()} className="flex h-14 shrink-0 items-center gap-3 bg-background px-5">
+      <div {...dragRegion()} className="min-w-0 flex-1">
+        <div {...dragRegion()} className="truncate text-[14.5px] font-medium">{item.label}</div>
       </div>
 
       <button

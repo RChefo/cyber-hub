@@ -300,7 +300,7 @@ export function FileAnalysis({ hasKey }: { hasKey: boolean }) {
                   Upload to VirusTotal…
                 </Button>
                 {uploading && progress && progress.phase !== "confirming" && progress.phase !== "processing" && (
-                  <Button variant="ghost" onPress={() => api.vtFileCancel(file.handle).catch(() => undefined)}>
+                  <Button variant="ghost" onPress={() => api.vtFileCancel(file.handle).catch((e) => notify.error("Could not cancel the upload", e))}>
                     Cancel upload
                   </Button>
                 )}
