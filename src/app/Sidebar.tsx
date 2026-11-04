@@ -1,10 +1,12 @@
 import { Button, Tooltip } from "@heroui/react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { api } from "@/lib/ipc";
+import { useQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, SETTINGS_ITEM, type NavItem } from "./routes";
 import { useApp } from "./store";
 
-function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+function NavLink({ item, collapsed, badge }: { item: NavItem; collapsed: boolean; badge?: number }) {
   const { route, navigate } = useApp();
   const active = route.page === item.id;
   const Icon = item.icon;
@@ -13,7 +15,7 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
       variant="ghost"
       onPress={() => navigate(item.id)}
       aria-current={active ? "page" : undefined}
-      aria-label={collapsed ? item.label : undefined}
+      aria-label={collapsed ? (badge ? `${item.label}, ${badge} waiting` : item.label) : badge ? `${item.label}, ${badge} waiting for approval` : undefined}
       className={cn(
         "group relative h-8 w-full justify-start gap-2.5 rounded-md px-2.5 text-[13.5px] font-normal",
         active ? "bg-white/[0.06] text-foreground hover:bg-white/[0.07]" : "text-muted hover:bg-white/[0.035] hover:text-foreground",
@@ -23,6 +25,15 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
       {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-[2px] rounded-full bg-accent" aria-hidden />}
       <Icon className={cn("size-[17px] shrink-0", active ? "text-accent-soft-foreground" : "text-muted group-hover:text-foreground")} strokeWidth={1.75} />
       {!collapsed && <span className="truncate">{item.label}</span>}
+      {badge ? (
+        collapsed ? (
+          <span className="absolute top-1 right-2 size-1.5 rounded-full bg-warning" aria-hidden />
+        ) : (
+          <span className="tabular ml-auto rounded-full bg-warning-soft px-1.5 text-[11px] leading-[18px] text-warning-soft-foreground" aria-hidden>
+            {badge}
+          </span>
+        )
+      ) : null}
     </Button>
   );
   if (!collapsed) return button;
@@ -35,8 +46,10 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
 }
 
 export function Sidebar() {
-  const { prefs, setPref } = useApp();
+  const { prefs, setPref, runtime } = useApp();
   const collapsed = prefs["ui.sidebarCollapsed"] === true;
+  // MCP requests waiting for approval (refreshed whenever the approval listener sees a change)
+  const mcpPending = useQuery(["mcp"], api.mcpPending, [], runtime).data?.length ?? 0;
 
   return (
     <aside
@@ -66,7 +79,7 @@ export function Sidebar() {
             )}
             <div className="flex flex-col gap-0.5">
               {group.items.map((item) => (
-                <NavLink key={item.id} item={item} collapsed={collapsed} />
+                <NavLink key={item.id} item={item} collapsed={collapsed} badge={item.id === "mcp" ? mcpPending : undefined} />
               ))}
             </div>
           </div>

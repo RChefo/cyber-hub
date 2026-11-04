@@ -43,7 +43,7 @@ pub fn run() {
             app.manage(mcp::ops::LiveRuns::default());
             // remove target-file snapshots left behind by a crash
             tools::clean_runtime_dir(app.handle());
-            // MCP bridge: off unless the user turned it on in Settings → Integrations → MCP
+            // MCP bridge: off unless the user turned it on on the MCP page
             let enabled = mcp_commands::enabled_pref(&app.state::<db::Db>());
             let _ = std::fs::remove_dir_all(dir.join("mcp")); // stale connection files from a crash
             if enabled {
@@ -159,7 +159,7 @@ pub fn run() {
             threat_intel::ti_saved_add,
             threat_intel::ti_saved_remove,
             threat_intel::ti_export,
-            // MCP integration (Settings → Integrations → MCP; not reachable from MCP clients)
+            // MCP integration (MCP page; not reachable from MCP clients)
             mcp_commands::mcp_status,
             mcp_commands::mcp_set_enabled,
             mcp_commands::mcp_set_policy,
@@ -167,6 +167,8 @@ pub fn run() {
             mcp_commands::mcp_decide,
             mcp_commands::mcp_audit,
             mcp_commands::mcp_audit_clear,
+            mcp_commands::mcp_catalog,
+            mcp_commands::mcp_clients,
             mcp_commands::mcp_client_configs,
             // system
             system::system_info,

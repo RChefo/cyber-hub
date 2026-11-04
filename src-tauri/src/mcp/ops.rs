@@ -333,6 +333,8 @@ struct AuditEntry {
     approval: &'static str,
     approval_id: Option<String>,
     execution_id: Option<i64>,
+    /// permission category that applied (None for unknown tools and malformed calls)
+    category: Option<Category>,
 }
 
 fn approval_word(r: &Result<Value, ErrorBody>) -> &'static str {
@@ -348,7 +350,7 @@ async fn handle(app: AppHandle, conn: ConnCtx, tool: String, args: Value) -> Res
     let started = Instant::now();
     let args = if args.is_null() { json!({}) } else { args };
     let name: String = tool.chars().filter(|c| !c.is_control()).take(64).collect();
-    let mut audit = AuditEntry { approval: "not_required", approval_id: None, execution_id: None };
+    let mut audit = AuditEntry { approval: "not_required", approval_id: None, execution_id: None, category: None };
     let refuse = |e: ErrorBody, audit: &AuditEntry| {
         let r = Err(e);
         write_audit(&app, &conn, &name, &json!({}), audit, &r, started.elapsed());
@@ -369,23 +371,24 @@ async fn handle(app: AppHandle, conn: ConnCtx, tool: String, args: Value) -> Res
         return refuse(err("invalid_params", "Arguments are too large"), &audit);
     }
     let category = catalog::effective_category(spec, &args);
+    audit.category = Some(category);
     let policy = load_policy(&app.state::<Db>()).get(&category).copied().unwrap_or(Policy::Deny);
 
     let result = match policy {
         Policy::Deny => {
             audit.approval = "denied_by_policy";
-            Err(err("denied", format!("{} is turned off for MCP clients in Cyber Hub (Settings → Integrations → MCP).", category.label())))
+            Err(err("denied", format!("{} is turned off for MCP clients in Cyber Hub (MCP page → Permissions).", category.label())))
         }
         Policy::Allow => run_op(&app, &conn, spec.name, &args).await,
         Policy::Ask => match describe(&app, spec.name, &args) {
             Err(e) => Err(e), // invalid or out-of-scope requests never reach the user
-            Ok((summary, details, project_id)) => {
+            Ok((summary, details, project_id, checks)) => {
                 let bridge = app.state::<Arc<Bridge>>();
                 // a client that already disconnected cannot leave a request behind
                 if !bridge.is_connected(conn.id) || bridge.info().is_none() {
                     Err(err("cancelled", "The client disconnected."))
                 } else {
-                    match bridge.approvals.request(NewRequest { connection: conn.id, client: conn.client.label(), tool: spec.name.into(), category, summary, details, project_id }) {
+                    match bridge.approvals.request(NewRequest { connection: conn.id, client: conn.client.label(), tool: spec.name.into(), category, summary, details, checks, project_id }) {
                         Err(m) => Err(err("busy", m)),
                         Ok((id, rx)) => {
                             audit.approval_id = Some(id.clone());
@@ -418,6 +421,7 @@ async fn handle(app: AppHandle, conn: ConnCtx, tool: String, args: Value) -> Res
                                 // the final outcome is always audited here, also when it is decided after the
                                 // client stopped waiting (runs and uploads included)
                                 let entry = AuditEntry {
+                                    category: Some(category),
                                     approval: approval_word(&outcome),
                                     approval_id: Some(id2.clone()),
                                     execution_id: outcome.as_ref().ok().and_then(|v| v.get("runId")).and_then(Value::as_i64),
@@ -464,9 +468,9 @@ fn write_audit(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value, a: &Au
     let db = app.state::<Db>();
     let _ = db.with(|c| {
         c.execute(
-            "INSERT INTO mcp_audit (at, client, connection, tool, arguments, project_id, approval, approval_id, execution_id, result, message, duration_ms)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
-            params![crate::util::now(), conn.client.label(), conn.id as i64, tool, redacted_args(args), project_id, a.approval, a.approval_id, a.execution_id, status, message, took.as_millis() as i64],
+            "INSERT INTO mcp_audit (at, client, connection, tool, arguments, project_id, approval, approval_id, execution_id, result, message, duration_ms, category)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![crate::util::now(), conn.client.label(), conn.id as i64, tool, redacted_args(args), project_id, a.approval, a.approval_id, a.execution_id, status, message, took.as_millis() as i64, a.category.map(|c| c.as_str())],
         )?;
         c.execute("DELETE FROM mcp_audit WHERE id NOT IN (SELECT id FROM mcp_audit ORDER BY id DESC LIMIT 1000)", [])?;
         Ok(())
@@ -571,7 +575,10 @@ fn d(label: &str, value: impl Into<String>) -> Detail {
 
 /// Validate a sensitive request and describe it for the approval prompt. Fails for invalid or
 /// out-of-scope requests, so those are refused without bothering the user.
-fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<(String, Vec<Detail>, Option<i64>), ErrorBody> {
+type Described = (String, Vec<Detail>, Option<i64>, Vec<String>);
+
+/// What the user sees for a request (summary, details, project) and the checks that passed.
+fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, ErrorBody> {
     let db = app.state::<Db>();
     match tool {
         "cyberhub_run_tool" => {
@@ -589,7 +596,13 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<(String, Vec<De
             for w in &v.warnings {
                 details.push(d("Warning", w.clone()));
             }
-            Ok((format!("Run {name}"), details, a.project_id))
+            let mut checks = vec![format!("Program is the detected catalog executable for {name}; no shell"), "No local file arguments".to_string()];
+            if v.requires_scope {
+                checks.push(format!("{} target{} inside the project's authorized scope, exclusions applied", v.checked_targets.len(), if v.checked_targets.len() == 1 { "" } else { "s" }));
+            } else {
+                checks.push("This tool takes no network targets".into());
+            }
+            Ok((format!("Run {name}"), details, a.project_id, checks))
         }
         "cyberhub_vt_upload_file" => {
             let a: UploadArg = opt_obj(args)?;
@@ -597,13 +610,15 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<(String, Vec<De
                 d("What happens", "You choose a file in the system file picker. Cyber Hub hashes it, then asks again in a system dialog before uploading."),
                 d("Privacy", "Uploaded files are shared with VirusTotal, its partners and the security community. Never upload sensitive, confidential, proprietary or personal files."),
             ];
+            let mut checks = vec!["No file has been chosen yet; the client cannot name one".to_string()];
             if let Some(h) = &a.expected_sha256 {
                 if h.len() != 64 || !h.chars().all(|c| c.is_ascii_hexdigit()) {
                     return Err(err("invalid_params", "expected_sha256 must be 64 hexadecimal characters"));
                 }
                 details.push(d("Expected SHA-256", h.to_ascii_lowercase()));
+                checks.push("The file you pick must match the expected SHA-256".into());
             }
-            Ok(("Upload a file to VirusTotal (public submission)".into(), details, None))
+            Ok(("Upload a file to VirusTotal (public submission)".into(), details, None, checks))
         }
         "cyberhub_create_finding" => {
             let a: CreateFinding = parse(args)?;
@@ -621,12 +636,18 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<(String, Vec<De
                     d("Description", preview),
                 ],
                 Some(a.project_id),
+                vec!["Arguments valid".into(), format!("Project #{} exists", a.project_id)],
             ))
         }
         "cyberhub_save_indicator" => {
             let a: SaveIndicator = parse(args)?;
             let ind = crate::ti::indicator::detect(&a.indicator).map_err(|e| err("validation", e))?;
-            Ok(("Save an indicator in Threat Intel".into(), vec![d("Indicator", ind.value), d("Note", a.note.unwrap_or_default())], None))
+            Ok((
+                "Save an indicator in Threat Intel".into(),
+                vec![d("Indicator", ind.value), d("Note", a.note.unwrap_or_default())],
+                None,
+                vec![format!("Recognized as {}; private and internal values are refused", ind.kind.as_str())],
+            ))
         }
         "cyberhub_export_report" => {
             let a: ExportArg = parse(args)?;
@@ -634,12 +655,22 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<(String, Vec<De
                 "project" => {
                     let p = a.project_id.ok_or_else(|| err("invalid_params", "project_id is required for a project report"))?;
                     check_project(&db, p)?;
-                    Ok((format!("Save the report of {} to a file", project_name(&db, p)), vec![d("Location", "You choose it in the system save dialog")], Some(p)))
+                    Ok((
+                        format!("Save the report of {} to a file", project_name(&db, p)),
+                        vec![d("Location", "You choose it in the system save dialog")],
+                        Some(p),
+                        vec![format!("Project #{p} exists"), "No path from the client; you choose the location".into()],
+                    ))
                 }
                 "threat_intel" => {
                     let i = a.indicator.ok_or_else(|| err("invalid_params", "indicator is required for a threat-intelligence report"))?;
                     let ind = crate::ti::indicator::detect(&i).map_err(|e| err("validation", e))?;
-                    Ok(("Save a threat-intelligence report to a file".into(), vec![d("Indicator", ind.value), d("Location", "You choose it in the system save dialog")], None))
+                    Ok((
+                        "Save a threat-intelligence report to a file".into(),
+                        vec![d("Indicator", ind.value), d("Location", "You choose it in the system save dialog")],
+                        None,
+                        vec![format!("Recognized as {}", ind.kind.as_str()), "No path from the client; you choose the location".into()],
+                    ))
                 }
                 _ => Err(err("invalid_params", "kind must be project or threat_intel")),
             }
@@ -654,10 +685,12 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<(String, Vec<De
                 _ => "External lookup",
             };
             let mut details = vec![];
+            let mut checks = vec![];
             for k in ["indicator", "hash", "query", "cve_id", "analysis_id"] {
                 if let Some(v) = args.get(k).and_then(Value::as_str) {
                     if matches!(k, "indicator" | "hash") {
-                        crate::ti::indicator::detect(v).map_err(|e| err("validation", e))?;
+                        let ind = crate::ti::indicator::detect(v).map_err(|e| err("validation", e))?;
+                        checks.push(format!("Recognized as {}; private and internal values are refused", ind.kind.as_str()));
                     }
                     details.push(d(k, v.chars().take(300).collect::<String>()));
                 }
@@ -665,7 +698,10 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<(String, Vec<De
             if let Some(p) = args.get("providers").and_then(Value::as_array) {
                 details.push(d("providers", p.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", ")));
             }
-            Ok((summary.into(), details, None))
+            if checks.is_empty() {
+                checks.push("Arguments valid".into());
+            }
+            Ok((summary.into(), details, None, checks))
         }
     }
 }

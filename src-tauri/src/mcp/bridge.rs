@@ -43,8 +43,11 @@ pub trait Dispatcher: Send + Sync + 'static {
 #[serde(rename_all = "camelCase")]
 pub struct ConnView {
     pub id: u64,
-    /// self-reported by the MCP client
+    /// self-reported by the MCP client ("name version")
     pub client: String,
+    /// self-reported name and version, shown as such; never used for authorization
+    pub client_name: String,
+    pub client_version: String,
     pub connected_at: String,
     pub requests: u64,
     pub last_request_at: Option<String>,
@@ -198,7 +201,7 @@ async fn serve_connection(
     }
     let client = auth.client.sanitized();
     if let Ok(mut c) = conns.lock() {
-        c.insert(id, ConnView { id, client: client.label(), connected_at: crate::util::now(), requests: 0, last_request_at: None });
+        c.insert(id, ConnView { id, client: client.label(), client_name: client.name.clone(), client_version: client.version.clone(), connected_at: crate::util::now(), requests: 0, last_request_at: None });
     }
 
     // ── requests
@@ -418,7 +421,7 @@ mod tests {
         // a pending approval of a client is cancelled when it disconnects
         let (_id, rx) = bridge
             .approvals
-            .request(crate::mcp::approvals::NewRequest { connection: 99, client: "x".into(), tool: "t".into(), category: crate::mcp::catalog::Category::RunTools, summary: String::new(), details: vec![], project_id: None })
+            .request(crate::mcp::approvals::NewRequest { connection: 99, client: "x".into(), tool: "t".into(), category: crate::mcp::catalog::Category::RunTools, summary: String::new(), details: vec![], checks: vec![], project_id: None })
             .unwrap();
         bridge.approvals.cancel_connection(99);
         assert_eq!(rx.await.unwrap(), crate::mcp::approvals::Decision::Cancelled);

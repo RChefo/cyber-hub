@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   BookMarked,
+  Bot,
   Boxes,
   FolderKanban,
   LayoutDashboard,
@@ -28,6 +29,7 @@ export type PageId =
   | "virustotal"
   | "threatintel"
   | "utilities"
+  | "mcp"
   | "settings";
 
 export interface NavItem {
@@ -67,6 +69,10 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Toolkit",
     items: [{ id: "utilities", label: "Security Utilities", icon: Wrench, description: "Encoders, parsers and analyzers" }],
+  },
+  {
+    label: "Integrations",
+    items: [{ id: "mcp", label: "MCP", icon: Bot, description: "AI client access, approvals and audit" }],
   },
 ];
 

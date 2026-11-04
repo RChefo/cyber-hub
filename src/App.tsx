@@ -21,6 +21,7 @@ const PAGES: Record<PageId, React.LazyExoticComponent<ComponentType>> = {
   virustotal: lazy(() => import("@/modules/virustotal/VirusTotalPage")),
   threatintel: lazy(() => import("@/modules/threatintel/ThreatIntelPage")),
   utilities: lazy(() => import("@/modules/utilities/UtilitiesPage")),
+  mcp: lazy(() => import("@/modules/mcp/McpPage")),
   settings: lazy(() => import("@/modules/settings/SettingsPage")),
 };
 

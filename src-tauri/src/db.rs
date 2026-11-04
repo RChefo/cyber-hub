@@ -295,6 +295,10 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_mcp_audit_time ON mcp_audit(id DESC);
     "#,
+    // 5 — permission category that applied to each MCP call (NULL for unknown tools)
+    r#"
+    ALTER TABLE mcp_audit ADD COLUMN category TEXT;
+    "#,
 ];
 
 impl Db {

@@ -266,10 +266,11 @@ pub fn tool(name: &str) -> Option<&'static ToolSpec> {
 
 /// Category for a specific call (some tools only reach the network when asked to).
 pub fn effective_category(spec: &ToolSpec, args: &Value) -> Category {
-    match spec.name {
-        "cyberhub_lookup_cve" | "cyberhub_search_vulnerabilities" if args.get("live").and_then(Value::as_bool) == Some(true) => Category::ExternalLookup,
-        _ => spec.category,
-    }
+    CONDITIONAL_CATEGORY
+        .iter()
+        .find(|(t, arg, _)| *t == spec.name && args.get(*arg).and_then(Value::as_bool) == Some(true))
+        .map(|(_, _, c)| *c)
+        .unwrap_or(spec.category)
 }
 
 /// Read-only resources and the read tool that serves each.
@@ -283,6 +284,24 @@ pub static RESOURCES: &[(&str, &str, &str, &str)] = &[
 ];
 
 pub const SCOPE_TEMPLATE: &str = "cyberhub://project/{project_id}/scope";
+pub const SCOPE_TEMPLATE_NAME: &str = "project-scope";
+pub const SCOPE_TEMPLATE_DESCRIPTION: &str = "Authorized scope (in-scope and excluded targets) of one project";
+
+/// Tool groups in display order, with their labels.
+pub const GROUPS: &[(&str, &str)] = &[
+    ("discovery", "Discovery"),
+    ("projects", "Projects & Scope"),
+    ("execution", "Execution"),
+    ("virustotal", "VirusTotal"),
+    ("threat_intel", "Threat Intelligence"),
+    ("vulnerabilities", "Vulnerability Intelligence"),
+    ("reports", "Reports & History"),
+    ("approvals", "Approvals"),
+];
+
+/// Tools whose permission category depends on their arguments: (tool, argument, category when set).
+pub const CONDITIONAL_CATEGORY: &[(&str, &str, Category)] =
+    &[("cyberhub_lookup_cve", "live", Category::ExternalLookup), ("cyberhub_search_vulnerabilities", "live", Category::ExternalLookup)];
 
 /// Resolve a resource URI to (read tool, arguments). Only read tools are reachable.
 pub fn resource_call(uri: &str) -> Option<(&'static str, Value)> {
@@ -329,6 +348,16 @@ mod tests {
         let cve = tool("cyberhub_lookup_cve").unwrap();
         assert_eq!(effective_category(cve, &json!({"cve_id": "CVE-2021-44228"})), Category::Read);
         assert_eq!(effective_category(cve, &json!({"cve_id": "CVE-2021-44228", "live": true})), Category::ExternalLookup);
+    }
+
+    #[test]
+    fn every_tool_belongs_to_a_listed_group() {
+        for t in TOOLS {
+            assert!(GROUPS.iter().any(|(g, _)| *g == t.group), "{} has an unlisted group {}", t.name, t.group);
+        }
+        for (t, _, _) in CONDITIONAL_CATEGORY {
+            assert!(tool(t).is_some());
+        }
     }
 
     #[test]

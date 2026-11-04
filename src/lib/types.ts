@@ -532,8 +532,10 @@ export interface McpPolicyRow {
 
 export interface McpConnection {
   id: number;
-  /** self-reported by the MCP client */
+  /** self-reported by the MCP client ("name version") */
   client: string;
+  clientName: string;
+  clientVersion: string;
   connectedAt: string;
   requests: number;
   lastRequestAt: string | null;
@@ -562,6 +564,8 @@ export interface McpPending {
   category: string;
   summary: string;
   details: { label: string; value: string }[];
+  /** checks Cyber Hub performed before showing the request */
+  checks: string[];
   projectId: number | null;
   createdAt: string;
   expiresInSecs: number;
@@ -581,6 +585,82 @@ export interface McpAuditRow {
   result: string;
   message: string;
   durationMs: number;
+  /** permission category that applied */
+  category: string | null;
+}
+
+export type McpAuditResult = "ok" | "awaiting_approval" | "refused" | "error";
+
+export interface McpAuditFilter {
+  client?: string;
+  category?: string;
+  result?: McpAuditResult;
+}
+
+export interface McpParam {
+  name: string;
+  kind: string;
+  required: boolean;
+  description: string;
+  values: string[];
+}
+
+export interface McpCatalogTool {
+  name: string;
+  title: string;
+  group: string;
+  groupLabel: string;
+  description: string;
+  category: string;
+  categoryLabel: string;
+  policy: McpPolicy;
+  requiresApproval: boolean;
+  nativeConfirmation: boolean;
+  available: boolean;
+  note: string | null;
+  readOnly: boolean;
+  parameters: McpParam[];
+}
+
+export interface McpCatalogResource {
+  uri: string;
+  name: string;
+  description: string;
+  mimeType: string;
+  template: boolean;
+  servedBy: string;
+  parameters: McpParam[];
+}
+
+export interface McpCatalogPrompt {
+  name: string;
+  title: string;
+  description: string;
+  arguments: McpParam[];
+}
+
+export interface McpCatalog {
+  groups: [string, string][];
+  tools: McpCatalogTool[];
+  resources: McpCatalogResource[];
+  prompts: McpCatalogPrompt[];
+  instructions: string;
+}
+
+export interface McpClientRow {
+  /** self-reported, never verified */
+  label: string;
+  name: string;
+  version: string;
+  connected: boolean;
+  connections: number;
+  connectedSince: string | null;
+  sessionRequests: number;
+  loggedRequests: number;
+  lastActivity: string | null;
+  lastTool: string | null;
+  lastResult: string | null;
+  lastApproval: string | null;
 }
 
 export interface McpClientConfigs {

@@ -42,7 +42,7 @@ Other scripts:
 | Vulnerability Intel | NVD CVE API 2.0 search (live or local cache, clearly labeled), CVSS 4.0/3.x/2.0 with vector breakdown, CWE names, affected products, references, CISA KEV flag, add as finding. |
 | Projects | Assessments with authorized scope (domains, wildcards, IPs, CIDRs, URLs, exclusions), findings with evidence references, notes, tool run history, Markdown report export. |
 | Security Utilities | Transform workbench, Base64, URL, Hex, JWT inspector, hash identifier, hash calculator, regex tester, JSON/XML/HTML formatters, URL parser, IP/CIDR calculator, User-Agent parser, DNS lookup, HTTP header analyzer. |
-| MCP integration | Claude Code, Claude Desktop and other MCP clients can use Cyber Hub's real functionality through `cyberhub-mcp`: 34 tools, 7 resources and 6 prompts. Sensitive operations (runs, uploads, exports, local writes and, by default, external lookups) wait for your approval inside Cyber Hub, and every call is recorded. See [docs/MCP.md](docs/MCP.md). |
+| MCP integration | Claude Code, Claude Desktop and other MCP clients can use Cyber Hub's real functionality through `cyberhub-mcp`: 34 tools, 7 resources and 6 prompts. Sensitive operations (runs, uploads, exports, local writes and, by default, external lookups) wait for your approval inside Cyber Hub, and every call is recorded. The MCP page in the sidebar has the status, Approval Center, clients, tool catalog, permissions, audit log and client setup. See [docs/MCP.md](docs/MCP.md). |
 | Global search | `Ctrl/⌘ + K` across tools, commands, resources, projects, dorks, payloads, wordlists, utilities and pages. |
 
 ## Documentation
@@ -71,7 +71,7 @@ Details and accepted risks: [docs/SECURITY.md](docs/SECURITY.md).
 | Platform | Status |
 |---|---|
 | Windows 11 | Verified in the running app (detection, scoped runs incl. target files, native confirmations, cancellation, frameless window and its controls, all threat-intelligence providers and VirusTotal file uploads against a local mock API, all pages with a frozen prototype) plus all automated tests. |
-| Linux | Automated verification in a Debian 12 container: typecheck, 87 frontend tests, 111 backend tests, frontend and backend builds. The GUI has not been run on Linux. |
+| Linux | Automated verification in a Debian 12 container: typecheck, 93 frontend tests, 115 backend tests, frontend and backend builds. The GUI has not been run on Linux. |
 | macOS | Not built or tested. |
 
 Installers have not been rebuilt since the hardening pass. See [docs/PLATFORMS.md](docs/PLATFORMS.md).

@@ -1,13 +1,17 @@
-//! Settings → Integrations → MCP: bridge status and start/stop, permission policy, pending
-//! approvals (decided only here, by the user), audit log and client configuration snippets.
+//! The MCP page: bridge status and start/stop, the server catalogue, clients, permission
+//! policy, pending approvals (decided only here, by the user), audit log and client
+//! configuration snippets.
 //!
 //! These are Tauri commands for Cyber Hub's own window. None of them is reachable through the
 //! MCP bridge, so an MCP client cannot approve its own requests or change its permissions.
 
 use std::sync::Arc;
 
-use rusqlite::params;
+use std::collections::BTreeMap;
+
+use rusqlite::{params, params_from_iter, types::Value as SqlValue};
 use serde::Serialize;
+use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::db::Db;
@@ -173,16 +177,52 @@ pub struct AuditRow {
     pub result: String,
     pub message: String,
     pub duration_ms: i64,
+    /// permission category that applied (older rows: the tool's catalogue category)
+    pub category: Option<String>,
 }
 
-#[tauri::command]
-pub async fn mcp_audit(db: State<'_, Db>, limit: Option<i64>) -> AppResult<Vec<AuditRow>> {
-    let limit = limit.unwrap_or(50).clamp(1, 500);
+/// Optional filters for the audit log.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AuditFilter {
+    pub client: Option<String>,
+    pub category: Option<String>,
+    /// ok | awaiting_approval | refused | error
+    pub result: Option<String>,
+}
+
+const RESULTS: [&str; 4] = ["ok", "awaiting_approval", "refused", "error"];
+
+/// Query the audit log, newest first. Filters are validated and bound as parameters.
+pub fn audit_rows(db: &Db, limit: i64, f: &AuditFilter) -> AppResult<Vec<AuditRow>> {
+    let mut sql = String::from(
+        "SELECT id, at, client, connection, tool, arguments, project_id, approval, approval_id, execution_id, result, message, duration_ms, category FROM mcp_audit WHERE 1=1",
+    );
+    let mut args: Vec<SqlValue> = vec![];
+    if let Some(cl) = f.client.as_deref().filter(|c| !c.is_empty()) {
+        sql.push_str(" AND client = ?");
+        args.push(SqlValue::Text(cl.chars().take(128).collect()));
+    }
+    if let Some(cat) = f.category.as_deref().filter(|c| !c.is_empty()) {
+        let c = Category::parse(cat).ok_or_else(|| validation("Unknown category"))?;
+        // rows written before the category column existed fall back to the tool's category
+        let tools: Vec<&str> = catalog::TOOLS.iter().filter(|t| t.category == c).map(|t| t.name).collect();
+        sql.push_str(" AND (category = ? OR (category IS NULL AND tool IN (SELECT value FROM json_each(?))))");
+        args.push(SqlValue::Text(c.as_str().into()));
+        args.push(SqlValue::Text(serde_json::to_string(&tools).unwrap_or_else(|_| "[]".into())));
+    }
+    if let Some(r) = f.result.as_deref().filter(|r| !r.is_empty()) {
+        if !RESULTS.contains(&r) {
+            return Err(validation("Unknown result"));
+        }
+        sql.push_str(" AND result = ?");
+        args.push(SqlValue::Text(r.into()));
+    }
+    sql.push_str(" ORDER BY id DESC LIMIT ?");
+    args.push(SqlValue::Integer(limit.clamp(1, 1000)));
     db.with(|c| {
-        let mut stmt = c.prepare(
-            "SELECT id, at, client, connection, tool, arguments, project_id, approval, approval_id, execution_id, result, message, duration_ms FROM mcp_audit ORDER BY id DESC LIMIT ?1",
-        )?;
-        let rows = stmt.query_map(params![limit], |r| {
+        let mut stmt = c.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(args.iter()), |r| {
             Ok(AuditRow {
                 id: r.get(0)?,
                 at: r.get(1)?,
@@ -197,10 +237,264 @@ pub async fn mcp_audit(db: State<'_, Db>, limit: Option<i64>) -> AppResult<Vec<A
                 result: r.get(10)?,
                 message: r.get(11)?,
                 duration_ms: r.get(12)?,
+                category: r.get::<_, Option<String>>(13)?.or_else(|| catalog::tool(&r.get::<_, String>(4).unwrap_or_default()).map(|t| t.category.as_str().to_string())),
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     })
+}
+
+#[tauri::command]
+pub async fn mcp_audit(db: State<'_, Db>, limit: Option<i64>, filter: Option<AuditFilter>) -> AppResult<Vec<AuditRow>> {
+    audit_rows(&db, limit.unwrap_or(50), &filter.unwrap_or_default())
+}
+
+/* ───────────────────────── catalogue ───────────────────────── */
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Param {
+    pub name: String,
+    /// JSON type, e.g. "string", "integer", "array of string"
+    pub kind: String,
+    pub required: bool,
+    pub description: String,
+    pub values: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogTool {
+    pub name: &'static str,
+    pub title: &'static str,
+    pub group: &'static str,
+    pub group_label: &'static str,
+    pub description: &'static str,
+    pub category: &'static str,
+    pub category_label: &'static str,
+    pub policy: Policy,
+    /// the user is asked before it runs (current policy)
+    pub requires_approval: bool,
+    /// a native system dialog always follows approval
+    pub native_confirmation: bool,
+    pub available: bool,
+    /// why it is unavailable, or a note about conditional permission
+    pub note: Option<String>,
+    pub read_only: bool,
+    pub parameters: Vec<Param>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogResource {
+    pub uri: &'static str,
+    pub name: &'static str,
+    pub description: &'static str,
+    pub mime_type: &'static str,
+    pub template: bool,
+    /// the read-only tool that serves it
+    pub served_by: &'static str,
+    pub parameters: Vec<Param>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogPrompt {
+    pub name: &'static str,
+    pub title: &'static str,
+    pub description: &'static str,
+    pub arguments: Vec<Param>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpCatalog {
+    pub groups: Vec<(&'static str, &'static str)>,
+    pub tools: Vec<CatalogTool>,
+    pub resources: Vec<CatalogResource>,
+    pub prompts: Vec<CatalogPrompt>,
+    pub instructions: &'static str,
+}
+
+/// Parameters of an object JSON schema, required ones first.
+pub fn schema_params(schema: &Value) -> Vec<Param> {
+    let required: Vec<&str> = schema.get("required").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+    let kind_of = |v: &Value| -> String {
+        match v.get("type").and_then(Value::as_str) {
+            Some("array") => format!("array of {}", v.get("items").and_then(|i| i.get("type")).and_then(Value::as_str).unwrap_or("values")),
+            Some(t) => t.to_string(),
+            None => "value".into(),
+        }
+    };
+    let mut out: Vec<Param> = schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .map(|props| {
+            props
+                .iter()
+                .map(|(name, v)| Param {
+                    name: name.clone(),
+                    kind: kind_of(v),
+                    required: required.contains(&name.as_str()),
+                    description: v.get("description").and_then(Value::as_str).unwrap_or_default().to_string(),
+                    values: v.get("enum").and_then(Value::as_array).map(|e| e.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    out.sort_by_key(|p| !p.required);
+    out
+}
+
+pub fn build_catalog(policy: &std::collections::HashMap<Category, Policy>, running: bool) -> McpCatalog {
+    let tools = catalog::TOOLS
+        .iter()
+        .map(|t| {
+            let p = policy.get(&t.category).copied().unwrap_or(Policy::Deny);
+            let conditional = catalog::CONDITIONAL_CATEGORY.iter().find(|(name, _, _)| *name == t.name);
+            let note = if !running {
+                Some("MCP is off".to_string())
+            } else if p == Policy::Deny {
+                Some(format!("Blocked by your policy for “{}”", t.category.label()))
+            } else {
+                conditional.map(|(_, arg, c)| {
+                    let cp = policy.get(c).copied().unwrap_or(Policy::Deny);
+                    format!(
+                        "With {arg}: true it queries NVD and follows “{}” ({})",
+                        c.label(),
+                        match cp {
+                            Policy::Allow => "allowed",
+                            Policy::Ask => "asks you",
+                            Policy::Deny => "blocked",
+                        }
+                    )
+                })
+            };
+            CatalogTool {
+                name: t.name,
+                title: t.title,
+                group: t.group,
+                group_label: catalog::GROUPS.iter().find(|(g, _)| *g == t.group).map(|(_, l)| *l).unwrap_or(t.group),
+                description: t.description,
+                category: t.category.as_str(),
+                category_label: t.category.label(),
+                policy: p,
+                requires_approval: p == Policy::Ask,
+                native_confirmation: matches!(t.category, Category::RunTools | Category::FileUpload | Category::Export),
+                available: running && p != Policy::Deny,
+                note,
+                read_only: t.category == Category::Read,
+                parameters: schema_params(&(t.schema)()),
+            }
+        })
+        .collect();
+    let mut resources: Vec<CatalogResource> = catalog::RESOURCES
+        .iter()
+        .map(|(uri, name, description, tool)| CatalogResource { uri, name, description, mime_type: "application/json", template: false, served_by: tool, parameters: vec![] })
+        .collect();
+    resources.push(CatalogResource {
+        uri: catalog::SCOPE_TEMPLATE,
+        name: catalog::SCOPE_TEMPLATE_NAME,
+        description: catalog::SCOPE_TEMPLATE_DESCRIPTION,
+        mime_type: "application/json",
+        template: true,
+        served_by: "cyberhub_get_project_scope",
+        parameters: vec![Param { name: "project_id".into(), kind: "integer".into(), required: true, description: "Cyber Hub project ID".into(), values: vec![] }],
+    });
+    let prompts = prompts::PROMPTS
+        .iter()
+        .map(|p| CatalogPrompt {
+            name: p.name,
+            title: p.title,
+            description: p.description,
+            arguments: p.arguments.iter().map(|(n, d, r)| Param { name: (*n).into(), kind: "string".into(), required: *r, description: (*d).into(), values: vec![] }).collect(),
+        })
+        .collect();
+    McpCatalog { groups: catalog::GROUPS.to_vec(), tools, resources, prompts, instructions: catalog::SERVER_INSTRUCTIONS }
+}
+
+/// The catalogue `cyberhub-mcp` advertises, with the current policy and availability of each tool.
+#[tauri::command]
+pub async fn mcp_catalog(db: State<'_, Db>, bridge: State<'_, Arc<Bridge>>) -> AppResult<McpCatalog> {
+    Ok(build_catalog(&ops::load_policy(&db), bridge.info().is_some()))
+}
+
+/* ───────────────────────── clients ───────────────────────── */
+
+#[derive(Debug, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct McpClientRow {
+    /// self-reported "name version" (never verified)
+    pub label: String,
+    pub name: String,
+    pub version: String,
+    pub connected: bool,
+    pub connections: usize,
+    pub connected_since: Option<String>,
+    /// requests on the current connections
+    pub session_requests: u64,
+    /// requests in the audit log
+    pub logged_requests: i64,
+    pub last_activity: Option<String>,
+    pub last_tool: Option<String>,
+    pub last_result: Option<String>,
+    pub last_approval: Option<String>,
+}
+
+/// Split a logged "name version" label; the version is the last word if it starts with a digit.
+pub fn split_label(label: &str) -> (String, String) {
+    match label.rsplit_once(' ') {
+        Some((name, v)) if !name.trim().is_empty() && v.chars().next().is_some_and(|c| c.is_ascii_digit()) => (name.to_string(), v.to_string()),
+        _ => (label.to_string(), String::new()),
+    }
+}
+
+/// Connected clients (from the bridge) merged with recently active ones (from the audit log).
+pub fn client_rows(db: &Db, live: &[ConnView]) -> AppResult<Vec<McpClientRow>> {
+    let mut rows: BTreeMap<String, McpClientRow> = BTreeMap::new();
+    for c in live {
+        let r = rows.entry(c.client.clone()).or_default();
+        r.label = c.client.clone();
+        r.name = c.client_name.clone();
+        r.version = c.client_version.clone();
+        r.connected = true;
+        r.connections += 1;
+        r.session_requests += c.requests;
+        if r.connected_since.as_deref().map_or(true, |s| c.connected_at.as_str() < s) {
+            r.connected_since = Some(c.connected_at.clone());
+        }
+    }
+    let logged: Vec<(String, i64, String, String, String, String)> = db.with(|c| {
+        let mut stmt = c.prepare(
+            "SELECT a.client, g.n, a.at, a.tool, a.result, a.approval FROM mcp_audit a
+             JOIN (SELECT client, COUNT(*) AS n, MAX(id) AS last FROM mcp_audit GROUP BY client) g ON a.id = g.last
+             ORDER BY a.id DESC LIMIT 50",
+        )?;
+        let it = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))?;
+        Ok(it.collect::<Result<Vec<_>, _>>()?)
+    })?;
+    for (label, n, at, tool, result, approval) in logged {
+        let r = rows.entry(label.clone()).or_default();
+        if r.label.is_empty() {
+            let (name, version) = split_label(&label);
+            r.label = label;
+            r.name = name;
+            r.version = version;
+        }
+        r.logged_requests = n;
+        r.last_activity = Some(at);
+        r.last_tool = Some(tool);
+        r.last_result = Some(result);
+        r.last_approval = Some(approval);
+    }
+    let mut v: Vec<McpClientRow> = rows.into_values().collect();
+    v.sort_by(|a, b| b.connected.cmp(&a.connected).then_with(|| b.last_activity.cmp(&a.last_activity)));
+    Ok(v)
+}
+
+#[tauri::command]
+pub async fn mcp_clients(db: State<'_, Db>, bridge: State<'_, Arc<Bridge>>) -> AppResult<Vec<McpClientRow>> {
+    client_rows(&db, &bridge.connections())
 }
 
 #[tauri::command]
@@ -278,6 +572,77 @@ mod tests {
         if cfg!(windows) || cfg!(target_os = "macos") {
             assert!(c.claude_desktop_config_path.unwrap().ends_with("claude_desktop_config.json"));
         }
+    }
+
+    fn audit_db() -> Db {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            let ins = "INSERT INTO mcp_audit (at, client, connection, tool, arguments, project_id, approval, result, message, duration_ms, category) VALUES (?1, ?2, 1, ?3, '{}', NULL, 'not_required', ?4, '', 1, ?5)";
+            c.execute(ins, params!["2026-01-01T00:00:01Z", "claude-code 2.1", "cyberhub_get_status", "ok", "read"])?;
+            c.execute(ins, params!["2026-01-01T00:00:02Z", "claude-code 2.1", "cyberhub_lookup_cve", "ok", "external_lookup"])?;
+            c.execute(ins, params!["2026-01-01T00:00:03Z", "other", "cyberhub_run_tool", "refused", "run_tools"])?;
+            // a row written before migration 5 (no category)
+            c.execute(ins, params!["2026-01-01T00:00:04Z", "other", "cyberhub_vt_lookup", "error", None::<String>])?;
+            Ok(())
+        })
+        .unwrap();
+        db
+    }
+
+    #[test]
+    fn audit_filters_by_client_category_and_result() {
+        let db = audit_db();
+        let all = audit_rows(&db, 50, &AuditFilter::default()).unwrap();
+        assert_eq!(all.len(), 4);
+        assert_eq!(all[0].category.as_deref(), Some("external_lookup"), "older rows fall back to the tool's category");
+        let by_client = audit_rows(&db, 50, &AuditFilter { client: Some("claude-code 2.1".into()), ..Default::default() }).unwrap();
+        assert_eq!(by_client.len(), 2);
+        // the effective category is used: a live CVE lookup is an external lookup, not a read
+        let ext = audit_rows(&db, 50, &AuditFilter { category: Some("external_lookup".into()), ..Default::default() }).unwrap();
+        assert_eq!(ext.iter().map(|r| r.tool.as_str()).collect::<Vec<_>>(), ["cyberhub_vt_lookup", "cyberhub_lookup_cve"]);
+        let refused = audit_rows(&db, 50, &AuditFilter { result: Some("refused".into()), ..Default::default() }).unwrap();
+        assert_eq!(refused.len(), 1);
+        assert!(audit_rows(&db, 50, &AuditFilter { category: Some("x' OR 1=1 --".into()), ..Default::default() }).is_err());
+        assert!(audit_rows(&db, 50, &AuditFilter { result: Some("ok' --".into()), ..Default::default() }).is_err());
+        assert_eq!(audit_rows(&db, 1, &AuditFilter::default()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn clients_merge_live_connections_with_the_log() {
+        let db = audit_db();
+        let live = vec![ConnView { id: 3, client: "claude-code 2.1".into(), client_name: "claude-code".into(), client_version: "2.1".into(), connected_at: "2026-01-01T00:00:00Z".into(), requests: 2, last_request_at: None }];
+        let rows = client_rows(&db, &live).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].connected && rows[0].name == "claude-code" && rows[0].version == "2.1");
+        assert_eq!(rows[0].logged_requests, 2);
+        assert_eq!(rows[0].last_tool.as_deref(), Some("cyberhub_lookup_cve"));
+        assert!(!rows[1].connected);
+        assert_eq!((rows[1].name.as_str(), rows[1].version.as_str()), ("other", ""));
+        assert_eq!(split_label("claude-code 2.1.318"), ("claude-code".into(), "2.1.318".into()));
+        assert_eq!(split_label("unknown MCP client"), ("unknown MCP client".into(), String::new()));
+        assert_eq!(split_label("Claude Desktop 0.9"), ("Claude Desktop".into(), "0.9".into()));
+        assert_eq!(rows[1].last_result.as_deref(), Some("error"));
+    }
+
+    #[test]
+    fn catalog_matches_the_server_and_reflects_policy() {
+        let mut policy: std::collections::HashMap<Category, Policy> = Category::ALL.into_iter().map(|c| (c, c.default_policy())).collect();
+        policy.insert(Category::Export, Policy::Deny);
+        let c = build_catalog(&policy, true);
+        assert_eq!(c.tools.len(), catalog::TOOLS.len());
+        assert_eq!(c.resources.len(), catalog::RESOURCES.len() + 1);
+        assert_eq!(c.prompts.len(), prompts::PROMPTS.len());
+        let run = c.tools.iter().find(|t| t.name == "cyberhub_run_tool").unwrap();
+        assert!(run.requires_approval && run.native_confirmation && run.available);
+        assert_eq!(run.parameters.iter().filter(|p| p.required).map(|p| p.name.as_str()).collect::<Vec<_>>().len(), 2);
+        let export = c.tools.iter().find(|t| t.name == "cyberhub_export_report").unwrap();
+        assert!(!export.available && export.note.as_deref().unwrap().contains("Blocked"));
+        let status = c.tools.iter().find(|t| t.name == "cyberhub_get_status").unwrap();
+        assert!(status.read_only && !status.requires_approval);
+        assert!(c.tools.iter().find(|t| t.name == "cyberhub_lookup_cve").unwrap().note.is_some());
+        let off = build_catalog(&policy, false);
+        assert!(off.tools.iter().all(|t| !t.available));
+        assert!(c.resources.iter().any(|r| r.template && r.parameters.len() == 1));
     }
 
     #[test]

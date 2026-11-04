@@ -2,12 +2,15 @@ import { Button } from "@heroui/react";
 import { listen } from "@tauri-apps/api/event";
 import { Bot, ShieldAlert } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useApp } from "@/app/store";
 import { ToneChip } from "@/components/ui/Badges";
 import { AppModal } from "@/components/ui/Dialogs";
 import { notify } from "@/lib/actions";
 import { api, runtimeAvailable } from "@/lib/ipc";
 import { invalidate } from "@/lib/query";
 import type { McpPending } from "@/lib/types";
+import { useArmed } from "@/lib/useArmed";
+import { tabFromParams } from "@/modules/mcp/mcpMeta";
 
 const CATEGORY_LABEL: Record<string, string> = {
   external_lookup: "External lookup",
@@ -20,9 +23,13 @@ const CATEGORY_LABEL: Record<string, string> = {
 /**
  * Approval prompt for sensitive MCP requests. It is shown by Cyber Hub itself; MCP clients
  * cannot see or answer it. Runs and uploads are followed by the usual native confirmation.
+ * It stays out of the way while the MCP page's Approval Center (which lists the same requests)
+ * is on screen, and keeps listening for new requests either way.
  */
 export function McpApprovals() {
   const runtime = runtimeAvailable();
+  const { route, navigate } = useApp();
+  const centerVisible = route.page === "mcp" && tabFromParams(route.params) === "approvals";
   const [pending, setPending] = useState<McpPending[]>([]);
   const [fetchedAt, setFetchedAt] = useState(Date.now());
   const [now, setNow] = useState(Date.now());
@@ -67,17 +74,10 @@ export function McpApprovals() {
 
   // Approve stays disabled briefly whenever a different request comes to the front, so a click
   // aimed at the previous request cannot approve the next one.
-  const currentId = pending[0]?.id;
-  const [armedId, setArmedId] = useState<string | undefined>();
-  useEffect(() => {
-    if (!currentId) return;
-    const t = setTimeout(() => setArmedId(currentId), 1000);
-    return () => clearTimeout(t);
-  }, [currentId]);
+  const armed = useArmed(centerVisible ? undefined : pending[0]?.id);
 
   const current = pending[0];
-  if (!current) return null;
-  const armed = armedId === current.id;
+  if (!current || centerVisible) return null;
   const left = Math.max(0, current.expiresInSecs - Math.floor((now - fetchedAt) / 1000));
 
   const decide = async (approve: boolean) => {
@@ -146,7 +146,11 @@ export function McpApprovals() {
             : current.category === "external_lookup"
               ? "Approving sends the values above to the external service."
               : "Only approve requests you expect from your AI client."}{" "}
-        You can change what MCP clients may do in Settings → Integrations → MCP.
+        Waiting requests and what MCP clients may do are also on the{" "}
+        <button type="button" className="text-accent-soft-foreground underline-offset-2 outline-none hover:underline focus-visible:underline" onClick={() => navigate("mcp", { tab: "approvals" })}>
+          MCP page
+        </button>
+        .
       </p>
     </AppModal>
   );

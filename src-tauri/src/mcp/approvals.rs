@@ -49,6 +49,8 @@ pub struct PendingView {
     pub category: Category,
     pub summary: String,
     pub details: Vec<Detail>,
+    /// validation Cyber Hub performed before showing the request
+    pub checks: Vec<String>,
     pub project_id: Option<i64>,
     pub created_at: String,
     pub expires_in_secs: u64,
@@ -86,6 +88,7 @@ pub struct NewRequest {
     pub category: Category,
     pub summary: String,
     pub details: Vec<Detail>,
+    pub checks: Vec<String>,
     pub project_id: Option<i64>,
 }
 
@@ -107,6 +110,7 @@ impl Approvals {
             category: r.category,
             summary: r.summary,
             details: r.details,
+            checks: r.checks,
             project_id: r.project_id,
             created_at: crate::util::now(),
             expires_in_secs: TTL.as_secs(),
@@ -229,7 +233,7 @@ mod tests {
     use super::*;
 
     fn req(conn: u64) -> NewRequest {
-        NewRequest { connection: conn, client: "test".into(), tool: "cyberhub_run_tool".into(), category: Category::RunTools, summary: "Run nmap".into(), details: vec![], project_id: Some(1) }
+        NewRequest { connection: conn, client: "test".into(), tool: "cyberhub_run_tool".into(), category: Category::RunTools, summary: "Run nmap".into(), details: vec![], checks: vec![], project_id: Some(1) }
     }
 
     #[tokio::test]

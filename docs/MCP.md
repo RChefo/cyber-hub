@@ -17,9 +17,26 @@ Cyber Hub app           policy · approvals · audit log
 ```
 
 * **`cyberhub-mcp`** is built from the same code base (`src-tauri/src/bin/cyberhub-mcp.rs`, `src-tauri/src/mcp/server.rs`) on the official Rust SDK `rmcp`. It speaks MCP over stdio (stdout carries only protocol messages; diagnostics go to stderr). It forwards tool calls and resource reads to the running app and serves prompts itself.
-* **The bridge** (`mcp/bridge.rs`, `mcp/proto.rs`) runs inside the Cyber Hub app only while **Settings → Integrations → MCP → Allow MCP clients** is on. It listens on `127.0.0.1` on a random port and writes `bridge.json` (port) and `bridge.key` (a fresh 256-bit key per session) to `<app data>/mcp/`. Both sides prove knowledge of the key before any request (HMAC-SHA256 challenge/response). A process without the key can neither use the bridge nor pose as Cyber Hub. The files are removed when MCP is turned off or the app exits.
+* **The bridge** (`mcp/bridge.rs`, `mcp/proto.rs`) runs inside the Cyber Hub app only while **Allow MCP clients** is on (MCP page in the sidebar). It listens on `127.0.0.1` on a random port and writes `bridge.json` (port) and `bridge.key` (a fresh 256-bit key per session) to `<app data>/mcp/`. Both sides prove knowledge of the key before any request (HMAC-SHA256 challenge/response). A process without the key can neither use the bridge nor pose as Cyber Hub. The files are removed when MCP is turned off or the app exits.
 * **Operations** (`mcp/ops.rs`) call the same functions as the GUI. A run requested through MCP goes through `start_execution`: the same validation, scope engine (exclusions included), target-file snapshots, native confirmation dialog and process-tree management as a run you start yourself. There is no second execution path.
 * **Cyber Hub must be running.** Without it, tools return "Cyber Hub is not running or MCP is turned off".
+
+## The MCP page
+
+MCP has its own page in the sidebar (Integrations → MCP). The switch at the top turns MCP on or off. The sections are:
+
+| Section | Shows |
+|---|---|
+| Overview | Server state, transport (STDIO), local bridge address, connected clients, catalog size, waiting approvals, recent activity |
+| Approvals | The Approval Center: every waiting request with the client, action, project, target, the checks Cyber Hub ran, and time left; Approve and Decline; recent decisions from the audit log |
+| Clients | Connected clients (from the running bridge) and clients seen before (from the audit log), with self-reported name and version, last activity, request counts and the latest result |
+| Tools | All 34 tools from the server catalog, grouped as below, with permission category, whether they ask you under the current policy, availability and parameters |
+| Resources & prompts | The resources, the scope template and the prompts, with their parameters |
+| Permissions | The policy for each category (below) |
+| Activity | The audit log, filterable by client, permission category and status, with redacted arguments per entry |
+| Connect | Executable path, Claude Code and Claude Desktop setup with copy buttons, verification and troubleshooting |
+
+The page reads everything from the app: the catalog comes from the same definitions `cyberhub-mcp` advertises, and clients and activity come from the bridge and the `mcp_audit` table. MCP settings are no longer in Settings.
 
 ## Tools (34)
 
@@ -53,7 +70,7 @@ Arguments are JSON objects with strict schemas; unknown fields are rejected, and
 
 ## Permissions and approvals
 
-Settings → Integrations → MCP → **What MCP clients may do**:
+MCP page → **Permissions**:
 
 | Category | Choices | Default |
 |---|---|---|
@@ -67,21 +84,22 @@ Settings → Integrations → MCP → **What MCP clients may do**:
 **Ask me** works as follows:
 
 1. Cyber Hub validates the request first. Invalid arguments, unknown projects and out-of-scope or excluded targets are refused without asking you.
-2. A dialog opens in Cyber Hub, and its taskbar entry flashes if it is in the background. The dialog shows the client name (as reported by the client), the operation, and details such as program, arguments, project and authorized targets.
+2. The request appears in the Approval Center (MCP page → Approvals), and Cyber Hub's taskbar entry flashes if it is in the background. On any other page or section, a dialog shows it instead. Both show the client name (as reported by the client), the operation, the checks that passed, and details such as program, arguments, project and authorized targets.
 3. Only you can approve, in Cyber Hub's own window. The decision commands are not reachable through the bridge, so an MCP client cannot approve its own request or change its permissions.
 4. **Runs** then show the usual native "Confirm tool execution" dialog, which names the requesting client. **Uploads** open the native file picker, where you choose the file; an optional `expected_sha256` must match. Then the usual public-upload warning and native confirmation follow. **Exports** use the native save dialog.
 5. If you have not decided within 50 seconds, the tool returns `status: "awaiting_approval"` with an `approvalId` that the client can poll with `cyberhub_get_approval_status`. Requests expire after 3 minutes and are cancelled if the client disconnects. At most 20 can wait at once, 5 per client connection.
 
-When several requests are waiting, they are shown one at a time. Approve is disabled for a second whenever a new request comes to the front.
+Approve is disabled for a second whenever the waiting requests change (in the dialog: a new request comes to the front; in the Approval Center: a request is added, decided or expires), so a click aimed at one request cannot approve another. A request whose time is up shows as expired and cannot be approved.
 
 Turning MCP off disconnects every client and cancels pending requests.
 
 ### Audit log
 
-Every MCP tool call is recorded, including refused and unknown ones (Settings → Integrations → MCP → Recent requests, table `mcp_audit`, last 1,000 entries):
+Every MCP tool call is recorded, including refused and unknown ones (MCP page → Activity, table `mcp_audit`, last 1,000 entries):
 
 * time, client (self-reported) and connection number;
 * tool and arguments, with credentials redacted and capped at 1,000 characters;
+* permission category that applied (for example, a CVE lookup with `live: true` counts as an external lookup);
 * project and approval outcome (`not_required`, `approved`, `denied`, `expired`, `cancelled`, `pending`, `denied_by_policy`);
 * approval ID, run ID, result, error message (redacted), and duration. An approved request is recorded with its final result, even if you decide after the client stopped waiting.
 
@@ -94,7 +112,7 @@ cd src-tauri
 cargo build --release --bin cyberhub-mcp     # or without --release for development
 ```
 
-Then turn on **Settings → Integrations → MCP → Allow MCP clients**. The panel shows the exact executable path and copy buttons for the snippets below, filled with that path.
+Then turn on **Allow MCP clients** on the MCP page. Its **Connect** section shows the exact executable path and copy buttons for the snippets below, filled with that path.
 
 ### Claude Code
 
@@ -140,11 +158,11 @@ The configuration contains only the executable path. It carries no keys, tokens 
 
 | Symptom | Check |
 |---|---|
-| Tools return "Cyber Hub is not running or MCP is turned off" | Start Cyber Hub and turn on Settings → Integrations → MCP. |
+| Tools return "Cyber Hub is not running or MCP is turned off" | Start Cyber Hub and turn on MCP on the MCP page. |
 | "could not authenticate the Cyber Hub app" | Restart Cyber Hub (it writes a new key); make sure `cyberhub-mcp` and the app come from the same build. |
-| A tool returns `awaiting_approval` | Approve or decline in Cyber Hub, then poll `cyberhub_get_approval_status`. |
-| "… is turned off for MCP clients" | The category is set to Block in Settings → Integrations → MCP. |
+| A tool returns `awaiting_approval` | Approve or decline in the Approval Center, then poll `cyberhub_get_approval_status`. |
+| "… is turned off for MCP clients" | The category is set to Block under MCP page → Permissions. |
 | The client name shows "unknown MCP client" | The client sent no `clientInfo`; this is display-only. |
-| Nothing appears in Recent requests | The client did not reach the app (see the first row). |
+| Nothing appears under MCP page → Activity | The client did not reach the app (see the first row). |
 | "Arguments that refer to local files … are not accepted" | Pass targets directly, or start the file-based run in Cyber Hub. |
 | "Only runs started through MCP can be cancelled" | Cancel that run in Cyber Hub. |

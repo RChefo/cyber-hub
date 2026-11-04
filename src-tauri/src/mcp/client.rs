@@ -34,7 +34,7 @@ pub struct BridgeClient {
 pub fn not_running() -> ErrorBody {
     ErrorBody {
         kind: "unavailable".into(),
-        message: "Cyber Hub is not running or MCP is turned off. Start Cyber Hub and enable it in Settings → Integrations → MCP.".into(),
+        message: "Cyber Hub is not running or MCP is turned off. Start Cyber Hub and turn on MCP on its MCP page.".into(),
     }
 }
 

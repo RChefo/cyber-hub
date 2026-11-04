@@ -108,8 +108,8 @@ impl ServerHandler for CyberHubServer {
     }
 
     async fn list_resource_templates(&self, _request: Option<PaginatedRequestParams>, _context: RequestContext<RoleServer>) -> Result<ListResourceTemplatesResult, McpError> {
-        Ok(ListResourceTemplatesResult::with_all_items(vec![ResourceTemplate::new(catalog::SCOPE_TEMPLATE, "project-scope")
-            .with_description("Authorized scope (in-scope and excluded targets) of one project")
+        Ok(ListResourceTemplatesResult::with_all_items(vec![ResourceTemplate::new(catalog::SCOPE_TEMPLATE, catalog::SCOPE_TEMPLATE_NAME)
+            .with_description(catalog::SCOPE_TEMPLATE_DESCRIPTION)
             .with_mime_type("application/json")]))
     }
 
@@ -157,7 +157,7 @@ pub fn main() -> i32 {
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!(
-            "cyberhub-mcp {} — MCP server (stdio) for Cyber Hub\n\nRun by an MCP client such as Claude Code or Claude Desktop. Requires the Cyber Hub app to be running with\nSettings → Integrations → MCP turned on. See docs/MCP.md.",
+            "cyberhub-mcp {} — MCP server (stdio) for Cyber Hub\n\nRun by an MCP client such as Claude Code or Claude Desktop. Requires the Cyber Hub app to be running with\nMCP turned on (MCP page in the sidebar). See docs/MCP.md.",
             env!("CARGO_PKG_VERSION")
         );
         return 0;

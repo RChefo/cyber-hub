@@ -190,7 +190,9 @@ export const api = {
   mcpSetPolicy: (category: string, policy: T.McpPolicy) => call<void>("mcp_set_policy", { category, policy }),
   mcpPending: () => call<T.McpPending[]>("mcp_pending"),
   mcpDecide: (id: string, approve: boolean) => call<boolean>("mcp_decide", { id, approve }),
-  mcpAudit: (limit = 50) => call<T.McpAuditRow[]>("mcp_audit", { limit }),
+  mcpAudit: (limit = 50, filter?: T.McpAuditFilter) => call<T.McpAuditRow[]>("mcp_audit", { limit, filter: filter ?? null }),
+  mcpCatalog: () => call<T.McpCatalog>("mcp_catalog"),
+  mcpClients: () => call<T.McpClientRow[]>("mcp_clients"),
   mcpAuditClear: () => call<void>("mcp_audit_clear"),
   mcpClientConfigs: () => call<T.McpClientConfigs>("mcp_client_configs"),
 
