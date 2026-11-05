@@ -88,6 +88,16 @@ Reusable backend interfaces to define in Phase 1:
 4. **Scheduled workflows.** Background execution while the user is not looking is a change to "nothing runs automatically". Recommendation: scheduled triggers allowed only for passive steps; any active step still needs a native confirmation when the run starts.
 5. **Scan parsing.** Reliable service comparison needs structured output (Nmap XML). Recommendation: builders add `-oX` to a run artifact in the private work folder, and parsers read that artifact; free-text output is compared as text only.
 
+### Decided (2026-11-05)
+
+| Decision | Choice |
+|---|---|
+| 1. Assistant provider | Owner-provisioned API key through `cyberhub-keys`; no in-app credential entry; the security model is unchanged. |
+| 2. EPSS | Added as an optional, clearly labelled provider (FIRST EPSS API) that can be turned off; priorities state whether EPSS was available. |
+| 3. PDF reports | HTML report saved as PDF through the system webview's print, via a native save dialog; no new dependency. |
+| 4. Scheduled workflows | Scheduled runs may execute passive steps only; any step that contacts a target needs a native confirmation when the run starts. |
+| 5. Scan parsing | Not asked; the recommendation stands (structured Nmap XML artifacts in the private work folder; free text compared as text only). |
+
 ## 6. Phase plan
 
 Each phase: plan, implement, targeted tests, full regression (typecheck, frontend tests, `cargo test`, clippy `-D warnings`), security checks (cargo/npm audit, injection, traversal, SSRF and scope tests for the phase), documentation, one commit, clean tree. No installers are built until final release authorization.
