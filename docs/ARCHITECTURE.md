@@ -98,7 +98,7 @@ State is deliberately small: a React context for app-wide state, and `useQuery` 
 | Library | How it is used |
 |---|---|
 | **HeroUI v3** (`@heroui/react`, `@heroui/styles`) | Primary design system: buttons, cards, inputs, selects, tabs, modals, alert dialogs, dropdowns, popovers, tooltips, switches, checkboxes, toasts, skeletons. The Cyber Hub palette is applied by overriding HeroUI's dark-theme CSS variables in `src/styles/index.css`. |
-| **ReactBits** | `CountUp` (vendored unmodified) for dashboard figures. |
+| **ReactBits** | `CountUp` (vendored unmodified) for dashboard figures. `BranchedMenu` (typed TSX port of the JavaScript + CSS variant) for the expanded sidebar (its groups are the branches; the collapsed sidebar keeps the icon rail): icons are passed as lucide components, so the `@hugeicons` packages are not installed; an optional controlled `value` keeps it in step with the route; focus rings stay visible. |
 | **Lightswind** | `DotPattern` (vendored, made static) as subtle texture on the readiness card and empty states. The npm package was not installed because its peer dependencies (three, gsap, ai SDK) are unnecessary. |
 | **Untitled UI React** | `FeaturedIcon` pattern adapted onto HeroUI tokens for icon tiles (activity feed, KPIs, empty states). |
 | **shadcn Charts** | `chart.tsx` vendored unmodified (Recharts) for the dashboard activity area chart. |

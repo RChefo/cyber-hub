@@ -4,7 +4,8 @@ import { dragRegion } from "@/lib/dragRegion";
 import { api } from "@/lib/ipc";
 import { useQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
-import { NAV_GROUPS, SETTINGS_ITEM, type NavItem } from "./routes";
+import BranchedMenu from "@/components/vendor/reactbits/BranchedMenu";
+import { NAV_GROUPS, SETTINGS_ITEM, type NavItem, type PageId } from "./routes";
 import { useApp } from "./store";
 
 function NavLink({ item, collapsed, badge }: { item: NavItem; collapsed: boolean; badge?: number }) {
@@ -47,7 +48,7 @@ function NavLink({ item, collapsed, badge }: { item: NavItem; collapsed: boolean
 }
 
 export function Sidebar() {
-  const { prefs, setPref, runtime } = useApp();
+  const { prefs, setPref, runtime, route, navigate } = useApp();
   const collapsed = prefs["ui.sidebarCollapsed"] === true;
   // MCP requests waiting for approval (refreshed whenever the approval listener sees a change)
   const mcpPending = useQuery(["mcp"], api.mcpPending, [], runtime).data?.length ?? 0;
@@ -56,7 +57,7 @@ export function Sidebar() {
     <aside
       className={cn(
         "flex h-full shrink-0 flex-col bg-background-secondary transition-[width] duration-200",
-        collapsed ? "w-[60px]" : "w-[232px]",
+        collapsed ? "w-[60px]" : "w-[244px]",
       )}
       aria-label="Primary navigation"
     >
@@ -70,22 +71,57 @@ export function Sidebar() {
         )}
       </div>
 
-      <nav className="scroll-area flex-1 px-2.5 pt-2 pb-3">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label} className="mb-4">
-            {!collapsed ? (
-              <div className="mb-1 px-2.5 text-[11.5px] font-medium text-muted/80">{group.label}</div>
-            ) : (
+      {collapsed ? (
+        <nav className="scroll-area flex-1 px-2.5 pt-2 pb-3">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label} className="mb-4">
               <div className="mb-2 h-1" aria-hidden />
-            )}
-            <div className="flex flex-col gap-0.5">
-              {group.items.map((item) => (
-                <NavLink key={item.id} item={item} collapsed={collapsed} badge={item.id === "mcp" ? mcpPending : undefined} />
-              ))}
+              <div className="flex flex-col gap-0.5">
+                {group.items.map((item) => (
+                  <NavLink key={item.id} item={item} collapsed badge={item.id === "mcp" ? mcpPending : undefined} />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </nav>
+          ))}
+        </nav>
+      ) : (
+        // expanded: the groups as a branched tree (React Bits BranchedMenu); every group starts open
+        <div className="scroll-area flex-1 px-3 pt-1 pb-3">
+          <BranchedMenu
+            aria-label="Sections"
+            items={NAV_GROUPS.map((group) => ({
+              label: group.label,
+              children: group.items.map((item) => ({
+                value: item.id,
+                icon: item.icon,
+                label:
+                  item.id === "mcp" && mcpPending ? (
+                    <span className="flex items-center gap-2">
+                      {item.label}
+                      <span className="tabular rounded-full bg-warning-soft px-1.5 text-[11px] leading-[18px] text-warning-soft-foreground" aria-label={`${mcpPending} waiting for approval`}>
+                        {mcpPending}
+                      </span>
+                    </span>
+                  ) : (
+                    item.label
+                  ),
+              })),
+            }))}
+            defaultOpen={NAV_GROUPS.map((_, i) => i)}
+            value={route.page}
+            onSelect={(id) => navigate(id as PageId)}
+            color="#e8ebf0"
+            accentColor="#6aa1ff"
+            lineColor="#2a303b"
+            width={228}
+            rowHeight={32}
+            indent={34}
+            trunk={11}
+            radius={9}
+            fontSize={13.5}
+          />
+        </div>
+      )}
 
       <div className="flex flex-col gap-0.5 px-2.5 pt-1 pb-3">
         <NavLink item={SETTINGS_ITEM} collapsed={collapsed} />
