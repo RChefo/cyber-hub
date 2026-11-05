@@ -140,7 +140,7 @@ export interface ProjectTarget {
   note: string;
 }
 
-export interface Project {
+export interface Project extends Engagement {
   id: number;
   name: string;
   description: string;
@@ -152,6 +152,31 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   targets: ProjectTarget[];
+}
+
+/** Engagement details (schema 12). */
+export interface Engagement {
+  client: string;
+  engagementType: string;
+  authorizationRef: string;
+  objectives: string;
+  methodology: string;
+  contacts: string;
+}
+
+export interface ReportOptions {
+  title: string;
+  author: string;
+  classification: string;
+  summary: string;
+  includeScope: boolean;
+  includeFindings: boolean;
+  minSeverity: Severity;
+  includeClosed: boolean;
+  includeVulnerabilities: boolean;
+  includeAssets: boolean;
+  includeEvidence: boolean;
+  includeTimeline: boolean;
 }
 
 export interface ScopeCheck {

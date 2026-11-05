@@ -1,6 +1,6 @@
 # Platform expansion: architecture audit and plan (Phase 0)
 
-Status: **Phases 0–6 complete.** Phases 1–3 (shared data foundation, attack surface discovery, vulnerabilities and findings; schemas 9 and 10) are described in [DATA_MODEL.md](DATA_MODEL.md), phase 4 (workflow automation; schema 11) in [WORKFLOWS.md](WORKFLOWS.md), phase 5 (analysis and assistant) in [DATA_MODEL.md](DATA_MODEL.md#analysis) and [ASSISTANT.md](ASSISTANT.md), phase 6 (security utilities) in [UTILITIES.md](UTILITIES.md). Phases 7–8 not started.
+Status: **Phases 0–7 complete.** Phases 1–3 (shared data foundation, attack surface discovery, vulnerabilities and findings; schemas 9 and 10) are described in [DATA_MODEL.md](DATA_MODEL.md), phase 4 (workflow automation; schema 11) in [WORKFLOWS.md](WORKFLOWS.md), phase 5 (analysis and assistant) in [DATA_MODEL.md](DATA_MODEL.md#analysis) and [ASSISTANT.md](ASSISTANT.md), phase 6 (security utilities) in [UTILITIES.md](UTILITIES.md), phase 7 (engagement workspace; schema 12) in [DATA_MODEL.md](DATA_MODEL.md#engagement-workspace-schema-12). Phase 8 not started.
 Scope: the "Advanced Platform Expansion" request (attack surface management, vulnerability management, findings, workflow automation, assistant, attack paths, IOC correlation, scan comparison, utilities, engagement workspace, reporting). This document records what already exists, what each new capability reuses, the shared data contracts, migration risks, decisions that need the owner, and the phase plan. It is updated at the end of every phase.
 
 ## 1. What exists today
@@ -110,7 +110,7 @@ Each phase: plan, implement, targeted tests, full regression (typecheck, fronten
 | 4. Workflow automation **(done)** | definitions, node schemas, validation, executor (ordering, timeouts, retries, cancellation, persistence), builder UI, history, templates | 4 |
 | 5. Intelligence and analysis **(done)** | IOC correlation, attack-path views on the OSINT graph, scan comparison, assistant | 1, 5 |
 | 6. Security utilities **(done)** | HTTP builder, DNS intelligence, TLS analyzer, port/service intelligence, subdomain monitor, secrets scanner, wordlist manager | — |
-| 7. Engagement workspace | engagement fields, scope manager UI, evidence vault, project timeline, report builder | 3 |
+| 7. Engagement workspace **(done)** | engagement fields, scope manager UI, evidence vault, project timeline, report builder | 3 |
 | 8. Integration and final QA | cross-module tests, Windows and Linux (container) verification, performance, security review, release readiness | — |
 
 Realistic size: each of phases 1–7 is several thousand lines with tests; the whole expansion is a multi-week effort, done and committed phase by phase.
@@ -190,4 +190,18 @@ Realistic size: each of phases 1–7 is several thousand lines with tests; the w
   * the secrets rules: detections, masking, placeholders, entropy, and folder scans skipping dependency folders and binaries. The fake tokens in the tests are split so that no complete token appears in the source;
   * the port reference.
 * **Not verified here:** live TLS, DNS and HTTP requests against real targets. The UI is checked visually in phase 8.
+
+## 13. Phase 7 result
+
+* **Schema 12:** engagement details on projects.
+* **Project workspace:**
+  * the engagement fields in the form and the overview;
+  * the scope tester and scope history;
+  * the evidence vault (files, notes, tool runs, links to findings, export);
+  * the Timeline tab;
+  * the Report tab: HTML report builder with preview, print to PDF, HTML export and a copy kept in the evidence.
+
+  The Markdown report includes the engagement details.
+* **Tests:** report escaping (no markup from data) and the report CSP, section and severity options, closed findings, and engagement details in the Markdown report. The populated-database upgrade test now runs through schema 12.
+* **Not verified here:** printing and the UI are checked visually in phase 8.
 

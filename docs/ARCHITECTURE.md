@@ -25,6 +25,7 @@ Tauri commands (src-tauri/src/commands/*)      ← input validation, no raw SQL 
 | `commands/activity.rs` | activity log, daily aggregates, preferences (allow-listed keys), favorites, tasks |
 | `commands/library.rs` | custom resources and visits, saved commands and history, saved dorks and history, custom payloads |
 | `commands/projects.rs` | projects, scope targets (every change recorded in `scope_events`), scope checks, findings (lifecycle statuses, history events, legacy status names accepted), per-project run history, Markdown report |
+| `workspace/report.rs` | HTML report builder: escaped rendering of selected sections with a report-level CSP; commands `report_html`, `report_export_html`, `report_save_evidence`, `report_printed` in `commands/workspace.rs` |
 | `workspace/analysis.rs` + `commands/analysis.rs` | analysis over stored data: indicator correlation (assets, scope, findings, linked OSINT, saved indicators, cached threat intelligence), exposure paths, discovery run comparison, line diff of tool run outputs |
 | `sectools/` + `commands/sectools.rs` | security utilities (see UTILITIES.md): TLS analyzer (rustls with a recording verifier, x509-parser), DNS intelligence (SPF/DMARC/DKIM/CAA/DNSSEC), HTTP request builder, secrets scanner, services by port |
 | `commands/assistant.rs` | project assistant (see ASSISTANT.md): context builder with redaction and limits, Anthropic Messages API client (raw HTTPS, owner-provisioned key), in-memory conversations, native confirmation before data is sent |

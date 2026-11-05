@@ -19,14 +19,15 @@ import { AnalysisTab } from "./AnalysisTab";
 import { AssistantTab } from "./AssistantTab";
 import { AttackSurfaceTab } from "./AttackSurfaceTab";
 import { AutomationTab } from "./AutomationTab";
+import { EvidenceVault, ReportTab, ScopeExtras, TimelineTab } from "./EngagementTabs";
 import { FindingsTab } from "./FindingsTab";
-import { ProjectFormModal, STATUS_OPTIONS } from "./ProjectFormModal";
+import { ENGAGEMENT_TYPES, engagementOf, ProjectFormModal, STATUS_OPTIONS } from "./ProjectFormModal";
 import { isOpenFinding } from "@/lib/findings";
 import { countBySeverity } from "./report";
 import { ScopeTab } from "./ScopeTab";
 import { VulnerabilitiesTab } from "./VulnerabilitiesTab";
 
-type TabId = "overview" | "scope" | "surface" | "vulns" | "findings" | "analysis" | "assistant" | "automation" | "notes" | "commands" | "evidence";
+type TabId = "overview" | "scope" | "surface" | "vulns" | "findings" | "analysis" | "assistant" | "automation" | "timeline" | "evidence" | "report" | "notes" | "commands";
 
 function NotesTab({ project }: { project: Project }) {
   const [notes, setNotes] = useState(project.notes);
@@ -46,6 +47,7 @@ function NotesTab({ project }: { project: Project }) {
         notes,
         startDate: project.startDate,
         endDate: project.endDate,
+        ...engagementOf(project),
       });
       invalidate("projects");
       notify.success("Notes saved");
@@ -153,38 +155,6 @@ function CommandsTab({ projectId }: { projectId: number }) {
   );
 }
 
-function EvidenceTab({ findings, onOpenFindings }: { findings: Finding[]; onOpenFindings: () => void }) {
-  const rows = findings.flatMap((f) => f.evidence.map((e, i) => ({ key: `${f.id}-${i}`, finding: f, ...e })));
-  return (
-    <Panel title="Evidence references" description={`${rows.length} references across ${findings.filter((f) => f.evidence.length).length} findings`}>
-      {rows.length === 0 ? (
-        <EmptyBlock
-          icon={FileText}
-          title="No evidence referenced"
-          description="Add evidence references (file paths, URLs, ticket ids) when recording findings."
-          action={<Button size="sm" variant="tertiary" onPress={onOpenFindings}>Go to findings</Button>}
-        />
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {rows.map((r) => (
-            <li key={r.key} className="tile flex items-center gap-3 px-3 py-2">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px]">
-                  {r.label} <span className="text-muted">· {r.finding.title}</span>
-                </div>
-                <code data-selectable className="block truncate font-mono text-[12px] text-muted">
-                  {r.reference}
-                </code>
-              </div>
-              <CopyButton text={r.reference} label="Copy reference" />
-            </li>
-          ))}
-        </ul>
-      )}
-    </Panel>
-  );
-}
-
 function OverviewTab({ project, findings, onTab }: { project: Project; findings: Finding[]; onTab: (t: TabId) => void }) {
   const { runtime, toolById } = useApp();
   const runs = useQuery(["executions"], () => api.projectToolHistory(project.id), [project.id], runtime);
@@ -225,9 +195,21 @@ function OverviewTab({ project, findings, onTab }: { project: Project; findings:
                 <dd className="mt-0.5">{formatRelative(project.updatedAt)}</dd>
               </div>
             </div>
+            <div>
+              <dt className="text-muted">Client</dt>
+              <dd className="mt-0.5">{project.client || <span className="text-muted">Not set</span>}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">Engagement</dt>
+              <dd className="mt-0.5">{ENGAGEMENT_TYPES.find((t) => t.id === project.engagementType)?.label ?? project.engagementType}</dd>
+            </div>
+            <div className="md:col-span-2">
+              <dt className="text-muted">Authorization</dt>
+              <dd className="mt-0.5">{project.authorizationRef || <span className="text-warning-soft-foreground">No written authorization recorded. Add its reference before testing.</span>}</dd>
+            </div>
             <div className="md:col-span-2">
               <dt className="text-muted">Rules of engagement</dt>
-              <dd className="mt-0.5 whitespace-pre-wrap">{project.scopeNotes || <span className="text-muted">Not documented. Record the authorization reference and constraints before testing.</span>}</dd>
+              <dd className="mt-0.5 whitespace-pre-wrap">{project.scopeNotes || <span className="text-muted">Not documented. Record testing windows and constraints before testing.</span>}</dd>
             </div>
           </dl>
         </Panel>
@@ -294,7 +276,7 @@ export function ProjectDetail({ id }: { id: number }) {
 
   const setStatus = async (status: ProjectStatus) => {
     try {
-      await api.projectUpsert({ id: p.id, name: p.name, description: p.description, status, scopeNotes: p.scopeNotes, notes: p.notes, startDate: p.startDate, endDate: p.endDate });
+      await api.projectUpsert({ id: p.id, name: p.name, description: p.description, status, scopeNotes: p.scopeNotes, notes: p.notes, startDate: p.startDate, endDate: p.endDate, ...engagementOf(p) });
       invalidate("projects", "activity");
       notify.success(`Project marked ${PROJECT_STATUS_META[status].label.toLowerCase()}`);
     } catch (e) {
@@ -348,9 +330,11 @@ export function ProjectDetail({ id }: { id: number }) {
     { id: "analysis", label: "Analysis" },
     { id: "assistant", label: "Assistant" },
     { id: "automation", label: "Automation" },
+    { id: "timeline", label: "Timeline" },
+    { id: "evidence", label: "Evidence" },
+    { id: "report", label: "Report" },
     { id: "notes", label: "Notes" },
     { id: "commands", label: "Commands & runs" },
-    { id: "evidence", label: "Evidence" },
   ];
 
   return (
@@ -422,6 +406,7 @@ export function ProjectDetail({ id }: { id: number }) {
         </Tabs.Panel>
         <Tabs.Panel id="scope">
           <ScopeTab project={p} onChanged={project.reload} />
+          <ScopeExtras project={p} />
         </Tabs.Panel>
         <Tabs.Panel id="surface">
           <AttackSurfaceTab project={p} />
@@ -448,7 +433,13 @@ export function ProjectDetail({ id }: { id: number }) {
           <CommandsTab projectId={p.id} />
         </Tabs.Panel>
         <Tabs.Panel id="evidence">
-          <EvidenceTab findings={f} onOpenFindings={() => setTab("findings")} />
+          <EvidenceVault project={p} findings={f} onOpenFindings={() => setTab("findings")} />
+        </Tabs.Panel>
+        <Tabs.Panel id="timeline">
+          <TimelineTab project={p} />
+        </Tabs.Panel>
+        <Tabs.Panel id="report">
+          <ReportTab project={p} />
         </Tabs.Panel>
       </Tabs>
 

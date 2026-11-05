@@ -12,6 +12,7 @@ use crate::util::{clean, now, one_of};
 use crate::workspace::findings::{self as lifecycle, OPEN_SQL};
 
 const STATUSES: &[&str] = &["planning", "active", "paused", "completed", "archived"];
+pub const ENGAGEMENT_TYPES: &[&str] = &["", "external", "internal", "web_application", "api", "cloud", "mobile", "wireless", "red_team", "osint", "other"];
 const SEVERITIES: &[&str] = &["critical", "high", "medium", "low", "info"];
 
 #[derive(Debug, Serialize)]
@@ -51,6 +52,14 @@ pub struct Project {
     pub notes: String,
     pub start_date: Option<String>,
     pub end_date: Option<String>,
+    pub client: String,
+    pub engagement_type: String,
+    /// reference of the written authorization (contract, ticket, letter)
+    pub authorization_ref: String,
+    pub objectives: String,
+    pub methodology: String,
+    /// who to contact, including in an emergency
+    pub contacts: String,
     pub created_at: String,
     pub updated_at: String,
     pub targets: Vec<Target>,
@@ -70,6 +79,18 @@ pub struct ProjectInput {
     pub notes: String,
     pub start_date: Option<String>,
     pub end_date: Option<String>,
+    #[serde(default)]
+    pub client: String,
+    #[serde(default)]
+    pub engagement_type: String,
+    #[serde(default)]
+    pub authorization_ref: String,
+    #[serde(default)]
+    pub objectives: String,
+    #[serde(default)]
+    pub methodology: String,
+    #[serde(default)]
+    pub contacts: String,
 }
 
 fn date_opt(field: &str, v: &Option<String>) -> AppResult<Option<String>> {
@@ -141,10 +162,15 @@ pub fn scope_entries(c: &Connection, project_id: i64) -> AppResult<Vec<ScopeEntr
 
 #[tauri::command]
 pub async fn project_get(db: State<'_, Db>, id: i64) -> AppResult<Project> {
-    db.with(|c| {
+    db.with(|c| project_load(c, id))
+}
+
+pub(crate) fn project_load(c: &Connection, id: i64) -> AppResult<Project> {
+    {
         let p = c
             .query_row(
-                "SELECT id, name, description, status, scope_notes, notes, start_date, end_date, created_at, updated_at FROM projects WHERE id = ?1",
+                "SELECT id, name, description, status, scope_notes, notes, start_date, end_date, created_at, updated_at,
+                        client, engagement_type, authorization_ref, objectives, methodology, contacts FROM projects WHERE id = ?1",
                 params![id],
                 |r| {
                     Ok(Project {
@@ -158,6 +184,12 @@ pub async fn project_get(db: State<'_, Db>, id: i64) -> AppResult<Project> {
                         end_date: r.get(7)?,
                         created_at: r.get(8)?,
                         updated_at: r.get(9)?,
+                        client: r.get(10)?,
+                        engagement_type: r.get(11)?,
+                        authorization_ref: r.get(12)?,
+                        objectives: r.get(13)?,
+                        methodology: r.get(14)?,
+                        contacts: r.get(15)?,
                         targets: vec![],
                     })
                 },
@@ -166,7 +198,7 @@ pub async fn project_get(db: State<'_, Db>, id: i64) -> AppResult<Project> {
             .ok_or_else(|| AppError::NotFound(format!("project {id}")))?;
         let targets = load_targets(c, id)?;
         Ok(Project { targets, ..p })
-    })
+    }
 }
 
 #[tauri::command]
@@ -178,6 +210,12 @@ pub async fn project_upsert(db: State<'_, Db>, input: ProjectInput) -> AppResult
     let notes = clean("Notes", &input.notes, 100_000, false)?;
     let start = date_opt("Start date", &input.start_date)?;
     let end = date_opt("End date", &input.end_date)?;
+    let client = clean("Client", &input.client, 200, false)?;
+    let engagement_type = one_of("Engagement type", &input.engagement_type, ENGAGEMENT_TYPES)?;
+    let authorization_ref = clean("Authorization reference", &input.authorization_ref, 300, false)?;
+    let objectives = clean("Objectives", &input.objectives, 10_000, false)?;
+    let methodology = clean("Methodology", &input.methodology, 10_000, false)?;
+    let contacts = clean("Contacts", &input.contacts, 5_000, false)?;
     if let (Some(s), Some(e)) = (&start, &end) {
         if e < s {
             return Err(validation("End date must be after the start date"));
@@ -187,8 +225,9 @@ pub async fn project_upsert(db: State<'_, Db>, input: ProjectInput) -> AppResult
     db.with(|c| match input.id {
         Some(id) => {
             let n = c.execute(
-                "UPDATE projects SET name=?2, description=?3, status=?4, scope_notes=?5, notes=?6, start_date=?7, end_date=?8, updated_at=?9 WHERE id=?1",
-                params![id, name, description, status, scope_notes, notes, start, end, ts],
+                "UPDATE projects SET name=?2, description=?3, status=?4, scope_notes=?5, notes=?6, start_date=?7, end_date=?8, updated_at=?9,
+                     client=?10, engagement_type=?11, authorization_ref=?12, objectives=?13, methodology=?14, contacts=?15 WHERE id=?1",
+                params![id, name, description, status, scope_notes, notes, start, end, ts, client, engagement_type, authorization_ref, objectives, methodology, contacts],
             )?;
             if n == 0 {
                 return Err(AppError::NotFound(format!("project {id}")));
@@ -197,8 +236,9 @@ pub async fn project_upsert(db: State<'_, Db>, input: ProjectInput) -> AppResult
         }
         None => {
             c.execute(
-                "INSERT INTO projects (name, description, status, scope_notes, notes, start_date, end_date, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8)",
-                params![name, description, status, scope_notes, notes, start, end, ts],
+                "INSERT INTO projects (name, description, status, scope_notes, notes, start_date, end_date, created_at, updated_at,
+                     client, engagement_type, authorization_ref, objectives, methodology, contacts) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8,?9,?10,?11,?12,?13,?14)",
+                params![name, description, status, scope_notes, notes, start, end, ts, client, engagement_type, authorization_ref, objectives, methodology, contacts],
             )?;
             let id = c.last_insert_rowid();
             log(c, "project", &format!("Created project “{name}”"), "", Some("project"), Some(&id.to_string()), Some(id))?;
@@ -449,6 +489,16 @@ pub async fn findings_list(db: State<'_, Db>, project_id: Option<i64>) -> AppRes
     })
 }
 
+/// All findings of a project, highest severity first.
+pub(crate) fn findings_of(c: &Connection, project_id: i64) -> AppResult<Vec<Finding>> {
+    let mut stmt = c.prepare(&format!(
+        "SELECT {FINDING_COLS} FROM findings WHERE project_id = ?1
+         ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, updated_at DESC"
+    ))?;
+    let rows = stmt.query_map(params![project_id], finding_row)?.collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
 #[tauri::command]
 pub async fn finding_upsert(db: State<'_, Db>, input: FindingInput) -> AppResult<i64> {
     db.with(|c| finding_save(c, &input, "user"))
@@ -695,6 +745,15 @@ pub fn markdown_report(project: &Project, findings: &[Finding], generated: &str)
         first.make_ascii_uppercase();
     }
     l.push(format!("- **Status:** {status}"));
+    if !project.client.trim().is_empty() {
+        l.push(format!("- **Client:** {}", project.client.trim()));
+    }
+    if !project.engagement_type.is_empty() {
+        l.push(format!("- **Engagement:** {}", project.engagement_type.replace('_', " ")));
+    }
+    if !project.authorization_ref.trim().is_empty() {
+        l.push(format!("- **Authorization:** {}", project.authorization_ref.trim()));
+    }
     l.push(format!("- **Period:** {} → {}", project.start_date.as_deref().unwrap_or("not set"), project.end_date.as_deref().unwrap_or("not set")));
     let counts: Vec<String> = SEVERITY_LABEL.iter().map(|(k, v)| format!("{v} {}", findings.iter().filter(|f| f.severity == *k).count())).collect();
     l.push(format!("- **Findings:** {} ({})", findings.len(), counts.join(", ")));
@@ -826,6 +885,12 @@ mod report_tests {
             notes: String::new(),
             start_date: Some("2026-11-01".into()),
             end_date: Some("2026-11-15".into()),
+            client: if targets { "Acme Corp".into() } else { String::new() },
+            engagement_type: "external".into(),
+            authorization_ref: if targets { "SOW-2026-117".into() } else { String::new() },
+            objectives: String::new(),
+            methodology: String::new(),
+            contacts: String::new(),
             created_at: "2026-11-01T00:00:00Z".into(),
             updated_at: "2026-11-02T00:00:00Z".into(),
             targets: if targets {
@@ -877,6 +942,7 @@ mod report_tests {
         assert!(md.contains("Production VPN \\| do not touch"));
         assert!(md.contains("| `vpn.acme.test` | domain | Out of scope |"));
         assert!(md.contains("- **Status:** Active"));
+        assert!(md.contains("- **Client:** Acme Corp") && md.contains("- **Authorization:** SOW-2026-117"));
         assert!(md.contains("- **Status:** In remediation"));
         assert!(md.contains("**Remediation**
 

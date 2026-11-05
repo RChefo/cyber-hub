@@ -5,7 +5,7 @@ import { SelectInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
 import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate } from "@/lib/query";
-import type { Project, ProjectStatus } from "@/lib/types";
+import type { Engagement, Project, ProjectStatus } from "@/lib/types";
 
 export const STATUS_OPTIONS: { id: ProjectStatus; label: string; description: string }[] = [
   { id: "planning", label: "Planning", description: "Scope is being agreed; tools cannot run yet" },
@@ -16,6 +16,27 @@ export const STATUS_OPTIONS: { id: ProjectStatus; label: string; description: st
 ];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const ENGAGEMENT_TYPES: { id: string; label: string }[] = [
+  { id: "", label: "Not set" },
+  { id: "external", label: "External network" },
+  { id: "internal", label: "Internal network" },
+  { id: "web_application", label: "Web application" },
+  { id: "api", label: "API" },
+  { id: "cloud", label: "Cloud" },
+  { id: "mobile", label: "Mobile" },
+  { id: "wireless", label: "Wireless" },
+  { id: "red_team", label: "Red team" },
+  { id: "osint", label: "OSINT" },
+  { id: "other", label: "Other" },
+];
+
+const EMPTY_ENGAGEMENT: Engagement = { client: "", engagementType: "", authorizationRef: "", objectives: "", methodology: "", contacts: "" };
+
+export function engagementOf(p: Project | null | undefined): Engagement {
+  if (!p) return EMPTY_ENGAGEMENT;
+  return { client: p.client, engagementType: p.engagementType, authorizationRef: p.authorizationRef, objectives: p.objectives, methodology: p.methodology, contacts: p.contacts };
+}
 
 interface Props {
   isOpen: boolean;
@@ -32,6 +53,8 @@ export function ProjectFormModal({ isOpen, onOpenChange, project, onSaved }: Pro
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [scopeNotes, setScopeNotes] = useState("");
+  const [eng, setEng] = useState<Engagement>(EMPTY_ENGAGEMENT);
+  const setE = (k: keyof Engagement, v: string) => setEng((e) => ({ ...e, [k]: v }));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -43,6 +66,7 @@ export function ProjectFormModal({ isOpen, onOpenChange, project, onSaved }: Pro
     setStartDate(project?.startDate ?? "");
     setEndDate(project?.endDate ?? "");
     setScopeNotes(project?.scopeNotes ?? "");
+    setEng(engagementOf(project));
     setError(null);
   }, [isOpen, project]);
 
@@ -64,6 +88,7 @@ export function ProjectFormModal({ isOpen, onOpenChange, project, onSaved }: Pro
         notes: project?.notes ?? "",
         startDate: startDate || null,
         endDate: endDate || null,
+        ...eng,
       });
       invalidate("projects", "activity");
       notify.success(project ? "Project updated" : "Project created");
@@ -96,7 +121,17 @@ export function ProjectFormModal({ isOpen, onOpenChange, project, onSaved }: Pro
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <TextInput label="Project name" value={name} onChange={setName} placeholder="Acme external assessment Q4" isRequired autoFocus className="md:col-span-2" />
-        <TextAreaInput label="Description" value={description} onChange={setDescription} rows={2} placeholder="Objective, client contact, engagement type" className="md:col-span-2" />
+        <TextAreaInput label="Description" value={description} onChange={setDescription} rows={2} placeholder="What is being assessed and why" className="md:col-span-2" />
+        <TextInput label="Client" value={eng.client} onChange={(v) => setE("client", v)} placeholder="Acme Corp" />
+        <SelectInput label="Engagement type" value={eng.engagementType} onChange={(v) => setE("engagementType", v)} options={ENGAGEMENT_TYPES} />
+        <TextInput
+          label="Authorization reference"
+          value={eng.authorizationRef}
+          onChange={(v) => setE("authorizationRef", v)}
+          placeholder="SOW-2026-117, signed 2026-10-28"
+          description="The written authorization this testing relies on"
+          className="md:col-span-2"
+        />
         <SelectInput label="Status" value={status} onChange={(v) => setStatus(v as ProjectStatus)} options={STATUS_OPTIONS} />
         <div className="grid grid-cols-2 gap-3">
           <TextInput label="Start date" value={startDate} onChange={setStartDate} placeholder="2026-11-01" error={startErr} mono />
@@ -107,10 +142,13 @@ export function ProjectFormModal({ isOpen, onOpenChange, project, onSaved }: Pro
           value={scopeNotes}
           onChange={setScopeNotes}
           rows={4}
-          placeholder="Authorization reference, testing windows, excluded techniques, emergency contacts"
+          placeholder="Testing windows, excluded techniques, rate limits"
           description="Scope targets (domains, IPs, CIDRs) are managed on the project's Scope tab."
           className="md:col-span-2"
         />
+        <TextAreaInput label="Objectives" value={eng.objectives} onChange={(v) => setE("objectives", v)} rows={2} className="md:col-span-2" />
+        <TextAreaInput label="Methodology" value={eng.methodology} onChange={(v) => setE("methodology", v)} rows={2} placeholder="OWASP WSTG, PTES, internal checklist" className="md:col-span-2" />
+        <TextAreaInput label="Contacts" value={eng.contacts} onChange={(v) => setE("contacts", v)} rows={2} placeholder="Technical and emergency contacts" className="md:col-span-2" />
       </div>
       {error && (
         <div role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger-soft-foreground">

@@ -92,7 +92,7 @@ export const api = {
     notes: string;
     startDate: string | null;
     endDate: string | null;
-  }) => call<number>("project_upsert", { input }),
+  } & T.Engagement) => call<number>("project_upsert", { input }),
   projectDelete: (id: number) => call<void>("project_delete", { id }),
   scopeClassify: (value: string) => call<[string, string]>("scope_classify", { value }),
   projectTargetAdd: (projectId: number, input: { value: string; inScope: boolean; note: string }) =>
@@ -130,6 +130,10 @@ export const api = {
   evidenceLinkOsint: (projectId: number, osintEvidenceId: number) => call<T.EvidenceRecord>("evidence_link_osint", { projectId, osintEvidenceId }),
   evidenceExport: (id: number) => call<string | null>("evidence_export", { id }),
   evidenceDelete: (id: number) => call<void>("evidence_delete", { id }),
+  reportHtml: (projectId: number, options: T.ReportOptions) => call<string>("report_html", { projectId, options }),
+  reportExportHtml: (projectId: number, options: T.ReportOptions) => call<string | null>("report_export_html", { projectId, options }),
+  reportSaveEvidence: (projectId: number, options: T.ReportOptions) => call<T.EvidenceRecord>("report_save_evidence", { projectId, options }),
+  reportPrinted: (projectId: number) => call<void>("report_printed", { projectId }),
   // attack surface discovery
   discoveryPassiveStart: (projectId: number) => call<number>("discovery_passive_start", { projectId }),
   discoveryHttpStart: (projectId: number, hosts?: string[]) => call<number>("discovery_http_start", { projectId, hosts: hosts?.length ? hosts : null }),

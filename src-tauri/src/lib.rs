@@ -197,6 +197,10 @@ pub fn run() {
             workspace_commands::evidence_link_osint,
             workspace_commands::evidence_export,
             workspace_commands::evidence_delete,
+            workspace_commands::report_html,
+            workspace_commands::report_export_html,
+            workspace_commands::report_save_evidence,
+            workspace_commands::report_printed,
             // attack surface discovery
             discovery_commands::discovery_passive_start,
             discovery_commands::discovery_http_start,

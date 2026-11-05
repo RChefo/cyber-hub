@@ -1,4 +1,4 @@
-# Project data model (schema 10)
+# Project data model (schema 12)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -131,6 +131,24 @@ Projects → *Findings* provides:
 * tags, assignee and due date in the editor;
 * history and links per finding, with notes;
 * bulk status changes. `findings_bulk_status` changes each selected finding on its own with the lifecycle rule, records every change, and reports the findings it left unchanged instead of failing.
+
+## Engagement workspace (schema 12)
+
+* **Engagement details.** Projects have engagement details: client, engagement type, written authorization reference, objectives, methodology and contacts. Existing projects get empty values. The project form edits them, the overview shows them (with a warning when no authorization reference is recorded), and both reports include them. Every save of a project carries the fields, so editing notes or the status never clears them.
+* **Scope manager.** The Scope tab adds a *Test targets* panel (the scope gate's decision for active or passive use, without contacting anything) and the scope history (additions, changes, removals and refused active operations).
+* **Evidence vault.** The Evidence tab manages the evidence registry:
+  * add files (native dialog), text notes and tool runs;
+  * view notes, save copies of files, delete;
+  * link evidence to findings.
+
+  The free-form references kept in findings are listed below the vault.
+* **Timeline tab.** The project timeline is grouped by day, can be filtered by event type, and pages back through older events.
+* **Report builder.** The Report tab produces an HTML report with a live preview (sandboxed frame).
+  * Options: title, author, classification, executive summary, minimum severity, closed findings, and sections (scope, findings, vulnerabilities, assets, evidence register, timeline).
+  * Content: per finding, the description, reproduction, technical details, remediation and evidence, including the SHA-256 of linked files.
+  * Output: *Print or save as PDF* uses the system web view's print dialog (decision 3; no PDF library). *Save as HTML* writes the file through a native save dialog. *Keep a copy in the evidence* stores the HTML as text evidence.
+  * Safety: the backend escapes all content, and the document has its own Content-Security-Policy (`default-src 'none'; style-src 'unsafe-inline'; img-src data:`). The print frame may not run scripts.
+  * Exports, prints and saved copies appear on the timeline (`report`). The Markdown report (header button, MCP) is unchanged apart from the engagement details.
 
 ## Analysis
 

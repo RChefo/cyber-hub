@@ -7,6 +7,7 @@ pub mod assets;
 pub mod discovery;
 pub mod evidence;
 pub mod findings;
+pub mod report;
 pub mod scope_gate;
 pub mod timeline;
 pub mod vulns;

@@ -766,6 +766,16 @@ const MIGRATIONS: &[&str] = &[
         UNIQUE (run_id, position)
     );
     "#,
+    // 12: engagement details on projects (client, type, authorization reference, objectives,
+    // methodology, contacts). Existing projects get empty values.
+    r#"
+    ALTER TABLE projects ADD COLUMN client TEXT NOT NULL DEFAULT '';
+    ALTER TABLE projects ADD COLUMN engagement_type TEXT NOT NULL DEFAULT '';
+    ALTER TABLE projects ADD COLUMN authorization_ref TEXT NOT NULL DEFAULT '';
+    ALTER TABLE projects ADD COLUMN objectives TEXT NOT NULL DEFAULT '';
+    ALTER TABLE projects ADD COLUMN methodology TEXT NOT NULL DEFAULT '';
+    ALTER TABLE projects ADD COLUMN contacts TEXT NOT NULL DEFAULT '';
+    "#,
 ];
 
 impl Db {
