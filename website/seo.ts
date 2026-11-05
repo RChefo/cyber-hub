@@ -45,7 +45,7 @@ export function seo({ siteUrl, releasesApiOrigin, pages }: SeoOptions): Plugin {
           "object-src 'none'",
           "base-uri 'self'",
           "form-action 'none'",
-          "frame-ancestors 'none'",
+          // frame-ancestors only works as an HTTP header (see docs/WEBSITE.md, Deployment)
         ].join("; ");
         tags.unshift(`<meta http-equiv="Content-Security-Policy" content="${csp}" />`);
       }

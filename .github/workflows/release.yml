@@ -276,6 +276,23 @@ jobs:
             echo "::error::The draft release is missing assets; it stays a draft"; diff <(echo "$expected") <(echo "$actual") || true; exit 1
           fi
 
+      - name: Check GitHub's asset digests against SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The website shows GitHub's per-asset SHA-256 digest as the file's checksum; it must be
+          # the value in the published SHA256SUMS.txt for every file, or the release stays a draft.
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=30" \
+            --jq '.[] | select(.tag_name == env.TAG) | .assets[] | [.name, (.digest // "")] | @tsv' > digests.tsv
+          while read -r sum name; do
+            got=$(awk -F'\t' -v n="$name" '$1 == n { print $2 }' digests.tsv)
+            if [ "$got" != "sha256:$sum" ]; then
+              echo "::error::GitHub digest for $name is '${got:-missing}', expected sha256:$sum; the release stays a draft"; exit 1
+            fi
+          done < assets/SHA256SUMS.txt
+          echo "Every asset digest matches SHA256SUMS.txt."
+
       - name: Publish the release
         if: github.event_name == 'push' || inputs.draft == false
         env:

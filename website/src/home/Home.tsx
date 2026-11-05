@@ -5,7 +5,9 @@ import InkOrbitFeatures from "@/components/ui/ink-orbit-features";
 import OrbitImages from "@/components/ui/OrbitImages";
 import { facts, modules, principles, screens, SHOT, showcase } from "../content";
 import { DESKTOP, gsap, MOTION_OK, useGSAP, useReveal } from "../lib/motion";
-import { useLatestRelease } from "../lib/useRelease";
+import { CategoryTag, InlineText, Skeleton } from "../components/release";
+import { useReleases } from "../lib/releaseStore";
+import { changelogOf, formatDate, highlights } from "../lib/releases";
 
 function Shot({ src, alt, eager, className = "", ...rest }: { src: string; alt: string; eager?: boolean; className?: string } & Record<`data-${string}`, string>) {
   return (
@@ -403,6 +405,65 @@ function Platforms() {
   );
 }
 
+/* ───────────── changelog preview ───────────── */
+
+function ChangelogPreview() {
+  const root = useRef<HTMLElement>(null);
+  useReveal(root);
+  const state = useReleases();
+  const latest = state.kind === "ready" ? state.latest : null;
+  const log = latest ? changelogOf(latest) : null;
+  const items = log ? highlights(log, 5) : [];
+  return (
+    <section ref={root} id="changelog" className="wrap pt-28 md:pt-36" aria-labelledby="changelog-title">
+      <div data-reveal-group className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] lg:gap-16">
+        <div>
+          <h2 data-reveal id="changelog-title" className="text-[clamp(1.75rem,3.4vw,2.6rem)] leading-tight font-semibold tracking-[-0.025em]">
+            What's new
+          </h2>
+          {latest ? (
+            <div data-reveal className="mt-5">
+              <div className="text-[2.2rem] leading-none font-semibold tracking-[-0.03em]">{latest.version}</div>
+              <div className="mt-2 text-[0.9rem] text-faint">Released {formatDate(latest.publishedAt)}</div>
+              {log?.summary && (
+                <p className="mt-4 max-w-[40ch] leading-relaxed text-muted">
+                  <InlineText v={log.summary} />
+                </p>
+              )}
+            </div>
+          ) : state.kind === "loading" ? (
+            <div data-reveal className="mt-5 space-y-2">
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-4 w-40" />
+            </div>
+          ) : (
+            <p data-reveal className="mt-5 max-w-[40ch] leading-relaxed text-muted">
+              {state.kind === "error" ? "Release information could not be loaded right now." : "No release has been published yet. The changes of each release appear here once it is out."}
+            </p>
+          )}
+          <a data-reveal href="/changelog/" className="mt-6 inline-block text-[0.95rem] text-accent-soft hover:underline">
+            View full changelog
+          </a>
+        </div>
+        {items.length > 0 && (
+          <ul className="self-end">
+            {items.map((h, i) => (
+              <li data-reveal key={i} className="flex items-start gap-3 border-t border-line py-4 first:border-t-0">
+                <span className="w-[6.5rem] shrink-0 pt-0.5">
+                  <CategoryTag category={h.category} />
+                </span>
+                <span className="leading-relaxed text-ink/90">
+                  <InlineText v={h.item} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /* ───────────── closing ───────────── */
 
 /**
@@ -563,7 +624,7 @@ function Closing() {
 }
 
 export default function Home() {
-  const release = useLatestRelease();
+  const releases = useReleases();
   return (
     <>
       <Nav page="home" />
@@ -575,9 +636,10 @@ export default function Home() {
         <Showcase />
         <Principles />
         <Platforms />
+        <ChangelogPreview />
         <Closing />
       </main>
-      <Footer version={release.kind === "ready" ? release.release.version : null} />
+      <Footer version={releases.kind === "ready" ? (releases.latest?.version ?? null) : null} />
     </>
   );
 }

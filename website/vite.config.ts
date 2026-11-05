@@ -18,15 +18,21 @@ export default defineConfig(({ mode }) => {
         pages: [
           { path: "/", file: "index.html" },
           { path: "/download/", file: "download/index.html" },
+          { path: "/download/archive/", file: "download/archive/index.html" },
+          { path: "/changelog/", file: "changelog/index.html" },
         ],
       }),
     ],
     resolve: { alias: { "@": resolve(import.meta.dirname, "src") } },
     build: {
+      // never inline assets as data: URIs (fonts would then be blocked by font-src 'self')
+      assetsInlineLimit: 0,
       rollupOptions: {
         input: {
           home: resolve(import.meta.dirname, "index.html"),
           download: resolve(import.meta.dirname, "download/index.html"),
+          archive: resolve(import.meta.dirname, "download/archive/index.html"),
+          changelog: resolve(import.meta.dirname, "changelog/index.html"),
         },
       },
     },

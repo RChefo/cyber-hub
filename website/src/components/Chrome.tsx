@@ -12,22 +12,18 @@ export function Logo({ className = "size-8" }: { className?: string }) {
   );
 }
 
-type Page = "home" | "download";
+type Page = "home" | "download" | "changelog";
 
 function navItems(page: Page) {
   const home = page === "home" ? "" : "/";
   const links = repoLinks(config.repository);
   return [
+    { href: "/", label: "Home", current: page === "home" },
     { href: `${home}#features`, label: "Features" },
-    { href: `${home}#security`, label: "Security model" },
-    { href: `${home}#platforms`, label: "Platforms" },
-    ...(links
-      ? [
-          { href: links.docs, label: "Documentation", external: true },
-          { href: links.releases, label: "Changelog", external: true },
-        ]
-      : []),
-  ];
+    { href: "/changelog/", label: "Changelog", current: page === "changelog" },
+    // the documentation lives in the repository: linked only once one is configured
+    ...(links ? [{ href: links.docs, label: "Documentation", external: true }] : []),
+  ] as { href: string; label: string; current?: boolean; external?: boolean }[];
 }
 
 export function Nav({ page }: { page: Page }) {
@@ -76,7 +72,8 @@ export function Nav({ page }: { page: Page }) {
               key={i.label}
               href={i.href}
               {...(i.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-              className="rounded-md px-3 py-2 text-[0.92rem] text-muted transition-colors hover:text-ink"
+              aria-current={i.current ? "page" : undefined}
+              className={`rounded-md px-3 py-2 text-[0.92rem] transition-colors hover:text-ink ${i.current ? "text-ink" : "text-muted"}`}
             >
               {i.label}
             </a>
@@ -142,6 +139,8 @@ export function Footer({ version }: { version?: string | null }) {
             <li><a className="text-ink/85 hover:text-ink" href="/#security">Security model</a></li>
             <li><a className="text-ink/85 hover:text-ink" href="/#platforms">Platforms</a></li>
             <li><a className="text-ink/85 hover:text-ink" href="/download/">Download</a></li>
+            <li><a className="text-ink/85 hover:text-ink" href="/download/archive/">Version archive</a></li>
+            <li><a className="text-ink/85 hover:text-ink" href="/changelog/">Changelog</a></li>
           </ul>
         </nav>
         <nav aria-label="Project">
@@ -149,11 +148,11 @@ export function Footer({ version }: { version?: string | null }) {
           {links ? (
             <ul className="mt-3 space-y-2 text-[0.92rem]">
               <li><a className="text-ink/85 hover:text-ink" href={links.docs} target="_blank" rel="noopener noreferrer">Documentation</a></li>
-              <li><a className="text-ink/85 hover:text-ink" href={links.releases} target="_blank" rel="noopener noreferrer">Releases and changelog</a></li>
+              <li><a className="text-ink/85 hover:text-ink" href={links.releases} target="_blank" rel="noopener noreferrer">Releases on GitHub</a></li>
               <li><a className="text-ink/85 hover:text-ink" href={links.repository} target="_blank" rel="noopener noreferrer">GitHub</a></li>
             </ul>
           ) : (
-            <p className="mt-3 text-[0.9rem] leading-relaxed text-faint">Documentation, the changelog and the source repository will be linked here once the repository is public.</p>
+            <p className="mt-3 text-[0.9rem] leading-relaxed text-faint">Documentation and the source repository will be linked here once the repository is public.</p>
           )}
         </nav>
       </div>

@@ -1,14 +1,11 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Footer, Nav } from "../components/Chrome";
-import { config, repoLinks } from "../lib/config";
+import { NoteBlocks, ReleaseStateNotice, Skeleton, Verification } from "../components/release";
 import { gsap, MOTION_OK, useGSAP, useReveal } from "../lib/motion";
-import { type Block, type Inline, parseNotes, sections } from "../lib/notes";
-import { currentOs } from "../lib/platform";
-import { type Artifact, type Format, FORMAT_LABEL, formatSize, type Os, type Release, type ReleaseState } from "../lib/releases";
-import { useLatestRelease } from "../lib/useRelease";
+import { currentPlatform, type Detection, detectionMessage, refineArch, resolveSelection } from "../lib/platform";
+import { type ReleasesState, useReleases } from "../lib/releaseStore";
+import { changelogOf, FORMAT_HINT, FORMAT_LABEL, formatDate, formatSize, FORMATS_BY_OS, type Format, type Os, OS_LABEL, platformsOf, type Release, type ReleaseAsset } from "../lib/releases";
 
-const FORMATS: Record<Os, Format[]> = { windows: ["nsis", "msi"], linux: ["appimage", "deb", "rpm"] };
-const OS_LABEL: Record<Os, string> = { windows: "Windows", linux: "Linux" };
 const INSTALL_TITLE: Record<Format, string> = {
   nsis: "Install with the installer",
   msi: "Install the MSI package",
@@ -17,65 +14,7 @@ const INSTALL_TITLE: Record<Format, string> = {
   rpm: "Install the .rpm package",
 };
 
-function formatDate(iso: string | null) {
-  return iso ? new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : "—";
-}
-
-/* ───────────── hero with live release facts ───────────── */
-
-function StatusRow({ state }: { state: ReleaseState & { retry: () => void } }) {
-  const release = state.kind === "ready" ? state.release : null;
-  const platforms = release ? [...new Set(release.artifacts.map((a) => OS_LABEL[a.os]))].join(" and ") || "—" : "Windows and Linux (x64)";
-  const status =
-    state.kind === "ready" ? "Stable release" : state.kind === "loading" ? "Checking…" : state.kind === "error" ? "Unavailable right now" : "No public release yet";
-  const rows: [string, string][] = [
-    ["Version", release ? release.version : state.kind === "loading" ? "…" : "—"],
-    ["Released", release ? formatDate(release.publishedAt) : state.kind === "loading" ? "…" : "—"],
-    ["Status", status],
-    ["Platforms", platforms],
-  ];
-  return (
-    <dl className="mt-12 grid grid-cols-2 gap-px overflow-hidden rounded-[14px] bg-line/60 md:grid-cols-4" aria-live="polite" aria-busy={state.kind === "loading"}>
-      {rows.map(([k, v]) => (
-        <div key={k} className="bg-surface px-5 py-4">
-          <dt className="text-[0.82rem] text-faint">{k}</dt>
-          <dd className={`mt-1 text-[1.02rem] ${k === "Status" && state.kind === "ready" ? "text-ok" : "text-ink"}`}>{v}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function Unavailable({ state }: { state: ReleaseState & { retry: () => void } }) {
-  const links = repoLinks(config.repository);
-  if (state.kind === "error")
-    return (
-      <div role="alert" className="mt-6 rounded-[12px] bg-warn/10 px-5 py-4 text-[0.95rem] text-[#f1c779]">
-        <p>{state.message}</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" className="btn btn-quiet h-9 px-3.5 text-[0.88rem]" onClick={state.retry}>
-            Try again
-          </button>
-          {links && (
-            <a className="btn btn-quiet h-9 px-3.5 text-[0.88rem]" href={links.releases} target="_blank" rel="noopener noreferrer">
-              Open the releases page
-            </a>
-          )}
-        </div>
-      </div>
-    );
-  if (state.kind === "none" || state.kind === "not-configured")
-    return (
-      <p className="mt-6 max-w-[62ch] rounded-[12px] bg-surface px-5 py-4 text-[0.95rem] leading-relaxed text-muted">
-        Cyber Hub has not been publicly released yet, so there is nothing to download. Packages appear here automatically as soon as the first stable release is published.
-      </p>
-    );
-  return null;
-}
-
-/* ───────────── platform and package selection ───────────── */
-
-const STEPS: Record<Format, (a: Artifact | null) => { text: React.ReactNode; code?: string }[]> = {
+const STEPS: Record<Format, (a: ReleaseAsset | null) => { text: string; code?: string }[]> = {
   nsis: () => [
     { text: "Download the installer." },
     { text: "Run it. It installs Cyber Hub for your user account and does not need administrator rights." },
@@ -104,16 +43,49 @@ const STEPS: Record<Format, (a: Artifact | null) => { text: React.ReactNode; cod
   ],
 };
 
+/* ───────────── release facts ───────────── */
+
+function StatusRow({ state, release }: { state: ReleasesState; release: Release | null }) {
+  const loading = state.kind === "loading";
+  const platforms = release ? platformsOf(release).map((o) => OS_LABEL[o]).join(" and ") || "—" : "Windows and Linux (x64)";
+  const status = release ? "Stable release" : loading ? "Checking…" : state.kind === "error" ? "Unavailable right now" : "No public release yet";
+  const rows: [string, React.ReactNode][] = [
+    ["Version", release ? release.version : loading ? <Skeleton className="mt-1 h-5 w-14" /> : "—"],
+    ["Released", release ? formatDate(release.publishedAt) : loading ? <Skeleton className="mt-1 h-5 w-28" /> : "—"],
+    ["Status", status],
+    ["Platforms", platforms],
+  ];
+  return (
+    <dl className="mt-12 grid grid-cols-2 gap-px overflow-hidden rounded-[14px] bg-line/60 md:grid-cols-4" aria-live="polite" aria-busy={loading}>
+      {rows.map(([k, v]) => (
+        <div key={k} className="bg-surface px-5 py-4">
+          <dt className="text-[0.82rem] text-faint">{k}</dt>
+          <dd className={`mt-1 text-[1.02rem] ${k === "Status" && release ? "text-ok" : "text-ink"}`}>{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/* ───────────── recommendation, picker and verification ───────────── */
+
 function Picker({ release }: { release: Release | null }) {
-  const detected = useMemo(() => currentOs(), []);
-  const [os, setOs] = useState<Os>(detected === "linux" ? "linux" : "windows");
-  const available = (f: Format) => release?.artifacts.find((a) => a.format === f) ?? null;
-  const firstAvailable = (o: Os) => FORMATS[o].find((f) => available(f)) ?? FORMATS[o][0];
-  // the visitor's choice per platform; until they choose, the first package the release has
-  const [choice, setChoice] = useState<Partial<Record<Os, Format>>>({});
-  const format = choice[os] ?? firstAvailable(os);
-  const setFormat = (f: Format) => setChoice((c) => ({ ...c, [os]: f }));
-  const artifact = available(format);
+  const [detection, setDetection] = useState<Detection>(() => currentPlatform());
+  useEffect(() => {
+    let live = true;
+    refineArch(detection).then((d) => {
+      if (live && d.arch !== detection.arch) setDetection(d);
+    });
+    return () => {
+      live = false;
+    };
+    // only once, with the first detection
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [chosenOs, setChosenOs] = useState<Os | null>(null);
+  const [chosenFormat, setChosenFormat] = useState<Format | null>(null);
+  const sel = useMemo(() => resolveSelection(release, detection, chosenOs, chosenFormat), [release, detection, chosenOs, chosenFormat]);
+  const has = (f: Format) => release?.assets.find((a) => a.os === sel.os && a.format === f) ?? null;
   const panel = useRef<HTMLDivElement>(null);
   useGSAP(
     () => {
@@ -123,26 +95,33 @@ function Picker({ release }: { release: Release | null }) {
       });
       return () => mm.revert();
     },
-    { scope: panel, dependencies: [os, format], revertOnUpdate: true },
+    { scope: panel, dependencies: [sel.os, sel.format], revertOnUpdate: true },
   );
+  const message = detectionMessage(detection, release);
+  const formats = FORMATS_BY_OS[sel.os];
+  const shown = release ? formats.filter((f) => has(f)) : formats;
 
   return (
     <section className="mt-16" aria-labelledby="choose-title">
       <h2 id="choose-title" className="text-[1.5rem] font-semibold tracking-tight">
         Choose your platform
       </h2>
-      {detected === "macos" && <p className="mt-2 text-[0.92rem] text-warn">You seem to be on macOS, which Cyber Hub does not support. Pick Windows or Linux to download for another machine.</p>}
-      {detected && detected !== "macos" && <p className="mt-2 text-[0.92rem] text-faint">Suggested for this device: {OS_LABEL[detected]}. You can choose another platform.</p>}
+      <p className={`mt-2 text-[0.94rem] ${detection.os === "macos" || detection.arch === "arm" ? "text-warn" : "text-muted"}`} aria-live="polite">
+        {message} {detection.os === "windows" || detection.os === "linux" ? <span className="text-faint">You can choose another platform at any time.</span> : null}
+      </p>
 
       <div role="radiogroup" aria-label="Operating system" className="mt-6 inline-flex rounded-[12px] bg-surface p-1">
-        {(Object.keys(FORMATS) as Os[]).map((o) => (
+        {(Object.keys(FORMATS_BY_OS) as Os[]).map((o) => (
           <button
             key={o}
             type="button"
             role="radio"
-            aria-checked={os === o}
-            onClick={() => setOs(o)}
-            className={`rounded-[9px] px-5 py-2.5 text-[0.95rem] transition-colors ${os === o ? "bg-white/[0.09] text-ink" : "text-muted hover:text-ink"}`}
+            aria-checked={sel.os === o}
+            onClick={() => {
+              setChosenOs(o);
+              setChosenFormat(null);
+            }}
+            className={`rounded-[9px] px-5 py-2.5 text-[0.95rem] transition-colors ${sel.os === o ? "bg-white/[0.09] text-ink" : "text-muted hover:text-ink"}`}
           >
             {OS_LABEL[o]} <span className="text-faint">x64</span>
           </button>
@@ -151,54 +130,60 @@ function Picker({ release }: { release: Release | null }) {
 
       <div ref={panel} className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-12">
         <div data-swap>
-          <h3 className="text-[0.88rem] text-faint">{os === "windows" ? "Windows 10 and 11, x64" : "Linux, x64"}</h3>
-          <fieldset className="mt-3">
-            <legend className="sr-only">Package format</legend>
-            <ul className="space-y-2">
-              {FORMATS[os].map((f) => {
-                const a = available(f);
-                return (
-                  <li key={f}>
-                    <label className={`flex cursor-pointer items-center justify-between gap-4 rounded-[12px] px-4 py-3.5 transition-colors ${format === f ? "bg-raised shadow-[inset_0_0_0_1px_rgb(76_141_255/0.55)]" : "bg-surface hover:bg-raised"}`}>
-                      <span className="flex items-center gap-3">
-                        <input type="radio" name={`format-${os}`} value={f} checked={format === f} onChange={() => setFormat(f)} className="size-4 accent-[#4c8dff]" />
-                        <span className="text-[0.98rem] text-ink">{FORMAT_LABEL[f]}</span>
-                      </span>
-                      <span className="text-[0.85rem] text-faint">{a ? formatSize(a.size) : "Not available"}</span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          </fieldset>
+          <h3 className="text-[0.88rem] text-faint">{sel.os === "windows" ? "Windows 10 and 11, x64" : "Linux, x64"}</h3>
+          {release && !shown.length ? (
+            <p className="mt-3 rounded-[12px] bg-surface px-4 py-3.5 text-[0.92rem] text-muted">The {release.version} release has no {OS_LABEL[sel.os]} package.</p>
+          ) : (
+            <fieldset className="mt-3">
+              <legend className="sr-only">Package format</legend>
+              <ul className="space-y-2">
+                {shown.map((f) => {
+                  const a = has(f);
+                  const isSuggested = sel.recommended && sel.format === f;
+                  return (
+                    <li key={f}>
+                      <label className={`flex cursor-pointer gap-3 rounded-[12px] px-4 py-3.5 transition-colors ${sel.format === f ? "bg-raised shadow-[inset_0_0_0_1px_rgb(76_141_255/0.55)]" : "bg-surface hover:bg-raised"}`}>
+                        <input type="radio" name="format" value={f} checked={sel.format === f} onChange={() => setChosenFormat(f)} className="mt-1 size-4 shrink-0 accent-[#4c8dff]" />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                            <span className="text-[0.98rem] text-ink">{FORMAT_LABEL[f]}</span>
+                            <span className="text-[0.85rem] text-faint">{a ? formatSize(a.size) : "Not available"}</span>
+                          </span>
+                          {isSuggested && <span className="mt-1 inline-block rounded-md bg-accent/15 px-2 py-0.5 text-[0.74rem] font-medium text-accent-soft">Recommended for your device</span>}
+                          <span className="mt-1 block text-[0.85rem] leading-snug text-muted">{FORMAT_HINT[f]}</span>
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </fieldset>
+          )}
 
           <div className="mt-6">
-            {artifact ? (
-              <>
-                <a href={artifact.url} className="btn btn-primary w-full justify-center sm:w-auto" download>
-                  Download {FORMAT_LABEL[format]}
-                </a>
-                <p className="mt-3 font-mono text-[0.78rem] break-all text-faint">
-                  {artifact.name} · {formatSize(artifact.size)}
-                </p>
-                {release?.checksumsUrl && (
-                  <a className="mt-2 inline-block text-[0.88rem] text-accent-soft hover:underline" href={release.checksumsUrl}>
-                    SHA-256 checksums
-                  </a>
-                )}
-              </>
+            {sel.asset ? (
+              <a href={sel.asset.downloadUrl} className="btn btn-primary w-full justify-center sm:w-auto" download>
+                Download {FORMAT_LABEL[sel.format]}
+              </a>
             ) : (
               <p className="rounded-[12px] bg-surface px-4 py-3.5 text-[0.92rem] text-muted">
                 {release ? `The ${release.version} release does not include this package.` : "No package is available yet."}
               </p>
             )}
           </div>
+
+          {release && sel.asset && (
+            <div className="mt-8 rounded-[14px] bg-surface p-5">
+              <h3 className="mb-4 text-[1.02rem] font-medium">Verify your download</h3>
+              <Verification release={release} asset={sel.asset} />
+            </div>
+          )}
         </div>
 
-        <div data-swap className="rounded-[14px] bg-surface p-6 md:p-7">
-          <h3 className="text-[1.05rem] font-medium">{INSTALL_TITLE[format]}</h3>
+        <div data-swap className="h-fit rounded-[14px] bg-surface p-6 md:p-7">
+          <h3 className="text-[1.05rem] font-medium">{INSTALL_TITLE[sel.format]}</h3>
           <ol className="mt-4 space-y-4">
-            {STEPS[format](artifact).map((s, i) => (
+            {STEPS[sel.format](sel.asset).map((s, i) => (
               <li key={i} className="grid grid-cols-[1.75rem_1fr] gap-2 text-[0.95rem] leading-relaxed text-muted">
                 <span className="font-mono text-[0.85rem] leading-[1.7] text-faint">{i + 1}</span>
                 <div>
@@ -219,63 +204,12 @@ function Picker({ release }: { release: Release | null }) {
   );
 }
 
-/* ───────────── release notes ───────────── */
+/* ───────────── latest release notes ───────────── */
 
-function InlineText({ v }: { v: Inline[] }) {
-  return (
-    <>
-      {v.map((i, k) =>
-        i.t === "code" ? (
-          <code key={k} className="rounded bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-ink">
-            {i.v}
-          </code>
-        ) : i.t === "strong" ? (
-          <strong key={k} className="font-medium text-ink">
-            {i.v}
-          </strong>
-        ) : i.t === "link" ? (
-          <a key={k} href={i.href} className="text-accent-soft hover:underline" target="_blank" rel="noopener noreferrer nofollow">
-            {i.v}
-          </a>
-        ) : (
-          <span key={k}>{i.v}</span>
-        ),
-      )}
-    </>
-  );
-}
-
-function Blocks({ blocks }: { blocks: Block[] }) {
-  return (
-    <div className="space-y-3">
-      {blocks.map((b, k) =>
-        b.t === "list" ? (
-          <ul key={k} className="list-disc space-y-1.5 pl-5 marker:text-faint">
-            {b.items.map((it, j) => (
-              <li key={j}>
-                <InlineText v={it} />
-              </li>
-            ))}
-          </ul>
-        ) : b.t === "heading" ? (
-          <h4 key={k} className="pt-2 text-[0.98rem] font-medium text-ink">
-            <InlineText v={b.v} />
-          </h4>
-        ) : (
-          <p key={k}>
-            <InlineText v={b.v} />
-          </p>
-        ),
-      )}
-    </div>
-  );
-}
-
-function ReleaseNotes({ release }: { release: Release }) {
+function LatestNotes({ release }: { release: Release }) {
   const root = useRef<HTMLElement>(null);
   useReveal(root);
-  const parts = sections(parseNotes(release.notes));
-  const links = repoLinks(config.repository);
+  const log = changelogOf(release);
   return (
     <section ref={root} className="mt-24" aria-labelledby="notes-title">
       <div data-reveal-group>
@@ -285,27 +219,30 @@ function ReleaseNotes({ release }: { release: Release }) {
         <p data-reveal className="mt-2 text-[0.92rem] text-faint">
           {release.name} · published {formatDate(release.publishedAt)}
         </p>
-        {parts.length ? (
-          <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 md:grid-cols-2">
-            {parts.map((s, i) => (
-              <div data-reveal key={i} className="text-[0.96rem] leading-relaxed text-muted">
-                {s.title && <h3 className="mb-3 text-[1.05rem] font-medium text-ink">{s.title}</h3>}
-                <Blocks blocks={s.blocks} />
+        {log.groups.length || log.summary ? (
+          <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 text-[0.96rem] leading-relaxed text-muted md:grid-cols-2">
+            {log.groups.map((g, i) => (
+              <div data-reveal key={i}>
+                {g.title && <h3 className="mb-3 text-[1.05rem] font-medium text-ink">{g.title}</h3>}
+                <NoteBlocks blocks={g.blocks} />
               </div>
             ))}
           </div>
         ) : (
-          <p data-reveal className="mt-6 text-muted">This release has no notes.</p>
+          <p data-reveal className="mt-6 text-muted">
+            This release has no notes.
+          </p>
         )}
         <div data-reveal className="mt-8 flex flex-wrap gap-4 text-[0.92rem]">
-          <a className="text-accent-soft hover:underline" href={release.pageUrl} target="_blank" rel="noopener noreferrer">
+          <a className="text-accent-soft hover:underline" href="/changelog/">
+            Full changelog
+          </a>
+          <a className="text-accent-soft hover:underline" href="/download/archive/">
+            Older versions
+          </a>
+          <a className="text-accent-soft hover:underline" href={release.htmlUrl} target="_blank" rel="noopener noreferrer">
             Release on GitHub
           </a>
-          {links && (
-            <a className="text-accent-soft hover:underline" href={links.releases} target="_blank" rel="noopener noreferrer">
-              All releases
-            </a>
-          )}
         </div>
       </div>
     </section>
@@ -366,8 +303,8 @@ function Requirements() {
 }
 
 export default function DownloadPage() {
-  const state = useLatestRelease();
-  const release = state.kind === "ready" ? state.release : null;
+  const state = useReleases();
+  const release = state.kind === "ready" ? state.latest : null;
   const hero = useRef<HTMLDivElement>(null);
   useGSAP(
     () => {
@@ -392,12 +329,32 @@ export default function DownloadPage() {
             Bring your cybersecurity workflow into one powerful desktop workspace.
           </p>
           <div data-hero-line className="relative">
-            <StatusRow state={state} />
-            <Unavailable state={state} />
+            <StatusRow state={state} release={release} />
+            {state.kind !== "loading" && !release && (
+              <div className="mt-6">
+                <ReleaseStateNotice
+                  state={state}
+                  empty="Cyber Hub has not been publicly released yet, so there is nothing to download. Packages appear here automatically as soon as the first stable release is published."
+                />
+                {state.kind === "ready" && state.releases.length > 0 && (
+                  <p className="max-w-[62ch] rounded-[12px] bg-surface px-5 py-4 text-[0.95rem] leading-relaxed text-muted">
+                    No stable release has been published yet, only pre-releases for testing. They are listed in the version archive.
+                  </p>
+                )}
+              </div>
+            )}
+            {state.kind === "ready" && state.releases.length > 0 && (
+              <p className="mt-4 text-[0.9rem]">
+                <a className="text-accent-soft hover:underline" href="/download/archive/">
+                  Version archive
+                </a>
+                <span className="text-faint"> · every published version with its checksums</span>
+              </p>
+            )}
           </div>
         </div>
         <Picker release={release} />
-        {release && <ReleaseNotes release={release} />}
+        {release && <LatestNotes release={release} />}
         <Requirements />
       </main>
       <Footer version={release?.version ?? null} />
