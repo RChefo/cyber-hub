@@ -58,6 +58,7 @@ Other scripts:
 - [docs/PROVISIONING.md](docs/PROVISIONING.md): how the application owner provisions and checks service credentials
 - [docs/MCP.md](docs/MCP.md): MCP architecture, tools, resources, prompts, approvals, client setup and troubleshooting
 - [docs/PLATFORMS.md](docs/PLATFORMS.md): per-OS dependencies, validation status, platform-specific behavior
+- [docs/WEBSITE.md](docs/WEBSITE.md): the public website (landing and download pages): architecture, release-data integration, configuration, deployment
 - [docs/UPDATER.md](docs/UPDATER.md): signed automatic updates: formats, signing keys and their protection, the release workflow, manifest, staging tests, recovery and key rotation
 
 ## Security at a glance
