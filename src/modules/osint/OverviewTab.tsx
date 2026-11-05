@@ -233,7 +233,7 @@ function DuplicatesPanel() {
 
 function OperationsPanel() {
   const { investigation: inv, goTab } = useOsint();
-  const q = useQuery(["osint"], () => api.osintOperations(inv.id), [inv.id]);
+  const q = useQuery(["osint", "osint-ops"], () => api.osintOperations(inv.id), [inv.id]);
   return (
     <Panel
       title="Recent collection"

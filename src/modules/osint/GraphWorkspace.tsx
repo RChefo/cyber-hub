@@ -66,11 +66,11 @@ import {
   applyFilters,
   blobToBase64,
   defaultWorkspace,
+  initState,
   groupsForCanvas,
   neighborhoodIds,
   nextGroupColor,
   nodeStates,
-  parseWorkspace,
   plural,
   positionsFrom,
   searchNodes,
@@ -78,51 +78,15 @@ import {
   typeStyle,
   VERIFICATION_META,
   type Workspace,
+  type WorkState,
 } from "./model";
-import type { EntityBrief, ExportFormat, GraphData, GraphMeta, RelationshipBrief, Verification } from "./types";
-
-interface WorkState {
-  graphId: number;
-  meta: GraphMeta;
-  revision: number;
-  /** saved-state revision this editor started from (optimistic concurrency) */
-  stateRevision: number;
-  entities: Map<string, EntityBrief>;
-  rels: Map<string, RelationshipBrief>;
-  members: string[];
-  /** membership as last loaded/saved, to tell local removals from deletions elsewhere */
-  serverMembers: Set<string>;
-  removed: Set<string>;
-  pinned: Set<string>;
-  hidden: Set<string>;
-  nodeGroup: Map<string, string | null>;
-  workspace: Workspace;
-  warning: string | null;
-}
+import type { EntityBrief, ExportFormat, Verification } from "./types";
 
 const EMPTY_SELECTION: Selection = { nodes: new Set(), edge: null };
 const LAYOUT_LABEL: Record<LayoutKind, string> = { force: "Force-directed", hierarchical: "Hierarchical", radial: "Radial", circular: "Circular", manual: "Manual" };
 const LABEL_MODE: Record<LabelMode, string> = { auto: "Labels: automatic", always: "Labels: always", never: "Labels: hidden" };
 const MAX_EXPAND = 300;
 
-function initState(data: GraphData): WorkState {
-  return {
-    graphId: data.graph.id,
-    meta: data.graph,
-    revision: data.graph.revision,
-    stateRevision: data.graph.stateRevision,
-    entities: new Map(data.entities.map((e) => [String(e.id), e])),
-    rels: new Map(data.relationships.map((r) => [String(r.id), r])),
-    members: data.nodes.map((n) => String(n.entityId)),
-    serverMembers: new Set(data.nodes.map((n) => String(n.entityId))),
-    removed: new Set(),
-    pinned: new Set(data.nodes.filter((n) => n.pinned).map((n) => String(n.entityId))),
-    hidden: new Set(data.nodes.filter((n) => n.hidden).map((n) => String(n.entityId))),
-    nodeGroup: new Map(data.nodes.map((n) => [String(n.entityId), n.group])),
-    workspace: parseWorkspace(data.workspace),
-    warning: data.warning,
-  };
-}
 
 export function GraphWorkspace({
   graphId,

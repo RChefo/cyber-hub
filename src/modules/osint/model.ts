@@ -6,7 +6,7 @@
 import type { GraphEdge, GraphGroup, GraphNode, LayoutKind, Point, Positions, Viewport } from "./graph";
 import type { LabelMode } from "./graph/render";
 import { safeColor } from "./graph/style";
-import type { Diff, EntityBrief, GraphNodeState, RelationshipBrief, RelationshipTypeInfo, VersionRow, Verification } from "./types";
+import type { Diff, EntityBrief, GraphData, GraphMeta, GraphNodeState, RelationshipBrief, RelationshipTypeInfo, VersionRow, Verification } from "./types";
 
 /* ───────────────────────── entity types ───────────────────────── */
 
@@ -148,6 +148,49 @@ export function parseWorkspace(raw: unknown): Workspace {
   w.focus = strings(r.focus, 2000, 24);
   if (typeof r.notes === "string") w.notes = r.notes.slice(0, 20000);
   return w;
+}
+
+/* ───────────────────────── editor state from a loaded graph ───────────────────────── */
+
+/** The editor's working copy of an open graph. */
+export interface WorkState {
+  graphId: number;
+  meta: GraphMeta;
+  revision: number;
+  /** saved-state revision this editor started from (optimistic concurrency) */
+  stateRevision: number;
+  entities: Map<string, EntityBrief>;
+  rels: Map<string, RelationshipBrief>;
+  members: string[];
+  /** membership as last loaded/saved, to tell local removals from deletions elsewhere */
+  serverMembers: Set<string>;
+  removed: Set<string>;
+  pinned: Set<string>;
+  hidden: Set<string>;
+  nodeGroup: Map<string, string | null>;
+  workspace: Workspace;
+  warning: string | null;
+}
+
+/** Initial editor state for a graph as loaded from the backend: every saved property (workspace,
+ *  membership, pins, hidden nodes, groups) comes from the data, nothing from a previous graph. */
+export function initState(data: GraphData): WorkState {
+  return {
+    graphId: data.graph.id,
+    meta: data.graph,
+    revision: data.graph.revision,
+    stateRevision: data.graph.stateRevision,
+    entities: new Map(data.entities.map((e) => [String(e.id), e])),
+    rels: new Map(data.relationships.map((r) => [String(r.id), r])),
+    members: data.nodes.map((n) => String(n.entityId)),
+    serverMembers: new Set(data.nodes.map((n) => String(n.entityId))),
+    removed: new Set(),
+    pinned: new Set(data.nodes.filter((n) => n.pinned).map((n) => String(n.entityId))),
+    hidden: new Set(data.nodes.filter((n) => n.hidden).map((n) => String(n.entityId))),
+    nodeGroup: new Map(data.nodes.map((n) => [String(n.entityId), n.group])),
+    workspace: parseWorkspace(data.workspace),
+    warning: data.warning,
+  };
 }
 
 /* ───────────────────────── canvas model ───────────────────────── */

@@ -4,6 +4,8 @@
 
 pub mod confidence;
 pub mod discovery;
+#[cfg(test)]
+mod durability_tests;
 pub mod ingest;
 pub mod io;
 pub mod model;

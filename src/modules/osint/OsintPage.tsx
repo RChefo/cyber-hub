@@ -37,7 +37,13 @@ function useOsintEvents() {
   useEffect(() => {
     if (!runtimeAvailable()) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const un = listen("osint-changed", () => {
+    let opsTimer: ReturnType<typeof setTimeout> | null = null;
+    const un = listen<{ scope?: string }>("osint-changed", (e) => {
+      // a collection started: only the operations lists change, the open graph is left alone
+      if (e.payload?.scope === "operations") {
+        if (!opsTimer) opsTimer = setTimeout(() => ((opsTimer = null), invalidate("osint-ops")), 400);
+        return;
+      }
       if (timer) return;
       timer = setTimeout(() => {
         timer = null;
@@ -46,6 +52,7 @@ function useOsintEvents() {
     });
     return () => {
       if (timer) clearTimeout(timer);
+      if (opsTimer) clearTimeout(opsTimer);
       void un.then((f) => f());
     };
   }, []);

@@ -314,7 +314,7 @@ function ReviewModal({ operationId, onClose }: { operationId: number | null; onC
 
 function OperationsPanel() {
   const { investigation: inv } = useOsint();
-  const q = useQuery(["osint"], () => api.osintOperations(inv.id), [inv.id]);
+  const q = useQuery(["osint", "osint-ops"], () => api.osintOperations(inv.id), [inv.id]);
   const [review, setReview] = useState<number | null>(null);
   const running = (q.data ?? []).some((o) => o.status === "running");
 

@@ -56,7 +56,7 @@ Every import creates evidence pointing to the run, lookup, finding or scope entr
 | DNS records | domain, IP | A/AAAA, CNAME, NS, MX; PTR for IPs | System resolver; answers cached for 1 hour. |
 | IP to ASN (Team Cymru) | IP | ASN, announced prefix, registry, country, AS name | DNS-based service; no key. |
 | RDAP registration data | domain, IP, ASN | Registrar, registrant (when public), network operator and contacts, dates, status, name servers, network ranges | Servers from the IANA bootstrap (cached 7 days); only `https://` on public hosts; redirects are not followed. Contacts are people or organizations according to their vCard `kind`; only contacts that get a relationship are added. |
-| Certificate Transparency (crt.sh) | domain | Certificates and the names they cover inside the domain | The 60 most recent certificates and at most 400 names per run; names outside the queried domain are ignored. crt.sh is frequently overloaded: when its subdomain search fails (HTTP 404/502–504) the cheaper exact-name search is tried once and the result says so. |
+| Certificate Transparency (crt.sh) | domain | Certificates and the names they cover inside the domain | The 60 most recent certificates and at most 400 names per run; names outside the queried domain are ignored. crt.sh is frequently overloaded and alternates between answers and HTTP 502 from one request to the next: when its subdomain search fails (HTTP 404/502–504) the cheaper exact-name search is tried once and the result says so; when both fail the collection fails with that reason and can be retried. |
 | GitHub public search | domain, organization, email, `github:` username | Repositories that mention the value, owners, user profiles | Unauthenticated public API (low rate limits). |
 | Web server fingerprint | domain, URL | Status, server and technology headers, redirect target | **Contacts the target.** Only for investigations linked to an active project whose authorized scope covers the target; resolved public addresses are pinned for the request; HEAD (GET only when HEAD is refused) and the body is never read. For a domain, plain HTTP is tried when HTTPS cannot connect. |
 | Threat intelligence providers | domain, IP, URL, file hash | The configured providers' results (VirusTotal, AbuseIPDB, OTX, URLhaus, MalwareBazaar, ThreatFox, Shodan) | Reuses the Threat Intel module, its provisioned keys and quotas. Keys never reach the frontend, MCP clients, logs or stored records. |
@@ -106,6 +106,17 @@ Relationship: both ends, type and description, origin, confidence reason, eviden
 - **Save as** creates an independent graph from the current state; the original stays as last saved.
 - **Graphs** opens the Graph Manager: open, rename (with description and the *follow new data* setting), duplicate, delete (system confirmation; entities and evidence are kept), and create empty graphs.
 - Switching graphs with unsaved changes asks first.
+- **Cancel** in the conflict dialog writes nothing and keeps your unsaved changes in the editor.
+
+### Opening and restoring a graph
+
+Opening a graph loads its saved state from the database and builds the editor state from that data alone: membership, positions, pinned and hidden nodes, groups, filters, relationship-type filters, layout, label mode and viewport. Nothing is carried over from the previously open graph. The graph opened by default is the one opened most recently. Nodes without a saved position are placed next to their neighbours; a graph without any positions is laid out once with its saved layout.
+
+While a graph is open, data collected in the background is merged into it without touching your positions, viewport, filters, groups, selection or unsaved changes: entities added by a graph that follows new data get a position next to their neighbours. The open graph is refreshed only when data actually changes (a collection finishes, results are imported, a decision is recorded), not while a collection is merely running.
+
+### Crash safety
+
+A save (membership, positions, workspace and the version it records) is one SQLite transaction in WAL mode. If Cyber Hub is killed during a save, the database keeps the last committed state and the new state is discarded as a whole; the same applies to a failed write (for example a locked database or a full disk). Collections that were running when Cyber Hub closed are marked *Interrupted* at the next start; their partial results are not kept. Tested by killing the process during repeated saves (Windows and Linux), aborting inside an open save transaction, injecting a failure in the middle of a save, holding the database lock and limiting the database size; every case left `PRAGMA integrity_check` clean and the graph in its last committed state.
 
 ### Versions
 
@@ -132,7 +143,7 @@ Graph → Import (or *Import graph* on the investigation list) reads Cyber Hub J
 - A preview shows counts by type, elements that will be skipped (unknown types, invalid values, relationships to missing entities, invalid relationship types) and how many entities already exist in the chosen investigation.
 - The import goes into a **new graph**, in the current investigation (entities resolve against existing ones) or in a new investigation. Nothing is overwritten.
 - Review decisions in the file (verified, disputed, rejected) are kept as an attribute (`importedVerification`), but imported items start as observed or inferred. Relationships the file marks as disputed or rejected come back as inferred, so they wait for review instead of reappearing as plain observations.
-- After importing into a new investigation, the imported graph opens.
+- After importing into a new investigation, the imported graph opens. The new investigation is named "<original name> (imported)" so it cannot be mistaken for the original.
 - CSV files start with a UTF-8 byte order mark, so spreadsheet applications show non-ASCII values correctly.
 
 ## Timeline

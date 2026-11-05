@@ -1263,7 +1263,7 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
         "cyberhub_osint_discover" => {
             let a: OsintDiscoverArg = parse(args)?;
             let id = osint::discovery::start(app, a.request(), &format!("mcp:{}", conn.client.label())).map_err(app_err)?;
-            let _ = app.emit(osint::discovery::EVENT_CHANGED, json!({ "investigationId": a.investigation_id }));
+            let _ = app.emit(osint::discovery::EVENT_CHANGED, json!({ "investigationId": a.investigation_id, "operationId": id, "scope": "operations" }));
             Ok(json!({ "operationId": id, "status": "running", "message": "Collection started. Results are kept for the user's review in Cyber Hub; poll cyberhub_osint_get_operation." }))
         }
         "cyberhub_osint_get_operation" => {

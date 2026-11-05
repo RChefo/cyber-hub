@@ -668,7 +668,8 @@ pub fn apply(c: &Connection, doc: &Document, into: Option<i64>, graph_name: &str
             let id = store::investigation_create(
                 c,
                 &store::InvestigationInput {
-                    name: if doc.investigation.name.trim().is_empty() { "Imported investigation".into() } else { doc.investigation.name.chars().take(120).collect() },
+                    // a distinct name: the original investigation usually still exists next to the copy
+                    name: if doc.investigation.name.trim().is_empty() { "Imported investigation".into() } else { format!("{} (imported)", doc.investigation.name.trim().chars().take(105).collect::<String>()) },
                     description: format!("Imported from {file_label}. {}", doc.investigation.description.chars().take(3000).collect::<String>()),
                     target_type: t.into(),
                     target_value: value,
@@ -839,6 +840,7 @@ mod tests {
         let data = db.with(|c| store::graph_load(c, g2, false)).unwrap();
         assert_eq!((data.entities.len(), data.relationships.len()), (3, 2));
         assert_eq!(data.workspace["layout"], "radial");
+        assert_eq!(db.with(|c| store::investigation_get(c, inv2)).unwrap().name, "Acme <x> (imported)", "the copy is told apart from the original");
         assert!(data.nodes.iter().any(|n| n.x == Some(10.0)), "positions are restored");
         let refs: i64 = db.with(|c| Ok(c.query_row("SELECT COUNT(*) FROM osint_evidence WHERE investigation_id = ?1 AND source = 'dns'", params![inv2], |r| r.get(0))?)).unwrap();
         assert!(refs >= 1, "the original evidence source is kept");

@@ -447,24 +447,61 @@ mod tests {
         prepare_tree(&mut cmd);
         let mut child = cmd.spawn().expect("spawn");
         let tree = Tree::attach(&child).expect("attach tree");
-        tokio::time::sleep(Duration::from_millis(800)).await;
-        assert!(count_descendants(child.id().unwrap()) >= 1, "grandchild should be running");
         let root = child.id().unwrap();
+        // wait (bounded) until the grandchild exists, and remember exactly which processes they are
+        // (pid + start time): matching on the parent pid alone can be fooled by pid reuse after the
+        // parent dies, which happens quickly on Windows while other tests start processes
+        let mut grandchildren = vec![];
+        for _ in 0..100 {
+            grandchildren = descendants(root);
+            if !grandchildren.is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        assert!(!grandchildren.is_empty(), "grandchild should be running");
         tree.terminate();
         let _ = tokio::time::timeout(Duration::from_secs(5), child.wait()).await;
-        tokio::time::sleep(Duration::from_millis(2000)).await;
-        assert_eq!(count_descendants(root), 0, "no descendant may survive termination");
+        // termination is asynchronous (Unix: SIGTERM, then SIGKILL after 1.5 s): allow it to
+        // finish, but every one of those processes must be gone
+        let mut survivors = alive(&grandchildren);
+        for _ in 0..100 {
+            if survivors == 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            survivors = alive(&grandchildren);
+        }
+        assert_eq!(survivors, 0, "no descendant may survive termination");
         drop(tree);
     }
 
-    /// Count live processes whose parent is `pid` (direct children).
-    fn count_descendants(pid: u32) -> usize {
+    fn snapshot() -> sysinfo::System {
         let mut sys = sysinfo::System::new();
         sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-        sys.processes()
+        sys
+    }
+
+    /// Live direct children of `pid`, identified by (pid, start time).
+    fn descendants(pid: u32) -> Vec<(u32, u64)> {
+        snapshot()
+            .processes()
             .values()
             .filter(|p| p.parent().map(|pp| pp.as_u32()) == Some(pid))
             .filter(|p| !matches!(p.status(), sysinfo::ProcessStatus::Zombie | sysinfo::ProcessStatus::Dead))
+            .map(|p| (p.pid().as_u32(), p.start_time()))
+            .collect()
+    }
+
+    /// How many of the given processes are still running (same pid and start time).
+    fn alive(procs: &[(u32, u64)]) -> usize {
+        let sys = snapshot();
+        procs
+            .iter()
+            .filter(|(pid, start)| {
+                sys.process(sysinfo::Pid::from_u32(*pid))
+                    .is_some_and(|p| p.start_time() == *start && !matches!(p.status(), sysinfo::ProcessStatus::Zombie | sysinfo::ProcessStatus::Dead))
+            })
             .count()
     }
 }

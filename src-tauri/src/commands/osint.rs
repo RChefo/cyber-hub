@@ -526,7 +526,9 @@ pub async fn osint_suggestions(db: State<'_, Db>, investigation_id: i64) -> AppR
 pub async fn osint_discover(app: AppHandle, request: DiscoverRequest) -> AppResult<i64> {
     let inv = request.investigation_id;
     let id = discovery::start(&app, request, "analyst")?;
-    changed(&app, inv);
+    // only the operations list changes when a collection starts; graphs and counts change when
+    // it finishes (a full "osint-changed" event then)
+    let _ = app.emit(EVENT_CHANGED, json!({ "investigationId": inv, "operationId": id, "scope": "operations" }));
     Ok(id)
 }
 
