@@ -185,7 +185,7 @@ pub async fn tool_install(
     }
 
     let id_for_hook = tool.id.clone();
-    let hook: process::FinishHook = Box::new(move |app: &AppHandle, ok: bool| {
+    let hook: process::FinishHook = Box::new(move |app: &AppHandle, _id: i64, ok: bool| {
         let db = app.state::<Db>();
         let tool = catalog::tool(&id_for_hook);
         let detection = tool.and_then(|t| detect::detect_tool(t, true));
@@ -423,13 +423,14 @@ fn confirmation_text(tool: &str, args: &[String], v: &Validated) -> String {
 
 #[tauri::command]
 pub async fn exec_start(app: AppHandle, db: State<'_, Db>, request: ExecRequest, on_event: Channel<ExecEvent>) -> AppResult<i64> {
-    start_execution(&app, &db, request, on_event, None).await
+    start_execution(&app, &db, request, on_event, None, None).await
 }
 
 /// The single execution path used by the GUI and by MCP clients: validation, scope
 /// enforcement, native OS confirmation, target-file snapshots and process-tree management.
 /// `requester` names an AI client (self-reported MCP client name) shown in the native dialog.
-pub async fn start_execution(app: &AppHandle, db: &Db, request: ExecRequest, on_event: Channel<ExecEvent>, requester: Option<&str>) -> AppResult<i64> {
+/// `on_finish` runs after the end of the run was recorded (used by discovery to read the results).
+pub async fn start_execution(app: &AppHandle, db: &Db, request: ExecRequest, on_event: Channel<ExecEvent>, requester: Option<&str>, on_finish: Option<process::FinishHook>) -> AppResult<i64> {
     if !request.confirmed {
         return Err(validation("Execution must be explicitly confirmed"));
     }
@@ -479,7 +480,7 @@ pub async fn start_execution(app: &AppHandle, db: &Db, request: ExecRequest, on_
             cleanup_dir: Some(run_dir),
         },
         on_event,
-        None,
+        on_finish,
     )
 }
 

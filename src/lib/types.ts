@@ -301,6 +301,37 @@ export interface ScopeEvent {
   at: string;
 }
 
+export type Certainty = "confirmed" | "observed" | "possible" | "incomplete";
+export type DiscoverySource = "passive" | "http" | "nmap";
+export type SnapshotStatus = "running" | "completed" | "partial" | "failed" | "cancelled";
+
+export interface DiscoverySnapshot {
+  id: number;
+  mode: "passive" | "active" | "manual";
+  source: DiscoverySource;
+  status: SnapshotStatus;
+  note: string;
+  executionId: number | null;
+  startedAt: string;
+  finishedAt: string | null;
+  /** assets observed by this run */
+  assets: number;
+}
+
+export interface SnapshotChange {
+  change: "added" | "changed" | "missing";
+  assetId: number;
+  assetType: AssetType;
+  value: string;
+  certainty: Certainty;
+}
+
+export interface SnapshotChanges {
+  snapshot: DiscoverySnapshot;
+  previous: number | null;
+  changes: SnapshotChange[];
+}
+
 export interface ScopeDecision {
   mode: "passive" | "active";
   verdicts: ScopeCheck[];

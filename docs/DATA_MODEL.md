@@ -70,6 +70,34 @@ The status is `active`, `not_observed` or `retired`. *Not observed* never means 
 
 `discovery_snapshots` group the observations of one discovery run (`passive`, `active`, `manual`). They record their status (`running` → `completed`, `partial`, `failed`, `cancelled`) and their operation or run.
 
+## Attack surface discovery
+
+Projects → *Attack surface* fills the asset inventory from three kinds of runs. Each run is one discovery snapshot; the code is `workspace/discovery.rs` and `commands/discovery.rs`.
+
+| Run | What it does | Contacts the target | Gate |
+|---|---|---|---|
+| Passive discovery (`passive`) | certificate transparency (crt.sh, cached 24 h) for every in-scope domain, wildcard base and URL host (at most 20), then DNS (A, AAAA, CNAME, NS, MX) for the names found (at most 300) | no | scope gate, passive: internal names are never sent; names outside the scope (or excluded) are counted and not recorded |
+| Web services check (`http`) | `GET /` over HTTPS and HTTP on in-scope hosts (at most 100); no redirects followed, no credentials, at most 64 KB read for the title; an untrusted certificate is retried and recorded as such | yes | scope gate, active; native confirmation listing the hosts |
+| Service scan (`nmap`) | `nmap -sV -T3 [-F] -oX - <targets>` through the normal tool execution path (scope check of every argument, native confirmation of the exact command, process tree, stored output); the XML on standard output is parsed when the run ends | yes | scope gate, active, then the execution engine's own checks |
+
+One background run (passive or web check) per project runs at a time and can be cancelled. Progress is reported through the `asm-changed` event. A run interrupted by closing Cyber Hub is marked failed at the next start.
+
+**Certainty.** Every recorded item carries one: `confirmed` (the target answered: an HTTP response, a host up or an open port), `observed` (a public source reported it and DNS corroborates it), `possible` (a single unverified report, for example a certificate name that does not resolve). Asset confidence follows it (high, medium, low) and only rises.
+
+**Changes.** A run is compared with the previous finished or partial run of the same kind: items are *new*, *changed* (their recorded data differs) or *missing*. A missing item is `possible` after a completed run and `incomplete` after a partial, failed or cancelled run.
+
+**Not observed.** Only a *completed* run marks assets as not observed, and only those it covered:
+* passive runs cover names, addresses and DNS records that an earlier passive run recorded;
+* web checks cover the web services of the hosts they checked;
+* service scans cover the services of hosts that were up.
+
+Assets recorded by hand are never marked. Nothing is deleted.
+
+**Results.**
+* Passive runs record names, addresses and DNS records. Addresses are flagged `inScope` and `nonPublic`, so the inventory shows when a name points outside the authorized scope.
+* Web checks record web services (status, title, server, certificate trust) and technologies seen in headers.
+* Service scans record addresses, open services (service, product, version) and products as technologies.
+
 ## Evidence
 
 `evidence` is a registry of four kinds:

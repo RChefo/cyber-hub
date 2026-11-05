@@ -31,6 +31,8 @@ export type Tag =
   | "osint"
   /** OSINT collection operations only (a collection started; graphs are not affected yet) */
   | "osint-ops"
+  /** project assets and discovery runs */
+  | "assets"
   | "system";
 
 const versions = new Map<Tag, number>();

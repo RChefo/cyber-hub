@@ -1,6 +1,6 @@
 # Platform expansion: architecture audit and plan (Phase 0)
 
-Status: **Phases 0–1 complete.** Phase 1 (shared data foundation, schema 9) is described in [DATA_MODEL.md](DATA_MODEL.md). Phases 2–8 not started.
+Status: **Phases 0–2 complete.** Phase 1 (shared data foundation, schema 9) and Phase 2 (attack surface discovery) are described in [DATA_MODEL.md](DATA_MODEL.md). Phases 3–8 not started.
 Scope: the "Advanced Platform Expansion" request (attack surface management, vulnerability management, findings, workflow automation, assistant, attack paths, IOC correlation, scan comparison, utilities, engagement workspace, reporting). This document records what already exists, what each new capability reuses, the shared data contracts, migration risks, decisions that need the owner, and the phase plan. It is updated at the end of every phase.
 
 ## 1. What exists today
@@ -105,7 +105,7 @@ Each phase: plan, implement, targeted tests, full regression (typecheck, fronten
 | Phase | Content | Depends on decisions |
 |---|---|---|
 | 1. Shared data foundation **(done)** | migrations (schema 9+), `ScopeGate`, `EvidenceStore`, `Timeline`, `AssetStore`, extended findings model and history, scope audit; migration tests on populated databases | — |
-| 2. Attack surface management | asset inventory UI, passive discovery via OSINT providers, active discovery via scoped tools, snapshots, change classification (confirmed/observed/possible/incomplete), dashboard | 5 |
+| 2. Attack surface management **(done)** | asset inventory UI, passive discovery via OSINT providers, active discovery via scoped tools, snapshots, change classification (confirmed/observed/possible/incomplete), dashboard | 5 |
 | 3. Vulnerabilities and findings | vulnerability records, transparent priority model, lifecycle and history, remediation tracking, Findings Manager (search, filters, bulk status, tags, links) | 2 |
 | 4. Workflow automation | definitions, node schemas, validation, executor (ordering, timeouts, retries, cancellation, persistence), builder UI, history, templates | 4 |
 | 5. Intelligence and analysis | IOC correlation, attack-path views on the OSINT graph, scan comparison, assistant | 1, 5 |
@@ -121,4 +121,14 @@ Realistic size: each of phases 1–7 is several thousand lines with tests; the w
 * **Interfaces** (`src-tauri/src/workspace/`): `scope_gate::{decide, enforce}`, `EvidenceStore::{add_file, delete, sweep}` and `evidence::{add_text, link_execution, link_osint}`, `timeline::{record, project_timeline}`, `assets::upsert_observation` with snapshots, and `findings::{set_status, add_note, link, unlink, history}`. Commands are in `commands/workspace.rs`, typed IPC wrappers in `src/lib/ipc.ts`.
 * **Existing features adjusted:** the finding editor shows category, confidence, reproduction, technical details and remediation, and keeps fields it does not show. Status changes go through the lifecycle command, and invalid ones (reopening an open finding) are disabled. Findings created from OSINT entities are linked to the entity. MCP accepts the new and the old status names. The report includes the new detail sections. Scope additions, changes and removals are audited.
 * **Not in Phase 1:** user interfaces for assets, evidence, the timeline and scope history (phases 2 and 7); vulnerability links (phase 3). `enforce` and discovery snapshots have no caller until phase 2.
+
+## 8. Phase 2 result
+
+* **Attack surface tab** in each project:
+  * asset inventory with filters (type, status, text), certainty, status, last seen, observation history, retire or delete, and manual entry;
+  * discovery controls: passive discovery, web services check, service scan;
+  * run list with status and summary, and a per-run change view (new, changed, missing, each with its certainty).
+* **Backend:** `workspace/discovery.rs` and `commands/discovery.rs`, described in [DATA_MODEL.md](DATA_MODEL.md#attack-surface-discovery). `start_execution` accepts a finish hook that receives the run id. Interrupted runs are marked failed at startup.
+* **Tests:** Nmap XML parsing (complete, truncated and invalid output), scan arguments accepted by the execution engine's scope resolution (and an out-of-scope target refused), DNS answer mapping and merging, passive roots from the scope, HTML titles, and the snapshot lifecycle (change classification, partial runs, not-observed marking limited to the source, manual assets untouched). Frontend helpers are tested too.
+* **Not verified here:** live crt.sh, DNS, HTTP and Nmap runs against real targets; there is no authorized target in this environment. The UI is checked visually in phase 8.
 

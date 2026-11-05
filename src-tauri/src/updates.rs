@@ -318,7 +318,7 @@ pub fn classify(e: &tauri_plugin_updater::Error) -> Failure {
 }
 
 /// Whether a request failed because the server's certificate was rejected.
-fn is_certificate_error(e: &(dyn std::error::Error + 'static)) -> bool {
+pub(crate) fn is_certificate_error(e: &(dyn std::error::Error + 'static)) -> bool {
     let mut cur: Option<&(dyn std::error::Error + 'static)> = Some(e);
     while let Some(err) = cur {
         let text = format!("{err} {err:?}").to_ascii_lowercase();

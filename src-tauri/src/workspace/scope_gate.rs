@@ -41,9 +41,6 @@ pub struct Decision {
     pub verdicts: Vec<Verdict>,
 }
 
-// `allowed`, `blocked` and `enforce` are the entry points of the active and passive operations
-// added in the next phases (asset discovery, workflows, monitors); tested here already.
-#[cfg_attr(not(test), allow(dead_code))]
 impl Decision {
     pub fn allowed(&self) -> bool {
         !self.verdicts.is_empty() && self.verdicts.iter().all(|v| v.allowed)
@@ -132,7 +129,6 @@ pub fn decide(c: &Connection, project_id: Option<i64>, targets: &[String], mode:
     Ok(Decision { mode, verdicts })
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 /// Like [`decide`], but refuses with a clear error when any target is blocked, and records blocked
 /// active attempts in the project's scope history (they are audit-relevant).
 pub fn enforce(c: &Connection, project_id: Option<i64>, targets: &[String], mode: Mode, operation: &str) -> AppResult<Decision> {

@@ -219,7 +219,8 @@ pub struct SpawnSpec {
     pub cleanup_dir: Option<PathBuf>,
 }
 
-pub type FinishHook = Box<dyn FnOnce(&AppHandle, bool) + Send + 'static>;
+/// Called after the end of a run was recorded: (app, execution id, succeeded).
+pub type FinishHook = Box<dyn FnOnce(&AppHandle, i64, bool) + Send + 'static>;
 
 struct OutputBuf {
     text: String,
@@ -398,7 +399,7 @@ pub fn start(app: &AppHandle, spec: SpawnSpec, channel: Channel<ExecEvent>, on_f
         }
         let _ = channel.send(ExecEvent::Exit { status: status.to_string(), code });
         if let Some(hook) = on_finish {
-            hook(&app, status == "succeeded");
+            hook(&app, id, status == "succeeded");
         }
     });
 

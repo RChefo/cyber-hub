@@ -294,8 +294,7 @@ pub fn observations(c: &Connection, asset_id: i64, limit: i64) -> AppResult<Vec<
 
 /* ───────────────────────── discovery snapshots ───────────────────────── */
 
-// Snapshots group the observations of one discovery run (asset discovery, next phase).
-#[cfg_attr(not(test), allow(dead_code))]
+/// Snapshots group the observations of one discovery run (`workspace::discovery`).
 pub fn start_snapshot(c: &Connection, project_id: i64, mode: &str, source: &str, operation_id: Option<i64>, execution_id: Option<i64>) -> AppResult<i64> {
     if !matches!(mode, "passive" | "active" | "manual") {
         return Err(validation("Mode must be passive, active or manual"));
@@ -307,7 +306,6 @@ pub fn start_snapshot(c: &Connection, project_id: i64, mode: &str, source: &str,
     Ok(c.last_insert_rowid())
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn finish_snapshot(c: &Connection, id: i64, status: &str, note: &str) -> AppResult<()> {
     if !matches!(status, "completed" | "partial" | "failed" | "cancelled") {
         return Err(validation("Invalid snapshot status"));

@@ -693,6 +693,11 @@ impl Db {
             // Only one instance runs at a time, so a run still marked as running was interrupted
             // (crash or power loss); record that instead of showing it as running forever.
             c.execute("UPDATE executions SET status = 'error', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'", [crate::util::now()])?;
+            // likewise discovery runs: nothing found by an interrupted run is treated as removed
+            c.execute(
+                "UPDATE discovery_snapshots SET status = 'failed', note = 'Interrupted: Cyber Hub was closed while it ran', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'",
+                [crate::util::now()],
+            )?;
             Ok(())
         })?;
         Ok(db)

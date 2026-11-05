@@ -1037,7 +1037,7 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
             let a: ExecArgs = parse(args)?;
             refuse_local_paths(&a.args)?;
             let buf: Arc<Mutex<VecDeque<String>>> = Arc::default();
-            let id = tools::start_execution(app, &db, a.request(true), capture_channel(buf.clone()), Some(&conn.client.label())).await.map_err(app_err)?;
+            let id = tools::start_execution(app, &db, a.request(true), capture_channel(buf.clone()), Some(&conn.client.label()), None).await.map_err(app_err)?;
             app.state::<LiveRuns>().insert(id, buf);
             Ok(json!({ "runId": id, "status": "running", "message": "The run started. Use cyberhub_get_run_status and cyberhub_get_run_output to follow it." }))
         }

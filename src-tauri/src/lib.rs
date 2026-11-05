@@ -27,7 +27,7 @@ mod workspace;
 
 use tauri::{AppHandle, Manager};
 
-use commands::{activity, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, threat_intel, tools, updates as update_commands, virustotal, wordlists, workspace as workspace_commands};
+use commands::{activity, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, wordlists, workspace as workspace_commands};
 
 /// Leaves no work behind when Cyber Hub exits: normal exit, restart after an update, and right
 /// before an update installer takes over on Windows. Safe to call more than once.
@@ -101,6 +101,7 @@ pub fn run() {
                 eprintln!("Cyber Hub: evidence folder not checked: {e}");
             }
             app.manage(evidence);
+            app.manage(discovery_commands::DiscoveryState::default());
             // collections interrupted by a crash or exit are marked as such
             osint::discovery::recover_interrupted(&app.state::<db::Db>());
             // remove target-file snapshots left behind by a crash
@@ -191,6 +192,14 @@ pub fn run() {
             workspace_commands::evidence_link_osint,
             workspace_commands::evidence_export,
             workspace_commands::evidence_delete,
+            // attack surface discovery
+            discovery_commands::discovery_passive_start,
+            discovery_commands::discovery_http_start,
+            discovery_commands::discovery_scan_start,
+            discovery_commands::discovery_cancel,
+            discovery_commands::discovery_running,
+            discovery_commands::discovery_snapshots,
+            discovery_commands::discovery_changes,
             // tools & execution engine
             tools::tools_catalog,
             tools::tools_detection_list,

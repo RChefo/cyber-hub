@@ -3,6 +3,7 @@
 //! `commands::workspace`; the logic here takes a `&Connection` so it can be tested and reused.
 
 pub mod assets;
+pub mod discovery;
 pub mod evidence;
 pub mod findings;
 pub mod scope_gate;

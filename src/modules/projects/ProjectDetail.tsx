@@ -15,13 +15,14 @@ import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { Finding, Project, ProjectStatus } from "@/lib/types";
 import { formatDate, formatDateTime, formatRelative, shellQuote } from "@/lib/utils";
+import { AttackSurfaceTab } from "./AttackSurfaceTab";
 import { FindingsTab } from "./FindingsTab";
 import { ProjectFormModal, STATUS_OPTIONS } from "./ProjectFormModal";
 import { isOpenFinding } from "@/lib/findings";
 import { countBySeverity } from "./report";
 import { ScopeTab } from "./ScopeTab";
 
-type TabId = "overview" | "scope" | "findings" | "notes" | "commands" | "evidence";
+type TabId = "overview" | "scope" | "surface" | "findings" | "notes" | "commands" | "evidence";
 
 function NotesTab({ project }: { project: Project }) {
   const [notes, setNotes] = useState(project.notes);
@@ -192,7 +193,7 @@ function OverviewTab({ project, findings, onTab }: { project: Project; findings:
       <div className="flex flex-col gap-3 xl:col-span-8">
         <div className="panel grid grid-cols-2 gap-4 p-4 md:grid-cols-4">
           <Stat label="In-scope entries" value={inScope} hint={`${project.targets.length - inScope} excluded`} />
-          <Stat label="Findings" value={findings.length} hint={`${open} open or confirmed`} tone={open ? "warning" : "default"} />
+          <Stat label="Findings" value={findings.length} hint={`${open} open`} tone={open ? "warning" : "default"} />
           <Stat label="Critical & high" value={counts.critical + counts.high} hint="Unresolved" tone={counts.critical + counts.high ? "danger" : "default"} />
           <Stat label="Tool runs" value={runs.data?.length ?? "—"} hint="For this project" />
         </div>
@@ -337,6 +338,7 @@ export function ProjectDetail({ id }: { id: number }) {
   const tabs: { id: TabId; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "scope", label: `Scope (${p.targets.length})` },
+    { id: "surface", label: "Attack surface" },
     { id: "findings", label: `Findings (${f.length})` },
     { id: "notes", label: "Notes" },
     { id: "commands", label: "Commands & runs" },
@@ -412,6 +414,9 @@ export function ProjectDetail({ id }: { id: number }) {
         </Tabs.Panel>
         <Tabs.Panel id="scope">
           <ScopeTab project={p} onChanged={project.reload} />
+        </Tabs.Panel>
+        <Tabs.Panel id="surface">
+          <AttackSurfaceTab project={p} />
         </Tabs.Panel>
         <Tabs.Panel id="findings">
           {findings.error && !findings.data ? <ErrorBlock message={findings.error} onRetry={findings.reload} /> : <FindingsTab projectId={p.id} findings={f} />}

@@ -1,4 +1,5 @@
 pub mod activity;
+pub mod discovery;
 pub mod intel;
 pub mod library;
 pub mod mcp;

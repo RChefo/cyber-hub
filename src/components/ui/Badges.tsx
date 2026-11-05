@@ -3,7 +3,7 @@ import type { OsId } from "@/types/catalog";
 import type { DetectionStatus, ExecutionStatus, FindingStatus, ProjectStatus, Severity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Tone = "default" | "accent" | "success" | "warning" | "danger";
+export type Tone = "default" | "accent" | "success" | "warning" | "danger";
 
 const DOT: Record<Tone, string> = {
   default: "bg-muted",

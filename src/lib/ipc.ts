@@ -130,6 +130,15 @@ export const api = {
   evidenceLinkOsint: (projectId: number, osintEvidenceId: number) => call<T.EvidenceRecord>("evidence_link_osint", { projectId, osintEvidenceId }),
   evidenceExport: (id: number) => call<string | null>("evidence_export", { id }),
   evidenceDelete: (id: number) => call<void>("evidence_delete", { id }),
+  // attack surface discovery
+  discoveryPassiveStart: (projectId: number) => call<number>("discovery_passive_start", { projectId }),
+  discoveryHttpStart: (projectId: number, hosts?: string[]) => call<number>("discovery_http_start", { projectId, hosts: hosts?.length ? hosts : null }),
+  discoveryScanStart: (projectId: number, targets: string[], profile: "quick" | "standard") =>
+    call<{ snapshotId: number; executionId: number }>("discovery_scan_start", { projectId, targets, profile }),
+  discoveryCancel: (projectId: number) => call<boolean>("discovery_cancel", { projectId }),
+  discoveryRunning: (projectId: number) => call<number | null>("discovery_running", { projectId }),
+  discoverySnapshots: (projectId: number, limit?: number) => call<T.DiscoverySnapshot[]>("discovery_snapshots", { projectId, limit: limit ?? null }),
+  discoveryChanges: (snapshotId: number) => call<T.SnapshotChanges>("discovery_changes", { snapshotId }),
   projectToolHistory: (projectId: number) => call<T.ProjectExecution[]>("project_tool_history", { projectId }),
   projectReport: (id: number) => call<string>("project_report", { id }),
   /** native save dialog; returns the file name or null when cancelled */
