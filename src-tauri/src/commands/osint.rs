@@ -31,6 +31,10 @@ fn tx<T>(db: &Db, f: impl FnOnce(&Connection) -> AppResult<T>) -> AppResult<T> {
     })
 }
 
+fn count(n: i64, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
 fn changed(app: &AppHandle, inv: i64) {
     let _ = app.emit(EVENT_CHANGED, json!({ "investigationId": inv }));
 }
@@ -144,8 +148,12 @@ pub async fn osint_investigation_set_status(app: AppHandle, db: State<'_, Db>, i
 pub async fn osint_investigation_delete(app: AppHandle, db: State<'_, Db>, id: i64) -> AppResult<bool> {
     let i = db.with(|c| investigation_get(c, id))?;
     let msg = format!(
-        "Delete the investigation \"{}\" with its {} entities, {} relationships, {} evidence records and {} saved graphs, including all versions? This cannot be undone. Export the graphs first if you may need them.",
-        i.name, i.counts.entities, i.counts.relationships, i.counts.evidence, i.counts.graphs
+        "Delete the investigation \"{}\" with its {}, {}, {} and {}, including all versions? This cannot be undone. Export the graphs first if you may need them.",
+        i.name,
+        count(i.counts.entities, "entity", "entities"),
+        count(i.counts.relationships, "relationship", "relationships"),
+        count(i.counts.evidence, "evidence record", "evidence records"),
+        count(i.counts.graphs, "saved graph", "saved graphs")
     );
     if !crate::confirm::native(&app, "Delete investigation", msg, "Delete").await {
         return Ok(false);
@@ -383,8 +391,9 @@ pub async fn osint_graph_create(app: AppHandle, db: State<'_, Db>, investigation
 }
 
 #[tauri::command]
-pub async fn osint_graph_load(db: State<'_, Db>, id: i64) -> AppResult<GraphData> {
-    db.with(|c| graph_load(c, id, true))
+pub async fn osint_graph_load(db: State<'_, Db>, id: i64, touch: Option<bool>) -> AppResult<GraphData> {
+    // refreshes of an open graph pass touch=false, so they do not write to the database
+    db.with(|c| graph_load(c, id, touch.unwrap_or(true)))
 }
 
 #[tauri::command]
@@ -423,7 +432,7 @@ pub async fn osint_graph_rename(app: AppHandle, db: State<'_, Db>, id: i64, name
 #[tauri::command]
 pub async fn osint_graph_delete(app: AppHandle, db: State<'_, Db>, id: i64) -> AppResult<bool> {
     let m = db.with(|c| graph_meta(c, id))?;
-    let msg = format!("Delete the graph \"{}\" and its {} saved versions? The investigation's entities, relationships and evidence are kept.", m.name, m.version_count);
+    let msg = format!("Delete the graph \"{}\" and its {}? The investigation's entities, relationships and evidence are kept.", m.name, count(m.version_count, "saved version", "saved versions"));
     if !crate::confirm::native(&app, "Delete graph", msg, "Delete").await {
         return Ok(false);
     }
@@ -648,12 +657,12 @@ pub async fn osint_export_image(app: AppHandle, db: State<'_, Db>, graph_id: i64
 
 #[tauri::command]
 pub async fn osint_report(db: State<'_, Db>, investigation_id: i64) -> AppResult<String> {
-    db.with(|c| report::markdown(c, investigation_id, &chrono::Utc::now().format("%Y-%m-%d").to_string()))
+    db.with(|c| report::markdown(c, investigation_id, &chrono::Local::now().format("%Y-%m-%d").to_string()))
 }
 
 #[tauri::command]
 pub async fn osint_report_export(app: AppHandle, db: State<'_, Db>, investigation_id: i64) -> AppResult<Option<String>> {
-    let (name, md) = db.with(|c| Ok((investigation_get(c, investigation_id)?.name, report::markdown(c, investigation_id, &chrono::Utc::now().format("%Y-%m-%d").to_string())?)))?;
+    let (name, md) = db.with(|c| Ok((investigation_get(c, investigation_id)?.name, report::markdown(c, investigation_id, &chrono::Local::now().format("%Y-%m-%d").to_string())?)))?;
     let Some(path) = save_dialog(&app, "Export investigation report", &format!("{}-osint-report.md", safe_name(&name)), "Markdown", "md").await else { return Ok(None) };
     let file = write_file(&path, md.as_bytes())?;
     db.with(|c| Ok(ingest::event(c, investigation_id, "export", "Investigation report exported (Markdown)", Some("analyst"), None, None, None, None, json!({ "format": "md" }))?))?;

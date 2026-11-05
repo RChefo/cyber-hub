@@ -1,7 +1,7 @@
 /** DTOs returned by the Rust backend (src-tauri/src/commands/*). Keep in sync. */
 
 export interface AppError {
-  kind: "database" | "io" | "validation" | "not_found" | "scope" | "network" | "secret" | "cancelled" | "rate_limited" | "internal" | "runtime";
+  kind: "database" | "io" | "validation" | "not_found" | "scope" | "network" | "secret" | "cancelled" | "rate_limited" | "internal" | "conflict" | "runtime";
   message: string;
 }
 

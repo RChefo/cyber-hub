@@ -2,7 +2,7 @@ import { Button, Checkbox, Label } from "@heroui/react";
 import { AlertTriangle, Ban, Database, Eye, Play, Radar } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ToneChip } from "@/components/ui/Badges";
-import { AppModal } from "@/components/ui/Dialogs";
+import { AppModal, useConfirm } from "@/components/ui/Dialogs";
 import { EmptyBlock, ErrorBlock, LoadingRows, QueryView } from "@/components/ui/Feedback";
 import { SearchInput, SelectInput, SwitchInput, TextInput } from "@/components/ui/Fields";
 import { Panel } from "@/components/ui/Panel";
@@ -320,9 +320,11 @@ function OperationsPanel() {
 
   useEffect(() => {
     if (!running) return;
-    const t = setInterval(() => invalidate("osint"), 2000);
+    // reload only this list while something runs; when a collection finishes the backend emits
+    // "osint-changed" once, which refreshes the rest of the page (graph, counts, timeline)
+    const t = setInterval(() => q.reload(), 2000);
     return () => clearInterval(t);
-  }, [running]);
+  }, [running]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cancel = async (id: number) => {
     try {
@@ -386,8 +388,19 @@ function InternalPanel() {
   const { investigation: inv } = useOsint();
   const q = useQuery(["osint", "executions", "ti", "cve", "findings", "projects"], () => api.osintImportSources(inv.projectId), [inv.projectId]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [showOther, setShowOther] = useState(false);
+  const confirm = useConfirm();
 
   const run = async (s: ImportSource) => {
+    if (s.association === "other") {
+      const ok = await confirm.ask({
+        title: "Import from another project?",
+        body: `${s.label} belongs to the project “${s.projectName ?? `#${s.projectId}`}”, not to the project linked to this investigation. Import it only if you are authorized to combine the two.`,
+        confirmLabel: "Import",
+        tone: "accent",
+      });
+      if (!ok) return;
+    }
     setBusy(`${s.kind}:${s.id}`);
     try {
       const r = await api.osintImportInternal(inv.id, s.kind, s.id);
@@ -410,11 +423,21 @@ function InternalPanel() {
       }
     >
       <QueryView query={q} rows={4} isEmpty={(d) => d.length === 0} empty={<EmptyBlock compact icon={Database} title="Nothing to import yet" description="Run tools, look up indicators or open CVEs first." />}>
-        {(list) => {
+        {(all) => {
+          const otherCount = all.filter((s) => s.association === "other").length;
+          const list = all.filter((s) => showOther || s.association !== "other");
           const groups = new Map<ImportSource["kind"], ImportSource[]>();
           for (const s of list) groups.set(s.kind, [...(groups.get(s.kind) ?? []), s]);
           return (
             <div className="flex flex-col gap-4">
+              {otherCount > 0 && (
+                <SwitchInput
+                  label={`Show ${otherCount} run${otherCount === 1 ? "" : "s"} from other projects`}
+                  isSelected={showOther}
+                  onChange={setShowOther}
+                  description={inv.projectId ? "Hidden by default: they belong to a different project than the one linked to this investigation." : "This investigation has no linked project; these runs belong to projects."}
+                />
+              )}
               {[...groups.entries()].map(([kind, items]) => (
                 <section key={kind}>
                   <h3 className="mb-1.5 text-[12.5px] font-medium text-muted">{IMPORT_KIND_LABEL[kind] ?? kind}</h3>
@@ -425,6 +448,7 @@ function InternalPanel() {
                           <div className="truncate text-foreground">{s.label}</div>
                           <div className="truncate text-[12px] text-muted">
                             {s.detail} · {shortTime(s.at)}
+                            {s.kind === "run" && (s.association === "none" ? " · no project" : ` · project: ${s.projectName ?? `#${s.projectId}`}`)}
                           </div>
                         </div>
                         <Button size="sm" variant="ghost" onPress={() => run(s)} isPending={busy === `${s.kind}:${s.id}`} isDisabled={busy !== null && busy !== `${s.kind}:${s.id}`}>
@@ -439,6 +463,7 @@ function InternalPanel() {
           );
         }}
       </QueryView>
+      {confirm.element}
     </Panel>
   );
 }

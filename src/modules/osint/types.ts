@@ -205,6 +205,8 @@ export interface GraphMeta {
   relationshipCount: number;
   versionCount: number;
   latestVersion: number | null;
+  /** changes only when the saved presentation state is written (save, restore) */
+  stateRevision: number;
 }
 
 export interface GraphNodeState {
@@ -232,12 +234,17 @@ export interface GraphSave {
   workspace: unknown;
   versionLabel?: string | null;
   manualVersion?: boolean;
+  /** the stateRevision the editor loaded; a newer stored state makes the save fail with "conflict" */
+  baseStateRevision?: number | null;
+  /** overwrite a newer saved state */
+  force?: boolean;
 }
 
 export interface SaveResult {
   revision: number;
   version: number | null;
   mergedConcurrentChanges: boolean;
+  stateRevision: number;
 }
 
 export interface Diff {
@@ -409,6 +416,10 @@ export interface ImportSource {
   label: string;
   detail: string;
   at: string;
+  projectId: number | null;
+  projectName: string | null;
+  /** linked: the investigation's project; other: another project; none: no project */
+  association: "linked" | "other" | "none";
 }
 
 export interface ImportPreview {

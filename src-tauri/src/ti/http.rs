@@ -88,8 +88,24 @@ pub fn client(timeout: Duration) -> Result<reqwest::Client, String> {
 
 /// Send a prepared request. Any status is returned as a `Response`; only transport
 /// failures and oversized / non-JSON bodies on success become errors here.
+/// A transport error without its URL, with the innermost cause (timeout, refused, TLS…), which
+/// reqwest's own message ("error sending request") leaves out.
+fn describe(e: reqwest::Error) -> String {
+    if e.is_timeout() {
+        return "the request timed out".into();
+    }
+    let e = e.without_url();
+    let top = e.to_string();
+    let mut cause: &dyn std::error::Error = &e;
+    while let Some(next) = cause.source() {
+        cause = next;
+    }
+    let inner = cause.to_string();
+    if inner == top { top } else { format!("{top} ({inner})") }
+}
+
 pub async fn send(rb: reqwest::RequestBuilder, secret: &str) -> Result<Response, ApiError> {
-    let mut resp = rb.send().await.map_err(|e| ApiError::Network(scrub(&e.without_url().to_string(), secret)))?;
+    let mut resp = rb.send().await.map_err(|e| ApiError::Network(scrub(&describe(e), secret)))?;
     let status = resp.status().as_u16();
     let headers = resp.headers().clone();
     if resp.content_length().is_some_and(|n| n as usize > MAX_BODY) {
@@ -97,7 +113,7 @@ pub async fn send(rb: reqwest::RequestBuilder, secret: &str) -> Result<Response,
     }
     // read incrementally so chunked responses are capped too
     let mut bytes = Vec::new();
-    while let Some(chunk) = resp.chunk().await.map_err(|e| ApiError::Network(scrub(&e.without_url().to_string(), secret)))? {
+    while let Some(chunk) = resp.chunk().await.map_err(|e| ApiError::Network(scrub(&describe(e), secret)))? {
         if bytes.len() + chunk.len() > MAX_BODY {
             return Err(ApiError::Unexpected("response too large".into()));
         }

@@ -494,8 +494,13 @@ pub fn csv_cell(s: &str) -> String {
     format!("\"{}\"", s.replace('"', "\"\""))
 }
 
+/// UTF-8 byte order mark: spreadsheet applications (Excel) otherwise read CSV in the local ANSI
+/// code page and garble non-ASCII values.
+const CSV_BOM: &str = "\u{feff}";
+
 pub fn export_csv_entities(doc: &Document) -> String {
-    let mut out = String::from("id,type,value,display_name,verification,confidence,flagged,first_seen,last_seen,aliases\n");
+    let mut out = String::from(CSV_BOM);
+    out.push_str("id,type,value,display_name,verification,confidence,flagged,first_seen,last_seen,aliases\n");
     for e in &doc.entities {
         let row = [
             e.id.clone(),
@@ -517,7 +522,8 @@ pub fn export_csv_entities(doc: &Document) -> String {
 
 pub fn export_csv_relationships(doc: &Document) -> String {
     let values: HashMap<&str, &str> = doc.entities.iter().map(|e| (e.id.as_str(), e.value.as_str())).collect();
-    let mut out = String::from("id,source_id,source,type,target_id,target,verification,confidence,origin,evidence_count,confidence_reason\n");
+    let mut out = String::from(CSV_BOM);
+    out.push_str("id,source_id,source,type,target_id,target,verification,confidence,origin,evidence_count,confidence_reason\n");
     for r in &doc.relationships {
         let row = [
             r.id.clone(),
@@ -741,7 +747,9 @@ pub fn apply(c: &Connection, doc: &Document, into: Option<i64>, graph_name: &str
             .iter()
             .filter_map(|(r, st)| {
                 let (s, t) = (*pos.get(r.source.as_str())?, *pos.get(r.target.as_str())?);
-                let inferred = matches!(r.verification.as_deref(), Some("inferred")) || matches!(r.origin.as_deref(), Some("inferred" | "suggested"));
+                // links the file marks as unreviewed, disputed or rejected come back as inferred
+                // (they wait for review) instead of reappearing as plain observations
+                let inferred = matches!(r.verification.as_deref(), Some("inferred" | "disputed" | "rejected")) || matches!(r.origin.as_deref(), Some("inferred" | "suggested"));
                 let mut metadata = r.metadata.clone();
                 if let Some(v) = r.verification.as_deref() {
                     metadata.insert("importedVerification".into(), json!(v));
@@ -780,7 +788,7 @@ pub fn apply(c: &Connection, doc: &Document, into: Option<i64>, graph_name: &str
             acc
         });
     let workspace = if doc.graph.workspace.is_object() && doc.graph.workspace.to_string().len() < store::MAX_WORKSPACE_BYTES { doc.graph.workspace.clone() } else { json!({}) };
-    store::graph_save(c, graph, &store::GraphSave { base_revision: 0, nodes, removed: vec![], workspace, version_label: Some(format!("Imported from {file_label}")), manual_version: true })?;
+    store::graph_save(c, graph, &store::GraphSave { base_revision: 0, nodes, removed: vec![], workspace, version_label: Some(format!("Imported from {file_label}")), manual_version: true, base_state_revision: None, force: false })?;
     ingest::event(c, inv, "import", &format!("Graph \"{name}\" imported from {file_label}: {} entities, {} relationships", new_ids.len(), doc.relationships.len()), Some("import"), None, None, None, Some(graph), json!({}))?;
     Ok((inv, graph))
 }
@@ -806,7 +814,7 @@ mod tests {
         db.with(|c| {
             let data = store::graph_load(c, g, false)?;
             let nodes: Vec<GraphNodeState> = data.nodes.iter().enumerate().map(|(i, n)| GraphNodeState { x: Some(i as f64 * 10.0), y: Some(5.0), ..n.clone() }).collect();
-            store::graph_save(c, g, &store::GraphSave { base_revision: data.graph.revision, nodes, removed: vec![], workspace: json!({ "layout": "radial", "viewport": { "x": 0, "y": 0, "zoom": 1.2 } }), version_label: None, manual_version: false })
+            store::graph_save(c, g, &store::GraphSave { base_revision: data.graph.revision, nodes, removed: vec![], workspace: json!({ "layout": "radial", "viewport": { "x": 0, "y": 0, "zoom": 1.2 } }), version_label: None, manual_version: false, base_state_revision: None, force: false })
         })
         .unwrap();
         (db, inv, g)
@@ -858,6 +866,26 @@ mod tests {
         let csv = export_csv_entities(&doc);
         assert!(csv.contains("\"'=cmd|' /C calc'!A0\""), "formulas are neutralised: {csv}");
         assert_eq!(export_csv_relationships(&doc).lines().count(), 3);
+    }
+
+    #[test]
+    fn csv_is_marked_utf8_and_rejected_links_return_for_review() {
+        let (db, _, g) = sample();
+        let mut doc = db.with(|c| export_document(c, g)).unwrap();
+        doc.entities[0].display_name = Some("Société Ünïcode 中文".into());
+        let csv = export_csv_entities(&doc);
+        assert!(csv.starts_with('\u{feff}'), "UTF-8 \u{feff} for spreadsheet applications");
+        assert!(csv.contains("Société Ünïcode 中文"));
+        assert!(export_csv_relationships(&doc).starts_with('\u{feff}'));
+        // a relationship the file records as rejected comes back as inferred (needs review)
+        doc.relationships[0].verification = Some("rejected".into());
+        doc.relationships[1].verification = Some("verified".into());
+        let parsed = parse(&serde_json::to_vec(&doc).unwrap(), "json").unwrap();
+        let (_, g2) = db.with(|c| apply(c, &parsed, None, "", "t.json")).unwrap();
+        let data = db.with(|c| store::graph_load(c, g2, false)).unwrap();
+        let mut states: Vec<String> = data.relationships.iter().map(|r| r.verification.clone()).collect();
+        states.sort();
+        assert_eq!(states, vec!["inferred".to_string(), "observed".to_string()], "never verified, never silently observed when rejected");
     }
 
     #[test]

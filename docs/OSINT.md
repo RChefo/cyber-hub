@@ -43,8 +43,8 @@ Repeated evidence from the same source counts once.
 
 From Data Sources → Cyber Hub data:
 
-- **Tool runs**: entities are extracted from stored output. Nmap output becomes hosts, services and their relationships; other output yields domains, IPs, URLs, emails and CVE IDs found in the text.
-- **Threat-intelligence lookups**: stored results become entities with each provider's verdict kept in its own words.
+- **Tool runs**: entities are extracted from stored output. Nmap output becomes hosts, services and their relationships; other output yields domains, IPs, URLs, emails and CVE IDs found in the text. Each run is labelled with its project. Runs of the linked project are listed first; runs of other projects are hidden behind *Show runs from other projects* and are imported only after a confirmation, so results from an unrelated engagement are never combined by accident. Runs without a project are labelled as such.
+- **Threat-intelligence lookups**: stored results become entities with each provider's verdict kept in its own words. Lookups are not tied to a project.
 - **CVE cache**, **findings** and **project scope** entries.
 
 Every import creates evidence pointing to the run, lookup, finding or scope entry it came from.
@@ -53,16 +53,16 @@ Every import creates evidence pointing to the run, lookup, finding or scope entr
 
 | Source | Input | What it returns | Notes |
 |---|---|---|---|
-| DNS records | domain, IP | A/AAAA, CNAME, NS, MX; PTR for IPs | System resolver. |
+| DNS records | domain, IP | A/AAAA, CNAME, NS, MX; PTR for IPs | System resolver; answers cached for 1 hour. |
 | IP to ASN (Team Cymru) | IP | ASN, announced prefix, registry, country, AS name | DNS-based service; no key. |
-| RDAP registration data | domain, IP, ASN | Registrar, registrant organization (when public), dates, status, name servers, network ranges | Servers from the IANA bootstrap (cached 7 days); only `https://` on public hosts; redirects are not followed. |
-| Certificate Transparency (crt.sh) | domain | Certificates and the names they cover inside the domain | The 60 most recent certificates and at most 400 names per run; names outside the queried domain are ignored. |
+| RDAP registration data | domain, IP, ASN | Registrar, registrant (when public), network operator and contacts, dates, status, name servers, network ranges | Servers from the IANA bootstrap (cached 7 days); only `https://` on public hosts; redirects are not followed. Contacts are people or organizations according to their vCard `kind`; only contacts that get a relationship are added. |
+| Certificate Transparency (crt.sh) | domain | Certificates and the names they cover inside the domain | The 60 most recent certificates and at most 400 names per run; names outside the queried domain are ignored. crt.sh is frequently overloaded: when its subdomain search fails (HTTP 404/502–504) the cheaper exact-name search is tried once and the result says so. |
 | GitHub public search | domain, organization, email, `github:` username | Repositories that mention the value, owners, user profiles | Unauthenticated public API (low rate limits). |
-| Web server fingerprint | domain, URL | Status, server and technology headers, redirect target | **Contacts the target.** Only for investigations linked to an active project whose authorized scope covers the target; resolved public addresses are pinned for the request; HEAD (GET only when HEAD is refused) and the body is never read. |
+| Web server fingerprint | domain, URL | Status, server and technology headers, redirect target | **Contacts the target.** Only for investigations linked to an active project whose authorized scope covers the target; resolved public addresses are pinned for the request; HEAD (GET only when HEAD is refused) and the body is never read. For a domain, plain HTTP is tried when HTTPS cannot connect. |
 | Threat intelligence providers | domain, IP, URL, file hash | The configured providers' results (VirusTotal, AbuseIPDB, OTX, URLhaus, MalwareBazaar, ThreatFox, Shodan) | Reuses the Threat Intel module, its provisioned keys and quotas. Keys never reach the frontend, MCP clients, logs or stored records. |
 | NVD vulnerability record | CVE | CVE details | Uses the CVE cache when possible. |
 
-Before anything is sent, Cyber Hub checks that the source accepts the entity type and refuses private, loopback, link-local and reserved addresses and internal names. It also applies a per-source rate limit and, for the web fingerprint, the scope check. Results are cached per source (see the table in the app for cache times; *Ignore cache* forces a new request).
+Before anything is sent, Cyber Hub checks that the source accepts the entity type and refuses private, loopback, link-local and reserved addresses and internal names. It also applies a per-source rate limit and, for the web fingerprint, the scope check. Every request of a public source resolves host names through a resolver that only returns public addresses, so even a source host taken from a fixed list or the IANA bootstrap cannot be pointed at an internal service. Results are cached per source (see the table in the app for cache times; *Ignore cache* forces a new request).
 
 A collection runs in the background. Its results wait in the operation for your review: open it, select the entities and relationships to keep, and import them. You can also choose *Import results without review* when starting it. Cancelling stops a running collection. Collections interrupted by closing the app are marked as such the next time it starts.
 
@@ -102,6 +102,7 @@ Relationship: both ends, type and description, origin, confidence reason, eviden
 ### Saving, Save As and the Graph Manager
 
 - **Save** (Ctrl+S) stores membership, positions, pinned and hidden nodes, groups, filters, layout, label mode and viewport. If entities were collected into the graph while you worked, the save keeps them and tells you so. Only entities you removed are taken out.
+- **Conflicts**: each graph has a saved-state revision that only saves and restores change (automatically added entities do not). If the graph was saved or restored elsewhere since you opened it (another window, a client, a restore), Save is refused and you choose: *Discard mine and reload*, *Save mine as a new graph*, or *Overwrite* (the other state stays in the version history). Entities, relationships and evidence are never affected by this choice.
 - **Save as** creates an independent graph from the current state; the original stays as last saved.
 - **Graphs** opens the Graph Manager: open, rename (with description and the *follow new data* setting), duplicate, delete (system confirmation; entities and evidence are kept), and create empty graphs.
 - Switching graphs with unsaved changes asks first.
@@ -130,11 +131,13 @@ Graph → Import (or *Import graph* on the investigation list) reads Cyber Hub J
 - Files over 25 MB, more than 20,000 entities or 60,000 relationships or evidence records, duplicate IDs, files from a newer format version, non-UTF-8 files and GraphML with a DOCTYPE are refused.
 - A preview shows counts by type, elements that will be skipped (unknown types, invalid values, relationships to missing entities, invalid relationship types) and how many entities already exist in the chosen investigation.
 - The import goes into a **new graph**, in the current investigation (entities resolve against existing ones) or in a new investigation. Nothing is overwritten.
-- Review decisions in the file (verified, disputed, rejected) are kept as an attribute (`importedVerification`), but imported items start as observed or inferred.
+- Review decisions in the file (verified, disputed, rejected) are kept as an attribute (`importedVerification`), but imported items start as observed or inferred. Relationships the file marks as disputed or rejected come back as inferred, so they wait for review instead of reappearing as plain observations.
+- After importing into a new investigation, the imported graph opens.
+- CSV files start with a UTF-8 byte order mark, so spreadsheet applications show non-ASCII values correctly.
 
 ## Timeline
 
-Every collection, discovery, review decision, merge, removal, graph save, restore, import and export is an event. Filter by kind, date range, source and text; events link to their entity, relationship or graph.
+Every collection, discovery, review decision, merge, removal, graph save, restore, import and export is an event. Filter by kind, date range, source and text; events link to their entity, relationship or graph. Events are stored in UTC; the date filter uses your local calendar days (converted to UTC instants), so an event at 00:30 local time belongs to that local day.
 
 ## Analysis and suggestions
 
@@ -159,7 +162,7 @@ Reports → *Generate* builds a Markdown report from local data: overview, execu
 
 ## Investigations
 
-The list shows active and closed investigations (archived on request), with counts and items awaiting review. *Compare* lists the entities two investigations have in common. Deleting an investigation removes its entities, evidence, graphs and versions after a system confirmation; running collections for it are cancelled first.
+The list shows active and closed investigations (archived on request), with counts and items awaiting review. *Compare* lists the entities two investigations have in common. Editing can change the primary target: the new target becomes an entity (and joins graphs that follow new data); the previous one stays with its evidence but is no longer marked as the primary target. Deleting an investigation removes its entities, evidence, graphs and versions after a system confirmation; running collections for it are cancelled first.
 
 ## MCP
 
@@ -191,10 +194,29 @@ The server instructions tell clients that collected content is untrusted data an
 | Concurrent collections | 6 |
 | Import file | 25 MB, 20,000 entities, 60,000 relationships or evidence records |
 | Correlation fan-out | Infrastructure shared by more than 25 entities is not correlated |
+| Source cache | 5,000 most recent responses (trimmed at startup) |
+
+## Storage growth
+
+Versions are full snapshots of a graph (membership, positions, workspace and a summary of the intelligence), so a 2,000-entity graph takes a few hundred kilobytes per version; with 60 automatic versions plus checkpoints and restores this stays in the tens of megabytes per graph. Evidence is stored once per identical record and each record's data is capped at 64 KB. Collection operations keep their proposed results (at most 6 MB each) until the investigation is deleted, so they can still be reviewed and imported later. Nothing that holds evidence or unreviewed results is deleted automatically; only caches are trimmed.
+
+## Performance
+
+Measured in the Windows development build (Windows 11, debug Rust backend) with generated investigations; frame times are the interval between animation frames while panning and zooming:
+
+| Entities / relationships | Load (backend) | Save | Force layout | Hierarchical layout | Frame time p50 / p95 | Search |
+|---|---|---|---|---|---|---|
+| 100 / 225 | 6 ms | 112 ms | 55 ms | 27 ms | 5.6 / 5.7 ms | 28 ms |
+| 250 / 545 | 12 ms | 90 ms | 76 ms | 36 ms | 5.6 / 5.7 ms | 19 ms |
+| 500 / 1,129 | 22 ms | 103 ms | 156 ms | 20 ms | 5.6 / 5.7 ms | 21 ms |
+| 1,000 / 2,296 | 40 ms | 127 ms | 386 ms | 21 ms | 5.6 / 5.7 ms | 20 ms |
+| 2,000 / 4,478 | 74 ms | 218 ms | 915 ms | 24 ms | 5.6 / 5.7 ms | 25 ms |
+
+The JavaScript heap stayed between 70 and 125 MB. Before this pass, loading a 1,000-entity graph took 493 ms and saving it 1.5 s because the graph summary counted relationships with correlated subqueries (quadratic); it now uses joins on the graph membership key. Layouts above 200 nodes run in a Web Worker.
 
 ## Not included
 
 - Paid or authenticated sources beyond the existing threat-intelligence keys; social-media scraping; people-search services; breach data. None of these are used.
 - Automatic entity merging on similarity, and automatic verification.
 - A built-in AI model. The suggestions are rule-based and deterministic.
-- Live multi-user collaboration. The app is single-user; concurrent saves from two windows keep collected entities but the last workspace wins.
+- Live multi-user collaboration. Cyber Hub runs as a single instance; stale saves are detected and refused (see *Conflicts*), but edits are not merged.

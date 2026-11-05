@@ -226,7 +226,8 @@ export const api = {
   osintGraphs: (investigationId: number | null) => call<O.GraphMeta[]>("osint_graphs", { investigationId }),
   osintGraphCreate: (investigationId: number, name: string, description: string, followNew: boolean) =>
     call<number>("osint_graph_create", { investigationId, name, description, followNew }),
-  osintGraphLoad: (id: number) => call<O.GraphData>("osint_graph_load", { id }),
+  /** touch=false for refreshes of an open graph (no "last opened" write) */
+  osintGraphLoad: (id: number, touch = true) => call<O.GraphData>("osint_graph_load", { id, touch }),
   osintGraphSave: (id: number, save: O.GraphSave) => call<O.SaveResult>("osint_graph_save", { id, save }),
   osintGraphSaveAs: (from: number, name: string, nodes: O.GraphNodeState[], workspace: unknown, followNew: boolean) =>
     call<number>("osint_graph_save_as", { from, name, nodes, workspace, followNew }),

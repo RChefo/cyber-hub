@@ -157,37 +157,65 @@ pub struct ImportSource {
     pub label: String,
     pub detail: String,
     pub at: String,
+    /// the project the item belongs to (runs, findings, scope); None for items without a
+    /// project (lookups, CVEs, runs started outside a project)
+    pub project_id: Option<i64>,
+    pub project_name: Option<String>,
+    /// "linked" (the investigation's project), "other" (another project) or "none"
+    pub association: String,
+}
+
+fn association(item: Option<i64>, linked: Option<i64>) -> String {
+    match (item, linked) {
+        (None, _) => "none".into(),
+        (Some(a), Some(b)) if a == b => "linked".into(),
+        _ => "other".into(),
+    }
 }
 
 /// Importable items, newest first.
 pub fn list_sources(db: &Db, project_id: Option<i64>) -> crate::error::AppResult<Vec<ImportSource>> {
     db.with(|c| {
         let mut out = vec![];
-        let mut st = c.prepare("SELECT id, tool_id, args, status, started_at FROM executions WHERE kind = 'run' AND status != 'running' ORDER BY id DESC LIMIT 100")?;
-        for r in st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?)))? {
-            let (id, tool, args, status, at) = r?;
+        // runs of the linked project first, then the others (each labelled with its project)
+        let mut st = c.prepare(
+            "SELECT e.id, e.tool_id, e.args, e.status, e.started_at, e.project_id, p.name FROM executions e LEFT JOIN projects p ON p.id = e.project_id
+             WHERE e.kind = 'run' AND e.status != 'running' ORDER BY (e.project_id IS ?1) DESC, e.id DESC LIMIT 150",
+        )?;
+        let rows = st.query_map(params![project_id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?, r.get::<_, Option<i64>>(5)?, r.get::<_, Option<String>>(6)?)))?;
+        for r in rows {
+            let (id, tool, args, status, at, pid, pname) = r?;
             let args: Vec<String> = serde_json::from_str(&args).unwrap_or_default();
-            out.push(ImportSource { kind: "run".into(), id: id.to_string(), label: format!("{tool} run #{id}"), detail: format!("{} · {status}", args.join(" ").chars().take(120).collect::<String>()), at });
+            out.push(ImportSource {
+                kind: "run".into(),
+                id: id.to_string(),
+                label: format!("{tool} run #{id}"),
+                detail: format!("{} · {status}", args.join(" ").chars().take(120).collect::<String>()),
+                at,
+                association: association(pid, project_id),
+                project_id: pid,
+                project_name: pname,
+            });
         }
         let mut st = c.prepare("SELECT kind, indicator, MAX(searched_at) FROM ti_history GROUP BY kind, indicator ORDER BY MAX(searched_at) DESC LIMIT 100")?;
         for r in st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)))? {
             let (kind, ind, at) = r?;
-            out.push(ImportSource { kind: "lookup".into(), id: ind.clone(), label: format!("Threat intel lookup: {ind}"), detail: kind, at });
+            out.push(ImportSource { kind: "lookup".into(), id: ind.clone(), label: format!("Threat intel lookup: {ind}"), detail: kind, at, project_id: None, project_name: None, association: "none".into() });
         }
         let mut st = c.prepare("SELECT id, fetched_at FROM cve_cache ORDER BY fetched_at DESC LIMIT 100")?;
         for r in st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
             let (id, at) = r?;
-            out.push(ImportSource { kind: "cve".into(), id: id.clone(), label: id, detail: "cached NVD record".into(), at });
+            out.push(ImportSource { kind: "cve".into(), id: id.clone(), label: id, detail: "cached NVD record".into(), at, project_id: None, project_name: None, association: "none".into() });
         }
         if let Some(p) = project_id {
             let mut st = c.prepare("SELECT id, title, severity, created_at FROM findings WHERE project_id = ?1 ORDER BY id DESC LIMIT 200")?;
             for r in st.query_map(params![p], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?)))? {
                 let (id, title, sev, at) = r?;
-                out.push(ImportSource { kind: "finding".into(), id: id.to_string(), label: title, detail: format!("finding · {sev}"), at });
+                out.push(ImportSource { kind: "finding".into(), id: id.to_string(), label: title, detail: format!("finding · {sev}"), at, project_id: Some(p), project_name: None, association: "linked".into() });
             }
             let n: i64 = c.query_row("SELECT COUNT(*) FROM project_targets WHERE project_id = ?1 AND in_scope = 1", params![p], |r| r.get(0))?;
             if n > 0 {
-                out.push(ImportSource { kind: "scope".into(), id: p.to_string(), label: "Authorized scope of the linked project".into(), detail: format!("{n} in-scope entr{}", if n == 1 { "y" } else { "ies" }), at: String::new() });
+                out.push(ImportSource { kind: "scope".into(), id: p.to_string(), label: "Authorized scope of the linked project".into(), detail: format!("{n} in-scope entr{}", if n == 1 { "y" } else { "ies" }), at: String::new(), project_id: Some(p), project_name: None, association: "linked".into() });
             }
         }
         Ok(out)
@@ -284,6 +312,32 @@ pub fn import(db: &Db, kind: &str, id: &str, project_id: Option<i64>) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sources_are_labelled_with_their_project() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            c.execute_batch(
+                "INSERT INTO projects (id, name, description, status, scope_notes, notes, created_at, updated_at) VALUES
+                   (1, 'Linked', '', 'active', '', '', 'x', 'x'), (2, 'Other', '', 'active', '', '', 'x', 'x');",
+            )?;
+            for (id, pid) in [(1, Some(1)), (2, Some(2)), (3, None)] {
+                c.execute(
+                    "INSERT INTO executions (id, kind, tool_id, program, args, project_id, status, started_at, output) VALUES (?1, 'run', 'nmap', 'nmap', '[]', ?2, 'succeeded', 'x', '')",
+                    params![id, pid],
+                )?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        let list = list_sources(&db, Some(1)).unwrap();
+        let runs: Vec<(String, String, Option<String>)> = list.iter().filter(|s| s.kind == "run").map(|s| (s.id.clone(), s.association.clone(), s.project_name.clone())).collect();
+        assert_eq!(runs[0], ("1".into(), "linked".into(), Some("Linked".into())), "the linked project's runs come first");
+        assert!(runs.contains(&("2".into(), "other".into(), Some("Other".into()))));
+        assert!(runs.contains(&("3".into(), "none".into(), None)));
+        let unlinked = list_sources(&db, None).unwrap();
+        assert!(unlinked.iter().filter(|s| s.kind == "run").all(|s| s.association != "linked"));
+    }
 
     #[test]
     fn extracts_indicators_without_file_name_noise() {

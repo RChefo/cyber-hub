@@ -215,12 +215,22 @@ async fn run_provider(app: &AppHandle, provider: &str, t: EntityType, value: &st
     let db = app.state::<Db>();
     match provider {
         "dns" => {
-            if t == EntityType::Ip {
-                let ip: std::net::IpAddr = value.parse().map_err(|_| Error::Invalid("invalid address".into()))?;
-                Ok(providers::dns::domain_observation(value, t, &providers::dns::query_ptr(&ip).await?))
-            } else {
-                Ok(providers::dns::domain_observation(value, t, &providers::dns::query_domain(value).await?))
+            let key = format!("{}:{value}", t.as_str());
+            if !refresh {
+                if let Some(answers) = providers::cache_get(&db, "dns", &key, 1).and_then(|v| serde_json::from_value::<providers::dns::Answers>(v).ok()) {
+                    let mut out = providers::dns::domain_observation(value, t, &answers);
+                    out.from_cache = true;
+                    return Ok(out);
+                }
             }
+            let answers = if t == EntityType::Ip {
+                let ip: std::net::IpAddr = value.parse().map_err(|_| Error::Invalid("invalid address".into()))?;
+                providers::dns::query_ptr(&ip).await?
+            } else {
+                providers::dns::query_domain(value).await?
+            };
+            providers::cache_put(&db, "dns", &key, &json!(answers));
+            Ok(providers::dns::domain_observation(value, t, &answers))
         }
         "asn" => {
             let ip: std::net::IpAddr = value.parse().map_err(|_| Error::Invalid("invalid address".into()))?;

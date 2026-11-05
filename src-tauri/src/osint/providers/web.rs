@@ -42,6 +42,21 @@ pub fn target_url(t: EntityType, value: &str) -> Result<url::Url, Error> {
 }
 
 /// Resolve and require every address to be public.
+/// The innermost cause of a request error ("connection refused", "timed out"), without the URL.
+fn request_error(e: &reqwest::Error) -> String {
+    let mut cause: &dyn std::error::Error = e;
+    while let Some(next) = cause.source() {
+        cause = next;
+    }
+    let kind = if e.is_timeout() { "timed out" } else if e.is_connect() { "connection failed" } else { "request failed" };
+    format!("{kind} ({cause})")
+}
+
+/// Checked addresses for `resolve_to_addrs`, with port 0 so the request's own port applies.
+pub fn pinned_addrs(addrs: &[IpAddr]) -> Vec<SocketAddr> {
+    addrs.iter().map(|a| SocketAddr::new(*a, 0)).collect()
+}
+
 pub fn check_addresses(addrs: &[IpAddr]) -> Result<(), Error> {
     if addrs.is_empty() {
         return Err(Error::Network("The host name does not resolve".into()));
@@ -122,8 +137,9 @@ pub async fn run(t: EntityType, value: &str) -> Result<Output, Error> {
     let host = url.host_str().ok_or_else(|| Error::Invalid("URL without host".into()))?.to_string();
     let addrs = resolve(&host).await?;
     check_addresses(&addrs)?;
-    let port = url.port_or_known_default().unwrap_or(443);
-    let pinned: Vec<SocketAddr> = addrs.iter().map(|a| SocketAddr::new(*a, port)).collect();
+    // port 0: reqwest connects to the scheme's port (or the URL's explicit port); a fixed port here
+    // would also be used for the plain-HTTP fallback and connect to the wrong service
+    let pinned: Vec<SocketAddr> = pinned_addrs(&addrs);
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(12))
         .redirect(reqwest::redirect::Policy::none())
@@ -131,9 +147,19 @@ pub async fn run(t: EntityType, value: &str) -> Result<Output, Error> {
         .resolve_to_addrs(&host, &pinned)
         .build()
         .map_err(|e| Error::Unavailable(e.to_string()))?;
-    let mut resp = client.head(url.clone()).send().await.map_err(|e| Error::Network(format!("Request failed: {}", e.without_url())))?;
+    let mut url = url;
+    let mut resp = match client.head(url.clone()).send().await {
+        Ok(r) => r,
+        // a domain was given (no scheme chosen by the analyst): try plain HTTP when HTTPS cannot
+        // connect; the same pinned, checked addresses are used
+        Err(e) if t == EntityType::Domain && (e.is_connect() || e.is_timeout()) => {
+            url = url::Url::parse(&format!("http://{host}/")).map_err(|_| Error::Invalid("Invalid URL".into()))?;
+            client.head(url.clone()).send().await.map_err(|e2| Error::Network(format!("HTTPS: {}; HTTP: {}", request_error(&e), request_error(&e2))))?
+        }
+        Err(e) => return Err(Error::Network(request_error(&e))),
+    };
     if matches!(resp.status().as_u16(), 405 | 501) {
-        resp = client.get(url.clone()).send().await.map_err(|e| Error::Network(format!("Request failed: {}", e.without_url())))?;
+        resp = client.get(url.clone()).send().await.map_err(|e| Error::Network(request_error(&e)))?;
     }
     let status = resp.status().as_u16();
     let headers: Vec<(String, String)> = REPORTED_HEADERS
@@ -147,6 +173,12 @@ pub async fn run(t: EntityType, value: &str) -> Result<Output, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pinned_addresses_leave_the_port_to_the_request() {
+        let a: IpAddr = "45.33.32.156".parse().unwrap();
+        assert!(pinned_addrs(&[a]).iter().all(|s| s.port() == 0 && s.ip() == a));
+    }
 
     #[test]
     fn refuses_internal_and_non_http_targets() {

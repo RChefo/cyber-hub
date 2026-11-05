@@ -35,11 +35,11 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ToneChip } from "@/components/ui/Badges";
-import { useConfirm } from "@/components/ui/Dialogs";
+import { AppModal, useConfirm } from "@/components/ui/Dialogs";
 import { EmptyBlock, ErrorBlock, InlineSpinner, LoadingRows } from "@/components/ui/Feedback";
 import { SearchInput } from "@/components/ui/Fields";
 import { notify } from "@/lib/actions";
-import { api, errorMessage } from "@/lib/ipc";
+import { api, errorMessage, IpcError } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
 import { useOsint } from "./context";
@@ -85,6 +85,8 @@ interface WorkState {
   graphId: number;
   meta: GraphMeta;
   revision: number;
+  /** saved-state revision this editor started from (optimistic concurrency) */
+  stateRevision: number;
   entities: Map<string, EntityBrief>;
   rels: Map<string, RelationshipBrief>;
   members: string[];
@@ -108,6 +110,7 @@ function initState(data: GraphData): WorkState {
     graphId: data.graph.id,
     meta: data.graph,
     revision: data.graph.revision,
+    stateRevision: data.graph.stateRevision,
     entities: new Map(data.entities.map((e) => [String(e.id), e])),
     rels: new Map(data.relationships.map((r) => [String(r.id), r])),
     members: data.nodes.map((n) => String(n.entityId)),
@@ -143,7 +146,19 @@ export function GraphWorkspace({
     onGraphChange(pick.id);
   }, [graphId, graphs.data, onGraphChange]);
 
-  const q = useQuery(["osint"], () => api.osintGraphLoad(graphId as number), [graphId], graphId != null);
+  // the first load of a graph records it as opened; refreshes after data changes do not write
+  const touchedRef = useRef<number | null>(null);
+  const q = useQuery(
+    ["osint"],
+    () => {
+      const touch = touchedRef.current !== graphId;
+      touchedRef.current = graphId;
+      return api.osintGraphLoad(graphId as number, touch);
+    },
+    [graphId],
+    graphId != null,
+  );
+  const [conflict, setConflict] = useState<string | null>(null);
 
   const [state, setState] = useState<WorkState | null>(null);
   const [positions, setPositions] = useState<Positions>(new Map());
@@ -270,11 +285,21 @@ export function GraphWorkspace({
         const entities = new Map(fresh.entities.map((e) => [String(e.id), e]));
         const finalMembers = members.filter((id) => entities.has(id));
         const rels = new Map(fresh.relationships.map((r) => [String(r.id), r]));
-        setState((s) =>
-          s && s.graphId === data.graph.id
-            ? { ...s, meta: data.graph, revision: data.graph.revision, entities, rels, members: finalMembers, serverMembers: serverNow, warning: data.warning }
-            : s,
-        );
+        setState((s) => {
+          if (!s || s.graphId !== data.graph.id) return s;
+          // nothing that the canvas shows changed: keep the same state object (no re-render)
+          if (
+            finalMembers.length === s.members.length &&
+            finalMembers.every((id, i) => id === s.members[i]) &&
+            sameBriefs(entities, s.entities) &&
+            sameBriefs(rels, s.rels) &&
+            s.warning === data.warning
+          ) {
+            return s.revision === data.graph.revision ? s : { ...s, revision: data.graph.revision, serverMembers: serverNow };
+          }
+          // the loaded state revision is kept: a save elsewhere must still be detected on save
+          return { ...s, meta: { ...data.graph, stateRevision: s.stateRevision }, revision: data.graph.revision, entities, rels, members: finalMembers, serverMembers: serverNow, warning: data.warning };
+        });
         if (added.length) {
           const m = toCanvas(fresh.entities, fresh.relationships, registry.relationshipTypes);
           setPositions(placeNewNodes(m.nodes, m.edges, posRef.current));
@@ -431,7 +456,7 @@ export function GraphWorkspace({
 
   /* ── save ── */
   const save = useCallback(
-    async (label?: string) => {
+    async (label?: string, force = false) => {
       const s = stateRef.current;
       if (!s) return false;
       setBusy("Saving…");
@@ -439,14 +464,26 @@ export function GraphWorkspace({
         const nodes = nodeStates(s.members, posRef.current, s.pinned, s.hidden, s.nodeGroup);
         const workspace = { ...s.workspace, viewport };
         const removed = [...s.removed].filter((id) => s.serverMembers.has(id)).map(Number);
-        const r = await api.osintGraphSave(s.graphId, { baseRevision: s.revision, nodes, removed, workspace, versionLabel: label ?? null, manualVersion: false });
-        setState((cur) => (cur && cur.graphId === s.graphId ? { ...cur, revision: r.revision, removed: new Set(), serverMembers: new Set(s.members) } : cur));
+        const r = await api.osintGraphSave(s.graphId, {
+          baseRevision: s.revision,
+          baseStateRevision: s.stateRevision,
+          force,
+          nodes,
+          removed,
+          workspace,
+          versionLabel: label ?? null,
+          manualVersion: false,
+        });
+        setState((cur) =>
+          cur && cur.graphId === s.graphId ? { ...cur, revision: r.revision, stateRevision: r.stateRevision, removed: new Set(), serverMembers: new Set(s.members) } : cur,
+        );
         setDirty(false);
         notify.success(r.version ? `Saved as version ${r.version}` : "Saved", r.mergedConcurrentChanges ? "Entities collected while you worked were kept in the graph." : undefined);
         invalidate("osint");
         return true;
       } catch (e) {
-        notify.error("Could not save the graph", e);
+        if (e instanceof IpcError && e.kind === "conflict") setConflict(e.message);
+        else notify.error("Could not save the graph", e);
         return false;
       } finally {
         setBusy(null);
@@ -1023,9 +1060,65 @@ export function GraphWorkspace({
           else notify.info("Imported into a new investigation", "Open it from the investigation list.");
         }}
       />
+      <AppModal
+        isOpen={conflict !== null}
+        onOpenChange={(o) => !o && setConflict(null)}
+        title="This graph changed since you opened it"
+        description={conflict ?? undefined}
+        footer={
+          <>
+            <Button variant="tertiary" onPress={() => setConflict(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onPress={() => {
+                setConflict(null);
+                resetRef.current = true;
+                setDirty(false);
+                q.reload();
+              }}
+            >
+              Discard mine and reload
+            </Button>
+            <Button
+              variant="secondary"
+              onPress={() => {
+                setConflict(null);
+                setDialog("saveAs");
+              }}
+            >
+              Save mine as a new graph
+            </Button>
+            <Button
+              variant="danger"
+              onPress={() => {
+                setConflict(null);
+                void save(undefined, true);
+              }}
+            >
+              Overwrite
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[13px] text-muted">
+          Your layout, membership and filters were not saved. Entities, relationships and evidence are not affected by any of these choices; overwriting replaces only the other saved
+          layout (it stays available in the version history).
+        </p>
+      </AppModal>
       {confirm.element}
     </div>
   );
+}
+
+function sameBriefs<T extends object>(a: Map<string, T>, b: Map<string, T>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a) {
+    const w = b.get(k);
+    if (!w || JSON.stringify(v) !== JSON.stringify(w)) return false;
+  }
+  return true;
 }
 
 /** Search the investigation's entities and add the chosen ones to the graph. */

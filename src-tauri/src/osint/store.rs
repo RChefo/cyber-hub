@@ -185,15 +185,8 @@ fn validate_input(c: &Connection, input: &InvestigationInput) -> AppResult<Valid
 }
 
 /// Create an investigation, its main graph (which follows new data) and the target entity.
-pub fn investigation_create(c: &Connection, input: &InvestigationInput) -> AppResult<i64> {
-    let (name, description, target, tags, notes, authorization, t, raw) = validate_input(c, input)?;
-    let at = now();
-    c.execute(
-        "INSERT INTO osint_investigations (name, description, target_type, target_value, tags, notes, authorization, project_id, created_at, updated_at, last_opened_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9,?9)",
-        params![name, description, t.as_str(), target, j(&tags), notes, authorization, input.project_id, at],
-    )?;
-    let id = c.last_insert_rowid();
+/// Record the primary target as an entity (with analyst evidence) of the investigation.
+fn ingest_target(c: &Connection, id: i64, t: EntityType, raw: String) -> AppResult<()> {
     ingest::ingest(
         c,
         id,
@@ -213,6 +206,19 @@ pub fn investigation_create(c: &Connection, input: &InvestigationInput) -> AppRe
             relationships: vec![],
         },
     )?;
+    Ok(())
+}
+
+pub fn investigation_create(c: &Connection, input: &InvestigationInput) -> AppResult<i64> {
+    let (name, description, target, tags, notes, authorization, t, raw) = validate_input(c, input)?;
+    let at = now();
+    c.execute(
+        "INSERT INTO osint_investigations (name, description, target_type, target_value, tags, notes, authorization, project_id, created_at, updated_at, last_opened_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9,?9)",
+        params![name, description, t.as_str(), target, j(&tags), notes, authorization, input.project_id, at],
+    )?;
+    let id = c.last_insert_rowid();
+    ingest_target(c, id, t, raw)?;
     // the main graph starts with the target and follows the investigation
     graph_create(c, id, "Main graph", "Follows the investigation: new entities are added automatically.", true)?;
     ingest::event(c, id, "investigation", &format!("Investigation created: {name}"), Some("analyst"), None, None, None, None, json!({}))?;
@@ -220,8 +226,17 @@ pub fn investigation_create(c: &Connection, input: &InvestigationInput) -> AppRe
 }
 
 pub fn investigation_update(c: &Connection, id: i64, input: &InvestigationInput) -> AppResult<()> {
-    investigation_get(c, id)?;
-    let (name, description, target, tags, notes, authorization, t, _) = validate_input(c, input)?;
+    let before = investigation_get(c, id)?;
+    let (name, description, target, tags, notes, authorization, t, raw) = validate_input(c, input)?;
+    if before.target_type != t.as_str() || before.target_value != target {
+        // the previous target stays an entity with its evidence; it is no longer the primary one
+        c.execute(
+            "UPDATE osint_entities SET metadata = json_remove(metadata, '$.primaryTarget') WHERE investigation_id = ?1 AND json_extract(metadata, '$.primaryTarget') = 1",
+            params![id],
+        )?;
+        ingest_target(c, id, t, raw)?;
+        ingest::event(c, id, "investigation", &format!("Primary target changed from {} {} to {} {}", before.target_type, before.target_value, t.as_str(), target), Some("analyst"), None, None, None, None, json!({}))?;
+    }
     c.execute(
         "UPDATE osint_investigations SET name=?2, description=?3, target_type=?4, target_value=?5, tags=?6, notes=?7, authorization=?8, project_id=?9, updated_at=?10 WHERE id=?1",
         params![id, name, description, t.as_str(), target, j(&tags), notes, authorization, input.project_id, now()],
@@ -862,14 +877,18 @@ pub struct GraphMeta {
     pub relationship_count: i64,
     pub version_count: i64,
     pub latest_version: Option<i64>,
+    /// changes only when the saved presentation state is written (save, restore)
+    pub state_revision: i64,
 }
 
 const GRAPH_COLS: &str = "g.id, g.investigation_id, i.name, i.target_value, g.name, g.description, g.follow_new, g.revision, g.created_at, g.updated_at, g.last_opened_at,
     (SELECT COUNT(*) FROM osint_graph_nodes n WHERE n.graph_id = g.id),
-    (SELECT COUNT(*) FROM osint_relationships r WHERE r.investigation_id = g.investigation_id AND r.verification != 'rejected'
-        AND r.source_id IN (SELECT entity_id FROM osint_graph_nodes WHERE graph_id = g.id) AND r.target_id IN (SELECT entity_id FROM osint_graph_nodes WHERE graph_id = g.id)),
+    (SELECT COUNT(*) FROM osint_relationships r
+        JOIN osint_graph_nodes a ON a.graph_id = g.id AND a.entity_id = r.source_id
+        JOIN osint_graph_nodes b ON b.graph_id = g.id AND b.entity_id = r.target_id
+        WHERE r.investigation_id = g.investigation_id AND r.verification != 'rejected'),
     (SELECT COUNT(*) FROM osint_graph_versions v WHERE v.graph_id = g.id),
-    (SELECT MAX(number) FROM osint_graph_versions v WHERE v.graph_id = g.id)";
+    (SELECT MAX(number) FROM osint_graph_versions v WHERE v.graph_id = g.id), g.state_revision";
 
 fn graph_row(r: &rusqlite::Row) -> rusqlite::Result<GraphMeta> {
     Ok(GraphMeta {
@@ -888,6 +907,7 @@ fn graph_row(r: &rusqlite::Row) -> rusqlite::Result<GraphMeta> {
         relationship_count: r.get(12)?,
         version_count: r.get(13)?,
         latest_version: r.get(14)?,
+        state_revision: r.get(15)?,
     })
 }
 
@@ -1043,6 +1063,13 @@ pub struct GraphSave {
     /// record a named version even when nothing changed
     #[serde(default)]
     pub manual_version: bool,
+    /// the `state_revision` the client loaded; a different stored value means the graph was
+    /// saved or restored elsewhere and the save is refused with a conflict unless `force`
+    #[serde(default)]
+    pub base_state_revision: Option<i64>,
+    /// overwrite a newer saved state (the analyst chose to keep their version)
+    #[serde(default)]
+    pub force: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1052,6 +1079,7 @@ pub struct SaveResult {
     pub version: Option<i64>,
     /// the graph changed in the meantime (new data); the saved state includes those entities
     pub merged_concurrent_changes: bool,
+    pub state_revision: i64,
 }
 
 /// Save: upserts the client's node states, removes only the entities the analyst removed (so new
@@ -1059,6 +1087,15 @@ pub struct SaveResult {
 /// version when the content changed. Runs in the caller's transaction.
 pub fn graph_save(c: &Connection, id: i64, s: &GraphSave) -> AppResult<SaveResult> {
     let meta = graph_meta(c, id)?;
+    if let Some(base) = s.base_state_revision {
+        if base != meta.state_revision && !s.force {
+            return Err(AppError::Conflict(format!(
+                "\"{}\" was saved or restored elsewhere after you opened it (latest version {}). Reload it, save your work as a new graph, or overwrite the newer state.",
+                meta.name,
+                meta.latest_version.map(|v| v.to_string()).unwrap_or_else(|| "none".into())
+            )));
+        }
+    }
     validate_nodes(c, meta.investigation_id, &s.nodes)?;
     let ws = validate_workspace(&s.workspace)?;
     upsert_nodes(c, id, &s.nodes)?;
@@ -1068,12 +1105,12 @@ pub fn graph_save(c: &Connection, id: i64, s: &GraphSave) -> AppResult<SaveResul
         args.extend(chunk.iter().map(|i| SqlValue::Integer(*i)));
         c.execute(&format!("DELETE FROM osint_graph_nodes WHERE graph_id = ? AND entity_id IN ({marks})"), params_from_iter(args.iter()))?;
     }
-    c.execute("UPDATE osint_graphs SET workspace = ?2, revision = revision + 1, updated_at = ?3 WHERE id = ?1", params![id, ws, now()])?;
+    c.execute("UPDATE osint_graphs SET workspace = ?2, revision = revision + 1, state_revision = state_revision + 1, updated_at = ?3 WHERE id = ?1", params![id, ws, now()])?;
     let label = s.version_label.as_deref().map(|l| clean_text("Version label", l, 120, false)).transpose()?.unwrap_or_default();
     let version = record_version(c, id, if s.manual_version { "manual" } else { "save" }, &label, s.manual_version)?;
-    let revision: i64 = c.query_row("SELECT revision FROM osint_graphs WHERE id = ?1", params![id], |r| r.get(0))?;
+    let (revision, state_revision): (i64, i64) = c.query_row("SELECT revision, state_revision FROM osint_graphs WHERE id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?)))?;
     ingest::event(c, meta.investigation_id, "graph", &format!("Graph saved: {}{}", meta.name, version.map(|v| format!(" (version {v})")).unwrap_or_default()), Some("analyst"), None, None, None, Some(id), json!({}))?;
-    Ok(SaveResult { revision, version, merged_concurrent_changes: meta.revision != s.base_revision })
+    Ok(SaveResult { revision, version, merged_concurrent_changes: meta.revision != s.base_revision, state_revision })
 }
 
 /// Save As: a new, independent graph with the given state.
@@ -1313,7 +1350,7 @@ pub fn version_restore(c: &Connection, version: i64) -> AppResult<(i64, usize)> 
     let missing = snap.nodes.len() - keep.len();
     c.execute("DELETE FROM osint_graph_nodes WHERE graph_id = ?1", params![graph])?;
     upsert_nodes(c, graph, &keep)?;
-    c.execute("UPDATE osint_graphs SET workspace = ?2, revision = revision + 1, updated_at = ?3 WHERE id = ?1", params![graph, snap.workspace.to_string(), now()])?;
+    c.execute("UPDATE osint_graphs SET workspace = ?2, revision = revision + 1, state_revision = state_revision + 1, updated_at = ?3 WHERE id = ?1", params![graph, snap.workspace.to_string(), now()])?;
     let new = record_version(c, graph, "restore", &format!("Restored version {number}"), true)?.unwrap_or(number);
     ingest::event(c, meta.investigation_id, "graph", &format!("Graph \"{}\" restored to version {number}", meta.name), Some("analyst"), None, None, None, Some(graph), json!({ "missing": missing }))?;
     Ok((new, missing))
@@ -1352,6 +1389,14 @@ pub const EVENT_KINDS: &[&str] = &[
     "export",
 ];
 
+/// A timeline bound (RFC 3339 with an offset, e.g. a local midnight from the UI) converted to
+/// the stored form (UTC, whole seconds, `Z`), so text comparison matches instants exactly.
+pub fn utc_bound(s: &str) -> AppResult<String> {
+    chrono::DateTime::parse_from_rfc3339(s.trim())
+        .map(|d| d.with_timezone(&chrono::Utc).to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+        .map_err(|_| validation("Dates must be RFC 3339 timestamps with a time zone"))
+}
+
 pub fn timeline(c: &Connection, inv: i64, q: &TimelineQuery) -> AppResult<Page<TimelineEvent>> {
     let mut where_ = vec!["investigation_id = ?".to_string()];
     let mut args: Vec<SqlValue> = vec![SqlValue::Integer(inv)];
@@ -1364,11 +1409,11 @@ pub fn timeline(c: &Connection, inv: i64, q: &TimelineQuery) -> AppResult<Page<T
     }
     if let Some(f) = q.from.as_deref().filter(|s| !s.is_empty()) {
         where_.push("at >= ?".into());
-        args.push(SqlValue::Text(f.into()));
+        args.push(SqlValue::Text(utc_bound(f)?));
     }
     if let Some(t) = q.to.as_deref().filter(|s| !s.is_empty()) {
         where_.push("at <= ?".into());
-        args.push(SqlValue::Text(t.into()));
+        args.push(SqlValue::Text(utc_bound(t)?));
     }
     if let Some(e) = q.entity_id {
         where_.push("(entity_id = ? OR relationship_id IN (SELECT id FROM osint_relationships WHERE source_id = ? OR target_id = ?))".into());
@@ -1469,6 +1514,117 @@ mod tests {
         assert!(db.with(|c| investigation_create(c, &InvestigationInput { name: "x".into(), description: String::new(), target_type: "service".into(), target_value: "1.2.3.4:80/tcp".into(), tags: vec![], notes: String::new(), authorization: String::new(), project_id: None })).is_err(), "not a target type");
     }
 
+    /// Regression guard for the graph metadata query, which was quadratic (correlated `IN`
+    /// subqueries): 2,000 entities took over a second even in release builds. Now a few ms; the
+    /// bounds are generous so slow CI machines do not fail spuriously.
+    #[test]
+    fn large_graph_load_and_save_stay_fast() {
+        let (db, inv) = setup();
+        let n = 2000;
+        let mut ents = vec![];
+        let mut rels = vec![];
+        for i in 0..n {
+            ents.push(ent(EntityType::Domain, &format!("h{i}.perf.example")));
+            if i > 0 {
+                rels.push(rel(i, (i * 7919) % i, "ASSOCIATED_WITH"));
+                rels.push(rel(i, i / 2, "LINKS_TO"));
+            }
+        }
+        run(&db, inv, &Observation { evidence: ev("dns", "bulk"), entities: ents, relationships: rels });
+        let g = main_graph(&db, inv);
+        let t = std::time::Instant::now();
+        db.with(|c| graph_meta(c, g)).unwrap();
+        let meta = t.elapsed();
+        let t = std::time::Instant::now();
+        let d = db.with(|c| graph_load(c, g, false)).unwrap();
+        let load = t.elapsed();
+        let t = std::time::Instant::now();
+        let nodes: Vec<GraphNodeState> = d.nodes.iter().map(|x| GraphNodeState { x: Some(1.0), y: Some(2.0), ..x.clone() }).collect();
+        db.with(|c| {
+            let tx = c.unchecked_transaction()?;
+            graph_save(&tx, g, &GraphSave { base_revision: d.graph.revision, nodes, removed: vec![], workspace: json!({}), version_label: None, manual_version: false, base_state_revision: None, force: false })?;
+            tx.commit()?;
+            Ok(())
+        })
+        .unwrap();
+        let save = t.elapsed();
+        println!("entities {} rels {} meta {:?} load {:?} save {:?}", d.entities.len(), d.relationships.len(), meta, load, save);
+        assert_eq!((d.entities.len(), db.with(|c| graph_meta(c, g)).unwrap().relationship_count), (2001, 3998));
+        assert!(meta < std::time::Duration::from_millis(500), "graph metadata took {meta:?}");
+        assert!(load < std::time::Duration::from_secs(2), "graph load took {load:?}");
+        assert!(save < std::time::Duration::from_secs(5), "graph save took {save:?}");
+    }
+
+    #[test]
+    fn changing_the_target_adds_it_as_the_primary_entity() {
+        let (db, inv) = setup();
+        let i = db.with(|c| investigation_get(c, inv)).unwrap();
+        let input = InvestigationInput { name: i.name.clone(), description: String::new(), target_type: "domain".into(), target_value: "www.example.org".into(), tags: vec![], notes: String::new(), authorization: String::new(), project_id: None };
+        db.with(|c| investigation_update(c, inv, &input)).unwrap();
+        let primary: Vec<String> = db
+            .with(|c| {
+                let mut st = c.prepare("SELECT value FROM osint_entities WHERE investigation_id = ?1 AND json_extract(metadata, '$.primaryTarget') = 1")?;
+                let v = st.query_map(params![inv], |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
+                Ok(v)
+            })
+            .unwrap();
+        assert_eq!(primary, vec!["www.example.org".to_string()], "exactly one primary target, the new one");
+        let g = main_graph(&db, inv);
+        let data = db.with(|c| graph_load(c, g, false)).unwrap();
+        assert!(data.entities.iter().any(|e| e.value == "www.example.org"), "the new target joins the graph that follows the investigation");
+        assert!(data.entities.iter().any(|e| e.value == i.target_value), "the previous target is kept with its evidence");
+        // saving unchanged details does not add anything
+        let n = data.entities.len();
+        db.with(|c| investigation_update(c, inv, &input)).unwrap();
+        assert_eq!(db.with(|c| graph_load(c, g, false)).unwrap().entities.len(), n);
+    }
+
+    #[test]
+    fn stale_saves_are_refused_unless_forced_and_collection_is_not_a_conflict() {
+        let (db, inv) = setup();
+        let g = main_graph(&db, inv);
+        let a = db.with(|c| graph_load(c, g, false)).unwrap();
+        let b = a.clone(); // a second editor of the same graph
+        let save = |d: &GraphData, ws: Value, force: bool| {
+            db.with(|c| graph_save(c, g, &GraphSave { base_revision: d.graph.revision, nodes: d.nodes.clone(), removed: vec![], workspace: ws, version_label: None, manual_version: false, base_state_revision: Some(d.graph.state_revision), force }))
+        };
+        // entities collected into a follow-new graph change `revision`, not the saved state
+        run(&db, inv, &Observation { evidence: ev("dns", "A"), entities: vec![ent(EntityType::Domain, "example.com"), ent(EntityType::Ip, "93.184.216.34")], relationships: vec![rel(0, 1, "RESOLVES_TO")] });
+        let first = save(&a, json!({ "layout": "radial" }), false).unwrap();
+        assert!(first.merged_concurrent_changes, "collection while editing is merged, not refused");
+        assert_eq!(first.state_revision, a.graph.state_revision + 1);
+        // the other editor still holds the old state revision: refused, nothing written
+        let err = save(&b, json!({ "layout": "circular" }), false).unwrap_err();
+        assert_eq!(err.kind(), "conflict");
+        assert_eq!(db.with(|c| graph_load(c, g, false)).unwrap().workspace["layout"], "radial");
+        // explicit overwrite
+        save(&b, json!({ "layout": "circular" }), true).unwrap();
+        assert_eq!(db.with(|c| graph_load(c, g, false)).unwrap().workspace["layout"], "circular");
+        // a restore also invalidates stale editors
+        let fresh = db.with(|c| graph_load(c, g, false)).unwrap();
+        let v = db.with(|c| versions(c, g)).unwrap().last().unwrap().id;
+        db.with(|c| version_restore(c, v)).unwrap();
+        assert_eq!(save(&fresh, json!({}), false).unwrap_err().kind(), "conflict");
+    }
+
+    #[test]
+    fn timeline_bounds_are_compared_as_utc_instants() {
+        assert_eq!(utc_bound("2026-11-05T00:00:00+02:00").unwrap(), "2026-11-04T22:00:00Z");
+        assert_eq!(utc_bound("2026-11-05T23:59:59.999-05:00").unwrap(), "2026-11-06T04:59:59Z");
+        assert!(utc_bound("2026-11-05T00:00:00").is_err(), "a bound without a zone is ambiguous");
+        assert!(utc_bound("yesterday").is_err());
+        let (db, inv) = setup();
+        db.with(|c| {
+            c.execute("UPDATE osint_events SET at = '2026-11-04T23:30:00Z' WHERE investigation_id = ?1", params![inv])?;
+            Ok(())
+        })
+        .unwrap();
+        let q = |from: &str, to: &str| db.with(|c| timeline(c, inv, &TimelineQuery { from: Some(from.into()), to: Some(to.into()), ..Default::default() })).unwrap().total;
+        // 23:30 UTC on the 4th is the 5th in UTC+2: a local-day filter for the 5th includes it
+        assert!(q("2026-11-05T00:00:00+02:00", "2026-11-05T23:59:59+02:00") > 0);
+        assert_eq!(q("2026-11-05T00:00:00+00:00", "2026-11-05T23:59:59+00:00"), 0);
+    }
+
     #[test]
     fn save_keeps_concurrent_additions_and_save_as_is_independent() {
         let (db, inv) = setup();
@@ -1477,7 +1633,7 @@ mod tests {
         let target = loaded.nodes[0].entity_id;
         // new data arrives while the analyst has the graph open
         run(&db, inv, &Observation { evidence: ev("dns", "A"), entities: vec![ent(EntityType::Domain, "example.com"), ent(EntityType::Ip, "93.184.216.34")], relationships: vec![rel(0, 1, "RESOLVES_TO")] });
-        let save = GraphSave { base_revision: loaded.graph.revision, nodes: vec![GraphNodeState { entity_id: target, x: Some(10.0), y: Some(20.0), pinned: true, hidden: false, group: Some("g1".into()) }], removed: vec![], workspace: json!({ "viewport": { "x": 1, "y": 2, "zoom": 1.5 }, "layout": "force" }), version_label: None, manual_version: false };
+        let save = GraphSave { base_revision: loaded.graph.revision, nodes: vec![GraphNodeState { entity_id: target, x: Some(10.0), y: Some(20.0), pinned: true, hidden: false, group: Some("g1".into()) }], removed: vec![], workspace: json!({ "viewport": { "x": 1, "y": 2, "zoom": 1.5 }, "layout": "force" }), version_label: None, manual_version: false, base_state_revision: None, force: false };
         let r = db.with(|c| graph_save(c, g, &save)).unwrap();
         assert!(r.merged_concurrent_changes && r.version.is_some());
         let after = db.with(|c| graph_load(c, g, false)).unwrap();
@@ -1491,7 +1647,7 @@ mod tests {
         let copy = db.with(|c| graph_save_as(c, g, "Copy", &after.nodes, &after.workspace, false)).unwrap();
         let mut moved = after.nodes.clone();
         moved[0].x = Some(999.0);
-        db.with(|c| graph_save(c, copy, &GraphSave { base_revision: 0, nodes: moved, removed: vec![after.nodes[1].entity_id], workspace: json!({}), version_label: None, manual_version: false })).unwrap();
+        db.with(|c| graph_save(c, copy, &GraphSave { base_revision: 0, nodes: moved, removed: vec![after.nodes[1].entity_id], workspace: json!({}), version_label: None, manual_version: false, base_state_revision: None, force: false })).unwrap();
         let orig = db.with(|c| graph_load(c, g, false)).unwrap();
         assert_eq!(orig.nodes.len(), 2);
         assert_eq!(orig.nodes.iter().find(|n| n.entity_id == target).unwrap().x, Some(10.0));
@@ -1509,7 +1665,7 @@ mod tests {
     fn invalid_graph_state_is_refused() {
         let (db, inv) = setup();
         let g = main_graph(&db, inv);
-        let bad = |nodes: Vec<GraphNodeState>, ws: Value| db.with(|c| graph_save(c, g, &GraphSave { base_revision: 1, nodes, removed: vec![], workspace: ws, version_label: None, manual_version: false }));
+        let bad = |nodes: Vec<GraphNodeState>, ws: Value| db.with(|c| graph_save(c, g, &GraphSave { base_revision: 1, nodes, removed: vec![], workspace: ws, version_label: None, manual_version: false, base_state_revision: None, force: false }));
         let n = |id: i64, x: f64| GraphNodeState { entity_id: id, x: Some(x), y: Some(0.0), pinned: false, hidden: false, group: None };
         assert!(bad(vec![n(999_999, 0.0)], json!({})).is_err(), "unknown entity");
         assert!(bad(vec![n(1, f64::NAN)], json!({})).is_err(), "non-finite position");
@@ -1537,9 +1693,9 @@ mod tests {
         assert_eq!(v1.len(), 1);
         run(&db, inv, &Observation { evidence: ev("dns", "A"), entities: vec![ent(EntityType::Domain, "example.com"), ent(EntityType::Ip, "93.184.216.34")], relationships: vec![rel(0, 1, "RESOLVES_TO")] });
         let data = db.with(|c| graph_load(c, g, false)).unwrap();
-        db.with(|c| graph_save(c, g, &GraphSave { base_revision: data.graph.revision, nodes: data.nodes.clone(), removed: vec![], workspace: json!({ "layout": "radial" }), version_label: None, manual_version: false })).unwrap();
+        db.with(|c| graph_save(c, g, &GraphSave { base_revision: data.graph.revision, nodes: data.nodes.clone(), removed: vec![], workspace: json!({ "layout": "radial" }), version_label: None, manual_version: false, base_state_revision: None, force: false })).unwrap();
         // saving the same state again does not create a version
-        let same = db.with(|c| graph_save(c, g, &GraphSave { base_revision: data.graph.revision, nodes: data.nodes.clone(), removed: vec![], workspace: json!({ "layout": "radial" }), version_label: None, manual_version: false })).unwrap();
+        let same = db.with(|c| graph_save(c, g, &GraphSave { base_revision: data.graph.revision, nodes: data.nodes.clone(), removed: vec![], workspace: json!({ "layout": "radial" }), version_label: None, manual_version: false, base_state_revision: None, force: false })).unwrap();
         assert!(same.version.is_none());
         let vs = db.with(|c| versions(c, g)).unwrap();
         assert_eq!(vs.len(), 2);

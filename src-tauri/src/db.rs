@@ -15,7 +15,7 @@ pub const HISTORY_LIMITS: &[(&str, i64)] = &[("activity_logs", 5000), ("cve_sear
 
 /// Lookup caches (keyed by indicator or CVE ID) trimmed at startup to their most recently fetched
 /// entries, so distinct lookups cannot grow the database without bound.
-const CACHE_LIMITS: &[(&str, i64)] = &[("vt_cache", 5000), ("ti_cache", 10000), ("cve_cache", 20000)];
+const CACHE_LIMITS: &[(&str, i64)] = &[("vt_cache", 5000), ("ti_cache", 10000), ("cve_cache", 20000), ("osint_source_cache", 5000)];
 
 /// Keep the newest rows of a history table listed in [`HISTORY_LIMITS`]; other names are ignored.
 pub fn trim_history(c: &Connection, table: &str) -> rusqlite::Result<usize> {
@@ -500,6 +500,12 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (provider, query_key)
     );
     "#,
+    // 8: graph state revision for optimistic concurrency. `revision` also changes when
+    // collected entities join a graph automatically; `state_revision` changes only when the
+    // presentation state is written (save, restore), so only conflicting edits are refused.
+    r#"
+    ALTER TABLE osint_graphs ADD COLUMN state_revision INTEGER NOT NULL DEFAULT 0;
+    "#,
 ];
 
 impl Db {
@@ -566,6 +572,28 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn databases_from_the_previous_schema_are_upgraded_in_place() {
+        // a database as the previous release left it (schema 7) with an investigation and a graph
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        for (i, sql) in MIGRATIONS.iter().take(7).enumerate() {
+            conn.execute_batch(sql).unwrap();
+            conn.execute_batch(&format!("PRAGMA user_version = {}", i + 1)).unwrap();
+        }
+        conn.execute_batch(
+            "INSERT INTO osint_investigations (id, name, description, target_type, target_value, status, tags, notes, authorization, created_at, updated_at)
+               VALUES (1, 'Old', '', 'domain', 'example.com', 'active', '[]', '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+             INSERT INTO osint_graphs (id, investigation_id, name, description, follow_new, revision, workspace, created_at, updated_at)
+               VALUES (1, 1, 'Main graph', '', 1, 3, '{}', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');",
+        )
+        .unwrap();
+        let db = Db::init(conn).unwrap();
+        assert_eq!(db.schema_version().unwrap(), MIGRATIONS.len() as i64);
+        let (rev, state): (i64, i64) = db.with(|c| Ok(c.query_row("SELECT revision, state_revision FROM osint_graphs WHERE id = 1", [], |r| Ok((r.get(0)?, r.get(1)?)))?)).unwrap();
+        assert_eq!((rev, state), (3, 0), "existing graphs keep their data and start at state revision 0");
+    }
 
     #[test]
     fn reopening_marks_interrupted_runs_and_indexes_runs_by_project() {

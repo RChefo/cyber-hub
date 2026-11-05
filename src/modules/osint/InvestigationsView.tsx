@@ -127,7 +127,7 @@ function CompareModal({ isOpen, onOpenChange, investigations }: { isOpen: boolea
   );
 }
 
-export function InvestigationsView({ onOpen }: { onOpen: (id: number) => void }) {
+export function InvestigationsView({ onOpen }: { onOpen: (id: number, graphId?: number) => void }) {
   const [includeArchived, setIncludeArchived] = useState(false);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<string>("all");
@@ -217,7 +217,7 @@ export function InvestigationsView({ onOpen }: { onOpen: (id: number) => void })
         </QueryView>
       )}
       <InvestigationFormModal isOpen={creating} onOpenChange={setCreating} onSaved={(inv) => onOpen(inv.id)} />
-      <ImportGraphModal isOpen={importing} onOpenChange={setImporting} investigationId={null} onImported={(r) => onOpen(r.investigationId)} />
+      <ImportGraphModal isOpen={importing} onOpenChange={setImporting} investigationId={null} onImported={(r) => onOpen(r.investigationId, r.graphId)} />
       <CompareModal isOpen={comparing} onOpenChange={setComparing} investigations={q.data ?? []} />
     </div>
   );

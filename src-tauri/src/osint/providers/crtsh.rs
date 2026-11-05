@@ -19,6 +19,12 @@ pub fn query_url(base: &str, domain: &str) -> String {
     format!("{}?q=%25.{}&output=json", base, domain)
 }
 
+/// Identity search for the name itself; much cheaper for crt.sh than the subdomain (`%.`) search
+/// and still lists certificates whose names include subdomains.
+pub fn identity_url(base: &str, domain: &str) -> String {
+    format!("{}?q={}&output=json", base, domain)
+}
+
 /// One observation per certificate (its own evidence: the crt.sh entry).
 pub fn parse(domain: &str, body: &Value) -> Result<Output, Error> {
     let rows = body.as_array().ok_or_else(|| Error::Invalid("crt.sh returned an unexpected document".into()))?;
@@ -105,16 +111,26 @@ pub async fn run(db: &Db, domain: &str, refresh: bool) -> Result<Output, Error> 
         }
     }
     let client = super::client(60)?;
-    let (status, body, rate) = get_json(&client, &query_url(BASE, domain), "application/json").await?;
+    let (mut status, mut body, mut rate) = get_json(&client, &query_url(BASE, domain), "application/json").await?;
+    let mut fallback = false;
+    // the subdomain search is expensive for crt.sh and often fails upstream (502-504, or 404
+    // from its proxy); the exact-identity search is cheaper and is tried once instead
+    if matches!(status, 404 | 502..=504) {
+        let (s, b, r) = get_json(&client, &identity_url(BASE, domain), "application/json").await?;
+        (status, body, rate, fallback) = (s, b, r, true);
+    }
     match status {
         200 => {}
         429 => return Err(Error::RateLimited(60)),
-        502..=504 => return Err(Error::Unavailable("crt.sh is overloaded or unavailable right now; try again later".into())),
+        404 | 502..=504 => return Err(Error::Unavailable(format!("crt.sh did not answer (HTTP {status}); it is often overloaded, try again later"))),
         s => return Err(Error::Network(format!("crt.sh returned HTTP {s}"))),
     }
     let body = if body.is_null() { json!([]) } else { body };
     super::cache_put(db, "crtsh", domain, &body);
     let mut out = parse(domain, &body)?;
+    if fallback {
+        out.summary.push_str(" (exact-name search: crt.sh's subdomain search was unavailable)");
+    }
     out.rate_note = rate;
     Ok(out)
 }

@@ -108,7 +108,10 @@ pub fn domain_observation(name: &str, input: EntityType, answers: &Answers) -> O
     let obs = b.finish(EvidenceInput {
         kind: "provider_response".into(),
         source: "dns".into(),
-        reference: None,
+        reference: Some(format!(
+            "DNS {} query for {name} (system resolver)",
+            answers.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>().join("/")
+        )),
         observed_at: None,
         summary: summary.clone(),
         data: json!({ "answers": answers }),

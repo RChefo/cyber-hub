@@ -64,12 +64,17 @@ export function groupByDay(events: readonly TimelineEvent[]): [string, TimelineE
   return out;
 }
 
-/** yyyy-mm-dd from a date input → inclusive ISO bounds. */
+/** Local calendar day yyyy-mm-dd → the UTC instant of its start (or end), as RFC 3339. */
+function localDayInstant(day: string, end: boolean): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!m) return null;
+  const d = end ? new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59, 999) : new Date(+m[1], +m[2] - 1, +m[3], 0, 0, 0, 0);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** Date inputs (local days) → inclusive bounds as UTC instants; events are stored in UTC. */
 export function dayBounds(from: string, to: string): { from: string | null; to: string | null } {
-  return {
-    from: /^\d{4}-\d{2}-\d{2}$/.test(from) ? `${from}T00:00:00` : null,
-    to: /^\d{4}-\d{2}-\d{2}$/.test(to) ? `${to}T23:59:59.999` : null,
-  };
+  return { from: localDayInstant(from, false), to: localDayInstant(to, true) };
 }
 
 export function TimelineTab() {

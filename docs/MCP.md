@@ -57,6 +57,8 @@ The page reads everything from the app: the catalog comes from the same definiti
 | OSINT workspace | `cyberhub_osint_list_investigations`, `cyberhub_osint_get_investigation`, `cyberhub_osint_search_entities`, `cyberhub_osint_get_entity`, `cyberhub_osint_list_relationships`, `cyberhub_osint_find_path`, `cyberhub_osint_get_operation`, `cyberhub_osint_generate_report` | read |
 | | `cyberhub_osint_discover` (results wait for the user's review; clients cannot import them) | external lookup |
 | | `cyberhub_osint_propose_relationship` (stored as an unverified suggestion with low confidence) | local write |
+
+The OSINT tools were exercised with Claude Code 2.1.318 on Windows: all eight read tools, a refused discovery of a private address, a refused web fingerprint outside the project scope (both refused before any approval prompt), an approved DNS collection whose results stayed pending review, and an approved relationship proposal stored as inferred with low confidence and the client's rationale as evidence. The audit log recorded each call with its category and approval.
 | Reports and history | `cyberhub_generate_report`, `cyberhub_get_activity`, `cyberhub_get_run_details` | read |
 | | `cyberhub_export_report` | export |
 | Approvals | `cyberhub_get_approval_status` | read |

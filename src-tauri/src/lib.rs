@@ -43,6 +43,14 @@ pub fn run() {
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
+            // The data folder holds the database (projects, findings, investigations and evidence):
+            // only the user may enter it, whatever the umask made of it (on Windows the profile
+            // folder is already private to the user)
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
+            }
             // Tools inherit Cyber Hub's working directory, and relative file names in arguments are
             // validated against it. Use a private folder, so a relative name never resolves to (or
             // writes into) the installation folder or wherever the app happened to be started.

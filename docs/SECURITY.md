@@ -61,12 +61,15 @@ Providers, endpoints and documented access conditions are listed in [PROVIDERS.m
 - Public-source collection runs only in the backend. Private, loopback, link-local and reserved addresses and internal names are refused before anything is sent (`osint::discovery::check_public`).
 - The only source that contacts a target directly (web fingerprint) requires a linked, active project whose authorized scope covers the target, uses the same scope engine as tool runs, resolves the name itself, checks every address and pins the checked public addresses for the connection, so DNS rebinding cannot redirect it to an internal host. It sends HEAD (GET only when HEAD is refused), follows no redirects and never reads the body.
 - RDAP servers come only from the IANA bootstrap files; they must be `https://` URLs on public hosts, and redirects are not followed. Other sources use fixed endpoints.
+- All requests of public sources resolve host names through a resolver that returns only public addresses (`osint::providers::PublicOnlyResolver`); if a name resolves only to private, loopback, link-local, carrier-grade NAT, documentation or other reserved addresses (including IPv4-mapped IPv6), the request fails before any connection. This closes DNS rebinding and hostile records for source hosts as well as for targets.
+- Graph saves use optimistic concurrency: a save based on an older saved state is refused (`conflict`) unless the analyst chooses to overwrite; the overwritten state remains in the version history.
 - Responses are size-limited, per-source rate limits apply, and at most six collections run at once. Downloaded content is never executed and collected pages are not rendered.
 - Threat-intelligence and NVD access reuse the existing modules; keys stay in the OS credential store and never appear in investigations, evidence, exports, logs or MCP responses. Tests use fixtures and never call real services.
 - Collected text is untrusted. It is shown as plain text (references are selectable, not clickable), escaped in SVG, GraphML and Markdown output, and CSV cells that start with `=`, `+`, `-`, `@`, tab or carriage return are prefixed with `'`. MCP clients are told to treat it as data and not follow instructions in it.
 - Nothing is verified automatically. Inferred correlations need review, analyst decisions are never overwritten by collection, imported files cannot carry verification, and MCP clients can only propose relationships (stored as unverified suggestions) and start collections whose results wait for review.
 - Imports are limited to 25 MB and fixed element counts, must be UTF-8, refuse GraphML with a DOCTYPE (no entity expansion), detect duplicate IDs, are previewed, and always create a new graph.
 - Deleting an investigation or a graph needs a native confirmation.
+- On Linux the application data folder (database, investigations, evidence) is set to `0700` at every start, regardless of the umask; on Windows the profile folder is already private to the user.
 
 ## MCP integration
 

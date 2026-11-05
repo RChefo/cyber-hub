@@ -99,7 +99,7 @@ export function InvestigationFormModal({
       title={editing ? "Edit investigation" : "New investigation"}
       description={
         editing
-          ? "The primary target cannot change; start a new investigation for a different target."
+          ? "Changing the primary target adds the new target as an entity; the previous one stays in the investigation with its evidence."
           : "An investigation collects public information about one primary target, links what it finds with evidence and keeps its graphs."
       }
       footer={
@@ -117,13 +117,12 @@ export function InvestigationFormModal({
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput label="Name" value={input.name} onChange={(v) => set("name", v)} isRequired autoFocus placeholder="Acme external footprint" />
         <TextInput label="Tags" value={tags} onChange={setTags} placeholder="q4, phishing, vendor" description="Comma separated" />
-        <SelectInput label="Target type" value={input.targetType} onChange={(v) => set("targetType", v)} options={typeOptions} isDisabled={editing} />
+        <SelectInput label="Target type" value={input.targetType} onChange={(v) => set("targetType", v)} options={typeOptions} />
         <TextInput
           label="Target value"
           value={input.targetValue}
           onChange={(v) => set("targetValue", v)}
           isRequired
-          isDisabled={editing}
           mono
           placeholder={input.targetType === "domain" ? "example.com" : input.targetType === "ip" ? "93.184.216.34" : "Value"}
         />

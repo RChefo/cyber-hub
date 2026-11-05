@@ -108,6 +108,17 @@ fn vcard_name(entity: &Value) -> Option<String> {
     field("org").or_else(|| field("fn")).map(|s| s.trim().to_string()).filter(|s| !s.is_empty() && !is_redacted(s))
 }
 
+/// Person or organization, from the jCard: `kind: individual` (or a name without an `org`
+/// field when the kind says so) is a person; `org`, `group` or an `org` field is an organization.
+fn vcard_type(entity: &Value) -> EntityType {
+    let items = entity.get("vcardArray").and_then(|v| v.get(1)).and_then(Value::as_array);
+    let field = |name: &str| items.and_then(|it| it.iter().find(|i| i.get(0).and_then(Value::as_str) == Some(name))).and_then(|i| i.get(3)).and_then(Value::as_str).map(str::to_ascii_lowercase);
+    match field("kind").as_deref() {
+        Some("individual") if field("org").is_none() => EntityType::Person,
+        _ => EntityType::Organization,
+    }
+}
+
 fn is_redacted(s: &str) -> bool {
     let l = s.to_ascii_lowercase();
     ["redacted", "privacy", "not disclosed", "withheld", "data protected", "domains by proxy", "whoisguard", "contact privacy"].iter().any(|w| l.contains(w))
@@ -154,17 +165,22 @@ pub fn parse(t: EntityType, value: &str, url: &str, body: &Value) -> Output {
     for e in &entities {
         let Some(name) = vcard_name(e) else { continue };
         let r = roles(e);
-        let org = b.add(ent(EntityType::Organization, name.clone()));
-        if r.iter().any(|x| x == "registrar") {
-            b.rel(me, org, "REGISTERED_WITH", Strength::Direct);
+        let kind = vcard_type(e);
+        // only contacts that get a relationship become entities (no isolated contact records)
+        let (rel, strength) = if r.iter().any(|x| x == "registrar") {
             facts.push(format!("registrar: {name}"));
+            ("REGISTERED_WITH", Strength::Direct)
         } else if r.iter().any(|x| x == "registrant") {
-            b.rel(me, org, if t == EntityType::Domain { "REGISTERED_TO" } else { "OPERATED_BY" }, Strength::Direct);
             facts.push(format!("registrant: {name}"));
+            (if t == EntityType::Domain { "REGISTERED_TO" } else { "OPERATED_BY" }, Strength::Direct)
         } else if t != EntityType::Domain && r.iter().any(|x| x == "administrative" || x == "technical" || x == "abuse") {
             // network contacts are often the operator's NOC: corroborating, not ownership
-            b.rel(me, org, "ASSOCIATED_WITH", Strength::Corroborating);
-        }
+            ("ASSOCIATED_WITH", Strength::Corroborating)
+        } else {
+            continue;
+        };
+        let contact = b.add(ent(kind, name.clone()));
+        b.rel(me, contact, rel, strength);
     }
     for ns in body.get("nameservers").and_then(Value::as_array).into_iter().flatten() {
         if let Some(n) = ns.get("ldhName").and_then(Value::as_str) {
@@ -245,6 +261,26 @@ pub async fn run(db: &Db, t: EntityType, value: &str, refresh: bool) -> Result<O
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contacts_are_people_or_organizations_and_never_isolated() {
+        let body = json!({ "name": "NET", "entities": [
+            { "roles": ["registrant"], "vcardArray": ["vcard", [["version", {}, "text", "4.0"], ["fn", {}, "text", "ICANN"], ["kind", {}, "text", "org"]]] },
+            { "roles": ["technical"], "vcardArray": ["vcard", [["fn", {}, "text", "Jane Example"], ["kind", {}, "text", "individual"]]] },
+            { "roles": ["abuse"], "vcardArray": ["vcard", [["fn", {}, "text", "NOC Team"], ["kind", {}, "text", "group"]]] },
+            { "roles": ["noc"], "vcardArray": ["vcard", [["fn", {}, "text", "Unlinked Contact"], ["kind", {}, "text", "individual"]]] }
+        ]});
+        let out = parse(EntityType::Ip, "192.0.2.1", "https://rdap.example/ip/192.0.2.1", &body);
+        let ents: Vec<(EntityType, String)> = out.observations[0].entities.iter().map(|e| (e.entity_type, e.value.clone())).collect();
+        assert!(ents.contains(&(EntityType::Organization, "ICANN".into())));
+        assert!(ents.contains(&(EntityType::Person, "Jane Example".into())), "{ents:?}");
+        assert!(ents.contains(&(EntityType::Organization, "NOC Team".into())));
+        assert!(!ents.iter().any(|(_, v)| v == "Unlinked Contact"), "contacts without a relationship are not added");
+        assert_eq!(out.observations[0].relationships.len(), 3);
+        // a domain's technical contact is not linked, so it is not added either
+        let d = parse(EntityType::Domain, "example.org", "u", &json!({ "entities": [{ "roles": ["technical"], "vcardArray": ["vcard", [["fn", {}, "text", "Tech Person"], ["kind", {}, "text", "individual"]]] }] }));
+        assert!(d.observations[0].entities.iter().all(|e| e.value != "Tech Person"));
+    }
 
     #[test]
     fn bootstrap_picks_the_most_specific_safe_server() {

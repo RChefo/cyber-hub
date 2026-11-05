@@ -27,6 +27,9 @@ pub enum AppError {
     RateLimited(String),
     #[error("{0}")]
     Internal(String),
+    /// the stored state changed since the client loaded it (optimistic concurrency)
+    #[error("{0}")]
+    Conflict(String),
 }
 
 impl AppError {
@@ -42,6 +45,7 @@ impl AppError {
             AppError::Cancelled(_) => "cancelled",
             AppError::RateLimited(_) => "rate_limited",
             AppError::Internal(_) => "internal",
+            AppError::Conflict(_) => "conflict",
         }
     }
 }

@@ -11,7 +11,12 @@ describe("timeline helpers", () => {
   });
 
   it("turns date inputs into inclusive bounds and ignores invalid values", () => {
-    expect(dayBounds("2026-11-01", "2026-11-05")).toEqual({ from: "2026-11-01T00:00:00", to: "2026-11-05T23:59:59.999" });
+    // local midnight and local end of day, expressed as UTC instants (independent of the test machine's zone)
+    expect(dayBounds("2026-11-01", "2026-11-05")).toEqual({
+      from: new Date(2026, 10, 1, 0, 0, 0, 0).toISOString(),
+      to: new Date(2026, 10, 5, 23, 59, 59, 999).toISOString(),
+    });
+    expect(dayBounds("2026-11-01", "")!.from).toMatch(/Z$/);
     expect(dayBounds("", "nope")).toEqual({ from: null, to: null });
   });
 });

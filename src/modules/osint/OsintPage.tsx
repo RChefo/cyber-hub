@@ -193,5 +193,5 @@ export default function OsintPage() {
     );
   }
   if (id && Number.isFinite(id)) return <InvestigationWorkspace key={id} id={id} onClose={() => navigate("osint")} />;
-  return <InvestigationsView onOpen={(invId) => navigate("osint", { id: String(invId) })} />;
+  return <InvestigationsView onOpen={(invId, graphId) => navigate("osint", graphId ? { id: String(invId), tab: "graph", graph: String(graphId) } : { id: String(invId) })} />;
 }

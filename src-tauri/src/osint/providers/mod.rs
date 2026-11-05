@@ -280,8 +280,47 @@ impl Builder {
 }
 
 /// HTTPS client for public provider APIs (no redirects, bounded time).
+/// HTTP client for public sources: no redirects, a timeout, size-capped bodies (in `get_json`),
+/// and a resolver that only returns public addresses. Even a registry or API host taken from a
+/// fixed list or the IANA bootstrap can therefore never be pointed at an internal service through
+/// DNS (rebinding or a hostile record).
 pub fn client(timeout_secs: u64) -> Result<reqwest::Client, Error> {
-    crate::ti::http::client(Duration::from_secs(timeout_secs)).map_err(Error::Unavailable)
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION")))
+        .dns_resolver(std::sync::Arc::new(PublicOnlyResolver))
+        .build()
+        .map_err(|e| Error::Unavailable(e.to_string()))
+}
+
+/// Keep only public addresses; fail when none remain.
+pub fn public_addresses(addrs: impl IntoIterator<Item = std::net::IpAddr>) -> Result<Vec<std::net::IpAddr>, String> {
+    let all: Vec<std::net::IpAddr> = addrs.into_iter().collect();
+    if all.is_empty() {
+        return Err("the host name does not resolve".into());
+    }
+    let public: Vec<std::net::IpAddr> = all.iter().copied().filter(|a| !crate::ti::indicator::is_non_public(a)).collect();
+    if public.is_empty() {
+        return Err(format!("the host resolves only to non-public addresses ({}); it is not contacted", all[0]));
+    }
+    Ok(public)
+}
+
+struct PublicOnlyResolver;
+
+impl reqwest::dns::Resolve for PublicOnlyResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let host = name.as_str().to_string();
+        Box::pin(async move {
+            let err = |m: String| -> Box<dyn std::error::Error + Send + Sync> { Box::new(std::io::Error::new(std::io::ErrorKind::PermissionDenied, m)) };
+            let r = hickory_resolver::Resolver::builder_tokio().map_err(|e| err(e.to_string()))?.build().map_err(|e| err(e.to_string()))?;
+            let l = tokio::time::timeout(Duration::from_secs(8), r.lookup_ip(host.as_str())).await.map_err(|_| err("DNS resolution timed out".into()))?.map_err(|e| err(format!("DNS resolution failed: {e}")))?;
+            let public = public_addresses(l.iter()).map_err(err)?;
+            let addrs: reqwest::dns::Addrs = Box::new(public.into_iter().map(|ip| std::net::SocketAddr::new(ip, 0)));
+            Ok(addrs)
+        })
+    }
 }
 
 /// GET a JSON document with a size cap; maps transport and status errors.
@@ -298,6 +337,16 @@ pub async fn get_json(client: &reqwest::Client, url: &str, accept: &str) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_public_addresses_are_connected_to() {
+        let ip = |s: &str| s.parse::<std::net::IpAddr>().unwrap();
+        assert_eq!(public_addresses([ip("93.184.216.34"), ip("10.0.0.1")]).unwrap(), vec![ip("93.184.216.34")]);
+        for bad in ["127.0.0.1", "10.1.2.3", "169.254.169.254", "192.168.1.1", "::1", "fc00::1", "::ffff:127.0.0.1", "100.64.0.1", "0.0.0.0"] {
+            assert!(public_addresses([ip(bad)]).is_err(), "{bad} must be refused");
+        }
+        assert!(public_addresses(Vec::new()).is_err());
+    }
 
     #[test]
     fn registry_is_consistent_and_builder_dedupes() {
