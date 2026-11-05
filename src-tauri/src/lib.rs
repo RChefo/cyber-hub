@@ -27,7 +27,7 @@ mod workspace;
 
 use tauri::{AppHandle, Manager};
 
-use commands::{activity, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, vulns as vuln_commands, wordlists, workspace as workspace_commands};
+use commands::{activity, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, vulns as vuln_commands, wordlists, workflows as workflow_commands, workspace as workspace_commands};
 
 /// Leaves no work behind when Cyber Hub exits: normal exit, restart after an update, and right
 /// before an update installer takes over on Windows. Safe to call more than once.
@@ -102,6 +102,7 @@ pub fn run() {
             }
             app.manage(evidence);
             app.manage(discovery_commands::DiscoveryState::default());
+            app.manage(workflow_commands::WorkflowState::default());
             // collections interrupted by a crash or exit are marked as such
             osint::discovery::recover_interrupted(&app.state::<db::Db>());
             // remove target-file snapshots left behind by a crash
@@ -119,6 +120,8 @@ pub fn run() {
             }
             // automatic update checks (off the startup path; nothing is installed without approval)
             updates::start_scheduler(app.handle().clone());
+            // scheduled workflows (passive steps only) while Cyber Hub runs
+            workflow_commands::start_scheduler(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -212,6 +215,16 @@ pub fn run() {
             vuln_commands::vuln_delete,
             vuln_commands::vuln_create_finding,
             vuln_commands::findings_bulk_status,
+            // workflow automation
+            workflow_commands::workflow_nodes,
+            workflow_commands::workflow_templates,
+            workflow_commands::workflows_list,
+            workflow_commands::workflow_save,
+            workflow_commands::workflow_delete,
+            workflow_commands::workflow_run,
+            workflow_commands::workflow_cancel,
+            workflow_commands::workflow_runs,
+            workflow_commands::workflow_run_detail,
             // tools & execution engine
             tools::tools_catalog,
             tools::tools_detection_list,

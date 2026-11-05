@@ -35,6 +35,8 @@ export type Tag =
   | "assets"
   /** project vulnerabilities */
   | "vulns"
+  /** project workflows and their runs */
+  | "workflows"
   | "system";
 
 const versions = new Map<Tag, number>();

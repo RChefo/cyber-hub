@@ -152,6 +152,17 @@ export const api = {
   vulnHistory: (id: number) => call<T.VulnEvent[]>("vuln_history", { id }),
   vulnDelete: (id: number) => call<void>("vuln_delete", { id }),
   vulnCreateFinding: (id: number) => call<number>("vuln_create_finding", { id }),
+  // workflows
+  workflowNodes: () => call<T.WorkflowNodeSpec[]>("workflow_nodes"),
+  workflowTemplates: () => call<T.WorkflowTemplate[]>("workflow_templates"),
+  workflowsList: (projectId: number) => call<T.Workflow[]>("workflows_list", { projectId }),
+  workflowSave: (input: { id?: number; projectId: number; name: string; description: string; definition: T.WorkflowDefinition; scheduleHours: number | null; enabled: boolean }) =>
+    call<T.Workflow>("workflow_save", { input }),
+  workflowDelete: (id: number) => call<void>("workflow_delete", { id }),
+  workflowRun: (id: number) => call<number>("workflow_run", { id }),
+  workflowCancel: (runId: number) => call<boolean>("workflow_cancel", { runId }),
+  workflowRuns: (workflowId: number, limit?: number) => call<T.WorkflowRunSummary[]>("workflow_runs", { workflowId, limit: limit ?? null }),
+  workflowRunDetail: (runId: number) => call<T.WorkflowRunDetail>("workflow_run_detail", { runId }),
   findingsBulkStatus: (ids: number[], status: T.FindingStatus, note?: string) =>
     call<{ changed: number[]; skipped: [number, string][] }>("findings_bulk_status", { ids, status, note: note ?? null }),
   projectToolHistory: (projectId: number) => call<T.ProjectExecution[]>("project_tool_history", { projectId }),

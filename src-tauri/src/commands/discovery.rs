@@ -38,6 +38,13 @@ impl DiscoveryState {
     fn busy(&self, project_id: i64) -> bool {
         self.0.lock().map(|m| m.contains_key(&project_id)).unwrap_or(true)
     }
+    /// Asks the project's background discovery to stop; false when none runs.
+    pub fn cancel(&self, project_id: i64) -> bool {
+        match self.0.lock() {
+            Ok(m) => m.get(&project_id).map(|(_, flag)| flag.store(true, Ordering::Relaxed)).is_some(),
+            Err(_) => false,
+        }
+    }
     fn release(&self, project_id: i64) {
         if let Ok(mut m) = self.0.lock() {
             m.remove(&project_id);
@@ -66,54 +73,122 @@ fn run_status(cancelled: bool, recorded: usize, problems: &[String]) -> &'static
     }
 }
 
+/* ───────────────────────── shared run handling ───────────────────────── */
+
+/// How a background discovery ended.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunOutcome {
+    pub snapshot_id: i64,
+    pub status: String,
+    pub note: String,
+}
+
+/// Starts a snapshot and claims the project's discovery slot.
+fn begin(app: &AppHandle, project_id: i64, mode: &str, source: &str) -> AppResult<(i64, Arc<AtomicBool>)> {
+    let db = app.state::<Db>();
+    let state = app.state::<DiscoveryState>();
+    if state.busy(project_id) {
+        return Err(AppError::Conflict("A discovery is already running for this project".into()));
+    }
+    let snapshot_id = db.with(|c| assets::start_snapshot(c, project_id, mode, source, None, None))?;
+    match state.claim(project_id, snapshot_id) {
+        Ok(f) => Ok((snapshot_id, f)),
+        Err(e) => {
+            let _ = db.with(|c| assets::finish_snapshot(c, snapshot_id, "cancelled", "Another discovery was running"));
+            Err(e)
+        }
+    }
+}
+
+/// Ends a run however it stops: normally, with an error, or when its future is dropped (a
+/// workflow step that ran out of time). The snapshot never stays "running".
+struct RunGuard {
+    app: AppHandle,
+    project_id: i64,
+    snapshot_id: i64,
+}
+
+impl RunGuard {
+    fn finish(self, result: AppResult<String>) -> RunOutcome {
+        let db = self.app.state::<Db>();
+        if let Err(e) = &result {
+            let _ = db.with(|c| assets::finish_snapshot(c, self.snapshot_id, "failed", &e.to_string()));
+        }
+        let snap = db.with(|c| disc::snapshot(c, self.snapshot_id)).ok();
+        let out = RunOutcome {
+            snapshot_id: self.snapshot_id,
+            status: snap.as_ref().map(|s| s.status.clone()).unwrap_or_else(|| "failed".into()),
+            note: snap.map(|s| s.note).unwrap_or_default(),
+        };
+        drop(self);
+        out
+    }
+}
+
+impl Drop for RunGuard {
+    fn drop(&mut self) {
+        let db = self.app.state::<Db>();
+        // still running here means the run was stopped before it could finish
+        let _ = db.with(|c| {
+            c.execute(
+                "UPDATE discovery_snapshots SET status = 'failed', note = 'Stopped before it finished (time limit or cancellation)', finished_at = ?2 WHERE id = ?1 AND status = 'running'",
+                params![self.snapshot_id, crate::util::now()],
+            )?;
+            Ok(())
+        });
+        self.app.state::<DiscoveryState>().release(self.project_id);
+        emit(&self.app, self.project_id, self.snapshot_id, None);
+    }
+}
+
 /* ───────────────────────── passive ───────────────────────── */
+
+/// Scope entries and the public in-scope domains passive discovery may ask about.
+pub(crate) fn passive_targets(c: &rusqlite::Connection, project_id: i64) -> AppResult<(Vec<crate::scope::ScopeEntry>, Vec<String>)> {
+    let entries = scope_entries(c, project_id)?;
+    let roots = disc::passive_roots(&entries);
+    let decision = scope_gate::decide(c, Some(project_id), &roots, scope_gate::Mode::Passive)?;
+    let allowed: Vec<String> = decision.verdicts.into_iter().filter(|v| v.allowed).map(|v| v.target).collect();
+    if allowed.is_empty() {
+        return Err(validation("Add an in-scope public domain (for example example.com or *.example.com) to the project's scope first"));
+    }
+    Ok((entries, allowed))
+}
+
+pub(crate) type PassiveStart = (i64, Arc<AtomicBool>, Vec<crate::scope::ScopeEntry>, Vec<String>);
+
+pub(crate) fn passive_begin(app: &AppHandle, project_id: i64) -> AppResult<PassiveStart> {
+    let (entries, roots) = app.state::<Db>().with(|c| passive_targets(c, project_id))?;
+    let (snapshot_id, cancel) = begin(app, project_id, "passive", "passive")?;
+    emit(app, project_id, snapshot_id, Some(format!("Passive discovery started for {}", roots.join(", "))));
+    Ok((snapshot_id, cancel, entries, roots))
+}
+
+pub(crate) async fn passive_run(app: AppHandle, project_id: i64, (snapshot_id, cancel, entries, roots): PassiveStart) -> RunOutcome {
+    let guard = RunGuard { app: app.clone(), project_id, snapshot_id };
+    let db = app.state::<Db>();
+    let (batch, problems, outside) = disc::passive_collect(&db, &entries, &roots, &cancel, progress(&app, project_id, snapshot_id)).await;
+    let status = run_status(cancel.load(Ordering::Relaxed), batch.len(), &problems);
+    let covers = |a: &assets::Asset| matches!(a.kind.as_str(), "domain" | "subdomain" | "ip" | "dns_record");
+    let result = db.with(|c| {
+        // names outside the authorized scope are deliberately not recorded; the note says how many
+        let mut note_problems = problems.clone();
+        if outside > 0 {
+            note_problems.push(format!("{outside} names outside the authorized scope were not recorded"));
+        }
+        disc::complete(c, project_id, snapshot_id, "passive", &batch, (status, &note_problems), &covers)
+    });
+    guard.finish(result)
+}
 
 /// Certificate transparency and DNS for the project's in-scope domains. Nothing is sent to the
 /// targets; private and internal names are never sent to public sources.
 #[tauri::command]
-pub async fn discovery_passive_start(app: AppHandle, db: State<'_, Db>, state: State<'_, DiscoveryState>, project_id: i64) -> AppResult<i64> {
-    let (entries, roots) = db.with(|c| {
-        let entries = scope_entries(c, project_id)?;
-        let roots = disc::passive_roots(&entries);
-        let decision = scope_gate::decide(c, Some(project_id), &roots, scope_gate::Mode::Passive)?;
-        let allowed: Vec<String> = decision.verdicts.into_iter().filter(|v| v.allowed).map(|v| v.target).collect();
-        Ok((entries, allowed))
-    })?;
-    if roots.is_empty() {
-        return Err(validation("Add an in-scope public domain (for example example.com or *.example.com) to the project's scope first"));
-    }
-    if state.busy(project_id) {
-        return Err(AppError::Conflict("A discovery is already running for this project".into()));
-    }
-    let snapshot_id = db.with(|c| assets::start_snapshot(c, project_id, "passive", "passive", None, None))?;
-    let cancel = match state.claim(project_id, snapshot_id) {
-        Ok(f) => f,
-        Err(e) => {
-            let _ = db.with(|c| assets::finish_snapshot(c, snapshot_id, "cancelled", "Another discovery was running"));
-            return Err(e);
-        }
-    };
-    emit(&app, project_id, snapshot_id, Some(format!("Passive discovery started for {}", roots.join(", "))));
-    let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let db = handle.state::<Db>();
-        let (batch, problems, outside) = disc::passive_collect(&db, &entries, &roots, &cancel, progress(&handle, project_id, snapshot_id)).await;
-        let status = run_status(cancel.load(Ordering::Relaxed), batch.len(), &problems);
-        let covers = |a: &assets::Asset| matches!(a.kind.as_str(), "domain" | "subdomain" | "ip" | "dns_record");
-        let result = db.with(|c| {
-            // names outside the authorized scope are deliberately not recorded; the note says how many
-            let mut note_problems = problems.clone();
-            if outside > 0 {
-                note_problems.push(format!("{outside} names outside the authorized scope were not recorded"));
-            }
-            disc::complete(c, project_id, snapshot_id, "passive", &batch, (status, &note_problems), &covers)
-        });
-        if let Err(e) = result {
-            let _ = db.with(|c| assets::finish_snapshot(c, snapshot_id, "failed", &e.to_string()));
-        }
-        handle.state::<DiscoveryState>().release(project_id);
-        emit(&handle, project_id, snapshot_id, None);
-    });
+pub async fn discovery_passive_start(app: AppHandle, project_id: i64) -> AppResult<i64> {
+    let start = passive_begin(&app, project_id)?;
+    let snapshot_id = start.0;
+    tauri::async_runtime::spawn(passive_run(app.clone(), project_id, start));
     Ok(snapshot_id)
 }
 
@@ -143,73 +218,78 @@ fn default_hosts(c: &rusqlite::Connection, project_id: i64) -> AppResult<Vec<Str
     Ok(hosts.into_iter().collect())
 }
 
-/// Sends one HTTPS and one HTTP request to each in-scope host (natively confirmed).
-#[tauri::command]
-pub async fn discovery_http_start(app: AppHandle, db: State<'_, Db>, state: State<'_, DiscoveryState>, project_id: i64, hosts: Option<Vec<String>>) -> AppResult<i64> {
+/// The hosts an HTTP check may contact. Named hosts must all be authorized (refusals are
+/// recorded); without names, the in-scope defaults are used.
+pub(crate) fn http_targets(c: &rusqlite::Connection, project_id: i64, hosts: Option<Vec<String>>) -> AppResult<Vec<String>> {
     let explicit = hosts.as_ref().is_some_and(|h| !h.is_empty());
-    let hosts: Vec<String> = db.with(|c| {
-        let list = match hosts.filter(|h| !h.is_empty()) {
-            Some(h) => h.into_iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect::<BTreeSet<_>>().into_iter().collect(),
-            None => default_hosts(c, project_id)?,
-        };
-        if list.len() > disc::MAX_HTTP_HOSTS && explicit {
+    let list: Vec<String> = match hosts.filter(|h| !h.is_empty()) {
+        Some(h) => h.into_iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect::<BTreeSet<_>>().into_iter().collect(),
+        None => default_hosts(c, project_id)?,
+    };
+    let hosts = if explicit {
+        if list.len() > disc::MAX_HTTP_HOSTS {
             return Err(validation(format!("At most {} hosts per check", disc::MAX_HTTP_HOSTS)));
         }
-        if explicit {
-            // every host the user named must be authorized; refusals are recorded
-            scope_gate::enforce(c, Some(project_id), &list, scope_gate::Mode::Active, "HTTP check")?;
-            Ok(list)
-        } else {
-            let d = scope_gate::decide(c, Some(project_id), &list, scope_gate::Mode::Active)?;
-            if let Some(v) = d.verdicts.iter().find(|v| !v.allowed && v.reason.contains("project")) {
-                return Err(AppError::Scope(v.reason.clone()));
-            }
-            Ok(d.verdicts.into_iter().filter(|v| v.allowed).map(|v| v.target).take(disc::MAX_HTTP_HOSTS).collect())
+        scope_gate::enforce(c, Some(project_id), &list, scope_gate::Mode::Active, "HTTP check")?;
+        list
+    } else {
+        let d = scope_gate::decide(c, Some(project_id), &list, scope_gate::Mode::Active)?;
+        if let Some(v) = d.verdicts.iter().find(|v| !v.allowed && v.reason.contains("project")) {
+            return Err(AppError::Scope(v.reason.clone()));
         }
-    })?;
+        d.verdicts.into_iter().filter(|v| v.allowed).map(|v| v.target).take(disc::MAX_HTTP_HOSTS).collect()
+    };
     if hosts.is_empty() {
         return Err(validation("No in-scope host to check. Add domains or IP addresses to the scope, or run passive discovery first."));
     }
+    Ok(hosts)
+}
+
+/// What an HTTP check sends, for confirmation dialogs.
+pub(crate) fn http_description(hosts: &[String]) -> String {
+    let shown: Vec<&str> = hosts.iter().take(15).map(String::as_str).collect();
+    let more = if hosts.len() > 15 { format!("\n... and {} more", hosts.len() - 15) } else { String::new() };
+    format!(
+        "one HTTPS and one HTTP request (GET /, no redirects followed, no credentials) to each of these {} in-scope hosts:\n\n{}{more}",
+        hosts.len(),
+        shown.join("\n")
+    )
+}
+
+pub(crate) fn http_begin(app: &AppHandle, project_id: i64, hosts: &[String]) -> AppResult<(i64, Arc<AtomicBool>)> {
+    let (snapshot_id, cancel) = begin(app, project_id, "active", "http")?;
+    emit(app, project_id, snapshot_id, Some(format!("Checking {} hosts", hosts.len())));
+    Ok((snapshot_id, cancel))
+}
+
+pub(crate) async fn http_run(app: AppHandle, project_id: i64, snapshot_id: i64, cancel: Arc<AtomicBool>, hosts: Vec<String>) -> RunOutcome {
+    let guard = RunGuard { app: app.clone(), project_id, snapshot_id };
+    let db = app.state::<Db>();
+    let result = match disc::http_collect(&hosts, &cancel, progress(&app, project_id, snapshot_id)).await {
+        Ok((batch, problems, probed)) => {
+            let status = run_status(cancel.load(Ordering::Relaxed), batch.len(), &problems);
+            let covers = move |a: &assets::Asset| a.kind == "http_service" && disc::origin_host(&a.value).is_some_and(|h| probed.contains(&h));
+            db.with(|c| disc::complete(c, project_id, snapshot_id, "http", &batch, (status, &problems), &covers))
+        }
+        Err(e) => Err(e),
+    };
+    guard.finish(result)
+}
+
+/// Sends one HTTPS and one HTTP request to each in-scope host (natively confirmed).
+#[tauri::command]
+pub async fn discovery_http_start(app: AppHandle, db: State<'_, Db>, state: State<'_, DiscoveryState>, project_id: i64, hosts: Option<Vec<String>>) -> AppResult<i64> {
+    let hosts = db.with(|c| http_targets(c, project_id, hosts))?;
     if state.busy(project_id) {
         return Err(AppError::Conflict("A discovery is already running for this project".into()));
     }
     let project_name: String = db.with(|c| Ok(c.query_row("SELECT name FROM projects WHERE id = ?1", params![project_id], |r| r.get(0))?))?;
-    let shown: Vec<&str> = hosts.iter().take(15).map(String::as_str).collect();
-    let more = if hosts.len() > 15 { format!("\n… and {} more", hosts.len() - 15) } else { String::new() };
-    let text = format!(
-        "Project: {project_name}\n\nCyber Hub will send one HTTPS and one HTTP request (GET /, no redirects followed, no credentials) to each of these {} in-scope hosts:\n\n{}{more}",
-        hosts.len(),
-        shown.join("\n")
-    );
+    let text = format!("Project: {project_name}\n\nCyber Hub will send {}", http_description(&hosts));
     if !crate::confirm::native(&app, "Confirm attack surface check", text, "Check hosts").await {
         return Err(AppError::Cancelled("The check was cancelled in the confirmation dialog".into()));
     }
-    let snapshot_id = db.with(|c| assets::start_snapshot(c, project_id, "active", "http", None, None))?;
-    let cancel = match state.claim(project_id, snapshot_id) {
-        Ok(f) => f,
-        Err(e) => {
-            let _ = db.with(|c| assets::finish_snapshot(c, snapshot_id, "cancelled", "Another discovery was running"));
-            return Err(e);
-        }
-    };
-    emit(&app, project_id, snapshot_id, Some(format!("Checking {} hosts", hosts.len())));
-    let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let db = handle.state::<Db>();
-        let result = match disc::http_collect(&hosts, &cancel, progress(&handle, project_id, snapshot_id)).await {
-            Ok((batch, problems, probed)) => {
-                let status = run_status(cancel.load(Ordering::Relaxed), batch.len(), &problems);
-                let covers = move |a: &assets::Asset| a.kind == "http_service" && disc::origin_host(&a.value).is_some_and(|h| probed.contains(&h));
-                db.with(|c| disc::complete(c, project_id, snapshot_id, "http", &batch, (status, &problems), &covers))
-            }
-            Err(e) => Err(e),
-        };
-        if let Err(e) = result {
-            let _ = db.with(|c| assets::finish_snapshot(c, snapshot_id, "failed", &e.to_string()));
-        }
-        handle.state::<DiscoveryState>().release(project_id);
-        emit(&handle, project_id, snapshot_id, None);
-    });
+    let (snapshot_id, cancel) = http_begin(&app, project_id, &hosts)?;
+    tauri::async_runtime::spawn(http_run(app.clone(), project_id, snapshot_id, cancel, hosts));
     Ok(snapshot_id)
 }
 
@@ -225,12 +305,18 @@ pub struct ScanStarted {
 /// Runs an Nmap service scan through the normal execution path (scope check, native
 /// confirmation, process tree), then records its XML results as a snapshot.
 #[tauri::command]
-pub async fn discovery_scan_start(app: AppHandle, db: State<'_, Db>, project_id: i64, targets: Vec<String>, profile: String) -> AppResult<ScanStarted> {
+pub async fn discovery_scan_start(app: AppHandle, project_id: i64, targets: Vec<String>, profile: String) -> AppResult<ScanStarted> {
+    start_scan(&app, project_id, targets, &profile).await
+}
+
+/// Starts a service scan (the execution engine asks for native confirmation of the command).
+pub(crate) async fn start_scan(app: &AppHandle, project_id: i64, targets: Vec<String>, profile: &str) -> AppResult<ScanStarted> {
+    let db = app.state::<Db>();
     let targets: Vec<String> = targets.into_iter().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect::<BTreeSet<_>>().into_iter().collect();
     if targets.is_empty() || targets.len() > 64 {
         return Err(validation("Give 1 to 64 targets (hosts, addresses or networks)"));
     }
-    let args = disc::nmap_args(&profile, &targets)?;
+    let args = disc::nmap_args(profile, &targets)?;
     db.with(|c| scope_gate::enforce(c, Some(project_id), &targets, scope_gate::Mode::Active, "Service scan").map(|_| ()))?;
     let snapshot_id = db.with(|c| assets::start_snapshot(c, project_id, "active", "nmap", None, None))?;
     let hook: FinishHook = Box::new(move |app: &AppHandle, execution_id: i64, ok: bool| {
@@ -267,16 +353,16 @@ pub async fn discovery_scan_start(app: AppHandle, db: State<'_, Db>, project_id:
     let request = ExecRequest { tool_id: "nmap".into(), args, project_id: Some(project_id), targets, confirmed: true };
     // output is stored with the run; the live view is the project's run history
     let sink: Channel<crate::process::ExecEvent> = Channel::new(|_| Ok(()));
-    match start_execution(&app, &db, request, sink, None, Some(hook)).await {
+    match start_execution(app, &db, request, sink, None, Some(hook)).await {
         Ok(execution_id) => {
             let _ = db.with(|c| Ok(c.execute("UPDATE discovery_snapshots SET execution_id = ?2 WHERE id = ?1", params![snapshot_id, execution_id])?));
-            emit(&app, project_id, snapshot_id, Some("Service scan started".into()));
+            emit(app, project_id, snapshot_id, Some("Service scan started".into()));
             Ok(ScanStarted { snapshot_id, execution_id })
         }
         Err(e) => {
             let status = if matches!(e, AppError::Cancelled(_)) { "cancelled" } else { "failed" };
             let _ = db.with(|c| assets::finish_snapshot(c, snapshot_id, status, &e.to_string()));
-            emit(&app, project_id, snapshot_id, None);
+            emit(app, project_id, snapshot_id, None);
             Err(e)
         }
     }
@@ -286,14 +372,7 @@ pub async fn discovery_scan_start(app: AppHandle, db: State<'_, Db>, project_id:
 
 #[tauri::command]
 pub async fn discovery_cancel(state: State<'_, DiscoveryState>, project_id: i64) -> AppResult<bool> {
-    let m = state.0.lock().map_err(|_| AppError::Internal("discovery state poisoned".into()))?;
-    Ok(match m.get(&project_id) {
-        Some((_, flag)) => {
-            flag.store(true, Ordering::Relaxed);
-            true
-        }
-        None => false,
-    })
+    Ok(state.cancel(project_id))
 }
 
 /// The snapshot of the background discovery running for a project, if any.

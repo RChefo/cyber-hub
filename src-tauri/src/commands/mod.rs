@@ -12,4 +12,5 @@ pub mod updates;
 pub mod virustotal;
 pub mod vulns;
 pub mod wordlists;
+pub mod workflows;
 pub mod workspace;

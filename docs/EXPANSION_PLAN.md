@@ -1,6 +1,6 @@
 # Platform expansion: architecture audit and plan (Phase 0)
 
-Status: **Phases 0–3 complete.** Phases 1–3 (shared data foundation, attack surface discovery, vulnerabilities and findings; schemas 9 and 10) are described in [DATA_MODEL.md](DATA_MODEL.md). Phases 4–8 not started.
+Status: **Phases 0–4 complete.** Phases 1–3 (shared data foundation, attack surface discovery, vulnerabilities and findings; schemas 9 and 10) are described in [DATA_MODEL.md](DATA_MODEL.md), phase 4 (workflow automation; schema 11) in [WORKFLOWS.md](WORKFLOWS.md). Phases 5–8 not started.
 Scope: the "Advanced Platform Expansion" request (attack surface management, vulnerability management, findings, workflow automation, assistant, attack paths, IOC correlation, scan comparison, utilities, engagement workspace, reporting). This document records what already exists, what each new capability reuses, the shared data contracts, migration risks, decisions that need the owner, and the phase plan. It is updated at the end of every phase.
 
 ## 1. What exists today
@@ -107,7 +107,7 @@ Each phase: plan, implement, targeted tests, full regression (typecheck, fronten
 | 1. Shared data foundation **(done)** | migrations (schema 9+), `ScopeGate`, `EvidenceStore`, `Timeline`, `AssetStore`, extended findings model and history, scope audit; migration tests on populated databases | — |
 | 2. Attack surface management **(done)** | asset inventory UI, passive discovery via OSINT providers, active discovery via scoped tools, snapshots, change classification (confirmed/observed/possible/incomplete), dashboard | 5 |
 | 3. Vulnerabilities and findings **(done)** | vulnerability records, transparent priority model, lifecycle and history, remediation tracking, Findings Manager (search, filters, bulk status, tags, links) | 2 |
-| 4. Workflow automation | definitions, node schemas, validation, executor (ordering, timeouts, retries, cancellation, persistence), builder UI, history, templates | 4 |
+| 4. Workflow automation **(done)** | definitions, node schemas, validation, executor (ordering, timeouts, retries, cancellation, persistence), builder UI, history, templates | 4 |
 | 5. Intelligence and analysis | IOC correlation, attack-path views on the OSINT graph, scan comparison, assistant | 1, 5 |
 | 6. Security utilities | HTTP builder, DNS intelligence, TLS analyzer, port/service intelligence, subdomain monitor, secrets scanner, wordlist manager | — |
 | 7. Engagement workspace | engagement fields, scope manager UI, evidence vault, project timeline, report builder | 3 |
@@ -148,4 +148,15 @@ Realistic size: each of phases 1–7 is several thousand lines with tests; the w
   * bulk status (invalid steps skipped and reported, legacy names accepted);
   * frontend helpers.
 * **Not verified here:** live NVD and EPSS requests; the UI is checked visually in phase 8.
+
+## 10. Phase 4 result
+
+* **Schema 11:** `workflows`, `workflow_runs` (with a copy of the definition run) and `workflow_run_steps` (state, attempts, summary, log). Interrupted runs are recovered at startup.
+* **Automation tab:**
+  * workflows from templates or empty;
+  * an editor for steps (settings per type, time limit, retries, continue on error, reordering), schedule and enabled state;
+  * run with confirmation, run history, and run details with step logs and cancellation.
+* **Refactoring:** the discovery commands were split into prepare/begin/run functions shared by the manual actions and the workflow steps. A guard closes a discovery snapshot that is stopped before it finishes.
+* **Safety:** no arbitrary code; active steps are confirmed natively and checked against the scope at run time; schedules are passive only (see [WORKFLOWS.md](WORKFLOWS.md)).
+* **Not verified here:** live runs against real targets; the UI is checked visually in phase 8.
 

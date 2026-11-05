@@ -385,6 +385,96 @@ export interface VulnEvent {
   at: string;
 }
 
+export type WorkflowParamKind = "targets" | "select" | "number" | "text";
+
+export interface WorkflowParamSpec {
+  key: string;
+  label: string;
+  kind: WorkflowParamKind;
+  required: boolean;
+  help: string;
+  options: [string, string][];
+  min: number;
+  max: number;
+}
+
+export interface WorkflowNodeSpec {
+  type: string;
+  label: string;
+  description: string;
+  /** contacts targets: confirmed natively, never scheduled */
+  active: boolean;
+  retryable: boolean;
+  defaultTimeout: number;
+  maxTimeout: number;
+  params: WorkflowParamSpec[];
+}
+
+export interface WorkflowStep {
+  type: string;
+  name: string;
+  params: Record<string, unknown>;
+  /** 0 = the step type's default */
+  timeoutSecs: number;
+  retries: number;
+  continueOnError: boolean;
+}
+
+export interface WorkflowDefinition {
+  steps: WorkflowStep[];
+}
+
+export type WorkflowRunStatus = "running" | "succeeded" | "partial" | "failed" | "cancelled";
+
+export interface WorkflowRunSummary {
+  id: number;
+  status: WorkflowRunStatus;
+  trigger: "manual" | "schedule";
+  startedAt: string;
+  finishedAt: string | null;
+  summary: string;
+}
+
+export interface Workflow {
+  id: number;
+  projectId: number;
+  name: string;
+  description: string;
+  definition: WorkflowDefinition;
+  scheduleHours: number | null;
+  enabled: boolean;
+  nextRunAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastRun: WorkflowRunSummary | null;
+}
+
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+  definition: WorkflowDefinition;
+}
+
+export interface WorkflowRunStep {
+  id: number;
+  position: number;
+  kind: string;
+  name: string;
+  status: "pending" | "running" | "succeeded" | "failed" | "skipped" | "cancelled";
+  attempts: number;
+  summary: string;
+  log: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface WorkflowRunDetail {
+  run: WorkflowRunSummary;
+  workflowId: number;
+  steps: WorkflowRunStep[];
+}
+
 export interface ScopeDecision {
   mode: "passive" | "active";
   verdicts: ScopeCheck[];

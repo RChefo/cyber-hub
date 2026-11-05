@@ -90,6 +90,9 @@ pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], befor
             SELECT 'investigation', i.name || ': ' || ev.summary, ev.kind, 'investigation', i.id, ev.at
             FROM osint_events ev JOIN osint_investigations i ON i.id = ev.investigation_id WHERE i.project_id = ?1
           UNION ALL
+            SELECT 'workflow', 'Workflow ' || w.name || ' (' || r.trigger || '): ' || r.status, r.summary, 'workflow_run', r.id, r.started_at
+            FROM workflow_runs r JOIN workflows w ON w.id = r.workflow_id WHERE r.project_id = ?1
+          UNION ALL
             SELECT 'discovery', 'Discovery (' || mode || ', ' || source || '): ' || status, note, 'discovery', id, started_at
             FROM discovery_snapshots WHERE project_id = ?1
         )

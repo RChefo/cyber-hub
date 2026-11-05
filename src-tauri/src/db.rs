@@ -722,6 +722,50 @@ const MIGRATIONS: &[&str] = &[
         fetched_at TEXT NOT NULL
     );
     "#,
+    // 11: workflow automation (docs/WORKFLOWS.md): saved workflows per project made of predefined
+    // steps (no scripts), runs with a copy of the definition they ran, and per-step state and logs.
+    r#"
+    CREATE TABLE workflows (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        definition TEXT NOT NULL,
+        schedule_hours INTEGER CHECK (schedule_hours IS NULL OR schedule_hours BETWEEN 1 AND 720),
+        enabled INTEGER NOT NULL DEFAULT 1,
+        next_run_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_workflows_project ON workflows(project_id);
+    CREATE TABLE workflow_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        trigger TEXT NOT NULL CHECK (trigger IN ('manual','schedule')),
+        status TEXT NOT NULL CHECK (status IN ('running','succeeded','partial','failed','cancelled')),
+        definition TEXT NOT NULL,
+        summary TEXT NOT NULL DEFAULT '',
+        started_at TEXT NOT NULL,
+        finished_at TEXT
+    );
+    CREATE INDEX idx_workflow_runs ON workflow_runs(workflow_id, id DESC);
+    CREATE INDEX idx_workflow_runs_project ON workflow_runs(project_id, id DESC);
+    CREATE TABLE workflow_run_steps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending','running','succeeded','failed','skipped','cancelled')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        summary TEXT NOT NULL DEFAULT '',
+        log TEXT NOT NULL DEFAULT '',
+        started_at TEXT,
+        finished_at TEXT,
+        UNIQUE (run_id, position)
+    );
+    "#,
 ];
 
 impl Db {
@@ -751,6 +795,10 @@ impl Db {
             // Only one instance runs at a time, so a run still marked as running was interrupted
             // (crash or power loss); record that instead of showing it as running forever.
             c.execute("UPDATE executions SET status = 'error', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'", [crate::util::now()])?;
+            // workflow runs interrupted by an exit end as failed; their unfinished steps too
+            let ts = crate::util::now();
+            c.execute("UPDATE workflow_run_steps SET status = CASE status WHEN 'running' THEN 'failed' ELSE 'cancelled' END, summary = CASE status WHEN 'running' THEN 'Interrupted: Cyber Hub was closed' ELSE summary END, finished_at = COALESCE(finished_at, ?1) WHERE status IN ('running','pending') AND run_id IN (SELECT id FROM workflow_runs WHERE status = 'running')", [&ts])?;
+            c.execute("UPDATE workflow_runs SET status = 'failed', summary = 'Interrupted: Cyber Hub was closed while it ran', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'", [&ts])?;
             // likewise discovery runs: nothing found by an interrupted run is treated as removed
             c.execute(
                 "UPDATE discovery_snapshots SET status = 'failed', note = 'Interrupted: Cyber Hub was closed while it ran', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'",
@@ -923,6 +971,11 @@ mod tests {
             db.with(|c| {
                 c.execute("INSERT INTO executions (tool_id, kind, program, args, status, started_at) VALUES ('nmap','run','nmap','[]','running','t')", [])?;
                 c.execute("INSERT INTO executions (tool_id, kind, program, args, status, started_at, finished_at) VALUES ('nmap','run','nmap','[]','succeeded','t','t2')", [])?;
+                c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'P', 'active', 't', 't')", [])?;
+                c.execute("INSERT INTO workflows (id, project_id, name, definition, created_at, updated_at) VALUES (1, 1, 'W', '{\"steps\":[]}', 't', 't')", [])?;
+                c.execute("INSERT INTO workflow_runs (id, workflow_id, project_id, trigger, status, definition, started_at) VALUES (1, 1, 1, 'manual', 'running', '{}', 't')", [])?;
+                c.execute("INSERT INTO workflow_run_steps (run_id, position, kind, name, status) VALUES (1, 0, 'wait', 'Wait', 'succeeded'), (1, 1, 'wait', 'Wait', 'running'), (1, 2, 'wait', 'Wait', 'pending')", [])?;
+                c.execute("INSERT INTO discovery_snapshots (project_id, mode, source, status, started_at) VALUES (1, 'passive', 'passive', 'running', 't')", [])?;
                 let idx: i64 = c.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_executions_project'", [], |r| r.get(0))?;
                 assert_eq!(idx, 1);
                 Ok(())
@@ -930,6 +983,17 @@ mod tests {
             .unwrap();
         }
         let db = Db::open(&path).unwrap();
+        let (run, steps, snap): (String, Vec<String>, String) = db
+            .with(|c| {
+                let run = c.query_row("SELECT status FROM workflow_runs WHERE id = 1", [], |r| r.get(0))?;
+                let steps = c.prepare("SELECT status FROM workflow_run_steps WHERE run_id = 1 ORDER BY position")?.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
+                let snap = c.query_row("SELECT status FROM discovery_snapshots", [], |r| r.get(0))?;
+                Ok((run, steps, snap))
+            })
+            .unwrap();
+        assert_eq!(run, "failed", "an interrupted workflow run is not shown as running forever");
+        assert_eq!(steps, vec!["succeeded", "failed", "cancelled"]);
+        assert_eq!(snap, "failed");
         let rows: Vec<(String, Option<String>)> = db
             .with(|c| {
                 let mut st = c.prepare("SELECT status, finished_at FROM executions ORDER BY id")?;
