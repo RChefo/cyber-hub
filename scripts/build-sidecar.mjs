@@ -1,8 +1,10 @@
-// Builds the `cyberhub-mcp` MCP server and stages it as a Tauri sidecar
-// (bundle.externalBin = "binaries/cyberhub-mcp" in src-tauri/tauri.conf.json).
+// Builds the `cyberhub-mcp` MCP server for the target and checks it (`--version`), so
+// `tauri build` stops before packaging if the server cannot be built, and stages a copy at
+// src-tauri/binaries/cyberhub-mcp-<target triple>[.exe] for manual use.
 //
-// Tauri expects the file at src-tauri/binaries/cyberhub-mcp-<target triple>[.exe]. The bundler
-// installs it next to the Cyber Hub executable, without the triple suffix:
+// The installers do not take the staged copy: `cyberhub-mcp` is a `[[bin]]` of the app crate, and
+// the Tauri bundler ships every binary of the crate next to the Cyber Hub executable (declaring it
+// again in bundle.externalBin put the same file into the MSI twice, which WiX refuses):
 //   Windows  <install dir>\cyberhub-mcp.exe
 //   Linux    /usr/bin/cyberhub-mcp (deb, rpm), usr/bin inside the AppImage
 // Supported platforms are Windows x64 and Linux x64; macOS targets are refused.

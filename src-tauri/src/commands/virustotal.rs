@@ -48,6 +48,11 @@ pub struct VtState {
 }
 
 impl VtState {
+    /// File uploads that are sending or waiting for their confirmation.
+    pub fn uploads_in_progress(&self) -> usize {
+        self.uploads.lock().map(|m| m.len()).unwrap_or(0)
+    }
+
     pub fn new() -> AppResult<Self> {
         let (max, window) = ProviderId::Virustotal.rate();
         Ok(Self {

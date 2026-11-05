@@ -43,7 +43,7 @@ pub struct Activity {
 const ACTIVITY_KINDS: &[&str] = &[
     "tool_run", "tool_install", "tool_launch", "tool_scan", "command_copy", "command_saved", "dork_search",
     "dork_saved", "resource_open", "project", "finding", "wordlist", "cve_search", "utility", "payload_copy", "vt_lookup",
-    "vt_upload", "ti_lookup",
+    "vt_upload", "ti_lookup", "update",
 ];
 
 #[tauri::command]

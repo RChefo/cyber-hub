@@ -2,7 +2,7 @@
 
 A local-first, cross-platform cybersecurity workstation built with **Tauri 2 (Rust)** and **React 19 + TypeScript**. It brings a curated tools library with real installation detection, a scoped execution engine, command builders, Google Dorks Studio, payloads and wordlists, security utilities, a projects workspace with findings, and CVE intelligence together in one desktop app.
 
-No account, no telemetry, no background network traffic. Everything is stored in a local SQLite database and the OS credential store.
+No account and no telemetry. The only background request is the optional update check, which fetches the signed release manifest and never downloads or installs anything by itself. Everything is stored in a local SQLite database and the OS credential store.
 
 **Status:** under active development for **Windows 10/11 x64** and **Linux x64**. Cyber Hub is not released: no installers, packages or downloads are published. macOS is not supported.
 
@@ -58,6 +58,7 @@ Other scripts:
 - [docs/PROVISIONING.md](docs/PROVISIONING.md): how the application owner provisions and checks service credentials
 - [docs/MCP.md](docs/MCP.md): MCP architecture, tools, resources, prompts, approvals, client setup and troubleshooting
 - [docs/PLATFORMS.md](docs/PLATFORMS.md): per-OS dependencies, validation status, platform-specific behavior
+- [docs/UPDATER.md](docs/UPDATER.md): signed automatic updates: formats, signing keys and their protection, the release workflow, manifest, staging tests, recovery and key rotation
 
 ## Security at a glance
 
@@ -68,6 +69,7 @@ Other scripts:
 * MCP clients reach Cyber Hub only through an authenticated loopback bridge that is off by default. They use the same scope engine and native confirmations as the GUI and cannot approve their own sensitive requests.
 * Service credentials are provisioned by the application owner with a developer-only tool ([docs/PROVISIONING.md](docs/PROVISIONING.md)), stored in the OS credential store and read only by the Rust backend. No UI or IPC command can read or change them, and none are shipped in binaries or installers.
 * Files are uploaded to VirusTotal only after a public-sharing warning, an in-page acknowledgement and a native confirmation for that file. The original file is never modified.
+* Updates come only from the official Tauri updater: each package must carry a signature from the Cyber Hub update key that names its version, feeds and downloads must use HTTPS, and nothing is installed without a native confirmation or while work is running ([docs/UPDATER.md](docs/UPDATER.md)).
 
 Details and accepted risks: [docs/SECURITY.md](docs/SECURITY.md).
 
@@ -77,7 +79,7 @@ Development is ongoing. Current verification (details in [docs/PLATFORMS.md](doc
 
 | Platform | Status |
 |---|---|
-| Windows 10/11 x64 | Verified in the running app on Windows 11: every module, scoped runs incl. target files, native confirmations, cancellation, the frameless window and its controls, VirusTotal file uploads and all threat-intelligence providers against a local mock API, MCP with Claude Code and a scripted client, single-instance behaviour, persistence across restarts. OSINT Workspace: full reliability pass in the GUI (investigations, entities, live public sources, review and import, graph interactions, save and restore across restarts, Save As, Graph Manager, versions, save conflicts, every export and import format through the native dialogs, performance up to 2,000 entities, MCP tools through Claude Code). Durability: crashes during saves and collections, restoration after restart, save conflicts and live collection refresh verified (see docs/PLATFORMS.md). Automated tests: 167 frontend, 183 backend, 4 provisioning-tool. |
+| Windows 10/11 x64 | Verified in the running app on Windows 11: every module, scoped runs incl. target files, native confirmations, cancellation, the frameless window and its controls, VirusTotal file uploads and all threat-intelligence providers against a local mock API, MCP with Claude Code and a scripted client, single-instance behaviour, persistence across restarts. OSINT Workspace: full reliability pass in the GUI (investigations, entities, live public sources, review and import, graph interactions, save and restore across restarts, Save As, Graph Manager, versions, save conflicts, every export and import format through the native dialogs, performance up to 2,000 entities, MCP tools through Claude Code). Durability: crashes during saves and collections, restoration after restart, save conflicts and live collection refresh verified (see docs/PLATFORMS.md). Automated tests: 175 frontend and release-script, 191 backend, 4 provisioning-tool. Updates: an NSIS installation of a test build updated through a local staging feed with signature, downgrade, TLS, cancellation and data-preservation checks (Linux formats and MSI updates untested, see docs/UPDATER.md). |
 | Linux x64 | The real app tested on a virtual X display (Xvfb + Openbox) in Debian 12 and Ubuntu 24.04 containers, driven through Tauri's WebDriver support: every module, window behaviour, native GTK dialogs and file choosers, Secret Service provisioning (Debian), Nmap runs and cancellation, VirusTotal and threat intelligence against mocks, findings and reports, MCP, restart persistence; plus builds and all automated tests. Not tested on a physical GNOME/KDE desktop or under Wayland. |
 | macOS | Not supported. |
 

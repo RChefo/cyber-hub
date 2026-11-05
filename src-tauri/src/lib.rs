@@ -19,13 +19,31 @@ mod redact;
 mod scope;
 mod targets;
 mod ti;
+mod updates;
 mod util;
 mod vt;
 mod vtfile;
 
-use tauri::Manager;
+use tauri::{AppHandle, Manager};
 
-use commands::{activity, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, threat_intel, tools, virustotal, wordlists};
+use commands::{activity, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, threat_intel, tools, updates as update_commands, virustotal, wordlists};
+
+/// Leaves no work behind when Cyber Hub exits: normal exit, restart after an update, and right
+/// before an update installer takes over on Windows. Safe to call more than once.
+pub(crate) fn shutdown(app: &AppHandle) {
+    // never leave tool processes running after Cyber Hub exits
+    let had_runs = !app.state::<process::ProcessManager>().running_ids().is_empty();
+    app.state::<process::ProcessManager>().kill_all_now();
+    if had_runs {
+        // give terminated processes a moment to release snapshot files
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    tools::clean_runtime_dir(app);
+    // close the MCP bridge and remove its connection files
+    app.state::<std::sync::Arc<mcp::bridge::Bridge>>().stop();
+    // fold the write-ahead log into the database file (committed data is durable either way)
+    let _ = app.state::<db::Db>().with(|c| Ok(c.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?));
+}
 
 pub fn run() {
     tauri::Builder::default()
@@ -40,6 +58,8 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // signed updates; driven only by the backend (`updates`), no permission for the web view
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -72,6 +92,7 @@ pub fn run() {
             app.manage(mcp::ops::LiveRuns::default());
             app.manage(std::sync::Arc::new(osint::discovery::OsintState::default()));
             app.manage(osint_commands::ImportState::default());
+            app.manage(std::sync::Arc::new(updates::Updates::load(&app.state::<db::Db>())));
             // collections interrupted by a crash or exit are marked as such
             osint::discovery::recover_interrupted(&app.state::<db::Db>());
             // remove target-file snapshots left behind by a crash
@@ -87,6 +108,8 @@ pub fn run() {
                     }
                 });
             }
+            // automatic update checks (off the startup path; nothing is installed without approval)
+            updates::start_scheduler(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -256,6 +279,14 @@ pub fn run() {
             osint_commands::osint_import_preview,
             osint_commands::osint_import_apply,
             osint_commands::osint_import_discard,
+            // updates (Settings → Updates)
+            update_commands::update_status,
+            update_commands::update_check,
+            update_commands::update_download,
+            update_commands::update_cancel,
+            update_commands::update_install,
+            update_commands::update_restart,
+            update_commands::update_settings_set,
             // system
             system::system_info,
             system::open_terminal,
@@ -264,16 +295,7 @@ pub fn run() {
         .expect("error while building Cyber Hub")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
-                // never leave tool processes running after Cyber Hub exits
-                let had_runs = !app.state::<process::ProcessManager>().running_ids().is_empty();
-                app.state::<process::ProcessManager>().kill_all_now();
-                if had_runs {
-                    // give terminated processes a moment to release snapshot files
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                }
-                tools::clean_runtime_dir(app);
-                // close the MCP bridge and remove its connection files
-                app.state::<std::sync::Arc<mcp::bridge::Bridge>>().stop();
+                shutdown(app);
             }
         });
 }

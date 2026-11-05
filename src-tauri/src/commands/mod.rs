@@ -7,5 +7,6 @@ pub mod projects;
 pub mod system;
 pub mod threat_intel;
 pub mod tools;
+pub mod updates;
 pub mod virustotal;
 pub mod wordlists;

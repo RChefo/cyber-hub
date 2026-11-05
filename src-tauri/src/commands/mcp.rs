@@ -24,7 +24,7 @@ use crate::mcp::prompts;
 
 /// Path of the `cyberhub-mcp` executable shipped next to the app binary, if present.
 ///
-/// Installers place the sidecar (bundle.externalBin, scripts/build-sidecar.mjs) in the same
+/// Installers place it (the bundler ships every `[[bin]]` of this crate) in the same
 /// directory as the Cyber Hub executable: the installation folder on Windows and `/usr/bin` for
 /// the Linux packages. In development
 /// cargo builds it into the same `target/<profile>` directory. The lookup never uses the working

@@ -1,0 +1,283 @@
+name: Release
+
+# Builds, signs and publishes a Cyber Hub release together with its update manifest (latest.json).
+#
+# - Runs only for a pushed version tag (vMAJOR.MINOR.PATCH) or a manual run naming an existing tag;
+#   never for pull requests, so untrusted code never sees the signing secrets.
+# - validate: version, tag and branch checks, tests, clippy and security checks (no secrets).
+# - build: the only job that receives TAURI_SIGNING_PRIVATE_KEY and its password, in the protected
+#   `release` environment (add required reviewers under Settings → Environments → release).
+# - publish: generates latest.json, verifies every signature against the public key compiled into
+#   the app, uploads everything to a draft release and makes it public only when all assets are
+#   present. A failure in any job leaves nothing published.
+# No caches are used here (a poisoned cache must not reach a signed build).
+# See docs/UPDATER.md for the setup and the owner's checklist.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release, for example v0.2.0"
+        required: true
+        type: string
+      draft:
+        description: "Stop at a draft release (publish it by hand after review)"
+        required: true
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Version, tag and branch
+        id: version
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Tag '$TAG' is not vMAJOR.MINOR.PATCH (the stable channel has no pre-releases)"; exit 1
+          fi
+          version="${TAG#v}"
+          for f in package.json src-tauri/tauri.conf.json; do
+            v=$(jq -r .version "$f")
+            [ "$v" = "$version" ] || { echo "::error::$f has version $v but the tag is $TAG"; exit 1; }
+          done
+          v=$(sed -n 's/^version = "\(.*\)"$/\1/p' src-tauri/Cargo.toml | head -1)
+          [ "$v" = "$version" ] || { echo "::error::src-tauri/Cargo.toml has version $v but the tag is $TAG"; exit 1; }
+          sha=$(git rev-parse HEAD)
+          if ! git branch -r --contains "$sha" | grep -Eq '^\s*origin/(main|release/[^ ]+)$'; then
+            echo "::error::$sha is not on main or a release/* branch"; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Updater configuration
+        run: |
+          set -euo pipefail
+          c=src-tauri/tauri.conf.json
+          jq -e '(.plugins.updater.pubkey | length) > 100' "$c" > /dev/null || { echo "::error::plugins.updater.pubkey is missing"; exit 1; }
+          jq -e '.plugins.updater.requireSignedVersion == true' "$c" > /dev/null || { echo "::error::requireSignedVersion must stay enabled"; exit 1; }
+          jq -e '.bundle.createUpdaterArtifacts == true' "$c" > /dev/null || { echo "::error::bundle.createUpdaterArtifacts must be true"; exit 1; }
+          if jq -e '.plugins.updater | (.dangerousInsecureTransportProtocol // false) or (.dangerousAcceptInvalidCerts // false) or (.dangerousAcceptInvalidHostnames // false)' "$c" > /dev/null; then
+            echo "::error::insecure updater options are set"; exit 1
+          fi
+
+      - name: No private key in the repository
+        run: |
+          set -euo pipefail
+          # base64 of "untrusted comment: rsign encrypted secret key" (the private key file header)
+          if git grep -l -e 'dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5' -e 'rsign encrypted secret key' -- . ':!.github/workflows/release.yml'; then
+            echo "::error::a private signing key is committed"; exit 1
+          fi
+
+      - name: Release notes
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          if [ -s "docs/releases/$version.md" ]; then cp "docs/releases/$version.md" notes.md
+          else git tag -l --format='%(contents)' "$TAG" | sed '/-----BEGIN/,$d' > notes.md; fi
+          [ -s notes.md ] || { echo "::error::No release notes: add docs/releases/$version.md or annotate the tag"; exit 1; }
+
+      - name: No release exists yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::A release for $TAG already exists"; exit 1
+          fi
+
+      - name: Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-1-dev pkg-config build-essential
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          components: clippy
+
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: Frontend and release-script tests
+        run: npx vitest run
+      - name: Frontend production build
+        run: npx vite build
+      - name: Backend tests
+        working-directory: src-tauri
+        run: cargo test --locked
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: npm audit
+        run: npm audit --audit-level=high
+      - name: cargo audit
+        working-directory: src-tauri
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
+
+  build:
+    name: Build and sign (${{ matrix.name }})
+    needs: validate
+    environment: release
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-2022
+            bundles: nsis,msi
+          - name: linux-x64
+            os: ubuntu-22.04
+            bundles: appimage,deb,rpm
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          persist-credentials: false
+
+      - name: Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libdbus-1-dev patchelf rpm file pkg-config build-essential
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - run: npm ci
+
+      - name: Build and sign
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          FEED: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
+          BUNDLES: ${{ matrix.bundles }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ] || [ -z "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
+            echo "::error::The release environment has no TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets"; exit 1
+          fi
+          # the update feed of this repository is compiled into the release build only
+          printf '{"plugins":{"updater":{"endpoints":["%s"]}}}' "$FEED" > "$RUNNER_TEMP/feed.json"
+          npx tauri build --ci --bundles "$BUNDLES" --config "$RUNNER_TEMP/feed.json"
+
+      - name: Collect signed artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          find src-tauri/target/release/bundle -mindepth 2 -maxdepth 2 -type f \
+            \( -name '*-setup.exe' -o -name '*.msi' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.sig' \) \
+            -exec cp {} release-assets/ \;
+          for f in release-assets/*; do
+            case "$f" in *.sig) ;; *) [ -s "$f.sig" ] || { echo "::error::$f was not signed"; exit 1; } ;; esac
+          done
+          ls -l release-assets
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bundles-${{ matrix.name }}
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish
+    needs: [validate, build]
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: bundles-*
+          merge-multiple: true
+          path: assets
+
+      - name: Release notes
+        run: |
+          set -euo pipefail
+          if [ -s "docs/releases/$VERSION.md" ]; then cp "docs/releases/$VERSION.md" notes.md
+          else git tag -l --format='%(contents)' "$TAG" | sed '/-----BEGIN/,$d' > notes.md; fi
+          [ -s notes.md ]
+
+      - name: Generate and validate latest.json
+        run: |
+          set -euo pipefail
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          node scripts/updater-manifest.mjs generate --normalize-names --version "$VERSION" --assets assets \
+            --base-url "$base" --notes-file notes.md --out latest.json
+          node scripts/updater-manifest.mjs validate --manifest latest.json --assets assets --base-url "$base" \
+            --require windows-x86_64-nsis,windows-x86_64-msi,linux-x86_64-appimage,linux-x86_64-deb,linux-x86_64-rpm
+          mv latest.json assets/latest.json
+          (cd assets && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: Upload to a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+            --title "Cyber Hub $VERSION" --notes-file notes.md assets/*
+          expected=$(cd assets && ls -1 | sort)
+          actual=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::The draft release is missing assets; it stays a draft"; diff <(echo "$expected") <(echo "$actual") || true; exit 1
+          fi
+
+      - name: Publish the release
+        if: github.event_name == 'push' || inputs.draft == false
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

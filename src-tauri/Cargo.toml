@@ -37,7 +37,6 @@ path = "src/bin/cyberhub-keys.rs"
 required-features = ["provisioning"]
 
 [build-dependencies]
-serde_json = "1.0.154"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
@@ -60,6 +59,7 @@ rpassword = { version = "7.5.4", optional = true }
 rmcp = { version = "3.8.0", default-features = false, features = ["server", "macros", "transport-io"] }
 reqwest = { version = "0.13.3", default-features = false, features = ["rustls", "json", "charset", "http2", "multipart", "stream", "query", "form"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
+semver = "1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha1 = "0.10.7"
@@ -76,6 +76,8 @@ tokio = { version = "1.53.3", features = ["process", "io-util", "time", "sync", 
 tokio-util = { version = "0.7.20", features = ["io"] }
 url = "2.5.8"
 which = "8.0.6"
+# official signed updater (minisign signatures, HTTPS feed); driven only from the backend
+tauri-plugin-updater = "2.14.1"
 
 [target."cfg(windows)".dependencies]
 windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading"] }

@@ -671,3 +671,42 @@ export interface McpClientConfigs {
   claudeDesktopJson: string;
   claudeDesktopConfigPath: string | null;
 }
+
+/* ───────────── updates (Settings → Updates) ───────────── */
+
+export type UpdatePhase =
+  | "idle"
+  | "checking"
+  | "upToDate"
+  | "available"
+  | "downloading"
+  | "verifying"
+  | "ready"
+  | "installing"
+  | "restartRequired"
+  | "cancelled"
+  | "failed";
+
+export type InstallKind = "nsis" | "msi" | "appimage" | "deb" | "rpm" | "unknown";
+
+export interface UpdateStatus {
+  phase: UpdatePhase;
+  currentVersion: string;
+  os: "windows" | "macos" | "linux";
+  arch: string;
+  installKind: InstallKind;
+  supported: boolean;
+  supportNote: string | null;
+  channel: "stable";
+  configured: boolean;
+  warning: string | null;
+  lastCheck: string | null;
+  lastResult: "upToDate" | "available" | "failed" | null;
+  nextCheck: string | null;
+  available: { version: string; date: string | null; notes: string; size: number | null } | null;
+  progress: { downloaded: number; total: number | null } | null;
+  error: { kind: string; message: string } | null;
+  autoCheck: boolean;
+  frequencyHours: number;
+  blockers: string[];
+}

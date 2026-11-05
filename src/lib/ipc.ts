@@ -266,6 +266,15 @@ export const api = {
     call<{ investigationId: number; graphId: number }>("osint_import_apply", { token, investigationId, graphName }),
   osintImportDiscard: (token: string) => call<void>("osint_import_discard", { token }),
 
+  // updates (the backend owns the whole flow; the page has no updater permission of its own)
+  updateStatus: () => call<T.UpdateStatus>("update_status"),
+  updateCheck: () => call<T.UpdateStatus>("update_check"),
+  updateDownload: () => call<T.UpdateStatus>("update_download"),
+  updateCancel: () => call<T.UpdateStatus>("update_cancel"),
+  updateInstall: () => call<T.UpdateStatus>("update_install"),
+  updateRestart: () => call<void>("update_restart"),
+  updateSettingsSet: (autoCheck: boolean, frequencyHours: number) => call<T.UpdateStatus>("update_settings_set", { autoCheck, frequencyHours }),
+
   // system
   systemInfo: () => call<T.SystemInfo>("system_info"),
   openTerminal: (cwd?: string | null) => call<string>("open_terminal", { cwd: cwd ?? null }),

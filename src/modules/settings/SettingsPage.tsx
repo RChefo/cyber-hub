@@ -10,6 +10,7 @@ import { api, errorMessage } from "@/lib/ipc";
 import { invalidate } from "@/lib/query";
 import { formatBytes, modKey } from "@/lib/utils";
 import { ProvidersPanel } from "./ProvidersPanel";
+import { UpdatesPanel } from "./UpdatesPanel";
 
 function DataPanel() {
   const { system, runtime } = useApp();
@@ -124,9 +125,10 @@ export default function SettingsPage() {
   const { system, catalog } = useApp();
   return (
     <div>
-      <PageHeader title="Settings" description="Preferences, service status and local data. Cyber Hub has no account, no telemetry and no background network activity." />
+      <PageHeader title="Settings" description="Preferences, updates, service status and local data. Cyber Hub has no account and no telemetry; the only background request is the optional update check." />
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <div className="flex flex-col gap-3">
+          <UpdatesPanel />
           <PreferencesPanel />
           <DataPanel />
         </div>
@@ -135,7 +137,8 @@ export default function SettingsPage() {
             <ul className="flex flex-col gap-2 text-[13px] text-muted">
               {[
                 "Local-first: all data stays in the local SQLite database. Service credentials are provisioned by the application owner, kept in the OS credential store and never shown in the app.",
-                "No telemetry and no automatic uploads. Network requests happen only when you press a button that says it sends one (live CVE search, threat-intelligence lookup, DNS lookup, header fetch, opening links).",
+                "No telemetry and no automatic uploads. Network requests happen only when you press a button that says it sends one (live CVE search, threat-intelligence lookup, DNS lookup, header fetch, opening links), plus the automatic update check, which you can turn off under Updates; it fetches only the release manifest.",
+                "Updates are verified against the Cyber Hub signing key before they can be installed, and are installed only after you confirm in a system dialog.",
                 "Threat-intelligence lookups only read provider data. A file is uploaded to VirusTotal only from File analysis, after a warning and a system confirmation for that file; URLs are never submitted for scanning.",
                 "Tools never run automatically. Every run shows the exact program and arguments and needs confirmation.",
                 "Tools that touch targets run only inside an active project and only against in-scope targets.",
