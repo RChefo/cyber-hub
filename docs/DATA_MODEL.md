@@ -132,6 +132,18 @@ Projects → *Findings* provides:
 * history and links per finding, with notes;
 * bulk status changes. `findings_bulk_status` changes each selected finding on its own with the lifecycle rule, records every change, and reports the findings it left unchanged instead of failing.
 
+## Analysis
+
+Projects → *Analysis* works on stored data only; nothing is contacted (`workspace/analysis.rs`).
+
+* **Exposure paths.** Chains from the network entry through name, address and service or web service to each open vulnerability that has an asset, and on to the findings linked to it. Asset-linked findings without a vulnerability get their own paths. Paths are ranked by vulnerability priority (findings by severity). Names come from DNS records and the address asset's data, and the entry comes from the vulnerability's exposure.
+* **Indicator correlation.** Every address, domain (URL hosts included), e-mail and file hash of the project is listed with where it appears: assets, scope entries, finding targets, entities of OSINT investigations linked to the project, and saved indicators. The list includes the verdicts already in the threat-intelligence cache. Indicators are *flagged* when a provider reported them as malicious or suspicious, or an OSINT entity is flagged. Nothing is looked up; new lookups stay on the Threat Intel page with its own rules. The data is computed on demand, not copied into a new table.
+* **Run comparison.**
+  * Any two discovery runs of the same kind in the same project are compared asset by asset (new, changed, missing, with certainty).
+  * Two tool runs are compared line by line on their stored, redacted output: a longest-common-subsequence diff of at most 4,000 lines each, with unchanged stretches reduced to two lines of context. Free text is compared only as text; no meaning is inferred from it.
+
+The project assistant is described in [ASSISTANT.md](ASSISTANT.md).
+
 ## Evidence
 
 `evidence` is a registry of four kinds:

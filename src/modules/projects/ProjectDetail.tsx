@@ -15,6 +15,8 @@ import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { Finding, Project, ProjectStatus } from "@/lib/types";
 import { formatDate, formatDateTime, formatRelative, shellQuote } from "@/lib/utils";
+import { AnalysisTab } from "./AnalysisTab";
+import { AssistantTab } from "./AssistantTab";
 import { AttackSurfaceTab } from "./AttackSurfaceTab";
 import { AutomationTab } from "./AutomationTab";
 import { FindingsTab } from "./FindingsTab";
@@ -24,7 +26,7 @@ import { countBySeverity } from "./report";
 import { ScopeTab } from "./ScopeTab";
 import { VulnerabilitiesTab } from "./VulnerabilitiesTab";
 
-type TabId = "overview" | "scope" | "surface" | "vulns" | "findings" | "automation" | "notes" | "commands" | "evidence";
+type TabId = "overview" | "scope" | "surface" | "vulns" | "findings" | "analysis" | "assistant" | "automation" | "notes" | "commands" | "evidence";
 
 function NotesTab({ project }: { project: Project }) {
   const [notes, setNotes] = useState(project.notes);
@@ -343,6 +345,8 @@ export function ProjectDetail({ id }: { id: number }) {
     { id: "surface", label: "Attack surface" },
     { id: "vulns", label: "Vulnerabilities" },
     { id: "findings", label: `Findings (${f.length})` },
+    { id: "analysis", label: "Analysis" },
+    { id: "assistant", label: "Assistant" },
     { id: "automation", label: "Automation" },
     { id: "notes", label: "Notes" },
     { id: "commands", label: "Commands & runs" },
@@ -427,6 +431,12 @@ export function ProjectDetail({ id }: { id: number }) {
         </Tabs.Panel>
         <Tabs.Panel id="findings">
           {findings.error && !findings.data ? <ErrorBlock message={findings.error} onRetry={findings.reload} /> : <FindingsTab projectId={p.id} findings={f} />}
+        </Tabs.Panel>
+        <Tabs.Panel id="analysis">
+          <AnalysisTab project={p} />
+        </Tabs.Panel>
+        <Tabs.Panel id="assistant">
+          <AssistantTab project={p} />
         </Tabs.Panel>
         <Tabs.Panel id="automation">
           <AutomationTab project={p} />

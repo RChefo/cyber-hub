@@ -2,6 +2,7 @@
 //! lifecycle, evidence, scope decisions and the project timeline. Commands live in
 //! `commands::workspace`; the logic here takes a `&Connection` so it can be tested and reused.
 
+pub mod analysis;
 pub mod assets;
 pub mod discovery;
 pub mod evidence;

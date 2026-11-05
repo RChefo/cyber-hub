@@ -21,14 +21,18 @@ use crate::ti::{KeyId, ProviderId};
 pub enum Cred {
     Ti(KeyId),
     Nvd,
+    Anthropic,
 }
 
 impl Cred {
-    pub const ALL: [Cred; 6] = [Cred::Ti(KeyId::Virustotal), Cred::Ti(KeyId::Abuseipdb), Cred::Ti(KeyId::Otx), Cred::Ti(KeyId::Abusech), Cred::Ti(KeyId::Shodan), Cred::Nvd];
+    pub const ALL: [Cred; 7] = [Cred::Ti(KeyId::Virustotal), Cred::Ti(KeyId::Abuseipdb), Cred::Ti(KeyId::Otx), Cred::Ti(KeyId::Abusech), Cred::Ti(KeyId::Shodan), Cred::Nvd, Cred::Anthropic];
 
     pub fn parse(s: &str) -> Option<Cred> {
         if s == "nvd" {
             return Some(Cred::Nvd);
+        }
+        if s == "anthropic" {
+            return Some(Cred::Anthropic);
         }
         KeyId::parse(s).map(Cred::Ti)
     }
@@ -36,24 +40,28 @@ impl Cred {
         match self {
             Cred::Ti(k) => k.as_str(),
             Cred::Nvd => "nvd",
+            Cred::Anthropic => "anthropic",
         }
     }
     pub fn secret_name(self) -> &'static str {
         match self {
             Cred::Ti(k) => k.secret_name(),
             Cred::Nvd => NVD_KEY,
+            Cred::Anthropic => crate::commands::assistant::ANTHROPIC_KEY,
         }
     }
     pub fn label(self) -> &'static str {
         match self {
             Cred::Ti(k) => k.label(),
             Cred::Nvd => "NVD API key",
+            Cred::Anthropic => "Anthropic API key",
         }
     }
     pub fn used_by(self) -> String {
         match self {
             Cred::Ti(k) => k.providers().into_iter().map(ProviderId::name).collect::<Vec<_>>().join(", "),
             Cred::Nvd => "Vulnerability Intel (optional; raises the NVD rate limit)".into(),
+            Cred::Anthropic => "Project assistant (Projects → Assistant)".into(),
         }
     }
     pub fn check_format(self, key: &str) -> Result<(), String> {
@@ -64,6 +72,13 @@ impl Cred {
                     Ok(())
                 } else {
                     Err("This does not look like an NVD API key.".into())
+                }
+            }
+            Cred::Anthropic => {
+                if key.starts_with("sk-ant-") && (20..=400).contains(&key.len()) && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+                    Ok(())
+                } else {
+                    Err("This does not look like an Anthropic API key (sk-ant-…).".into())
                 }
             }
         }
@@ -116,6 +131,15 @@ async fn probe(cred: Cred, key: &str) -> Result<Option<String>, String> {
                 s => Err(format!("NVD answered HTTP {s}; the key was not accepted or the service is unavailable.")),
             }
         }
+        Cred::Anthropic => {
+            // listing models is read-only and uses no tokens
+            let rb = c.get("https://api.anthropic.com/v1/models").header("x-api-key", key).header("anthropic-version", crate::commands::assistant::API_VERSION);
+            let resp = http::send(rb, key).await.map_err(|e| http::scrub(&e.message("Anthropic"), key))?;
+            match resp.status {
+                200 => Ok(None),
+                s => Err(format!("Anthropic answered HTTP {s}; the key was not accepted or the service is unavailable.")),
+            }
+        }
     }
 }
 
@@ -132,7 +156,8 @@ USAGE
   cyberhub-keys remove ID|all           Delete stored credentials
 
 IDS
-  virustotal, abuseipdb, otx, abusech (URLhaus, MalwareBazaar, ThreatFox), shodan, nvd
+  virustotal, abuseipdb, otx, abusech (URLhaus, MalwareBazaar, ThreatFox), shodan, nvd,
+  anthropic (project assistant)
 
 Credentials are stored in the OS credential store of the current user. See docs/PROVISIONING.md."
 }

@@ -163,6 +163,17 @@ export const api = {
   workflowCancel: (runId: number) => call<boolean>("workflow_cancel", { runId }),
   workflowRuns: (workflowId: number, limit?: number) => call<T.WorkflowRunSummary[]>("workflow_runs", { workflowId, limit: limit ?? null }),
   workflowRunDetail: (runId: number) => call<T.WorkflowRunDetail>("workflow_run_detail", { runId }),
+  // analysis (stored data only)
+  iocCorrelation: (projectId: number) => call<T.IocIndicator[]>("ioc_correlation", { projectId }),
+  exposurePaths: (projectId: number) => call<T.ExposurePath[]>("exposure_paths", { projectId }),
+  discoveryCompare: (from: number, to: number) => call<T.SnapshotChanges>("discovery_compare", { from, to }),
+  runsCompare: (a: number, b: number) => call<T.RunDiff>("runs_compare", { a, b }),
+  // project assistant (Anthropic; the key is owner-provisioned and never reaches the web view)
+  assistantStatus: () => call<{ configured: boolean; provider: string; model: string }>("assistant_status"),
+  assistantContextPreview: (projectId: number, options: T.AssistantContextOptions) => call<{ text: string; chars: number }>("assistant_context_preview", { projectId, options }),
+  assistantAsk: (projectId: number, conversationId: string | null, question: string, options: T.AssistantContextOptions) =>
+    call<{ conversationId: string; answer: T.AssistantAnswer }>("assistant_ask", { projectId, conversationId, question, options }),
+  assistantForget: (conversationId: string) => call<void>("assistant_forget", { conversationId }),
   findingsBulkStatus: (ids: number[], status: T.FindingStatus, note?: string) =>
     call<{ changed: number[]; skipped: [number, string][] }>("findings_bulk_status", { ids, status, note: note ?? null }),
   projectToolHistory: (projectId: number) => call<T.ProjectExecution[]>("project_tool_history", { projectId }),

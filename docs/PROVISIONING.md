@@ -14,6 +14,7 @@ Cyber Hub's provider integrations (VirusTotal, AbuseIPDB, AlienVault OTX, the ab
   | `abusech` | `abusech_auth_key` | URLhaus, MalwareBazaar, ThreatFox |
   | `shodan` | `shodan_api_key` | Shodan |
   | `nvd` | `nvd_api_key` | Vulnerability Intel (optional; raises the NVD rate limit) |
+  | `anthropic` | `anthropic_api_key` | Project assistant (Claude, Anthropic Messages API); `test` lists models, which uses no tokens |
 
 * The app's Rust backend reads an entry only inside the function that calls that provider. The web view only learns whether each provider is **configured**, never the value.
 * Credentials are written with **`cyberhub-keys`**, a developer-only command-line tool. It is compiled only with the Cargo feature `provisioning`, so it is not part of the application binary, `tauri build` output or the installers.
@@ -45,6 +46,7 @@ Run the tool **as the same OS user that runs Cyber Hub**, on that machine.
    abusech    = …
    shodan     = …
    nvd        = …
+   anthropic  = …
    ```
 
 3. Import, then delete the file:

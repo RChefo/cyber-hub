@@ -475,6 +475,61 @@ export interface WorkflowRunDetail {
   steps: WorkflowRunStep[];
 }
 
+export interface IocSighting {
+  source: "asset" | "scope" | "finding" | "osint" | "saved";
+  detail: string;
+  refKind: string | null;
+  refId: number | null;
+}
+
+export interface IocIndicator {
+  kind: "ip" | "domain" | "email" | "file_hash";
+  value: string;
+  sightings: IocSighting[];
+  sources: number;
+  ti: { provider: string; level: string; label: string; fetchedAt: string }[];
+  flagged: boolean;
+}
+
+export interface ExposurePathNode {
+  kind: "entry" | "name" | "ip" | "service" | "web" | "vulnerability" | "finding";
+  label: string;
+  refKind: string | null;
+  refId: number | null;
+}
+
+export interface ExposurePath {
+  nodes: ExposurePathNode[];
+  priority: PriorityLevel | null;
+  score: number;
+  exposure: string;
+}
+
+export interface RunDiff {
+  lines: { op: "same" | "added" | "removed" | "gap"; text: string }[];
+  added: number;
+  removed: number;
+  truncated: boolean;
+}
+
+export interface AssistantContextOptions {
+  scope: boolean;
+  assets: boolean;
+  vulnerabilities: boolean;
+  findings: boolean;
+  timeline: boolean;
+}
+
+export interface AssistantAnswer {
+  text: string;
+  stopReason: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  fallback: boolean;
+}
+
 export interface ScopeDecision {
   mode: "passive" | "active";
   verdicts: ScopeCheck[];

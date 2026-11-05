@@ -275,7 +275,25 @@ pub fn changes(c: &Connection, snapshot_id: i64) -> AppResult<SnapshotChanges> {
             |r| r.get(0),
         )
         .optional()?;
-    let cur = observed_in(c, snapshot_id)?;
+    diff(c, previous, snap)
+}
+
+/// Compares any two runs of the same project and source (`from` the older one).
+pub fn compare(c: &Connection, from: i64, to: i64) -> AppResult<SnapshotChanges> {
+    let owner = |id: i64| -> AppResult<(i64, String)> {
+        c.query_row("SELECT project_id, source FROM discovery_snapshots WHERE id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .optional()?
+            .ok_or_else(|| AppError::NotFound(format!("discovery snapshot {id}")))
+    };
+    let (a, b) = (owner(from)?, owner(to)?);
+    if a.0 != b.0 || a.1 != b.1 {
+        return Err(validation("Only runs of the same kind in the same project can be compared"));
+    }
+    diff(c, Some(from), snapshot(c, to)?)
+}
+
+fn diff(c: &Connection, previous: Option<i64>, snap: Snapshot) -> AppResult<SnapshotChanges> {
+    let cur = observed_in(c, snap.id)?;
     let prev = match previous {
         Some(p) => observed_in(c, p)?,
         None => BTreeMap::new(),
@@ -833,10 +851,14 @@ mod tests {
             assert_eq!(status("b.example.com")?, "not_observed");
             assert_eq!(status("manual.example.com")?, "active");
             assert_eq!(snapshots(c, p, 10)?.len(), 3);
+            // any two runs of the same kind can be compared; run 1 against run 3 shows the dropped name
+            let ch = compare(c, s1, s3)?;
+            assert_eq!(ch.changes.iter().map(|x| (x.change, x.value.as_str())).collect::<Vec<_>>(), vec![("changed", "a.example.com"), ("missing", "b.example.com")]);
 
             // another source never marks passive assets
             let s4 = assets::start_snapshot(c, p, "active", "http", None, None)?;
             complete(c, p, s4, "http", &Batch::default(), ("completed", &[]), &covers_all)?;
+            assert!(compare(c, s1, s4).is_err(), "different kinds of runs are not compared");
             assert_eq!(status("a.example.com")?, "active");
             Ok(())
         })

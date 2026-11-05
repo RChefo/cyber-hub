@@ -138,7 +138,7 @@ fn dirs_home() -> Option<PathBuf> {
 pub const SERVICE: &str = "dev.cyberhub.workstation";
 pub const NVD_KEY: &str = "nvd_api_key";
 /// Every credential Cyber Hub may use.
-pub const KNOWN_SECRETS: &[&str] = &[NVD_KEY, "virustotal_api_key", "abuseipdb_api_key", "otx_api_key", "abusech_auth_key", "shodan_api_key"];
+pub const KNOWN_SECRETS: &[&str] = &[NVD_KEY, "virustotal_api_key", "abuseipdb_api_key", "otx_api_key", "abusech_auth_key", "shodan_api_key", crate::commands::assistant::ANTHROPIC_KEY];
 
 fn entry(name: &str) -> AppResult<keyring::Entry> {
     if !KNOWN_SECRETS.contains(&name) {

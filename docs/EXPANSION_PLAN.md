@@ -1,6 +1,6 @@
 # Platform expansion: architecture audit and plan (Phase 0)
 
-Status: **Phases 0–4 complete.** Phases 1–3 (shared data foundation, attack surface discovery, vulnerabilities and findings; schemas 9 and 10) are described in [DATA_MODEL.md](DATA_MODEL.md), phase 4 (workflow automation; schema 11) in [WORKFLOWS.md](WORKFLOWS.md). Phases 5–8 not started.
+Status: **Phases 0–5 complete.** Phases 1–3 (shared data foundation, attack surface discovery, vulnerabilities and findings; schemas 9 and 10) are described in [DATA_MODEL.md](DATA_MODEL.md), phase 4 (workflow automation; schema 11) in [WORKFLOWS.md](WORKFLOWS.md), phase 5 (analysis and assistant) in [DATA_MODEL.md](DATA_MODEL.md#analysis) and [ASSISTANT.md](ASSISTANT.md). Phases 6–8 not started.
 Scope: the "Advanced Platform Expansion" request (attack surface management, vulnerability management, findings, workflow automation, assistant, attack paths, IOC correlation, scan comparison, utilities, engagement workspace, reporting). This document records what already exists, what each new capability reuses, the shared data contracts, migration risks, decisions that need the owner, and the phase plan. It is updated at the end of every phase.
 
 ## 1. What exists today
@@ -108,7 +108,7 @@ Each phase: plan, implement, targeted tests, full regression (typecheck, fronten
 | 2. Attack surface management **(done)** | asset inventory UI, passive discovery via OSINT providers, active discovery via scoped tools, snapshots, change classification (confirmed/observed/possible/incomplete), dashboard | 5 |
 | 3. Vulnerabilities and findings **(done)** | vulnerability records, transparent priority model, lifecycle and history, remediation tracking, Findings Manager (search, filters, bulk status, tags, links) | 2 |
 | 4. Workflow automation **(done)** | definitions, node schemas, validation, executor (ordering, timeouts, retries, cancellation, persistence), builder UI, history, templates | 4 |
-| 5. Intelligence and analysis | IOC correlation, attack-path views on the OSINT graph, scan comparison, assistant | 1, 5 |
+| 5. Intelligence and analysis **(done)** | IOC correlation, attack-path views on the OSINT graph, scan comparison, assistant | 1, 5 |
 | 6. Security utilities | HTTP builder, DNS intelligence, TLS analyzer, port/service intelligence, subdomain monitor, secrets scanner, wordlist manager | — |
 | 7. Engagement workspace | engagement fields, scope manager UI, evidence vault, project timeline, report builder | 3 |
 | 8. Integration and final QA | cross-module tests, Windows and Linux (container) verification, performance, security review, release readiness | — |
@@ -159,4 +159,22 @@ Realistic size: each of phases 1–7 is several thousand lines with tests; the w
 * **Refactoring:** the discovery commands were split into prepare/begin/run functions shared by the manual actions and the workflow steps. A guard closes a discovery snapshot that is stopped before it finishes.
 * **Safety:** no arbitrary code; active steps are confirmed natively and checked against the scope at run time; schedules are passive only (see [WORKFLOWS.md](WORKFLOWS.md)).
 * **Not verified here:** live runs against real targets; the UI is checked visually in phase 8.
+
+## 11. Phase 5 result
+
+* **Analysis tab:**
+  * exposure paths;
+  * indicator correlation with cached threat-intelligence verdicts;
+  * comparison of any two discovery runs of the same kind, and a line diff of two tool runs.
+
+  It uses stored data only, with no new tables. The correlation is computed on demand instead of the `ioc_records` table sketched in section 3, so nothing is duplicated.
+* **Assistant tab:**
+  * Claude (`claude-opus-5-5`) through the Messages API with the owner-provisioned key (decision 1);
+  * selectable project data with an exact preview, sent after a native confirmation;
+  * no tools, the data wrapped as untrusted data, plain-text answers, in-memory conversations;
+  * server-side refusal fallback (`fallbacks: "default"`) and prompt caching.
+
+  `cyberhub-keys` has a new `anthropic` credential, whose test lists models.
+* **Tests:** indicator normalization and correlation (sources, cached verdicts, flags, project isolation), exposure path order, the line diff, comparison of arbitrary runs, the assistant's context (selected sections only, credentials redacted), its request shape, and response and error handling (refusal, fallback, truncation, 401/429/400).
+* **Not verified here:** live Anthropic requests; no key is provisioned in this environment. The UI is checked visually in phase 8.
 

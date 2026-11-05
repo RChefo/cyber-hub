@@ -27,7 +27,7 @@ mod workspace;
 
 use tauri::{AppHandle, Manager};
 
-use commands::{activity, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, vulns as vuln_commands, wordlists, workflows as workflow_commands, workspace as workspace_commands};
+use commands::{activity, analysis as analysis_commands, assistant as assistant_commands, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, vulns as vuln_commands, wordlists, workflows as workflow_commands, workspace as workspace_commands};
 
 /// Leaves no work behind when Cyber Hub exits: normal exit, restart after an update, and right
 /// before an update installer takes over on Windows. Safe to call more than once.
@@ -103,6 +103,7 @@ pub fn run() {
             app.manage(evidence);
             app.manage(discovery_commands::DiscoveryState::default());
             app.manage(workflow_commands::WorkflowState::default());
+            app.manage(assistant_commands::AssistantState::default());
             // collections interrupted by a crash or exit are marked as such
             osint::discovery::recover_interrupted(&app.state::<db::Db>());
             // remove target-file snapshots left behind by a crash
@@ -225,6 +226,15 @@ pub fn run() {
             workflow_commands::workflow_cancel,
             workflow_commands::workflow_runs,
             workflow_commands::workflow_run_detail,
+            // analysis and the project assistant
+            analysis_commands::ioc_correlation,
+            analysis_commands::exposure_paths,
+            analysis_commands::discovery_compare,
+            analysis_commands::runs_compare,
+            assistant_commands::assistant_status,
+            assistant_commands::assistant_context_preview,
+            assistant_commands::assistant_ask,
+            assistant_commands::assistant_forget,
             // tools & execution engine
             tools::tools_catalog,
             tools::tools_detection_list,

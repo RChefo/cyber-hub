@@ -1,4 +1,6 @@
 pub mod activity;
+pub mod analysis;
+pub mod assistant;
 pub mod discovery;
 pub mod intel;
 pub mod library;
