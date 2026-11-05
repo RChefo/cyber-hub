@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Footer, Nav } from "../components/Chrome";
 import InkOrbitFeatures from "@/components/ui/ink-orbit-features";
 import OrbitImages from "@/components/ui/OrbitImages";
@@ -404,6 +405,105 @@ function Platforms() {
 
 /* ───────────── closing ───────────── */
 
+/**
+ * Enlarged preview of an orbiting screenshot: on hover (mouse, pen) or tap (touch, toggles).
+ * One preview at a time, rendered in a portal above the page and kept inside the viewport.
+ * The orbiting card itself is not touched.
+ */
+function useOrbitPreview(images: { src: string; alt: string }[]) {
+  const [shown, setShown] = useState<{ index: number; x: number; y: number; w: number; h: number } | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const lastPointer = useRef("mouse");
+  const reduced = () => typeof window !== "undefined" && !window.matchMedia(MOTION_OK).matches;
+  const itemOf = (t: EventTarget | null) => (t instanceof Element ? (t.closest("[data-orbit-item]") as HTMLElement | null) : null);
+
+  const show = (card: HTMLElement) => {
+    const index = Number(card.getAttribute("data-orbit-item"));
+    const r = card.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const m = 16;
+    const top = 72; // below the fixed navigation when there is room
+    const w = Math.min(780, vw - m * 2);
+    const h = (w * SHOT.height) / SHOT.width;
+    const x = Math.min(Math.max(r.left + r.width / 2 - w / 2, m), vw - w - m);
+    let y = r.top - h - 14; // above the card first,
+    if (y < top) y = r.bottom + 14; // then below it,
+    if (y + h > vh - m) y = Math.min(Math.max(r.top + r.height / 2 - h / 2, Math.min(top, vh - h - m)), vh - h - m); // else centred on it
+    setShown({ index, x, y: Math.max(m, y), w, h });
+  };
+
+  const hide = () => {
+    const el = box.current;
+    if (!el) return setShown(null);
+    gsap.killTweensOf(el);
+    gsap.to(el, { autoAlpha: 0, scale: 0.96, duration: reduced() ? 0 : 0.2, ease: "power2.in", onComplete: () => setShown(null) });
+  };
+
+  // animate in whenever a (new) card is previewed
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!shown || !el) return;
+    gsap.killTweensOf(el);
+    gsap.fromTo(el, { autoAlpha: 0, scale: 0.94 }, { autoAlpha: 1, scale: 1, duration: reduced() ? 0 : 0.3, ease: "power2.out" });
+  }, [shown]);
+
+  // a fixed preview would drift from its card: close it on scroll, resize, or a tap elsewhere
+  useEffect(() => {
+    if (!shown) return;
+    const close = () => hide();
+    const outside = (e: PointerEvent) => {
+      if (!itemOf(e.target)) hide();
+    };
+    window.addEventListener("scroll", close, { passive: true });
+    window.addEventListener("resize", close);
+    document.addEventListener("pointerdown", outside);
+    return () => {
+      window.removeEventListener("scroll", close);
+      window.removeEventListener("resize", close);
+      document.removeEventListener("pointerdown", outside);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown]);
+
+  return {
+    onPointerOver: (e: React.PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      const card = itemOf(e.target);
+      if (card && Number(card.getAttribute("data-orbit-item")) !== shown?.index) show(card);
+    },
+    onPointerOut: (e: React.PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      const from = itemOf(e.target);
+      const to = itemOf(e.relatedTarget);
+      if (from && from !== to && !to) hide();
+    },
+    onPointerDown: (e: React.PointerEvent) => {
+      lastPointer.current = e.pointerType;
+    },
+    onClick: (e: React.MouseEvent) => {
+      if (lastPointer.current !== "touch") return;
+      const card = itemOf(e.target);
+      if (!card) return hide();
+      if (Number(card.getAttribute("data-orbit-item")) === shown?.index) hide();
+      else show(card);
+    },
+    element:
+      shown &&
+      createPortal(
+        <div
+          ref={box}
+          aria-hidden="true"
+          className="pointer-events-none fixed z-[60] overflow-hidden rounded-[12px] bg-surface opacity-0 shadow-[0_0_0_1px_rgb(255_255_255/0.08),0_30px_80px_-20px_rgb(0_0_0/0.85)]"
+          style={{ left: shown.x, top: shown.y, width: shown.w, height: shown.h }}
+        >
+          <img src={images[shown.index]?.src} alt="" width={SHOT.width} height={SHOT.height} className="block h-full w-full" />
+        </div>,
+        document.body,
+      ),
+  };
+}
+
 function Closing() {
   const root = useRef<HTMLElement>(null);
   useReveal(root);
@@ -418,11 +518,12 @@ function Closing() {
     { src: screens.payloads, alt: "Payloads" },
     { src: screens.mcp, alt: "MCP" },
   ];
+  const preview = useOrbitPreview(orbit);
   return (
     <section ref={root} className="wrap pt-28 md:pt-40" aria-labelledby="closing-title">
       <div data-reveal-group className="relative overflow-hidden rounded-[18px] bg-surface px-5 pt-10 pb-16 md:px-14 md:pt-14 md:pb-20">
-        <div aria-hidden="true" className="pointer-events-none absolute top-10 left-1/2 h-[24rem] w-[46rem] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(76_141_255/0.18),transparent)] blur-2xl" />
         <div data-reveal className="relative">
+          <div onPointerOver={preview.onPointerOver} onPointerOut={preview.onPointerOut} onPointerDown={preview.onPointerDown} onClick={preview.onClick}>
           <OrbitImages
             images={orbit}
             shape="ellipse"
@@ -443,6 +544,8 @@ function Closing() {
               </h2>
             }
           />
+          </div>
+          {preview.element}
         </div>
         <div className="relative mx-auto max-w-[48ch] text-center">
           <p data-reveal className="mt-4 text-[1.05rem] leading-relaxed text-muted">
