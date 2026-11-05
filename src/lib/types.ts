@@ -530,6 +530,89 @@ export interface AssistantAnswer {
   fallback: boolean;
 }
 
+export interface ToolIssue {
+  level: "critical" | "warning" | "info";
+  text: string;
+}
+
+export interface CertInfo {
+  subject: string;
+  issuer: string;
+  serial: string;
+  notBefore: string;
+  notAfter: string;
+  daysLeft: number;
+  sans: string[];
+  key: string;
+  keyBits: number | null;
+  signature: string;
+  sha256: string;
+  selfSigned: boolean;
+}
+
+export interface TlsReport {
+  host: string;
+  port: number;
+  protocol: string | null;
+  cipher: string | null;
+  alpn: string | null;
+  tls13: boolean;
+  tls12: boolean;
+  trusted: boolean;
+  trustError: string | null;
+  chain: CertInfo[];
+  issues: ToolIssue[];
+}
+
+export interface DnsIntelReport {
+  domain: string;
+  records: { type: string; values: string[] }[];
+  spf: { record: string | null; all: string | null; lookups: number; count: number };
+  dmarc: { record: string | null; policy: string | null; subdomainPolicy: string | null; pct: number | null; reports: boolean };
+  dkimSelectors: string[];
+  caa: string[];
+  dnssec: boolean;
+  issues: ToolIssue[];
+  errors: string[];
+}
+
+export interface HttpResponseOut {
+  status: number;
+  reason: string;
+  version: string;
+  headers: [string, string][];
+  body: string;
+  bodyBytes: number;
+  truncated: boolean;
+  elapsedMs: number;
+}
+
+export interface LeakHit {
+  rule: string;
+  label: string;
+  file: string;
+  line: number;
+  column: number;
+  masked: string;
+}
+
+export interface LeakScanResult {
+  hits: LeakHit[];
+  filesScanned: number;
+  filesSkipped: number;
+  truncated: boolean;
+}
+
+export interface PortSighting {
+  projectId: number;
+  project: string;
+  assetId: number;
+  value: string;
+  service: string;
+  product: string;
+  lastSeen: string;
+}
+
 export interface ScopeDecision {
   mode: "passive" | "active";
   verdicts: ScopeCheck[];

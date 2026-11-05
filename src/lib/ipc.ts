@@ -174,6 +174,13 @@ export const api = {
   assistantAsk: (projectId: number, conversationId: string | null, question: string, options: T.AssistantContextOptions) =>
     call<{ conversationId: string; answer: T.AssistantAnswer }>("assistant_ask", { projectId, conversationId, question, options }),
   assistantForget: (conversationId: string) => call<void>("assistant_forget", { conversationId }),
+  // security utilities
+  tlsAnalyze: (projectId: number, target: string, port?: number) => call<T.TlsReport>("tls_analyze", { projectId, target, port: port ?? null }),
+  dnsIntel: (projectId: number | null, domain: string) => call<T.DnsIntelReport>("dns_intel", { projectId, domain }),
+  httpSend: (input: { projectId: number; method: string; url: string; headers: [string, string][]; body: string; insecure: boolean }) => call<T.HttpResponseOut>("http_send", { input }),
+  leakScanText: (text: string) => call<T.LeakScanResult>("leak_scan_text", { text }),
+  leakScanPick: (folder: boolean) => call<{ root: string; result: T.LeakScanResult } | null>("leak_scan_pick", { folder }),
+  servicesByPort: (port: number) => call<T.PortSighting[]>("services_by_port", { port }),
   findingsBulkStatus: (ids: number[], status: T.FindingStatus, note?: string) =>
     call<{ changed: number[]; skipped: [number, string][] }>("findings_bulk_status", { ids, status, note: note ?? null }),
   projectToolHistory: (projectId: number) => call<T.ProjectExecution[]>("project_tool_history", { projectId }),

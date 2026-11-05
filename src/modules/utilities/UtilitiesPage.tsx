@@ -10,6 +10,7 @@ import { Base64Tool, HexTool, UrlTool } from "./tools/EncodingTools";
 import { DnsTool, HeadersTool, IpTool, UrlParserTool } from "./tools/NetworkTools";
 import { HtmlTool, JsonTool, RegexTool, XmlTool } from "./tools/TextTools";
 import { WorkbenchTool } from "./tools/Workbench";
+import { DnsIntelTool, HttpBuilderTool, PortsTool, SecretsTool, SubdomainMonitorTool, TlsTool } from "./tools/AssessmentTools";
 
 const VIEWS: Record<UtilityId, ComponentType> = {
   workbench: WorkbenchTool,
@@ -28,9 +29,15 @@ const VIEWS: Record<UtilityId, ComponentType> = {
   dns: DnsTool,
   headers: HeadersTool,
   "user-agent": UserAgentTool,
+  "http-builder": HttpBuilderTool,
+  tls: TlsTool,
+  "dns-intel": DnsIntelTool,
+  ports: PortsTool,
+  "subdomain-monitor": SubdomainMonitorTool,
+  secrets: SecretsTool,
 };
 
-const GROUP_ORDER: UtilityDef["group"][] = ["Encoding", "Analysis", "Formatting", "Network"];
+const GROUP_ORDER: UtilityDef["group"][] = ["Encoding", "Analysis", "Formatting", "Network", "Assessment"];
 
 function UtilityLink({ u, active, onSelect }: { u: UtilityDef; active: boolean; onSelect: () => void }) {
   const Icon = u.icon;

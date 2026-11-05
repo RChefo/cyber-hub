@@ -7,6 +7,7 @@ pub mod library;
 pub mod mcp;
 pub mod osint;
 pub mod projects;
+pub mod sectools;
 pub mod system;
 pub mod threat_intel;
 pub mod tools;

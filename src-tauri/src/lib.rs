@@ -17,6 +17,7 @@ mod process;
 pub mod provision;
 mod redact;
 mod scope;
+mod sectools;
 mod targets;
 mod ti;
 mod updates;
@@ -27,7 +28,7 @@ mod workspace;
 
 use tauri::{AppHandle, Manager};
 
-use commands::{activity, analysis as analysis_commands, assistant as assistant_commands, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, vulns as vuln_commands, wordlists, workflows as workflow_commands, workspace as workspace_commands};
+use commands::{activity, analysis as analysis_commands, assistant as assistant_commands, intel, library, mcp as mcp_commands, osint as osint_commands, projects, sectools as sectool_commands, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, vulns as vuln_commands, wordlists, workflows as workflow_commands, workspace as workspace_commands};
 
 /// Leaves no work behind when Cyber Hub exits: normal exit, restart after an update, and right
 /// before an update installer takes over on Windows. Safe to call more than once.
@@ -235,6 +236,13 @@ pub fn run() {
             assistant_commands::assistant_context_preview,
             assistant_commands::assistant_ask,
             assistant_commands::assistant_forget,
+            // security utilities
+            sectool_commands::tls_analyze,
+            sectool_commands::dns_intel,
+            sectool_commands::http_send,
+            sectool_commands::leak_scan_text,
+            sectool_commands::leak_scan_pick,
+            sectool_commands::services_by_port,
             // tools & execution engine
             tools::tools_catalog,
             tools::tools_detection_list,

@@ -1,6 +1,6 @@
 # Platform expansion: architecture audit and plan (Phase 0)
 
-Status: **Phases 0–5 complete.** Phases 1–3 (shared data foundation, attack surface discovery, vulnerabilities and findings; schemas 9 and 10) are described in [DATA_MODEL.md](DATA_MODEL.md), phase 4 (workflow automation; schema 11) in [WORKFLOWS.md](WORKFLOWS.md), phase 5 (analysis and assistant) in [DATA_MODEL.md](DATA_MODEL.md#analysis) and [ASSISTANT.md](ASSISTANT.md). Phases 6–8 not started.
+Status: **Phases 0–6 complete.** Phases 1–3 (shared data foundation, attack surface discovery, vulnerabilities and findings; schemas 9 and 10) are described in [DATA_MODEL.md](DATA_MODEL.md), phase 4 (workflow automation; schema 11) in [WORKFLOWS.md](WORKFLOWS.md), phase 5 (analysis and assistant) in [DATA_MODEL.md](DATA_MODEL.md#analysis) and [ASSISTANT.md](ASSISTANT.md), phase 6 (security utilities) in [UTILITIES.md](UTILITIES.md). Phases 7–8 not started.
 Scope: the "Advanced Platform Expansion" request (attack surface management, vulnerability management, findings, workflow automation, assistant, attack paths, IOC correlation, scan comparison, utilities, engagement workspace, reporting). This document records what already exists, what each new capability reuses, the shared data contracts, migration risks, decisions that need the owner, and the phase plan. It is updated at the end of every phase.
 
 ## 1. What exists today
@@ -109,7 +109,7 @@ Each phase: plan, implement, targeted tests, full regression (typecheck, fronten
 | 3. Vulnerabilities and findings **(done)** | vulnerability records, transparent priority model, lifecycle and history, remediation tracking, Findings Manager (search, filters, bulk status, tags, links) | 2 |
 | 4. Workflow automation **(done)** | definitions, node schemas, validation, executor (ordering, timeouts, retries, cancellation, persistence), builder UI, history, templates | 4 |
 | 5. Intelligence and analysis **(done)** | IOC correlation, attack-path views on the OSINT graph, scan comparison, assistant | 1, 5 |
-| 6. Security utilities | HTTP builder, DNS intelligence, TLS analyzer, port/service intelligence, subdomain monitor, secrets scanner, wordlist manager | — |
+| 6. Security utilities **(done)** | HTTP builder, DNS intelligence, TLS analyzer, port/service intelligence, subdomain monitor, secrets scanner, wordlist manager | — |
 | 7. Engagement workspace | engagement fields, scope manager UI, evidence vault, project timeline, report builder | 3 |
 | 8. Integration and final QA | cross-module tests, Windows and Linux (container) verification, performance, security review, release readiness | — |
 
@@ -177,4 +177,17 @@ Realistic size: each of phases 1–7 is several thousand lines with tests; the w
   `cyberhub-keys` has a new `anthropic` credential, whose test lists models.
 * **Tests:** indicator normalization and correlation (sources, cached verdicts, flags, project isolation), exposure path order, the line diff, comparison of arbitrary runs, the assistant's context (selected sections only, credentials redacted), its request shape, and response and error handling (refusal, fallback, truncation, 401/429/400).
 * **Not verified here:** live Anthropic requests; no key is provisioned in this environment. The UI is checked visually in phase 8.
+
+## 12. Phase 6 result
+
+* **New utilities** (Security Utilities, new *Assessment* group): HTTP request builder, TLS analyzer, DNS intelligence, port & service reference, subdomain monitor, secrets scanner. See [UTILITIES.md](UTILITIES.md). The wordlist manager already existed and covers that item.
+* **Dependencies:** `x509-parser` 0.18 (rusticata; certificate parsing) is new. `rustls` 0.23, `tokio-rustls` 0.26 and `rustls-native-certs` 0.8 were already in the dependency tree and are now direct dependencies, using the `ring` provider.
+* **Tests:**
+  * TLS issue grading and parsing of the system's root certificates;
+  * SPF and DMARC parsing and the mail-authentication assessment;
+  * HTTP request validation: methods, schemes, header injection, reserved headers, header count, and an out-of-scope `Host` header refused by the gate;
+  * TLS target parsing;
+  * the secrets rules: detections, masking, placeholders, entropy, and folder scans skipping dependency folders and binaries. The fake tokens in the tests are split so that no complete token appears in the source;
+  * the port reference.
+* **Not verified here:** live TLS, DNS and HTTP requests against real targets. The UI is checked visually in phase 8.
 

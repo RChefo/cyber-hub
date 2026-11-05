@@ -78,6 +78,10 @@ url = "2.5.8"
 which = "8.0.6"
 # official signed updater (minisign signatures, HTTPS feed); driven only from the backend
 tauri-plugin-updater = "2.14.1"
+x509-parser = "0.18"
+rustls-native-certs = "0.8"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 
 [target."cfg(windows)".dependencies]
 windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading"] }

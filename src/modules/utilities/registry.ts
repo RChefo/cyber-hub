@@ -1,6 +1,12 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowLeftRight,
   Binary,
+  FileKey,
+  Lock,
+  MailCheck,
+  ServerCog,
+  Telescope,
   Braces,
   Code2,
   FileCode2,
@@ -34,14 +40,20 @@ export type UtilityId =
   | "ip"
   | "dns"
   | "headers"
-  | "user-agent";
+  | "user-agent"
+  | "http-builder"
+  | "tls"
+  | "dns-intel"
+  | "ports"
+  | "subdomain-monitor"
+  | "secrets";
 
 export interface UtilityDef {
   id: UtilityId;
   name: string;
   description: string;
   icon: LucideIcon;
-  group: "Encoding" | "Analysis" | "Formatting" | "Network";
+  group: "Encoding" | "Analysis" | "Formatting" | "Network" | "Assessment";
   /** true when the utility makes a network request (only on explicit action) */
   network?: boolean;
 }
@@ -63,4 +75,10 @@ export const UTILITIES: UtilityDef[] = [
   { id: "ip", name: "IP & CIDR calculator", description: "Address class, ranges, masks and host counts.", icon: Network, group: "Network" },
   { id: "dns", name: "DNS lookup", description: "Query A, AAAA, MX, TXT, NS and other records.", icon: Radar, group: "Network", network: true },
   { id: "headers", name: "HTTP header analyzer", description: "Fetch or paste headers and review security headers.", icon: ScanSearch, group: "Network", network: true },
+  { id: "dns-intel", name: "DNS intelligence", description: "Records plus SPF, DMARC, DKIM, CAA and DNSSEC assessment for a domain.", icon: MailCheck, group: "Network", network: true },
+  { id: "ports", name: "Port & service reference", description: "What usually runs on a port, its risks, and where projects expose it.", icon: ServerCog, group: "Analysis" },
+  { id: "secrets", name: "Secrets scanner", description: "Find API keys, tokens, private keys and passwords in text, files or folders.", icon: FileKey, group: "Analysis" },
+  { id: "http-builder", name: "HTTP request builder", description: "Send one crafted request to an in-scope target and inspect the response.", icon: ArrowLeftRight, group: "Assessment", network: true },
+  { id: "tls", name: "TLS analyzer", description: "Protocols, cipher, certificate chain and trust of an in-scope service.", icon: Lock, group: "Assessment", network: true },
+  { id: "subdomain-monitor", name: "Subdomain monitor", description: "New and missing names across passive discovery runs, on a schedule.", icon: Telescope, group: "Assessment", network: true },
 ];
