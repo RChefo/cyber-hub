@@ -1,6 +1,6 @@
 # Platform expansion: architecture audit and plan (Phase 0)
 
-Status: **Phases 0–2 complete.** Phase 1 (shared data foundation, schema 9) and Phase 2 (attack surface discovery) are described in [DATA_MODEL.md](DATA_MODEL.md). Phases 3–8 not started.
+Status: **Phases 0–3 complete.** Phases 1–3 (shared data foundation, attack surface discovery, vulnerabilities and findings; schemas 9 and 10) are described in [DATA_MODEL.md](DATA_MODEL.md). Phases 4–8 not started.
 Scope: the "Advanced Platform Expansion" request (attack surface management, vulnerability management, findings, workflow automation, assistant, attack paths, IOC correlation, scan comparison, utilities, engagement workspace, reporting). This document records what already exists, what each new capability reuses, the shared data contracts, migration risks, decisions that need the owner, and the phase plan. It is updated at the end of every phase.
 
 ## 1. What exists today
@@ -106,7 +106,7 @@ Each phase: plan, implement, targeted tests, full regression (typecheck, fronten
 |---|---|---|
 | 1. Shared data foundation **(done)** | migrations (schema 9+), `ScopeGate`, `EvidenceStore`, `Timeline`, `AssetStore`, extended findings model and history, scope audit; migration tests on populated databases | — |
 | 2. Attack surface management **(done)** | asset inventory UI, passive discovery via OSINT providers, active discovery via scoped tools, snapshots, change classification (confirmed/observed/possible/incomplete), dashboard | 5 |
-| 3. Vulnerabilities and findings | vulnerability records, transparent priority model, lifecycle and history, remediation tracking, Findings Manager (search, filters, bulk status, tags, links) | 2 |
+| 3. Vulnerabilities and findings **(done)** | vulnerability records, transparent priority model, lifecycle and history, remediation tracking, Findings Manager (search, filters, bulk status, tags, links) | 2 |
 | 4. Workflow automation | definitions, node schemas, validation, executor (ordering, timeouts, retries, cancellation, persistence), builder UI, history, templates | 4 |
 | 5. Intelligence and analysis | IOC correlation, attack-path views on the OSINT graph, scan comparison, assistant | 1, 5 |
 | 6. Security utilities | HTTP builder, DNS intelligence, TLS analyzer, port/service intelligence, subdomain monitor, secrets scanner, wordlist manager | — |
@@ -131,4 +131,21 @@ Realistic size: each of phases 1–7 is several thousand lines with tests; the w
 * **Backend:** `workspace/discovery.rs` and `commands/discovery.rs`, described in [DATA_MODEL.md](DATA_MODEL.md#attack-surface-discovery). `start_execution` accepts a finish hook that receives the run id. Interrupted runs are marked failed at startup.
 * **Tests:** Nmap XML parsing (complete, truncated and invalid output), scan arguments accepted by the execution engine's scope resolution (and an out-of-scope target refused), DNS answer mapping and merging, passive roots from the scope, HTML titles, and the snapshot lifecycle (change classification, partial runs, not-observed marking limited to the source, manual assets untouched). Frontend helpers are tested too.
 * **Not verified here:** live crt.sh, DNS, HTTP and Nmap runs against real targets; there is no authorized target in this environment. The UI is checked visually in phase 8.
+
+## 9. Phase 3 result
+
+* **Schema 10:** `vulnerabilities`, `vulnerability_events`, `epss_cache` (bounded to 20,000 rows like the other caches). The `epss.enabled` preference is allow-listed.
+* **Vulnerabilities tab:**
+  * open counts by priority and overdue;
+  * search and filters;
+  * tracking with asset, exposure, criticality and known exploitation;
+  * per vulnerability: the priority explanation, context, status with reasons, remediation plan, verification, history, finding creation;
+  * the EPSS switch and score updates.
+* **Findings manager:** search, tag filter, tags, assignee and due date in the editor, a history and links view with notes, and bulk status changes.
+* **Tests:**
+  * the priority model (bands, missing data stated, KEV and analyst knowledge not counted twice), CVSS version choice, and EPSS response validation;
+  * the vulnerability lifecycle: uniqueness per CVE and asset, exposure derived from a private service, reasons required, remediation date validation, verification cleared on reopen, project isolation;
+  * bulk status (invalid steps skipped and reported, legacy names accepted);
+  * frontend helpers.
+* **Not verified here:** live NVD and EPSS requests; the UI is checked visually in phase 8.
 

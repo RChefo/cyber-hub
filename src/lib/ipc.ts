@@ -139,6 +139,21 @@ export const api = {
   discoveryRunning: (projectId: number) => call<number | null>("discovery_running", { projectId }),
   discoverySnapshots: (projectId: number, limit?: number) => call<T.DiscoverySnapshot[]>("discovery_snapshots", { projectId, limit: limit ?? null }),
   discoveryChanges: (snapshotId: number) => call<T.SnapshotChanges>("discovery_changes", { snapshotId }),
+  // vulnerabilities
+  vulnsList: (projectId: number) => call<T.Vulnerability[]>("vulns_list", { projectId }),
+  vulnAdd: (input: { projectId: number; cveId: string; assetId?: number | null; exposure?: T.Exposure; criticality?: T.Confidence; exploitKnown?: boolean; notes?: string }) =>
+    call<{ vulnerability: T.Vulnerability; warnings: string[] }>("vuln_add", { input }),
+  vulnsRefresh: (projectId: number) => call<{ updated: number; warnings: string[] }>("vulns_refresh", { projectId }),
+  vulnSetContext: (id: number, exposure: T.Exposure, criticality: T.Confidence, exploitKnown: boolean) =>
+    call<T.Vulnerability>("vuln_set_context", { id, exposure, criticality, exploitKnown }),
+  vulnSetStatus: (id: number, status: T.VulnStatus, note?: string) => call<T.Vulnerability>("vuln_set_status", { id, status, note: note ?? null }),
+  vulnSetRemediation: (id: number, plan: string, owner: string, due: string | null) => call<T.Vulnerability>("vuln_set_remediation", { id, plan, owner, due }),
+  vulnVerify: (id: number, note: string) => call<T.Vulnerability>("vuln_verify", { id, note }),
+  vulnHistory: (id: number) => call<T.VulnEvent[]>("vuln_history", { id }),
+  vulnDelete: (id: number) => call<void>("vuln_delete", { id }),
+  vulnCreateFinding: (id: number) => call<number>("vuln_create_finding", { id }),
+  findingsBulkStatus: (ids: number[], status: T.FindingStatus, note?: string) =>
+    call<{ changed: number[]; skipped: [number, string][] }>("findings_bulk_status", { ids, status, note: note ?? null }),
   projectToolHistory: (projectId: number) => call<T.ProjectExecution[]>("project_tool_history", { projectId }),
   projectReport: (id: number) => call<string>("project_report", { id }),
   /** native save dialog; returns the file name or null when cancelled */

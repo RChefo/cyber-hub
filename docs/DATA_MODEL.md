@@ -1,4 +1,4 @@
-# Project data model (schema 9)
+# Project data model (schema 10)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -97,6 +97,40 @@ Assets recorded by hand are never marked. Nothing is deleted.
 * Passive runs record names, addresses and DNS records. Addresses are flagged `inScope` and `nonPublic`, so the inventory shows when a name points outside the authorized scope.
 * Web checks record web services (status, title, server, certificate trust) and technologies seen in headers.
 * Service scans record addresses, open services (service, product, version) and products as technologies.
+
+## Vulnerabilities (schema 10)
+
+`vulnerabilities` tracks a CVE per project, optionally for one asset. There is one record per project, CVE and asset; the same CVE without an asset is a separate record. Projects → *Vulnerabilities*; the code is `workspace/vulns.rs` and `commands/vulns.rs`.
+
+* **Data sources.** CVSS and the CISA KEV flag come from the NVD record: the local CVE cache first, otherwise one NVD lookup. EPSS comes from FIRST.org (`api.first.org/data/v1/epss`, only CVE IDs are sent, cached 24 h in `epss_cache`). It can be turned off with *Use EPSS*, stored as `epss.enabled`. Missing data never blocks tracking; the priority states what was missing.
+* **Priority** is computed only from these factors, and every factor is stored with its contribution:
+
+  | Factor | Contribution |
+  |---|---|
+  | CVSS base score (newest version, NVD's own first) | the score; 5.0 when unknown |
+  | Listed in CISA KEV, or exploitation known (analyst) | +2 (not both) |
+  | EPSS probability | +2 at ≥ 50 %, +1 at ≥ 10 %, +0.5 at ≥ 1 %; stated as not available otherwise |
+  | Exposure | internet +1, unknown +0.5, internal 0 |
+  | Asset criticality | high +1, medium 0, low −1 |
+
+  P1 from 11, P2 from 8.5, P3 from 6, otherwise P4. Exposure defaults from the asset: private addresses are internal, public names and addresses internet-facing. A changed level is recorded in the history with its reasons.
+* **Lifecycle.** `open`, `triaged`, `in_remediation` (these need work), `mitigated`, `resolved`, `accepted_risk`, `false_positive`. Accepting a risk or dismissing a vulnerability needs a written reason.
+* **Remediation.** Each vulnerability has a plan, an owner and a due date; an open vulnerability past its due date is shown as overdue.
+* **Verification.** Recording how a fix was confirmed sets `verified_at` and the status `resolved`. Reopening clears the verification.
+* **History** (`vulnerability_events`, append-only): `created`, `status`, `priority`, `remediation`, `verification`, `updated`. It appears on the project timeline (`vulnerability`, and `remediation` for plans and verifications).
+* **Findings.**
+  * *Create finding* records a finding with the CVE, severity from CVSS, the priority reasons and the remediation, linked to the vulnerability and its asset.
+  * Finding links of kind `vulnerability` are now accepted (same project only).
+  * Deleting a vulnerability removes its links and leaves a timeline entry.
+* **Updating scores** re-reads the CVE cache (at most 5 NVD lookups for CVEs without a record) and EPSS for open vulnerabilities, then recomputes priorities.
+
+## Findings manager
+
+Projects → *Findings* provides:
+* search (title, target, CVE, category, assignee, description) and filters by tag, severity and status;
+* tags, assignee and due date in the editor;
+* history and links per finding, with notes;
+* bulk status changes. `findings_bulk_status` changes each selected finding on its own with the lifecycle rule, records every change, and reports the findings it left unchanged instead of failing.
 
 ## Evidence
 

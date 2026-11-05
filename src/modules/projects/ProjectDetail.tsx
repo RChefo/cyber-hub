@@ -21,8 +21,9 @@ import { ProjectFormModal, STATUS_OPTIONS } from "./ProjectFormModal";
 import { isOpenFinding } from "@/lib/findings";
 import { countBySeverity } from "./report";
 import { ScopeTab } from "./ScopeTab";
+import { VulnerabilitiesTab } from "./VulnerabilitiesTab";
 
-type TabId = "overview" | "scope" | "surface" | "findings" | "notes" | "commands" | "evidence";
+type TabId = "overview" | "scope" | "surface" | "vulns" | "findings" | "notes" | "commands" | "evidence";
 
 function NotesTab({ project }: { project: Project }) {
   const [notes, setNotes] = useState(project.notes);
@@ -339,6 +340,7 @@ export function ProjectDetail({ id }: { id: number }) {
     { id: "overview", label: "Overview" },
     { id: "scope", label: `Scope (${p.targets.length})` },
     { id: "surface", label: "Attack surface" },
+    { id: "vulns", label: "Vulnerabilities" },
     { id: "findings", label: `Findings (${f.length})` },
     { id: "notes", label: "Notes" },
     { id: "commands", label: "Commands & runs" },
@@ -417,6 +419,9 @@ export function ProjectDetail({ id }: { id: number }) {
         </Tabs.Panel>
         <Tabs.Panel id="surface">
           <AttackSurfaceTab project={p} />
+        </Tabs.Panel>
+        <Tabs.Panel id="vulns">
+          <VulnerabilitiesTab project={p} />
         </Tabs.Panel>
         <Tabs.Panel id="findings">
           {findings.error && !findings.data ? <ErrorBlock message={findings.error} onRetry={findings.reload} /> : <FindingsTab projectId={p.id} findings={f} />}

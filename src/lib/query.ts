@@ -33,6 +33,8 @@ export type Tag =
   | "osint-ops"
   /** project assets and discovery runs */
   | "assets"
+  /** project vulnerabilities */
+  | "vulns"
   | "system";
 
 const versions = new Map<Tag, number>();

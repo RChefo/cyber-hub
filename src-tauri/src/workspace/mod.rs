@@ -8,3 +8,4 @@ pub mod evidence;
 pub mod findings;
 pub mod scope_gate;
 pub mod timeline;
+pub mod vulns;

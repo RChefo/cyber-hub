@@ -271,6 +271,7 @@ export interface EvidenceRecord {
 export type TimelineEventType =
   | "execution"
   | "finding"
+  | "vulnerability"
   | "scope"
   | "evidence"
   | "investigation"
@@ -330,6 +331,58 @@ export interface SnapshotChanges {
   snapshot: DiscoverySnapshot;
   previous: number | null;
   changes: SnapshotChange[];
+}
+
+export type VulnStatus = "open" | "triaged" | "in_remediation" | "mitigated" | "resolved" | "accepted_risk" | "false_positive";
+export type Exposure = "internet" | "internal" | "unknown";
+export type PriorityLevel = "p1" | "p2" | "p3" | "p4";
+
+export interface PriorityReason {
+  factor: "cvss" | "kev" | "exploit" | "epss" | "exposure" | "criticality";
+  effect: number;
+  text: string;
+}
+
+export interface Vulnerability {
+  id: number;
+  projectId: number;
+  cveId: string;
+  assetId: number | null;
+  asset: string | null;
+  title: string;
+  status: VulnStatus;
+  cvssScore: number | null;
+  cvssVersion: string | null;
+  cvssVector: string | null;
+  kev: boolean;
+  epss: number | null;
+  epssPercentile: number | null;
+  epssDate: string | null;
+  exploitKnown: boolean;
+  exposure: Exposure;
+  criticality: Confidence;
+  priority: PriorityLevel;
+  priorityScore: number;
+  priorityReasons: PriorityReason[];
+  remediation: string;
+  remediationOwner: string;
+  remediationDue: string | null;
+  verifiedAt: string | null;
+  verificationNote: string;
+  notes: string;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VulnEvent {
+  id: number;
+  kind: "created" | "status" | "priority" | "remediation" | "verification" | "note" | "updated";
+  fromValue: string | null;
+  toValue: string | null;
+  note: string;
+  source: string;
+  at: string;
 }
 
 export interface ScopeDecision {

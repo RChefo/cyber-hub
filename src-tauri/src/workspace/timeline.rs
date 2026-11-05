@@ -9,7 +9,7 @@ use serde::Serialize;
 use crate::error::{validation, AppResult};
 use crate::util::now;
 
-pub const TYPES: &[&str] = &["execution", "finding", "scope", "evidence", "investigation", "discovery", "asset", "workflow", "remediation", "report", "note"];
+pub const TYPES: &[&str] = &["execution", "finding", "vulnerability", "scope", "evidence", "investigation", "discovery", "asset", "workflow", "remediation", "report", "note"];
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -65,6 +65,17 @@ pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], befor
                      ELSE 'Finding updated: ' || f.title END,
                    e.note, 'finding', f.id, e.at
             FROM finding_events e JOIN findings f ON f.id = e.finding_id WHERE e.project_id = ?1
+          UNION ALL
+            SELECT CASE WHEN e.kind IN ('remediation','verification') THEN 'remediation' ELSE 'vulnerability' END,
+                   CASE e.kind
+                     WHEN 'created' THEN 'Vulnerability tracked: ' || v.cve_id
+                     WHEN 'status' THEN v.cve_id || ': ' || COALESCE(e.from_value, '?') || ' → ' || COALESCE(e.to_value, '?')
+                     WHEN 'priority' THEN v.cve_id || ' priority ' || upper(COALESCE(e.from_value, '?')) || ' → ' || upper(COALESCE(e.to_value, '?'))
+                     WHEN 'remediation' THEN 'Remediation plan for ' || v.cve_id
+                     WHEN 'verification' THEN 'Fix verified: ' || v.cve_id
+                     ELSE v.cve_id || ' updated' END,
+                   e.note, 'vulnerability', v.id, e.at
+            FROM vulnerability_events e JOIN vulnerabilities v ON v.id = e.vulnerability_id WHERE e.project_id = ?1
           UNION ALL
             SELECT 'scope',
                    CASE action WHEN 'added' THEN 'Scope ' || CASE in_scope WHEN 0 THEN 'exclusion added: ' ELSE 'entry added: ' END

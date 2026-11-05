@@ -15,7 +15,7 @@ pub const HISTORY_LIMITS: &[(&str, i64)] = &[("activity_logs", 5000), ("cve_sear
 
 /// Lookup caches (keyed by indicator or CVE ID) trimmed at startup to their most recently fetched
 /// entries, so distinct lookups cannot grow the database without bound.
-const CACHE_LIMITS: &[(&str, i64)] = &[("vt_cache", 5000), ("ti_cache", 10000), ("cve_cache", 20000), ("osint_source_cache", 5000)];
+const CACHE_LIMITS: &[(&str, i64)] = &[("vt_cache", 5000), ("ti_cache", 10000), ("cve_cache", 20000), ("osint_source_cache", 5000), ("epss_cache", 20000)];
 
 /// Keep the newest rows of a history table listed in [`HISTORY_LIMITS`]; other names are ignored.
 pub fn trim_history(c: &Connection, table: &str) -> rusqlite::Result<usize> {
@@ -663,6 +663,64 @@ const MIGRATIONS: &[&str] = &[
         at TEXT NOT NULL
     );
     CREATE INDEX idx_timeline_events ON timeline_events(project_id, at DESC);
+    "#,
+    // 10: vulnerability management (docs/DATA_MODEL.md): vulnerabilities per project (CVE, optional
+    // asset), transparent priority with its reasons, remediation and verification, append-only
+    // history, and the optional EPSS score cache.
+    r#"
+    CREATE TABLE vulnerabilities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        cve_id TEXT NOT NULL,
+        asset_id INTEGER REFERENCES assets(id) ON DELETE SET NULL,
+        title TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','triaged','in_remediation','mitigated','resolved','accepted_risk','false_positive')),
+        cvss_score REAL,
+        cvss_version TEXT,
+        cvss_vector TEXT,
+        kev INTEGER NOT NULL DEFAULT 0,
+        epss REAL,
+        epss_percentile REAL,
+        epss_date TEXT,
+        exploit_known INTEGER NOT NULL DEFAULT 0,
+        exposure TEXT NOT NULL DEFAULT 'unknown' CHECK (exposure IN ('internet','internal','unknown')),
+        criticality TEXT NOT NULL DEFAULT 'medium' CHECK (criticality IN ('low','medium','high')),
+        priority TEXT NOT NULL CHECK (priority IN ('p1','p2','p3','p4')),
+        priority_score REAL NOT NULL,
+        priority_reasons TEXT NOT NULL DEFAULT '[]',
+        remediation TEXT NOT NULL DEFAULT '',
+        remediation_owner TEXT NOT NULL DEFAULT '',
+        remediation_due TEXT,
+        verified_at TEXT,
+        verification_note TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'user',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX idx_vulnerabilities_unique ON vulnerabilities(project_id, cve_id, COALESCE(asset_id, 0));
+    CREATE INDEX idx_vulnerabilities_project ON vulnerabilities(project_id, status, priority);
+    CREATE INDEX idx_vulnerabilities_asset ON vulnerabilities(asset_id);
+    CREATE TABLE vulnerability_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vulnerability_id INTEGER NOT NULL REFERENCES vulnerabilities(id) ON DELETE CASCADE,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('created','status','priority','remediation','verification','note','updated')),
+        from_value TEXT,
+        to_value TEXT,
+        note TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'user',
+        at TEXT NOT NULL
+    );
+    CREATE INDEX idx_vulnerability_events ON vulnerability_events(vulnerability_id, id);
+    CREATE INDEX idx_vulnerability_events_project ON vulnerability_events(project_id, at);
+    CREATE TABLE epss_cache (
+        cve_id TEXT PRIMARY KEY,
+        epss REAL NOT NULL,
+        percentile REAL NOT NULL,
+        score_date TEXT NOT NULL,
+        fetched_at TEXT NOT NULL
+    );
     "#,
 ];
 

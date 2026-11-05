@@ -105,7 +105,7 @@ fn ref_project(c: &Connection, kind: &str, ref_id: i64) -> AppResult<Option<i64>
         "execution" => "SELECT project_id FROM executions WHERE id = ?1",
         "evidence" => "SELECT project_id FROM evidence WHERE id = ?1",
         "osint_entity" => "SELECT i.project_id FROM osint_entities e JOIN osint_investigations i ON i.id = e.investigation_id WHERE e.id = ?1",
-        "vulnerability" => return Err(validation("Vulnerability records can be linked once vulnerability management is available")),
+        "vulnerability" => "SELECT project_id FROM vulnerabilities WHERE id = ?1",
         _ => return Err(validation(format!("Links can point to: {}", LINK_KINDS.join(", ")))),
     };
     let found: Option<Option<i64>> = c.query_row(sql, params![ref_id], |r| r.get(0)).optional()?;
@@ -155,6 +155,7 @@ pub fn links(c: &Connection, finding_id: i64) -> AppResult<Vec<FindingLink>> {
              WHEN 'execution' THEN (SELECT x.tool_id || ' run #' || x.id FROM executions x WHERE x.id = l.ref_id)
              WHEN 'evidence' THEN (SELECT e.title FROM evidence e WHERE e.id = l.ref_id)
              WHEN 'osint_entity' THEN (SELECT o.display_name FROM osint_entities o WHERE o.id = l.ref_id)
+             WHEN 'vulnerability' THEN (SELECT v.cve_id FROM vulnerabilities v WHERE v.id = l.ref_id)
            END, l.created_at
          FROM finding_links l WHERE l.finding_id = ?1 ORDER BY l.kind, l.id",
     )?;
@@ -239,7 +240,7 @@ mod tests {
             assert!(link(c, f, "execution", foreign, "user").is_err());
             assert!(link(c, f, "execution", unassigned, "user").is_err());
             assert!(link(c, f, "execution", 12345, "user").is_err());
-            assert!(link(c, f, "vulnerability", 1, "user").is_err());
+            assert!(link(c, f, "vulnerability", 1, "user").is_err(), "no such vulnerability");
             assert!(link(c, f, "nonsense", run, "user").is_err());
             assert_eq!(links(c, f)?[0].label.as_deref(), Some(format!("nmap run #{run}").as_str()));
             c.execute("DELETE FROM executions WHERE id = ?1", params![run])?;

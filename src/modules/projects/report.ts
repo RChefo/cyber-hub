@@ -20,3 +20,25 @@ export function countBySeverity(findings: Finding[], onlyActive = false): Record
 
 // The Markdown assessment report is generated in Rust (commands/projects.rs `markdown_report`),
 // shared by Projects → Export report and the MCP `cyberhub_generate_report` tool.
+
+/** Tags from a comma-separated text: trimmed, deduplicated, at most 20 of up to 40 characters. */
+export function parseTags(text: string): string[] {
+  const out: string[] = [];
+  for (const t of text.split(",").map((x) => x.trim()).filter(Boolean)) if (!out.includes(t) && t.length <= 40) out.push(t);
+  return out.slice(0, 20);
+}
+
+export function tagsOf(findings: Finding[]): string[] {
+  return [...new Set(findings.flatMap((f) => f.tags))].sort((a, b) => a.localeCompare(b));
+}
+
+export function filterFindings(findings: Finding[], f: { severity: string; status: string; query: string; tag: string }): Finding[] {
+  const q = f.query.trim().toLowerCase();
+  return findings.filter(
+    (x) =>
+      (f.severity === "all" || x.severity === f.severity) &&
+      (f.status === "all" || x.status === f.status) &&
+      (f.tag === "all" || x.tags.includes(f.tag)) &&
+      (!q || [x.title, x.affectedTarget, x.cve, x.category, x.assignee, x.description].some((v) => v.toLowerCase().includes(q))),
+  );
+}

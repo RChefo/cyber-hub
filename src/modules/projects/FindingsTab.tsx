@@ -1,18 +1,19 @@
-import { Button, Dropdown, Tooltip } from "@heroui/react";
-import { ChevronDown, Pencil, Plus, ShieldAlert, Trash2, X } from "lucide-react";
+import { Button, Checkbox, Dropdown, Tooltip } from "@heroui/react";
+import { ChevronDown, History, Link2, Pencil, Plus, ShieldAlert, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FINDING_STATUS_META, SeverityBadge, ToneChip } from "@/components/ui/Badges";
 import { AppModal, useConfirm } from "@/components/ui/Dialogs";
 import { EmptyBlock } from "@/components/ui/Feedback";
-import { SelectInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
+import { SearchInput, SelectInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
 import { Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
-import { invalidate } from "@/lib/query";
+import { invalidate, useQuery } from "@/lib/query";
+import { useApp } from "@/app/store";
 import { canChangeStatus } from "@/lib/findings";
-import type { Confidence, Evidence, Finding, FindingStatus, Severity } from "@/lib/types";
-import { formatRelative } from "@/lib/utils";
-import { sortFindings } from "./report";
+import type { Confidence, Evidence, Finding, FindingLinkKind, FindingStatus, Severity } from "@/lib/types";
+import { formatDateTime, formatRelative } from "@/lib/utils";
+import { filterFindings, parseTags, sortFindings, tagsOf } from "./report";
 
 export const SEVERITY_OPTIONS: { id: Severity; label: string }[] = [
   { id: "critical", label: "Critical" },
@@ -71,12 +72,14 @@ export function FindingFormModal({
   initial?: FindingDraft | null;
 }) {
   const [d, setD] = useState<FindingDraft>(EMPTY);
+  const [tagText, setTagText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setD(initial ? { ...initial, evidence: initial.evidence.map((e) => ({ ...e })), tags: [...initial.tags] } : EMPTY);
+      setTagText((initial?.tags ?? []).join(", "));
       setError(null);
     }
   }, [isOpen, initial]);
@@ -90,7 +93,7 @@ export function FindingFormModal({
     setSaving(true);
     setError(null);
     try {
-      await api.findingUpsert({ ...d, projectId });
+      await api.findingUpsert({ ...d, tags: parseTags(tagText), projectId });
       invalidate("findings", "projects", "activity");
       notify.success(d.id ? "Finding updated" : "Finding recorded");
       onOpenChange(false);
@@ -131,6 +134,9 @@ export function FindingFormModal({
         <TextAreaInput label="Reproduction steps" value={d.reproduction} onChange={(v) => set("reproduction", v)} rows={4} placeholder="1. Open … 2. Send … 3. Observe …" className="md:col-span-2" />
         <TextAreaInput label="Technical details" value={d.technicalDetails} onChange={(v) => set("technicalDetails", v)} rows={3} placeholder="Requests, parameters, versions" className="md:col-span-2" />
         <TextAreaInput label="Remediation" value={d.remediation} onChange={(v) => set("remediation", v)} rows={3} placeholder="How to fix it and how to verify the fix" className="md:col-span-2" />
+        <TextInput label="Tags" value={tagText} onChange={setTagText} placeholder="web, auth, quick-win" description="Separated by commas" className="md:col-span-2" />
+        <TextInput label="Assignee" value={d.assignee} onChange={(v) => set("assignee", v)} placeholder="Who follows it up" />
+        <TextInput label="Due date" value={d.dueDate ?? ""} onChange={(v) => set("dueDate", v || null)} placeholder="YYYY-MM-DD" mono />
       </div>
       <div>
         <div className="mb-2 flex items-center justify-between">
@@ -166,17 +172,133 @@ export function FindingFormModal({
   );
 }
 
+const LINK_LABEL: Record<string, string> = { asset: "Asset", vulnerability: "Vulnerability", osint_entity: "OSINT entity", execution: "Tool run", evidence: "Evidence" };
+
+function FindingDetailModal({ finding, onClose }: { finding: Finding | null; onClose: () => void }) {
+  const { runtime } = useApp();
+  const history = useQuery(["findings"], () => (finding ? api.findingHistory(finding.id) : Promise.resolve([])), [finding?.id], runtime && !!finding);
+  const links = useQuery(["findings"], () => (finding ? api.findingLinks(finding.id) : Promise.resolve([])), [finding?.id], runtime && !!finding);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => setNote(""), [finding?.id]);
+  if (!finding) return null;
+  const addNote = async () => {
+    setSaving(true);
+    try {
+      await api.findingAddNote(finding.id, note);
+      setNote("");
+      invalidate("findings");
+    } catch (e) {
+      notify.error("Could not add the note", e);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const unlink = async (kind: FindingLinkKind, refId: number) => {
+    try {
+      await api.findingUnlink(finding.id, kind, refId);
+      invalidate("findings");
+    } catch (e) {
+      notify.error("Could not remove the link", e);
+    }
+  };
+  return (
+    <AppModal isOpen={!!finding} onOpenChange={(o) => !o && onClose()} title={finding.title} description={`Recorded ${formatDateTime(finding.createdAt)} by ${finding.source}`} size="lg">
+      <section>
+        <h3 className="mb-1.5 text-[12.5px] font-medium text-muted">Linked records</h3>
+        {!links.data ? (
+          <LoadingRowsInline />
+        ) : links.data.length === 0 ? (
+          <p className="text-[12.5px] text-muted">None. Findings created from vulnerabilities or OSINT entities are linked automatically.</p>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {links.data.map((l) => (
+              <li key={`${l.kind}-${l.refId}`} className="panel-inset flex items-center gap-2 px-3 py-1.5 text-[12.5px]">
+                <Link2 className="size-3.5 text-muted" />
+                <span className="w-28 shrink-0 text-muted">{LINK_LABEL[l.kind] ?? l.kind}</span>
+                <span className="min-w-0 flex-1 truncate font-mono">{l.label ?? `#${l.refId} (deleted)`}</span>
+                <Button isIconOnly size="sm" variant="ghost" aria-label={`Remove link to ${l.label ?? l.refId}`} onPress={() => unlink(l.kind, l.refId)}>
+                  <X className="size-3.5" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <section>
+        <h3 className="mb-1.5 text-[12.5px] font-medium text-muted">History</h3>
+        {!history.data ? (
+          <LoadingRowsInline />
+        ) : (
+          <ol className="flex flex-col gap-1 text-[12.5px]">
+            {history.data.map((e) => (
+              <li key={e.id} className="flex gap-3">
+                <span className="w-32 shrink-0 text-muted">{formatRelative(e.at)}</span>
+                <span className="min-w-0">
+                  <span className="text-foreground">
+                    {e.kind === "status" || e.kind === "migrated"
+                      ? `${FINDING_STATUS_META[e.fromStatus as FindingStatus]?.label ?? e.fromStatus ?? "—"} → ${FINDING_STATUS_META[e.toStatus as FindingStatus]?.label ?? e.toStatus ?? "—"}`
+                      : e.kind === "created"
+                        ? "Recorded"
+                        : e.kind === "note"
+                          ? "Note"
+                          : e.kind === "updated"
+                            ? "Edited"
+                            : e.kind === "link"
+                              ? "Linked"
+                              : "Unlinked"}
+                  </span>
+                  {e.note && <span className="text-muted"> · {e.note}</span>}
+                  {e.source !== "user" && <span className="text-muted"> · {e.source}</span>}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+        <div className="mt-2 flex items-end gap-2">
+          <TextInput aria-label="Add a note" value={note} onChange={setNote} placeholder="Add a note to the history" className="flex-1" onEnter={() => note.trim() && addNote()} />
+          <Button size="sm" variant="secondary" onPress={addNote} isPending={saving} isDisabled={!note.trim()}>
+            Add note
+          </Button>
+        </div>
+      </section>
+    </AppModal>
+  );
+}
+
+function LoadingRowsInline() {
+  return <p className="text-[12.5px] text-muted">Loading…</p>;
+}
+
 export function FindingsTab({ projectId, findings }: { projectId: number; findings: Finding[] }) {
   const confirm = useConfirm();
   const [editing, setEditing] = useState<FindingDraft | null>(null);
   const [open, setOpen] = useState(false);
   const [sev, setSev] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
+  const [query, setQuery] = useState("");
+  const [tag, setTag] = useState("all");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [detail, setDetail] = useState<number | null>(null);
 
-  const list = useMemo(
-    () => sortFindings(findings).filter((f) => (sev === "all" || f.severity === sev) && (status === "all" || f.status === status)),
-    [findings, sev, status],
-  );
+  const list = useMemo(() => filterFindings(sortFindings(findings), { severity: sev, status, query, tag }), [findings, sev, status, query, tag]);
+  const tags = useMemo(() => tagsOf(findings), [findings]);
+  const visibleSelected = list.filter((f) => selected.has(f.id));
+  const allSelected = list.length > 0 && visibleSelected.length === list.length;
+
+  const bulk = async (next: FindingStatus) => {
+    try {
+      const r = await api.findingsBulkStatus(
+        visibleSelected.map((f) => f.id),
+        next,
+      );
+      invalidate("findings", "projects");
+      setSelected(new Set());
+      notify.success(`${r.changed.length} marked as ${FINDING_STATUS_META[next].label.toLowerCase()}`, r.skipped.length ? `${r.skipped.length} left unchanged (${r.skipped[0][1]})` : undefined);
+    } catch (e) {
+      notify.error("Could not change the findings", e);
+    }
+  };
 
   const openNew = () => {
     setEditing(null);
@@ -214,6 +336,8 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
       description={`${findings.length} recorded · sorted by severity`}
       actions={
         <>
+          <SearchInput value={query} onChange={setQuery} placeholder="Search findings" className="w-52" />
+          {tags.length > 0 && <SelectInput aria-label="Filter by tag" value={tag} onChange={setTag} options={[{ id: "all", label: "All tags" }, ...tags.map((t) => ({ id: t, label: t }))]} className="w-36" />}
           <SelectInput aria-label="Filter by severity" value={sev} onChange={setSev} options={[{ id: "all", label: "All severities" }, ...SEVERITY_OPTIONS]} className="w-40" />
           <SelectInput aria-label="Filter by status" value={status} onChange={setStatus} options={[{ id: "all", label: "All statuses" }, ...FINDING_STATUS_OPTIONS]} className="w-40" />
           <Button variant="primary" size="sm" onPress={openNew}>
@@ -239,9 +363,41 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
         <EmptyBlock compact icon={ShieldAlert} title="No findings match these filters" />
       ) : (
         <div className="panel-inset overflow-x-auto px-3 py-1">
+          {visibleSelected.length > 0 && (
+            <div className="flex items-center gap-2 py-2 text-[12.5px]">
+              <span className="text-foreground">{visibleSelected.length} selected</span>
+              <Dropdown>
+                <Button size="sm" variant="secondary" className="h-7 gap-1">
+                  Change status
+                  <ChevronDown className="size-3" />
+                </Button>
+                <Dropdown.Popover placement="bottom start">
+                  <Dropdown.Menu aria-label="New status for the selected findings" onAction={(k) => void bulk(k as FindingStatus)}>
+                    {FINDING_STATUS_OPTIONS.map((o) => (
+                      <Dropdown.Item key={o.id} id={o.id} textValue={o.label}>
+                        {o.label}
+                      </Dropdown.Item>
+                    ))}
+                  </Dropdown.Menu>
+                </Dropdown.Popover>
+              </Dropdown>
+              <Button size="sm" variant="ghost" className="h-7" onPress={() => setSelected(new Set())}>
+                Clear selection
+              </Button>
+            </div>
+          )}
           <table className="w-full border-separate border-spacing-y-0.5 text-left text-[13px]">
             <thead>
               <tr className="text-[12px] text-muted">
+                <th className="w-8 py-2 pr-2 font-medium">
+                  <Checkbox isSelected={allSelected} isIndeterminate={!allSelected && visibleSelected.length > 0} onChange={(v) => setSelected(v ? new Set(list.map((f) => f.id)) : new Set())} aria-label="Select all shown findings">
+                    <Checkbox.Content>
+                      <Checkbox.Control>
+                        <Checkbox.Indicator />
+                      </Checkbox.Control>
+                    </Checkbox.Content>
+                  </Checkbox>
+                </th>
                 <th className="py-2 pr-3 font-medium">Severity</th>
                 <th className="py-2 pr-3 font-medium">Title</th>
                 <th className="py-2 pr-3 font-medium">Affected</th>
@@ -255,13 +411,33 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
             <tbody>
               {list.map((f) => (
                 <tr key={f.id} className="align-top transition-colors hover:bg-white/[0.025]">
+                  <td className="py-2.5 pr-2">
+                    <Checkbox
+                      isSelected={selected.has(f.id)}
+                      onChange={(v) =>
+                        setSelected((s) => {
+                          const n = new Set(s);
+                          if (v) n.add(f.id);
+                          else n.delete(f.id);
+                          return n;
+                        })
+                      }
+                      aria-label={`Select ${f.title}`}
+                    >
+                      <Checkbox.Content>
+                        <Checkbox.Control>
+                          <Checkbox.Indicator />
+                        </Checkbox.Control>
+                      </Checkbox.Content>
+                    </Checkbox>
+                  </td>
                   <td className="py-2.5 pr-3">
                     <SeverityBadge severity={f.severity} />
                   </td>
                   <td className="max-w-[340px] py-2.5 pr-3">
                     <div className="truncate text-foreground">{f.title}</div>
                     <div className="truncate text-[12px] text-muted">
-                      {[f.cve, f.evidence.length ? `${f.evidence.length} evidence` : null].filter(Boolean).join(" · ") || "No CVE or evidence"}
+                      {[f.cve, f.evidence.length ? `${f.evidence.length} evidence` : null, f.tags.length ? f.tags.join(", ") : null, f.assignee || null].filter(Boolean).join(" · ") || "No CVE or evidence"}
                     </div>
                   </td>
                   <td className="max-w-[220px] truncate py-2.5 pr-3 font-mono text-[12px] text-muted">{f.affectedTarget || "—"}</td>
@@ -289,6 +465,12 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
                   <td className="py-2.5 pr-3 whitespace-nowrap text-muted">{formatRelative(f.updatedAt)}</td>
                   <td className="py-2 text-right whitespace-nowrap">
                     <Tooltip delay={400}>
+                      <Button isIconOnly size="sm" variant="ghost" aria-label={`History and links of ${f.title}`} onPress={() => setDetail(f.id)}>
+                        <History className="size-3.5" />
+                      </Button>
+                      <Tooltip.Content>History and links</Tooltip.Content>
+                    </Tooltip>
+                    <Tooltip delay={400}>
                       <Button isIconOnly size="sm" variant="ghost" aria-label={`Edit ${f.title}`} onPress={() => openEdit(f)}>
                         <Pencil className="size-3.5" />
                       </Button>
@@ -308,6 +490,7 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
         </div>
       )}
       <FindingFormModal isOpen={open} onOpenChange={setOpen} projectId={projectId} initial={editing} />
+      <FindingDetailModal finding={findings.find((f) => f.id === detail) ?? null} onClose={() => setDetail(null)} />
       {confirm.element}
     </Panel>
   );

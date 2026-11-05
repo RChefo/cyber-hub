@@ -27,7 +27,7 @@ mod workspace;
 
 use tauri::{AppHandle, Manager};
 
-use commands::{activity, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, wordlists, workspace as workspace_commands};
+use commands::{activity, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, vulns as vuln_commands, wordlists, workspace as workspace_commands};
 
 /// Leaves no work behind when Cyber Hub exits: normal exit, restart after an update, and right
 /// before an update installer takes over on Windows. Safe to call more than once.
@@ -200,6 +200,18 @@ pub fn run() {
             discovery_commands::discovery_running,
             discovery_commands::discovery_snapshots,
             discovery_commands::discovery_changes,
+            // vulnerability management and bulk finding changes
+            vuln_commands::vulns_list,
+            vuln_commands::vuln_add,
+            vuln_commands::vulns_refresh,
+            vuln_commands::vuln_set_context,
+            vuln_commands::vuln_set_status,
+            vuln_commands::vuln_set_remediation,
+            vuln_commands::vuln_verify,
+            vuln_commands::vuln_history,
+            vuln_commands::vuln_delete,
+            vuln_commands::vuln_create_finding,
+            vuln_commands::findings_bulk_status,
             // tools & execution engine
             tools::tools_catalog,
             tools::tools_detection_list,

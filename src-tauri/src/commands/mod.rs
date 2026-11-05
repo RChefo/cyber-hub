@@ -10,5 +10,6 @@ pub mod threat_intel;
 pub mod tools;
 pub mod updates;
 pub mod virustotal;
+pub mod vulns;
 pub mod wordlists;
 pub mod workspace;
