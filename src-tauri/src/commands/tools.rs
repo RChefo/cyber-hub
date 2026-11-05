@@ -380,7 +380,7 @@ pub fn preview_execution(db: &Db, request: &ExecRequest) -> AppResult<ExecValida
 }
 
 fn runtime_dir(app: &AppHandle) -> AppResult<PathBuf> {
-    Ok(app.path().app_data_dir()?.join("runtime"))
+    Ok(crate::util::data_dir(app)?.join("runtime"))
 }
 
 /// Remove leftover per-run directories (e.g. after a crash). Called at startup.

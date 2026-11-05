@@ -97,7 +97,11 @@ async fn run_step(app: &AppHandle, project_id: i64, wf_name: &str, step: &Step, 
             for w in &r.warnings {
                 log(app, run, pos, w);
             }
-            Ok(format!("{} vulnerabilities updated{}", r.updated, if r.warnings.is_empty() { String::new() } else { format!("; {} warnings", r.warnings.len()) }))
+            Ok(format!(
+                "{} updated{}",
+                crate::workspace::discovery::plural(r.updated, "vulnerability", "vulnerabilities"),
+                if r.warnings.is_empty() { String::new() } else { format!("; {}", crate::workspace::discovery::plural(r.warnings.len(), "warning", "warnings")) }
+            ))
         }
         "save_report" => {
             let md = crate::commands::projects::project_report(app.state::<Db>(), project_id).await.map_err(|e| e.to_string())?;

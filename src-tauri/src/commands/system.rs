@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 use crate::db::Db;
 use crate::detect::find_binary;
@@ -43,7 +43,7 @@ pub async fn system_info(app: AppHandle, db: State<'_, Db>, pm: State<'_, Proces
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))?;
-    let data_dir = app.path().app_data_dir()?.to_string_lossy().to_string();
+    let data_dir = crate::util::data_dir(&app)?.to_string_lossy().to_string();
     Ok(SystemInfo {
         os: current_os().into(),
         os_name: sysinfo::System::name().unwrap_or_default(),

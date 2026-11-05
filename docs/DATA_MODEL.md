@@ -147,7 +147,7 @@ Projects → *Findings* provides:
   * Options: title, author, classification, executive summary, minimum severity, closed findings, and sections (scope, findings, vulnerabilities, assets, evidence register, timeline).
   * Content: per finding, the description, reproduction, technical details, remediation and evidence, including the SHA-256 of linked files.
   * Output: *Print or save as PDF* uses the system web view's print dialog (decision 3; no PDF library). *Save as HTML* writes the file through a native save dialog. *Keep a copy in the evidence* stores the HTML as text evidence.
-  * Safety: the backend escapes all content, and the document has its own Content-Security-Policy (`default-src 'none'; style-src 'unsafe-inline'; img-src data:`). The print frame may not run scripts.
+  * Safety: the backend escapes all content, and the document has its own Content-Security-Policy (`default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'`). The print frame may not run scripts.
   * Exports, prints and saved copies appear on the timeline (`report`). The Markdown report (header button, MCP) is unchanged apart from the engagement details.
 
 ## Analysis

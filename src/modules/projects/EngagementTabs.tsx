@@ -1,5 +1,5 @@
 import { Button, Dropdown } from "@heroui/react";
-import { ChevronDown, Download, FilePlus2, FileText, FlaskConical, History, Link2, NotebookPen, Printer, Save, Trash2, Upload } from "lucide-react";
+import { ChevronDown, Download, FilePlus2, FileText, History, Link2, NotebookPen, Printer, Save, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/app/store";
 import { ToneChip } from "@/components/ui/Badges";
@@ -11,7 +11,7 @@ import { Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { EvidenceRecord, Finding, Project, ReportOptions, ScopeDecision, Severity, TimelineEventType } from "@/lib/types";
+import type { EvidenceRecord, Finding, Project, ReportOptions, Severity, TimelineEventType } from "@/lib/types";
 import { cn, formatDateTime, formatRelative } from "@/lib/utils";
 
 /* ───────────────────────── scope history and tester ───────────────────────── */
@@ -21,54 +21,8 @@ const ACTION_TONE = { added: "success", updated: "accent", removed: "default", b
 export function ScopeExtras({ project }: { project: Project }) {
   const { runtime } = useApp();
   const history = useQuery(["projects"], () => api.scopeHistory(project.id, 200), [project.id], runtime);
-  const [targets, setTargets] = useState("");
-  const [mode, setMode] = useState<"active" | "passive">("active");
-  const [decision, setDecision] = useState<ScopeDecision | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const test = async () => {
-    setError(null);
-    try {
-      setDecision(await api.scopeDecide(project.id, targets.split(/[\s,]+/).filter(Boolean), mode));
-    } catch (e) {
-      setDecision(null);
-      setError(errorMessage(e));
-    }
-  };
   return (
-    <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
-      <Panel title="Test targets" description="See how Cyber Hub would decide, without contacting anything. Active checks need an active project and in-scope targets; passive lookups refuse internal names and respect exclusions.">
-        <div className="flex flex-col gap-3">
-          <TextAreaInput aria-label="Targets to test" value={targets} onChange={setTargets} rows={3} mono placeholder={"app.example.com\n192.0.2.10\nhttps://admin.example.com/login"} />
-          <div className="flex items-end gap-2">
-            <SelectInput
-              label="Kind of operation"
-              value={mode}
-              onChange={(v) => setMode(v as "active" | "passive")}
-              options={[
-                { id: "active", label: "Active (contacts the target)" },
-                { id: "passive", label: "Passive (public sources only)" },
-              ]}
-              className="w-64"
-            />
-            <Button variant="secondary" onPress={test} isDisabled={!targets.trim()}>
-              <FlaskConical className="size-3.5" />
-              Test
-            </Button>
-          </div>
-          {error && <ErrorBlock message={error} />}
-          {decision && (
-            <ul className="flex flex-col gap-1">
-              {decision.verdicts.map((v, i) => (
-                <li key={i} className="panel-inset flex items-start gap-2 px-3 py-1.5 text-[12.5px]">
-                  <ToneChip tone={v.allowed ? "success" : "danger"}>{v.allowed ? "Allowed" : "Refused"}</ToneChip>
-                  <span className="font-mono">{v.target || "—"}</span>
-                  <span className="text-muted">{v.reason}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </Panel>
+    <div className="mt-3">
       <Panel title="Scope history" description="Every change to the scope, and every active operation refused because of it.">
         {history.error ? (
           <ErrorBlock message={history.error} onRetry={history.reload} />
@@ -473,7 +427,7 @@ export function ReportTab({ project }: { project: Project }) {
       <div className="flex flex-col gap-3 xl:col-span-4">
         <Panel title="Report" description="Choose what the report contains. The preview updates as you change it.">
           <div className="flex flex-col gap-3">
-            <TextInput label="Title" value={o.title} onChange={(v) => set("title", v)} placeholder={`${project.name} assessment report`} />
+            <TextInput label="Title" value={o.title} onChange={(v) => set("title", v)} placeholder={/assessment/i.test(project.name) ? `${project.name} report` : `${project.name} assessment report`} />
             <div className="grid grid-cols-2 gap-3">
               <TextInput label="Author" value={o.author} onChange={(v) => set("author", v)} />
               <TextInput label="Classification" value={o.classification} onChange={(v) => set("classification", v)} />

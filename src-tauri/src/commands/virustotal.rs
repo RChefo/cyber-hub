@@ -362,7 +362,7 @@ pub async fn vt_file_upload(
         uploads.insert(handle.clone(), cancel.clone());
     }
     let admit = || vtst.limiter.try_acquire_n(Instant::now(), requests).map_err(busy);
-    let work_dir = app.path().app_data_dir()?.join("runtime");
+    let work_dir = crate::util::data_dir(&app)?.join("runtime");
     let channel = on_event.clone();
     let app2 = app.clone();
     let outcome = vtfile::upload(

@@ -52,6 +52,9 @@ pub fn prepare(input: &HttpRequestInput) -> Result<Prepared, String> {
     if !METHODS.contains(&method.as_str()) {
         return Err(format!("The method must be one of {}", METHODS.join(", ")));
     }
+    if input.url.len() > 8192 {
+        return Err("The URL is limited to 8,192 characters".into());
+    }
     let url = url::Url::parse(input.url.trim()).map_err(|_| "Enter a full http:// or https:// URL".to_string())?;
     if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
         return Err("Enter a full http:// or https:// URL".into());
@@ -78,7 +81,11 @@ pub fn prepare(input: &HttpRequestInput) -> Result<Prepared, String> {
         }
         if name == reqwest::header::HOST {
             // a different virtual host is a different target: it is scope-checked too
-            targets.push(v.split(':').next().unwrap_or(v).to_string());
+            let host = match v.strip_prefix('[') {
+                Some(rest) => rest.split(']').next().unwrap_or(rest),
+                None => v.split(':').next().unwrap_or(v),
+            };
+            targets.push(host.to_string());
         }
         let value = reqwest::header::HeaderValue::from_str(v).map_err(|_| format!("The value of {k} is not valid"))?;
         headers.append(name, value);
@@ -151,6 +158,8 @@ mod tests {
         assert_eq!(p.method, reqwest::Method::POST);
         assert_eq!(p.targets, vec!["https://app.example.com/login?x=1".to_string(), "admin.example.com".into()], "a Host header is a target too");
         assert!(prepare(&input("TRACE", "https://a.example.com", &[])).is_err());
+        assert_eq!(prepare(&input("GET", "https://a.example.com", &[("Host", "[2001:db8::1]:8443")])).unwrap().targets[1], "2001:db8::1");
+        assert!(prepare(&input("GET", &format!("https://a.example.com/{}", "a".repeat(9000)), &[])).is_err());
         assert!(prepare(&input("GET", "ftp://a.example.com", &[])).is_err());
         assert!(prepare(&input("GET", "a.example.com", &[])).is_err());
         assert!(prepare(&input("GET", "https://a.example.com", &[("X-Test", "a\r\nInjected: 1")])).is_err(), "header injection");

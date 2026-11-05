@@ -93,7 +93,9 @@ pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], befor
             SELECT 'workflow', 'Workflow ' || w.name || ' (' || r.trigger || '): ' || r.status, r.summary, 'workflow_run', r.id, r.started_at
             FROM workflow_runs r JOIN workflows w ON w.id = r.workflow_id WHERE r.project_id = ?1
           UNION ALL
-            SELECT 'discovery', 'Discovery (' || mode || ', ' || source || '): ' || status, note, 'discovery', id, started_at
+            SELECT 'discovery',
+                   CASE source WHEN 'passive' THEN 'Passive discovery' WHEN 'http' THEN 'Web services check' WHEN 'nmap' THEN 'Service scan' ELSE 'Discovery' END || ': ' || status,
+                   note, 'discovery', id, started_at
             FROM discovery_snapshots WHERE project_id = ?1
         )
         WHERE (?2 IS NULL OR at < ?2)

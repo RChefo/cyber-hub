@@ -76,7 +76,7 @@ pub fn enabled_pref(db: &Db) -> bool {
 
 /// Start the loopback bridge (used at startup when enabled and from Settings).
 pub async fn start_bridge(app: &AppHandle) -> AppResult<()> {
-    let dir = app.path().app_data_dir()?.join("mcp");
+    let dir = crate::util::data_dir(app)?.join("mcp");
     let bridge = app.state::<Arc<Bridge>>();
     let (_, started) = bridge.start(dir, Arc::new(AppDispatcher { app: app.clone() })).map_err(AppError::Internal)?;
     if !started {

@@ -207,7 +207,9 @@ impl EvidenceStore {
         safe_dir(&self.root)?;
         let tmp_dir = self.root.join("incoming");
         safe_dir(&tmp_dir)?;
-        let tmp = tmp_dir.join(format!("{}-{}", std::process::id(), now().replace([':', '-'], "")));
+        let mut nonce = [0u8; 8];
+        let _ = getrandom::fill(&mut nonce);
+        let tmp = tmp_dir.join(format!("{}-{}", std::process::id(), hex(&nonce)));
         let (sha, size) = {
             let mut input = File::open(src)?;
             let mut out = File::create(&tmp)?;

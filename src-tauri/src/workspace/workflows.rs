@@ -544,7 +544,8 @@ pub fn run_detail(c: &Connection, run: i64) -> AppResult<RunDetail> {
 
 /// Workflows whose schedule is due (enabled, scheduled, passive only).
 pub fn due(c: &Connection) -> AppResult<Vec<Workflow>> {
-    let mut st = c.prepare(&format!("SELECT {WF_COLS} {WF_FROM} WHERE w.enabled = 1 AND w.schedule_hours IS NOT NULL AND w.next_run_at IS NOT NULL AND w.next_run_at <= ?1"))?;
+    let mut st = c.prepare(&format!("SELECT {WF_COLS} {WF_FROM} WHERE w.enabled = 1 AND w.schedule_hours IS NOT NULL AND w.next_run_at IS NOT NULL AND w.next_run_at <= ?1
+           AND (SELECT status FROM projects WHERE id = w.project_id) IN ('active','planning')"))?;
     let rows = st.query_map(params![now()], wf_row)?.collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
 }
@@ -630,6 +631,9 @@ mod tests {
             // the schedule
             c.execute("UPDATE workflows SET schedule_hours = 1, next_run_at = '2000-01-01T00:00:00Z' WHERE id = ?1", params![wf.id])?;
             assert_eq!(due(c)?.len(), 1);
+            c.execute("UPDATE projects SET status = 'archived' WHERE id = ?1", params![p])?;
+            assert!(due(c)?.is_empty(), "archived projects are not monitored");
+            c.execute("UPDATE projects SET status = 'active' WHERE id = ?1", params![p])?;
             set_next_run(c, wf.id, 1)?;
             assert!(due(c)?.is_empty());
             Ok(())

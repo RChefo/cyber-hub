@@ -79,3 +79,14 @@ pub fn system_powershell() -> std::path::PathBuf {
     let root = std::env::var_os("SystemRoot").map(std::path::PathBuf::from).unwrap_or_else(|| r"C:\Windows".into());
     root.join("System32").join("WindowsPowerShell").join("v1.0").join("powershell.exe")
 }
+
+/// The application data folder. Debug builds accept `CYBERHUB_DATA_DIR`, as the MCP sidecar does
+/// (`mcp::proto::bridge_dir`), so development and testing never touch the real data; release
+/// builds ignore the variable.
+pub fn data_dir<R: tauri::Runtime, M: tauri::Manager<R>>(app: &M) -> tauri::Result<std::path::PathBuf> {
+    #[cfg(debug_assertions)]
+    if let Some(d) = std::env::var_os("CYBERHUB_DATA_DIR").filter(|d| !d.is_empty()) {
+        return Ok(std::path::PathBuf::from(d));
+    }
+    app.path().app_data_dir()
+}

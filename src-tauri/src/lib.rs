@@ -63,7 +63,7 @@ pub fn run() {
         // signed updates; driven only by the backend (`updates`), no permission for the web view
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            let dir = app.path().app_data_dir()?;
+            let dir = util::data_dir(app)?;
             std::fs::create_dir_all(&dir)?;
             // The data folder holds the database (projects, findings, investigations and evidence):
             // only the user may enter it, whatever the umask made of it (on Windows the profile

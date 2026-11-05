@@ -24,7 +24,7 @@ function useWorkflowEvents(projectId: number) {
       if (e.payload.projectId !== projectId || timer) return;
       timer = setTimeout(() => {
         timer = null;
-        invalidate("workflows", "assets", "vulns");
+        invalidate("workflows", "assets", "vulns", "findings");
       }, 400);
     });
     return () => {

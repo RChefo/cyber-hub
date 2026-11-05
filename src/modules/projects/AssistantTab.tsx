@@ -38,7 +38,10 @@ export function AssistantTab({ project }: { project: Project }) {
   const [preview, setPreview] = useState<{ text: string; chars: number } | null>(null);
   const end = useRef<HTMLDivElement>(null);
 
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [turns.length]);
+  useEffect(() => {
+    // a block body: scrollIntoView returns a Promise in current WebView2 versions, which an effect must not return
+    end.current?.scrollIntoView({ block: "end" });
+  }, [turns.length]);
 
   const reset = () => {
     if (conversation) void api.assistantForget(conversation);

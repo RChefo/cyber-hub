@@ -68,3 +68,15 @@ describe("asset descriptions", () => {
     expect(describeAsset(asset(4, "endpoint", "https://a.example.com/x", "active", null))).toBe("");
   });
 });
+
+describe("asset counts", () => {
+  it("uses singular and plural forms", async () => {
+    const { countLabel } = await import("./asm");
+    expect(countLabel(1, "subdomain")).toBe("1 subdomain");
+    expect(countLabel(4, "subdomain")).toBe("4 subdomains");
+    expect(countLabel(1, "ip")).toBe("1 IP address");
+    expect(countLabel(2, "ip")).toBe("2 IP addresses");
+    expect(countLabel(3, "technology")).toBe("3 technologies");
+  });
+});
+

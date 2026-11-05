@@ -175,7 +175,7 @@ pub(crate) async fn passive_run(app: AppHandle, project_id: i64, (snapshot_id, c
         // names outside the authorized scope are deliberately not recorded; the note says how many
         let mut note_problems = problems.clone();
         if outside > 0 {
-            note_problems.push(format!("{outside} names outside the authorized scope were not recorded"));
+            note_problems.push(format!("{} outside the authorized scope not recorded", disc::plural(outside, "name", "names")));
         }
         disc::complete(c, project_id, snapshot_id, "passive", &batch, (status, &note_problems), &covers)
     });
@@ -227,6 +227,17 @@ pub(crate) fn http_targets(c: &rusqlite::Connection, project_id: i64, hosts: Opt
         None => default_hosts(c, project_id)?,
     };
     let hosts = if explicit {
+        // the value checked is the value contacted: URLs and other forms become their host
+        let list = list
+            .iter()
+            .map(|x| match crate::scope::parse_target(x) {
+                Some(crate::scope::Target::Host(h)) => Ok(h),
+                Some(crate::scope::Target::Ip(ip)) => Ok(ip.to_string()),
+                _ => Err(validation(format!("'{x}' is not a host name or IP address"))),
+            })
+            .collect::<AppResult<BTreeSet<String>>>()?
+            .into_iter()
+            .collect::<Vec<_>>();
         if list.len() > disc::MAX_HTTP_HOSTS {
             return Err(validation(format!("At most {} hosts per check", disc::MAX_HTTP_HOSTS)));
         }
@@ -390,4 +401,24 @@ pub async fn discovery_snapshots(db: State<'_, Db>, project_id: i64, limit: Opti
 #[tauri::command]
 pub async fn discovery_changes(db: State<'_, Db>, snapshot_id: i64) -> AppResult<disc::SnapshotChanges> {
     db.with(|c| disc::changes(c, snapshot_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn named_hosts_are_checked_and_contacted_in_the_same_form() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1,'P','active','t','t')", [])?;
+            c.execute("INSERT INTO project_targets (project_id, value, kind, in_scope, created_at) VALUES (1,'*.example.com','wildcard',1,'t')", [])?;
+            let hosts = http_targets(c, 1, Some(vec!["https://app.example.com/login".into(), "APP.example.com".into(), "api.example.com".into()]))?;
+            assert_eq!(hosts, vec!["api.example.com", "app.example.com"], "URLs become their host; duplicates collapse");
+            assert!(http_targets(c, 1, Some(vec!["192.0.2.0/24".into()])).is_err(), "networks are not hosts");
+            assert!(http_targets(c, 1, Some(vec!["evil.example.net".into()])).is_err());
+            Ok(())
+        })
+        .unwrap();
+    }
 }

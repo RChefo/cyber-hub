@@ -109,6 +109,12 @@ footer { margin-top: 36px; color: #64748b; font-size: 8.5pt; }
 @media print { main { padding: 0; } h2 { break-before: auto; } }
 "#;
 
+/// A table cell: text (always escaped) or a severity badge (from the fixed severity list).
+enum Cell {
+    Text(String),
+    Badge(String),
+}
+
 struct W(String);
 
 impl W {
@@ -123,6 +129,9 @@ impl W {
         }
     }
     fn table(&mut self, head: &[&str], rows: Vec<Vec<String>>) {
+        self.cells(head, rows.into_iter().map(|r| r.into_iter().map(Cell::Text).collect()).collect());
+    }
+    fn cells(&mut self, head: &[&str], rows: Vec<Vec<Cell>>) {
         self.raw("<table><thead><tr>");
         for h in head {
             self.el("th", "", h);
@@ -131,11 +140,9 @@ impl W {
         for r in rows {
             self.raw("<tr>");
             for cell in r {
-                // cells are escaped here unless they are prepared markup (severity badges)
-                if cell.starts_with("<span class=\"sev ") {
-                    self.raw(&format!("<td>{cell}</td>"));
-                } else {
-                    self.el("td", "", &cell);
+                match cell {
+                    Cell::Text(t) => self.el("td", "", &t),
+                    Cell::Badge(sev) => self.raw(&format!("<td>{}</td>", sev_badge(&sev))),
                 }
             }
             self.raw("</tr>");
@@ -157,11 +164,17 @@ fn included(f: &Finding, o: &ReportOptions) -> bool {
 
 pub fn render(c: &Connection, project_id: i64, o: &ReportOptions, today: &str) -> AppResult<String> {
     let p = project_load(c, project_id)?;
-    let title = if o.title.trim().is_empty() { format!("{} assessment report", p.name) } else { o.title.trim().to_string() };
+    let title = if !o.title.trim().is_empty() {
+        o.title.trim().to_string()
+    } else if p.name.to_ascii_lowercase().contains("assessment") {
+        format!("{} report", p.name)
+    } else {
+        format!("{} assessment report", p.name)
+    };
     let findings: Vec<Finding> = if o.include_findings { findings_of(c, project_id)?.into_iter().filter(|f| included(f, o)).collect() } else { vec![] };
     let mut w = W(String::new());
     w.raw("<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">");
-    w.raw("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:\">");
+    w.raw("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'\">");
     w.raw("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>");
     w.raw(&esc(&title));
     w.raw("</title><style>");
@@ -236,7 +249,14 @@ pub fn render(c: &Connection, project_id: i64, o: &ReportOptions, today: &str) -
         if findings.is_empty() {
             w.el("p", "muted", "No findings match the report's criteria.");
         } else {
-            w.table(&["#", "Title", "Severity", "Status", "Affected"], findings.iter().enumerate().map(|(i, f)| vec![(i + 1).to_string(), f.title.clone(), sev_badge(&f.severity), label(&f.status), f.affected_target.clone()]).collect());
+            w.cells(
+                &["#", "Title", "Severity", "Status", "Affected"],
+                findings
+                    .iter()
+                    .enumerate()
+                    .map(|(i, f)| vec![Cell::Text((i + 1).to_string()), Cell::Text(f.title.clone()), Cell::Badge(f.severity.clone()), Cell::Text(label(&f.status)), Cell::Text(f.affected_target.clone())])
+                    .collect(),
+            );
             let mut ev_st = c.prepare("SELECT e.title, e.kind, COALESCE(e.sha256, '') FROM finding_links l JOIN evidence e ON e.id = l.ref_id WHERE l.finding_id = ?1 AND l.kind = 'evidence'")?;
             for (i, f) in findings.iter().enumerate() {
                 w.raw("<section class=\"finding\">");
@@ -355,7 +375,10 @@ mod tests {
             let html = render(c, 1, &ReportOptions::default(), "2026-11-05")?;
             assert!(!html.contains("<script>") && !html.contains("<img"), "no markup from data");
             assert!(html.contains("XSS &lt;script&gt;alert(1)&lt;/script&gt;"));
-            assert!(html.contains("default-src 'none'"), "the document forbids scripts and remote content");
+            assert!(html.contains("default-src 'none'") && html.contains("form-action 'none'"), "the document forbids scripts, remote content and forms");
+            c.execute("INSERT INTO findings (project_id, title, severity, status, created_at, updated_at) VALUES (1,'<span class=\"sev x\"><form action=https://evil.example>','critical','new','t','t')", [])?;
+            let forged = render(c, 1, &ReportOptions::default(), "2026-11-05")?;
+            assert!(!forged.contains("<form") && forged.contains("&lt;span class=&quot;sev x&quot;&gt;"), "text that looks like markup is escaped everywhere");
             assert!(html.contains("Acme Corp") && html.contains("Acme &lt;test&gt; assessment report"));
             assert!(!html.contains("Old banner"), "closed findings are left out by default");
             assert!(html.contains("Verbose header"));

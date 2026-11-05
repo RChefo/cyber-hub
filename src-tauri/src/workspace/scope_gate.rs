@@ -52,6 +52,8 @@ impl Decision {
 
 /// At most this many targets are judged per decision.
 pub const MAX_TARGETS: usize = 500;
+/// Refused active attempts kept per project in the scope history.
+pub const MAX_BLOCKED_EVENTS: i64 = 2000;
 
 fn public_problem(t: &Target) -> Option<String> {
     let label = scope::target_label(t);
@@ -138,12 +140,18 @@ pub fn enforce(c: &Connection, project_id: Option<i64>, targets: &[String], mode
     }
     let blocked = d.blocked();
     if let (Mode::Active, Some(pid)) = (mode, project_id) {
-        for b in &blocked {
+        for b in blocked.iter().take(50) {
             c.execute(
                 "INSERT INTO scope_events (project_id, action, value, kind, in_scope, note, source, at) VALUES (?1, 'blocked', ?2, '', NULL, ?3, ?4, ?5)",
-                params![pid, b.target, b.reason, operation, now()],
+                params![pid, b.target.chars().take(255).collect::<String>(), b.reason.chars().take(500).collect::<String>(), operation.chars().take(100).collect::<String>(), now()],
             )?;
         }
+        // refused attempts are kept, but only the newest ones: the history cannot be flooded
+        c.execute(
+            "DELETE FROM scope_events WHERE project_id = ?1 AND action = 'blocked' AND id NOT IN
+               (SELECT id FROM scope_events WHERE project_id = ?1 AND action = 'blocked' ORDER BY id DESC LIMIT ?2)",
+            params![pid, MAX_BLOCKED_EVENTS],
+        )?;
     }
     let list = blocked.iter().map(|b| if b.target.is_empty() { b.reason.clone() } else { format!("{}: {}", b.target, b.reason) }).collect::<Vec<_>>().join("; ");
     Err(AppError::Scope(format!("{operation} was not started. {list}")))
@@ -250,6 +258,10 @@ mod tests {
             let n: i64 = c.query_row("SELECT COUNT(*) FROM scope_events WHERE project_id = ?1 AND action = 'blocked' AND source = 'TLS analysis'", params![p], |r| r.get(0))?;
             assert_eq!(n, 1, "only the blocked target is recorded");
             assert!(enforce(c, Some(p), &s(&["example.com"]), Mode::Active, "TLS analysis").is_ok());
+            let huge = "x".repeat(10_000) + ".example.org";
+            let _ = enforce(c, Some(p), &[huge], Mode::Active, "TLS analysis");
+            let stored: i64 = c.query_row("SELECT MAX(length(value)) FROM scope_events WHERE action = 'blocked'", [], |r| r.get(0))?;
+            assert!(stored <= 255, "stored values are bounded");
             Ok(())
         })
         .unwrap();

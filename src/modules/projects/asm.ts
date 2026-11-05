@@ -109,3 +109,21 @@ export function describeAsset(a: Asset): string {
   }
   return parts.filter(Boolean).join(" · ");
 }
+
+const COUNT_NOUN: Record<AssetType, [string, string]> = {
+  domain: ["domain", "domains"],
+  subdomain: ["subdomain", "subdomains"],
+  ip: ["IP address", "IP addresses"],
+  dns_record: ["DNS record", "DNS records"],
+  service: ["service", "services"],
+  http_service: ["web service", "web services"],
+  certificate: ["certificate", "certificates"],
+  technology: ["technology", "technologies"],
+  endpoint: ["endpoint", "endpoints"],
+};
+
+/** "1 subdomain", "4 subdomains". */
+export function countLabel(n: number, type: AssetType): string {
+  return `${n} ${COUNT_NOUN[type][n === 1 ? 0 : 1]}`;
+}
+

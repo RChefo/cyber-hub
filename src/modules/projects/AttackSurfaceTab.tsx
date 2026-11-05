@@ -23,6 +23,7 @@ import {
   SNAPSHOT_STATUS_META,
   SOURCE_LABEL,
   suggestedScanTargets,
+  countLabel,
   summarize,
 } from "./asm";
 
@@ -342,7 +343,7 @@ export function AttackSurfaceTab({ project }: { project: Project }) {
 
         <Panel
           title="Assets"
-          description={typeCounts.length ? typeCounts.map((t) => `${summary.byType[t]} ${ASSET_TYPE_LABEL[t].toLowerCase()}`).join(" · ") : "Discovered and recorded assets of this project"}
+          description={typeCounts.length ? typeCounts.map((t) => countLabel(summary.byType[t] ?? 0, t)).join(" · ") : "Discovered and recorded assets of this project"}
           actions={
             <Button size="sm" variant="tertiary" onPress={() => setAdding(true)}>
               <Plus className="size-3.5" />

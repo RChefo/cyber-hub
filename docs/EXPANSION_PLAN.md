@@ -1,6 +1,6 @@
 # Platform expansion: architecture audit and plan (Phase 0)
 
-Status: **Phases 0–7 complete.** Phases 1–3 (shared data foundation, attack surface discovery, vulnerabilities and findings; schemas 9 and 10) are described in [DATA_MODEL.md](DATA_MODEL.md), phase 4 (workflow automation; schema 11) in [WORKFLOWS.md](WORKFLOWS.md), phase 5 (analysis and assistant) in [DATA_MODEL.md](DATA_MODEL.md#analysis) and [ASSISTANT.md](ASSISTANT.md), phase 6 (security utilities) in [UTILITIES.md](UTILITIES.md), phase 7 (engagement workspace; schema 12) in [DATA_MODEL.md](DATA_MODEL.md#engagement-workspace-schema-12). Phase 8 not started.
+Status: **Phases 0–8 complete.** Installers have not been built (final release step, not authorized). Phases 1–3 (shared data foundation, attack surface discovery, vulnerabilities and findings; schemas 9 and 10) are described in [DATA_MODEL.md](DATA_MODEL.md), phase 4 (workflow automation; schema 11) in [WORKFLOWS.md](WORKFLOWS.md), phase 5 (analysis and assistant) in [DATA_MODEL.md](DATA_MODEL.md#analysis) and [ASSISTANT.md](ASSISTANT.md), phase 6 (security utilities) in [UTILITIES.md](UTILITIES.md), phase 7 (engagement workspace; schema 12) in [DATA_MODEL.md](DATA_MODEL.md#engagement-workspace-schema-12). Phase 8 results and release readiness are in section 14.
 Scope: the "Advanced Platform Expansion" request (attack surface management, vulnerability management, findings, workflow automation, assistant, attack paths, IOC correlation, scan comparison, utilities, engagement workspace, reporting). This document records what already exists, what each new capability reuses, the shared data contracts, migration risks, decisions that need the owner, and the phase plan. It is updated at the end of every phase.
 
 ## 1. What exists today
@@ -111,7 +111,7 @@ Each phase: plan, implement, targeted tests, full regression (typecheck, fronten
 | 5. Intelligence and analysis **(done)** | IOC correlation, attack-path views on the OSINT graph, scan comparison, assistant | 1, 5 |
 | 6. Security utilities **(done)** | HTTP builder, DNS intelligence, TLS analyzer, port/service intelligence, subdomain monitor, secrets scanner, wordlist manager | — |
 | 7. Engagement workspace **(done)** | engagement fields, scope manager UI, evidence vault, project timeline, report builder | 3 |
-| 8. Integration and final QA | cross-module tests, Windows and Linux (container) verification, performance, security review, release readiness | — |
+| 8. Integration and final QA **(done)** | cross-module tests, Windows and Linux (container) verification, performance, security review, release readiness | — |
 
 Realistic size: each of phases 1–7 is several thousand lines with tests; the whole expansion is a multi-week effort, done and committed phase by phase.
 
@@ -204,4 +204,68 @@ Realistic size: each of phases 1–7 is several thousand lines with tests; the w
   The Markdown report includes the engagement details.
 * **Tests:** report escaping (no markup from data) and the report CSP, section and severity options, closed findings, and engagement details in the Markdown report. The populated-database upgrade test now runs through schema 12.
 * **Not verified here:** printing and the UI are checked visually in phase 8.
+
+## 14. Phase 8: integration, QA and release readiness
+
+### Integration and performance
+
+* **Cross-module test** (`workspace/integration_tests.rs`). One project goes through every module:
+  * scope changes, passive discovery and a parsed Nmap scan;
+  * a vulnerability on the discovered service, a finding linked to it, and linked evidence;
+  * exposure paths, indicator correlation, the timeline and the HTML report;
+  * finally, deleting the project removes every dependent row.
+* **Volume check** (ignored test, `cargo test --release -- --ignored volume`): 20,000 address assets, 2,000 services and vulnerabilities, and 5,000 findings with history and links. The timings measured:
+
+  | Query | Time |
+  |---|---|
+  | Asset list (5,000 rows) | 19 ms |
+  | Timeline (200 events) | 2 ms |
+  | Indicator correlation | 69 ms |
+  | Exposure paths | 35 ms |
+  | Vulnerability list | 4 ms |
+  | Report | 32 ms |
+
+  No additional indexes were needed.
+
+### Security review
+
+An independent review of the phases 1–7 code found no critical or high issues. All reported issues were fixed and covered by tests:
+* **Report markup.** A string-prefix shortcut could let report text through as markup. Cells are now typed, and the report CSP adds `form-action 'none'` and `base-uri 'none'`.
+* **HTTP check targets.** A URL-form host could make the contacted host differ from the checked one. Entries are now normalized, so the host that is checked is the host that is contacted.
+* **Scope history flooding.** Refused attempts are bounded (see SECURITY.md), and the HTTP builder's URL is limited to 8 KB.
+* **Schedules.** Scheduled workflows no longer run for projects that are completed, paused or archived.
+* **Assistant data wrapper.** The project data can no longer close its own `<project_data>` wrapper.
+* **Evidence copies.** Temporary file names are now unique, so two concurrent copies cannot collide.
+* **IPv6 `Host` headers** are parsed correctly.
+
+Name-based scope for the active utilities stays an accepted risk (SECURITY.md).
+
+### Visual QA (Windows, WebView2)
+
+The debug build ran with an isolated data folder (`CYBERHUB_DATA_DIR`, honored by debug builds only, now also by the app itself and not just the MCP sidecar). It was seeded through the app's own IPC and driven through the DevTools protocol:
+* every new project tab and the new utilities were checked;
+* a live passive discovery of `example.com` ran (crt.sh and DNS);
+* a live NVD lookup, the passive workflow run and DNS intelligence were checked;
+* the print-to-PDF path was checked, and the system print dialog showed the report.
+
+Fixed during QA:
+* **Assistant tab crash.** `scrollIntoView` returns a Promise in current WebView2, and an effect returned it.
+* **Future times** showed as "just now".
+* **Discovery notes:** a null MX record (`0 .`) counted as an invalid asset, the names outside the scope were counted per occurrence instead of distinct, and singular/plural forms were wrong in counts.
+* **Timeline label** for discovery runs.
+* **Doubled word** in the default report title.
+* **Duplicate target tester** on the Scope tab.
+* **Stale evidence list** after workflow runs.
+
+### Release readiness
+
+| Item | State |
+|---|---|
+| Rust tests, clippy `-D warnings`, frontend typecheck and tests, bundle build | pass on Windows (250 Rust tests, 195 frontend tests). Linux (Debian bookworm container, Rust 1.99.1, WebKitGTK 4.1): all 251 Rust tests pass, including the Unix-only symlinked-evidence-folder test; clippy was not run there (not installed in the image) |
+| Migrations 9–12 | tested on populated older databases, with an injected failure and recovery of interrupted runs; downgrade is not supported (documented) |
+| `cargo audit` / `npm audit` | no vulnerabilities; the existing allowed `glib` warnings remain (Tauri's Linux stack) |
+| Installers (MSI, NSIS, AppImage, DEB, RPM) | **not built**: the final release step, after release authorization |
+| Windows code signing (Authenticode) | **required before release**: Defender flagged an unsigned test build (see UPDATER.md) |
+| Live checks not possible here | Anthropic assistant (no key provisioned); service scans and web checks against authorized targets; visual QA on Linux |
+| Version and changelog | unchanged (0.1.0); bump and release notes belong to the release step |
 

@@ -180,9 +180,9 @@ pub fn complete(c: &Connection, project_id: i64, snapshot_id: i64, source: &str,
     assets::with_savepoint(c, || {
         let stats = record(c, project_id, snapshot_id, source, batch)?;
         let missing = if status == "completed" { mark_missing(c, project_id, snapshot_id, source, covers)? } else { 0 };
-        let mut note = format!("{} assets ({} new), {} no longer observed", stats.new + stats.seen, stats.new, missing);
+        let mut note = format!("{} ({} new), {} no longer observed", plural(stats.new + stats.seen, "asset", "assets"), stats.new, missing);
         if batch.invalid > 0 {
-            note.push_str(&format!("; {} values were not valid assets", batch.invalid));
+            note.push_str(&format!("; {} not recorded (not a valid asset)", plural(batch.invalid, "value", "values")));
         }
         for p in problems.iter().take(5) {
             note.push_str("; ");
@@ -194,6 +194,10 @@ pub fn complete(c: &Connection, project_id: i64, snapshot_id: i64, source: &str,
         assets::finish_snapshot(c, snapshot_id, status, &note)?;
         Ok(note)
     })
+}
+
+pub fn plural(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
 }
 
 /* ───────────────────────── snapshots and changes ───────────────────────── */
@@ -350,6 +354,10 @@ pub fn add_dns(batch: &mut Batch, entries: &[ScopeEntry], name: &str, answers: &
     for (rtype, values) in answers {
         for raw in values {
             let host = raw.split_whitespace().last().unwrap_or("").trim_end_matches('.').to_string();
+            // a null MX ("0 .") means the domain receives no mail: nothing to record
+            if host.is_empty() {
+                continue;
+            }
             match rtype.as_str() {
                 "A" | "AAAA" => {
                     resolves = true;
@@ -382,10 +390,10 @@ pub async fn passive_collect(db: &Db, entries: &[ScopeEntry], roots: &[String], 
     for root in roots {
         names.entry(root.clone()).or_default().insert("scope");
     }
-    let mut outside = 0usize;
+    let mut outside: BTreeSet<String> = BTreeSet::new();
     for root in roots {
         if cancel.load(Ordering::Relaxed) {
-            return (batch, vec!["Cancelled".into()], outside);
+            return (batch, vec!["Cancelled".into()], outside.len());
         }
         progress(format!("Certificate transparency for {root}"));
         match crate::osint::providers::crtsh::run(db, root, false).await {
@@ -399,7 +407,7 @@ pub async fn passive_collect(db: &Db, entries: &[ScopeEntry], roots: &[String], 
                         if in_scope(entries, &n) {
                             names.entry(n).or_default().insert("crt.sh");
                         } else {
-                            outside += 1;
+                            outside.insert(n);
                         }
                     }
                 }
@@ -448,7 +456,7 @@ pub async fn passive_collect(db: &Db, entries: &[ScopeEntry], roots: &[String], 
         let certainty = if resolves { Certainty::Observed } else { Certainty::Possible };
         batch.add(kind, name, certainty, json!({ "sources": src, "resolves": resolves }));
     }
-    (batch, problems, outside)
+    (batch, problems, outside.len())
 }
 
 /* ───────────────────────── active: HTTP probe ───────────────────────── */
@@ -761,6 +769,10 @@ mod tests {
         assert_eq!(b.items[&("ip", "10.1.2.3".to_string())].data["nonPublic"], json!(true));
         assert!(b.items.contains_key(&("dns_record", "www.example.com mx mail.example.com".to_string())));
         assert!(!add_dns(&mut Batch::default(), &e, "gone.example.com", &[("A".into(), vec![])]));
+        let mut nomail = Batch::default();
+        add_dns(&mut nomail, &e, "example.com", &[("MX".into(), vec!["0 .".into()])]);
+        assert_eq!((nomail.len(), nomail.invalid), (0, 0), "a null MX is skipped, not counted as invalid");
+        assert_eq!(plural(1, "asset", "assets"), "1 asset");
     }
 
     #[test]

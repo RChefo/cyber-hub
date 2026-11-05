@@ -35,7 +35,7 @@ pub struct Wordlist {
 }
 
 pub fn managed_dir(app: &AppHandle) -> AppResult<PathBuf> {
-    let dir = app.path().app_data_dir()?.join("wordlists");
+    let dir = crate::util::data_dir(app)?.join("wordlists");
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }
