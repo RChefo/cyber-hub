@@ -185,7 +185,7 @@ pub static TOOLS: &[ToolSpec] = &[
             "project_id": project_id(),
             "title": { "type": "string", "minLength": 1, "maxLength": 300 },
             "severity": { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] },
-            "status": { "type": "string", "enum": ["open", "confirmed", "reported", "resolved", "false_positive"] },
+            "status": { "type": "string", "enum": ["new", "under_review", "confirmed", "accepted_risk", "in_remediation", "resolved", "reopened", "false_positive"], "description": "Defaults to new. The names open and reported of earlier versions are still accepted (as new and confirmed)." },
             "description": { "type": "string", "maxLength": 20000 },
             "affected_target": { "type": "string", "maxLength": 500 },
             "cve": { "type": "string", "maxLength": 32 }

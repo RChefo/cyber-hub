@@ -88,10 +88,13 @@ export const PROJECT_STATUS_META: Record<ProjectStatus, { label: string; tone: T
 };
 
 export const FINDING_STATUS_META: Record<FindingStatus, { label: string; tone: Tone }> = {
-  open: { label: "Open", tone: "danger" },
+  new: { label: "New", tone: "danger" },
+  under_review: { label: "Under review", tone: "warning" },
   confirmed: { label: "Confirmed", tone: "warning" },
-  reported: { label: "Reported", tone: "accent" },
+  in_remediation: { label: "In remediation", tone: "accent" },
+  reopened: { label: "Reopened", tone: "danger" },
   resolved: { label: "Resolved", tone: "success" },
+  accepted_risk: { label: "Accepted risk", tone: "default" },
   false_positive: { label: "False positive", tone: "default" },
 };
 

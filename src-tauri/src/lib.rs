@@ -23,10 +23,11 @@ mod updates;
 mod util;
 mod vt;
 mod vtfile;
+mod workspace;
 
 use tauri::{AppHandle, Manager};
 
-use commands::{activity, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, threat_intel, tools, updates as update_commands, virustotal, wordlists};
+use commands::{activity, intel, library, mcp as mcp_commands, osint as osint_commands, projects, system, threat_intel, tools, updates as update_commands, virustotal, wordlists, workspace as workspace_commands};
 
 /// Leaves no work behind when Cyber Hub exits: normal exit, restart after an update, and right
 /// before an update installer takes over on Windows. Safe to call more than once.
@@ -93,6 +94,13 @@ pub fn run() {
             app.manage(std::sync::Arc::new(osint::discovery::OsintState::default()));
             app.manage(osint_commands::ImportState::default());
             app.manage(std::sync::Arc::new(updates::Updates::load(&app.state::<db::Db>())));
+            // evidence files (content-addressed, private folder); leftovers of an interrupted copy
+            // and files no record refers to any more are removed
+            let evidence = std::sync::Arc::new(workspace::evidence::EvidenceStore::new(dir.join("evidence")));
+            if let Err(e) = evidence.sweep(&app.state::<db::Db>()) {
+                eprintln!("Cyber Hub: evidence folder not checked: {e}");
+            }
+            app.manage(evidence);
             // collections interrupted by a crash or exit are marked as such
             osint::discovery::recover_interrupted(&app.state::<db::Db>());
             // remove target-file snapshots left behind by a crash
@@ -161,6 +169,28 @@ pub fn run() {
             projects::project_tool_history,
             projects::project_report,
             projects::project_report_export,
+            // shared project data: assets, finding lifecycle, evidence, scope history, timeline
+            workspace_commands::assets_list,
+            workspace_commands::asset_add,
+            workspace_commands::asset_set_status,
+            workspace_commands::asset_observations,
+            workspace_commands::asset_delete,
+            workspace_commands::finding_set_status,
+            workspace_commands::finding_add_note,
+            workspace_commands::finding_history,
+            workspace_commands::finding_links,
+            workspace_commands::finding_link,
+            workspace_commands::finding_unlink,
+            workspace_commands::scope_history,
+            workspace_commands::scope_decide,
+            workspace_commands::project_timeline,
+            workspace_commands::evidence_list,
+            workspace_commands::evidence_add_text,
+            workspace_commands::evidence_add_file,
+            workspace_commands::evidence_link_execution,
+            workspace_commands::evidence_link_osint,
+            workspace_commands::evidence_export,
+            workspace_commands::evidence_delete,
             // tools & execution engine
             tools::tools_catalog,
             tools::tools_detection_list,

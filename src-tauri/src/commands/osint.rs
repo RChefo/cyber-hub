@@ -362,15 +362,13 @@ pub async fn osint_finding_from_entity(app: AppHandle, db: State<'_, Db>, entity
             .collect();
         Ok((pid, d.brief.value.clone(), ev))
     })?;
-    let id = crate::commands::projects::finding_upsert(
-        db.clone(),
-        crate::commands::projects::FindingInput { id: None, project_id, title, severity, status: "open".into(), description, affected_target: value.chars().take(500).collect(), cve: String::new(), evidence },
-    )
-    .await?;
-    let inv = db.with(|c| {
+    let input = crate::commands::projects::FindingInput { project_id, title, severity, status: "new".into(), description, affected_target: value.chars().take(500).collect(), evidence, ..Default::default() };
+    let (id, inv) = db.with(|c| {
+        let id = crate::commands::projects::finding_save(c, &input, "osint")?;
+        crate::workspace::findings::link(c, id, "osint_entity", entity_id, "osint")?;
         let inv = entity_investigation(c, entity_id)?;
         ingest::event(c, inv, "annotation", &format!("Finding #{id} created in the linked project"), Some("analyst"), Some(entity_id), None, None, None, json!({ "findingId": id }))?;
-        Ok(inv)
+        Ok((id, inv))
     })?;
     changed(&app, inv);
     Ok(id)

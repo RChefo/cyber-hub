@@ -789,7 +789,7 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
                 vec![
                     d("Title", a.title.chars().take(300).collect::<String>()),
                     d("Severity", a.severity),
-                    d("Status", a.status.unwrap_or_else(|| "open".into())),
+                    d("Status", a.status.as_deref().and_then(crate::workspace::findings::canonical_status).unwrap_or("new").to_string()),
                     d("Affected target", a.affected_target.unwrap_or_default()),
                     d("CVE", a.cve.unwrap_or_default()),
                     d("Description", preview),
@@ -1015,22 +1015,17 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
         "cyberhub_create_finding" => {
             let a: CreateFinding = parse(args)?;
             check_project(&db, a.project_id)?;
-            let id = projects::finding_upsert(
-                app.state::<Db>(),
-                projects::FindingInput {
-                    id: None,
-                    project_id: a.project_id,
-                    title: a.title,
-                    severity: a.severity,
-                    status: a.status.unwrap_or_else(|| "open".into()),
-                    description: a.description.unwrap_or_default(),
-                    affected_target: a.affected_target.unwrap_or_default(),
-                    cve: a.cve.unwrap_or_default(),
-                    evidence: vec![],
-                },
-            )
-            .await
-            .map_err(app_err)?;
+            let input = projects::FindingInput {
+                project_id: a.project_id,
+                title: a.title,
+                severity: a.severity,
+                status: a.status.unwrap_or_else(|| "new".into()),
+                description: a.description.unwrap_or_default(),
+                affected_target: a.affected_target.unwrap_or_default(),
+                cve: a.cve.unwrap_or_default(),
+                ..Default::default()
+            };
+            let id = app.state::<Db>().with(|c| projects::finding_save(c, &input, "mcp")).map_err(app_err)?;
             Ok(json!({ "findingId": id, "projectId": a.project_id }))
         }
         "cyberhub_preview_run" => {

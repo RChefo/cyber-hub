@@ -17,6 +17,7 @@ import type { Finding, Project, ProjectStatus } from "@/lib/types";
 import { formatDate, formatDateTime, formatRelative, shellQuote } from "@/lib/utils";
 import { FindingsTab } from "./FindingsTab";
 import { ProjectFormModal, STATUS_OPTIONS } from "./ProjectFormModal";
+import { isOpenFinding } from "@/lib/findings";
 import { countBySeverity } from "./report";
 import { ScopeTab } from "./ScopeTab";
 
@@ -183,7 +184,7 @@ function OverviewTab({ project, findings, onTab }: { project: Project; findings:
   const { runtime, toolById } = useApp();
   const runs = useQuery(["executions"], () => api.projectToolHistory(project.id), [project.id], runtime);
   const counts = useMemo(() => countBySeverity(findings, true), [findings]);
-  const open = findings.filter((f) => f.status === "open" || f.status === "confirmed").length;
+  const open = findings.filter((f) => isOpenFinding(f.status)).length;
   const inScope = project.targets.filter((t) => t.inScope).length;
 
   return (

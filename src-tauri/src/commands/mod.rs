@@ -10,3 +10,4 @@ pub mod tools;
 pub mod updates;
 pub mod virustotal;
 pub mod wordlists;
+pub mod workspace;

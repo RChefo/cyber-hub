@@ -506,6 +506,164 @@ const MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE osint_graphs ADD COLUMN state_revision INTEGER NOT NULL DEFAULT 0;
     "#,
+    // 9: shared data foundation (docs/DATA_MODEL.md): findings lifecycle and history, finding
+    // links, scope audit, assets with observations and discovery snapshots, evidence registry,
+    // project timeline. Existing findings keep their ids and data; old statuses are mapped
+    // (open → new, reported → confirmed, the latter recorded in the finding's history).
+    r#"
+    CREATE TABLE findings_v9 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        severity TEXT NOT NULL CHECK (severity IN ('critical','high','medium','low','info')),
+        status TEXT NOT NULL CHECK (status IN ('new','under_review','confirmed','accepted_risk','in_remediation','resolved','reopened','false_positive')),
+        category TEXT NOT NULL DEFAULT '',
+        confidence TEXT NOT NULL DEFAULT 'medium' CHECK (confidence IN ('low','medium','high')),
+        description TEXT NOT NULL DEFAULT '',
+        affected_target TEXT NOT NULL DEFAULT '',
+        cve TEXT NOT NULL DEFAULT '',
+        evidence TEXT NOT NULL DEFAULT '[]',
+        reproduction TEXT NOT NULL DEFAULT '',
+        technical_details TEXT NOT NULL DEFAULT '',
+        remediation TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'manual',
+        tags TEXT NOT NULL DEFAULT '[]',
+        assignee TEXT NOT NULL DEFAULT '',
+        due_date TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    INSERT INTO findings_v9 (id, project_id, title, severity, status, description, affected_target, cve, evidence, created_at, updated_at)
+        SELECT id, project_id, title, severity,
+               CASE status WHEN 'open' THEN 'new' WHEN 'reported' THEN 'confirmed' ELSE status END,
+               description, affected_target, cve, evidence, created_at, updated_at
+        FROM findings;
+    CREATE TEMP TABLE finding_status_v8 AS SELECT id, status FROM findings;
+    DROP TABLE findings;
+    ALTER TABLE findings_v9 RENAME TO findings;
+    CREATE INDEX idx_findings_project ON findings(project_id, status);
+
+    CREATE TABLE finding_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        finding_id INTEGER NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('created','status','updated','note','link','unlink','migrated')),
+        from_status TEXT,
+        to_status TEXT,
+        note TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'user',
+        at TEXT NOT NULL
+    );
+    CREATE INDEX idx_finding_events ON finding_events(finding_id, id);
+    INSERT INTO finding_events (finding_id, project_id, kind, to_status, note, source, at)
+        SELECT f.id, f.project_id, 'created', f.status, 'Recorded before finding history existed', 'migration', f.created_at FROM findings f;
+    INSERT INTO finding_events (finding_id, project_id, kind, from_status, to_status, note, source, at)
+        SELECT f.id, f.project_id, 'migrated', 'reported', 'confirmed', 'The status “Reported” of earlier versions is now “Confirmed”', 'migration',
+               strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        FROM findings f JOIN finding_status_v8 o ON o.id = f.id WHERE o.status = 'reported';
+    DROP TABLE finding_status_v8;
+
+    CREATE TABLE finding_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        finding_id INTEGER NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('asset','vulnerability','osint_entity','execution','evidence')),
+        ref_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (finding_id, kind, ref_id)
+    );
+    CREATE INDEX idx_finding_links_ref ON finding_links(kind, ref_id);
+
+    CREATE TABLE scope_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        action TEXT NOT NULL CHECK (action IN ('added','updated','removed','blocked')),
+        value TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT '',
+        in_scope INTEGER,
+        note TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'user',
+        at TEXT NOT NULL
+    );
+    CREATE INDEX idx_scope_events ON scope_events(project_id, id DESC);
+    INSERT INTO scope_events (project_id, action, value, kind, in_scope, note, source, at)
+        SELECT project_id, 'added', value, kind, in_scope, note, 'migration', created_at FROM project_targets;
+
+    CREATE TABLE discovery_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        mode TEXT NOT NULL CHECK (mode IN ('passive','active','manual')),
+        source TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('running','completed','partial','failed','cancelled')),
+        operation_id INTEGER REFERENCES osint_operations(id) ON DELETE SET NULL,
+        execution_id INTEGER REFERENCES executions(id) ON DELETE SET NULL,
+        note TEXT NOT NULL DEFAULT '',
+        started_at TEXT NOT NULL,
+        finished_at TEXT
+    );
+    CREATE INDEX idx_discovery_snapshots ON discovery_snapshots(project_id, id DESC);
+
+    CREATE TABLE assets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('domain','subdomain','ip','dns_record','service','http_service','certificate','technology','endpoint')),
+        value TEXT NOT NULL,
+        key TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','not_observed','retired')),
+        confidence TEXT NOT NULL DEFAULT 'medium' CHECK (confidence IN ('low','medium','high')),
+        source TEXT NOT NULL,
+        osint_entity_id INTEGER REFERENCES osint_entities(id) ON DELETE SET NULL,
+        data TEXT NOT NULL DEFAULT '{}',
+        first_seen TEXT NOT NULL,
+        last_seen TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (project_id, type, key)
+    );
+    CREATE INDEX idx_assets_project ON assets(project_id, type, status);
+    CREATE TABLE asset_observations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+        snapshot_id INTEGER REFERENCES discovery_snapshots(id) ON DELETE SET NULL,
+        observed_at TEXT NOT NULL,
+        source TEXT NOT NULL,
+        data TEXT NOT NULL DEFAULT '{}',
+        fingerprint TEXT NOT NULL
+    );
+    CREATE INDEX idx_asset_observations ON asset_observations(asset_id, id DESC);
+    CREATE INDEX idx_asset_observations_snapshot ON asset_observations(snapshot_id);
+
+    CREATE TABLE evidence (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('file','text','execution','osint_evidence')),
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'user',
+        sha256 TEXT,
+        size INTEGER,
+        file_name TEXT,
+        content TEXT,
+        execution_id INTEGER REFERENCES executions(id) ON DELETE SET NULL,
+        osint_evidence_id INTEGER REFERENCES osint_evidence(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_evidence_project ON evidence(project_id, id DESC);
+    CREATE UNIQUE INDEX idx_evidence_file ON evidence(project_id, sha256) WHERE kind = 'file';
+    CREATE UNIQUE INDEX idx_evidence_execution ON evidence(project_id, execution_id) WHERE kind = 'execution';
+    CREATE UNIQUE INDEX idx_evidence_osint ON evidence(project_id, osint_evidence_id) WHERE kind = 'osint_evidence';
+
+    CREATE TABLE timeline_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        detail TEXT NOT NULL DEFAULT '',
+        ref_kind TEXT,
+        ref_id INTEGER,
+        at TEXT NOT NULL
+    );
+    CREATE INDEX idx_timeline_events ON timeline_events(project_id, at DESC);
+    "#,
 ];
 
 impl Db {
@@ -593,6 +751,105 @@ mod tests {
         assert_eq!(db.schema_version().unwrap(), MIGRATIONS.len() as i64);
         let (rev, state): (i64, i64) = db.with(|c| Ok(c.query_row("SELECT revision, state_revision FROM osint_graphs WHERE id = 1", [], |r| Ok((r.get(0)?, r.get(1)?)))?)).unwrap();
         assert_eq!((rev, state), (3, 0), "existing graphs keep their data and start at state revision 0");
+    }
+
+    /// A database as release 0.1 left it (schema 8): a project with scope entries, a tool run and
+    /// a finding in every status of that release.
+    fn schema8_with_data() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        for (i, sql) in MIGRATIONS.iter().take(8).enumerate() {
+            conn.execute_batch(sql).unwrap();
+            conn.execute_batch(&format!("PRAGMA user_version = {}", i + 1)).unwrap();
+        }
+        conn.execute_batch(
+            "INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (7, 'Acme', 'active', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z');
+             INSERT INTO project_targets (project_id, value, kind, in_scope, note, created_at) VALUES
+               (7, 'example.com', 'domain', 1, '', '2026-01-01T00:00:00Z'),
+               (7, 'vpn.example.com', 'domain', 0, 'Production VPN', '2026-01-01T00:01:00Z');
+             INSERT INTO executions (id, tool_id, kind, program, args, project_id, status, started_at) VALUES (3, 'nmap', 'run', 'nmap', '[]', 7, 'succeeded', '2026-01-03T00:00:00Z');
+             INSERT INTO findings (id, project_id, title, severity, status, description, affected_target, cve, evidence, created_at, updated_at) VALUES
+               (11, 7, 'Open',     'high',     'open',           'd1', 'a.example.com', '',               '[{\"label\":\"Request\",\"reference\":\"req.txt\"}]', '2026-01-04T00:00:00Z', '2026-01-04T00:00:00Z'),
+               (12, 7, 'Conf',     'critical', 'confirmed',      'd2', 'b.example.com', 'CVE-2021-44228', '[]', '2026-01-05T00:00:00Z', '2026-01-05T00:00:00Z'),
+               (13, 7, 'Reported', 'medium',   'reported',       'd3', '',              '',               '[]', '2026-01-06T00:00:00Z', '2026-01-06T00:00:00Z'),
+               (14, 7, 'Fixed',    'low',      'resolved',       '',   '',              '',               '[]', '2026-01-07T00:00:00Z', '2026-01-07T00:00:00Z'),
+               (15, 7, 'FP',       'info',     'false_positive', '',   '',              '',               '[]', '2026-01-08T00:00:00Z', '2026-01-08T00:00:00Z');",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn count(c: &Connection, sql: &str) -> i64 {
+        c.query_row(sql, [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn findings_and_scope_of_release_0_1_survive_the_upgrade_with_history() {
+        let db = Db::init(schema8_with_data()).unwrap();
+        assert_eq!(db.schema_version().unwrap(), MIGRATIONS.len() as i64);
+        db.with(|c| {
+            // every column as text: id, title, severity, status, description, affected_target, cve,
+            // evidence, created_at, updated_at, source, confidence
+            let mut st = c.prepare("SELECT CAST(id AS TEXT), title, severity, status, description, affected_target, cve, evidence, created_at, updated_at, source, confidence FROM findings ORDER BY id")?;
+            let rows: Vec<Vec<String>> = st.query_map([], |r| (0..12).map(|i| r.get::<_, String>(i)).collect())?.collect::<Result<_, _>>()?;
+            let statuses: Vec<(&str, &str)> = rows.iter().map(|r| (r[0].as_str(), r[3].as_str())).collect();
+            assert_eq!(statuses, vec![("11", "new"), ("12", "confirmed"), ("13", "confirmed"), ("14", "resolved"), ("15", "false_positive")], "ids are kept and old statuses are mapped");
+            assert_eq!((rows[0][4].as_str(), rows[0][5].as_str(), rows[0][7].as_str()), ("d1", "a.example.com", "[{\"label\":\"Request\",\"reference\":\"req.txt\"}]"));
+            assert_eq!((rows[1][6].as_str(), rows[1][2].as_str()), ("CVE-2021-44228", "critical"));
+            assert_eq!((rows[2][8].as_str(), rows[2][9].as_str()), ("2026-01-06T00:00:00Z", "2026-01-06T00:00:00Z"), "timestamps are untouched");
+            assert!(rows.iter().all(|r| r[10] == "manual" && r[11] == "medium"), "new columns get neutral defaults");
+
+            assert_eq!(count(c, "SELECT COUNT(*) FROM finding_events WHERE kind = 'created' AND source = 'migration'"), 5);
+            let created_at: String = c.query_row("SELECT at FROM finding_events WHERE finding_id = 13 AND kind = 'created'", [], |r| r.get(0))?;
+            assert_eq!(created_at, "2026-01-06T00:00:00Z", "history starts when the finding was recorded");
+            let migrated: (i64, String, String) = c.query_row("SELECT finding_id, from_status, to_status FROM finding_events WHERE kind = 'migrated'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            assert_eq!(migrated, (13, "reported".into(), "confirmed".into()), "only the renamed status is recorded as migrated");
+
+            let scope: Vec<(String, i64)> = c.prepare("SELECT value, in_scope FROM scope_events WHERE action = 'added' AND source = 'migration' ORDER BY id")?.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?;
+            assert_eq!(scope, vec![("example.com".into(), 1), ("vpn.example.com".into(), 0)]);
+            assert_eq!(count(c, "SELECT COUNT(*) FROM project_targets"), 2, "scope entries are kept");
+
+            assert_eq!(count(c, "SELECT COUNT(*) FROM pragma_foreign_key_check"), 0);
+            let integrity: String = c.query_row("PRAGMA integrity_check", [], |r| r.get(0))?;
+            assert_eq!(integrity, "ok");
+            assert_eq!(count(c, "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('findings_v9', 'finding_status_v8')"), 0, "no temporary tables are left");
+            assert_eq!(count(c, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_findings_project'"), 1);
+            // the rebuilt table still cascades with its project
+            c.execute("DELETE FROM projects WHERE id = 7", [])?;
+            assert_eq!(count(c, "SELECT COUNT(*) FROM findings") + count(c, "SELECT COUNT(*) FROM finding_events") + count(c, "SELECT COUNT(*) FROM scope_events"), 0);
+            Ok(())
+        })
+        .unwrap();
+        // running the migrations again changes nothing
+        db.migrate().unwrap();
+        assert_eq!(db.schema_version().unwrap(), MIGRATIONS.len() as i64);
+    }
+
+    #[test]
+    fn a_failed_upgrade_leaves_the_previous_database_untouched_and_can_be_retried() {
+        let conn = schema8_with_data();
+        // something the migration does not expect (here: a table it is about to create)
+        conn.execute_batch("CREATE TABLE timeline_events (x INTEGER);").unwrap();
+        let before: Vec<(i64, String)> = conn.prepare("SELECT id, status FROM findings ORDER BY id").unwrap().query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().collect::<Result<_, _>>().unwrap();
+        let db = Db { conn: Mutex::new(conn) };
+        assert!(db.migrate().is_err());
+        assert_eq!(db.schema_version().unwrap(), 8, "the version is not advanced");
+        db.with(|c| {
+            let after: Vec<(i64, String)> = c.prepare("SELECT id, status FROM findings ORDER BY id")?.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?;
+            assert_eq!(after, before, "findings keep their data and old statuses");
+            assert_eq!(count(c, "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('findings_v9', 'finding_events', 'assets', 'evidence')"), 0, "nothing of the failed upgrade remains");
+            c.execute_batch("DROP TABLE timeline_events;")?;
+            Ok(())
+        })
+        .unwrap();
+        db.migrate().unwrap();
+        assert_eq!(db.schema_version().unwrap(), MIGRATIONS.len() as i64);
+        db.with(|c| {
+            assert_eq!(count(c, "SELECT COUNT(*) FROM findings WHERE status IN ('open', 'reported')"), 0);
+            assert_eq!(count(c, "SELECT COUNT(*) FROM findings"), 5);
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]

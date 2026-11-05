@@ -1,3 +1,4 @@
+import { isOpenFinding } from "@/lib/findings";
 import type { Finding, Severity } from "@/lib/types";
 
 const SEVERITY_ORDER: Severity[] = ["critical", "high", "medium", "low", "info"];
@@ -11,7 +12,7 @@ export function sortFindings(findings: Finding[]): Finding[] {
 export function countBySeverity(findings: Finding[], onlyActive = false): Record<Severity, number> {
   const out: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
   for (const f of findings) {
-    if (onlyActive && (f.status === "resolved" || f.status === "false_positive")) continue;
+    if (onlyActive && !isOpenFinding(f.status)) continue;
     out[f.severity]++;
   }
   return out;

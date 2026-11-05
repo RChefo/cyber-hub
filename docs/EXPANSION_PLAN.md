@@ -1,6 +1,6 @@
 # Platform expansion: architecture audit and plan (Phase 0)
 
-Status: **Phase 0 complete (audit and plan only; no code changed). Phases 1–8 not started.**
+Status: **Phases 0–1 complete.** Phase 1 (shared data foundation, schema 9) is described in [DATA_MODEL.md](DATA_MODEL.md). Phases 2–8 not started.
 Scope: the "Advanced Platform Expansion" request (attack surface management, vulnerability management, findings, workflow automation, assistant, attack paths, IOC correlation, scan comparison, utilities, engagement workspace, reporting). This document records what already exists, what each new capability reuses, the shared data contracts, migration risks, decisions that need the owner, and the phase plan. It is updated at the end of every phase.
 
 ## 1. What exists today
@@ -8,7 +8,7 @@ Scope: the "Advanced Platform Expansion" request (attack surface management, vul
 | Area | Implementation | Data |
 |---|---|---|
 | Projects and scope | `commands/projects.rs`, `scope.rs` (domains, wildcards, IPs, CIDRs, ranges, URLs, exclusions), `targets.rs` (argument and target-file resolution, snapshots) | `projects` (status planning/active/paused/completed/archived), `project_targets` (kind, in_scope, note) |
-| Findings | `commands/projects.rs` (`finding_upsert`, list, delete), Markdown project report | `findings` (severity, status open/confirmed/reported/resolved/false_positive, description, affected_target, cve, evidence JSON of `{label, reference}`) |
+| Findings | `commands/projects.rs` (`finding_upsert`, list, delete), Markdown project report | `findings` (severity, status open/confirmed/reported/resolved/false_positive, description, affected_target, cve, evidence JSON of `{label, reference}`); extended in Phase 1 |
 | Tool execution | `process.rs` (argv only, no shell, Job Objects / process groups, bounded output, cancel), native confirmation (`confirm.rs`), scope gate in `exec_start` | `executions` (tool, program, args redacted, project_id, status, exit code, output ≤ 2 MB, truncated) |
 | OSINT | `osint/` (20 entity types incl. Service, Technology, Vulnerability, Certificate, Asn, FileHash; 38 relationship types; evidence with strength; confidence with reasons; verification states; providers: DNS, Team Cymru ASN, RDAP, crt.sh, GitHub, scoped web fingerprint, threat intel, NVD; review-before-import; graphs, versions, merges, timeline events, reports, JSON/GraphML/CSV/PNG/SVG I/O) | `osint_*` tables (investigations with optional `project_id`, entities, relationships, operations, evidence, entity/relationship evidence links, events, graphs, nodes, versions, merges, source cache) |
 | Vulnerability intel | `commands/intel.rs` NVD CVE API 2.0 search with cache; CVSS 4.0/3.x/2.0 parsing, CWE, CPE products, CISA KEV flag (from NVD), "add as finding" | `cve_cache`, `cve_search_history` |
@@ -104,7 +104,7 @@ Each phase: plan, implement, targeted tests, full regression (typecheck, fronten
 
 | Phase | Content | Depends on decisions |
 |---|---|---|
-| 1. Shared data foundation | migrations (schema 9+), `ScopeGate`, `EvidenceStore`, `Timeline`, `AssetStore`, extended findings model and history, scope audit; migration tests on populated databases | — |
+| 1. Shared data foundation **(done)** | migrations (schema 9+), `ScopeGate`, `EvidenceStore`, `Timeline`, `AssetStore`, extended findings model and history, scope audit; migration tests on populated databases | — |
 | 2. Attack surface management | asset inventory UI, passive discovery via OSINT providers, active discovery via scoped tools, snapshots, change classification (confirmed/observed/possible/incomplete), dashboard | 5 |
 | 3. Vulnerabilities and findings | vulnerability records, transparent priority model, lifecycle and history, remediation tracking, Findings Manager (search, filters, bulk status, tags, links) | 2 |
 | 4. Workflow automation | definitions, node schemas, validation, executor (ordering, timeouts, retries, cancellation, persistence), builder UI, history, templates | 4 |
@@ -114,3 +114,11 @@ Each phase: plan, implement, targeted tests, full regression (typecheck, fronten
 | 8. Integration and final QA | cross-module tests, Windows and Linux (container) verification, performance, security review, release readiness | — |
 
 Realistic size: each of phases 1–7 is several thousand lines with tests; the whole expansion is a multi-week effort, done and committed phase by phase.
+
+## 7. Phase 1 result
+
+* **Schema 9** (`db.rs` migration 9): findings rebuilt with the lifecycle statuses and new fields, plus `finding_events`, `finding_links`, `scope_events`, `discovery_snapshots`, `assets`, `asset_observations`, `evidence` and `timeline_events`. Existing data keeps its ids and values; `open` → `new`, `reported` → `confirmed` (recorded in the finding's history). Tests upgrade a populated schema-8 database, inject a failure (schema 8 stays intact, the retry succeeds) and check foreign keys and integrity.
+* **Interfaces** (`src-tauri/src/workspace/`): `scope_gate::{decide, enforce}`, `EvidenceStore::{add_file, delete, sweep}` and `evidence::{add_text, link_execution, link_osint}`, `timeline::{record, project_timeline}`, `assets::upsert_observation` with snapshots, and `findings::{set_status, add_note, link, unlink, history}`. Commands are in `commands/workspace.rs`, typed IPC wrappers in `src/lib/ipc.ts`.
+* **Existing features adjusted:** the finding editor shows category, confidence, reproduction, technical details and remediation, and keeps fields it does not show. Status changes go through the lifecycle command, and invalid ones (reopening an open finding) are disabled. Findings created from OSINT entities are linked to the entity. MCP accepts the new and the old status names. The report includes the new detail sections. Scope additions, changes and removals are audited.
+* **Not in Phase 1:** user interfaces for assets, evidence, the timeline and scope history (phases 2 and 7); vulnerability links (phase 3). `enforce` and discovery snapshots have no caller until phase 2.
+

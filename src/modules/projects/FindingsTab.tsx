@@ -9,7 +9,8 @@ import { Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate } from "@/lib/query";
-import type { Evidence, Finding, FindingStatus, Severity } from "@/lib/types";
+import { canChangeStatus } from "@/lib/findings";
+import type { Confidence, Evidence, Finding, FindingStatus, Severity } from "@/lib/types";
 import { formatRelative } from "@/lib/utils";
 import { sortFindings } from "./report";
 
@@ -26,18 +27,37 @@ export const FINDING_STATUS_OPTIONS: { id: FindingStatus; label: string }[] = (O
   label: FINDING_STATUS_META[id].label,
 }));
 
-export interface FindingDraft {
-  id?: number;
-  title: string;
-  severity: Severity;
-  status: FindingStatus;
-  description: string;
-  affectedTarget: string;
-  cve: string;
-  evidence: Evidence[];
-}
+const CONFIDENCE_OPTIONS: { id: Confidence; label: string }[] = [
+  { id: "high", label: "High confidence" },
+  { id: "medium", label: "Medium confidence" },
+  { id: "low", label: "Low confidence" },
+];
 
-const EMPTY: FindingDraft = { title: "", severity: "medium", status: "open", description: "", affectedTarget: "", cve: "", evidence: [] };
+/** Every editable field, so saving never drops data the form does not show. */
+export type FindingDraft = Omit<Finding, "id" | "projectId" | "source" | "createdAt" | "updatedAt"> & { id?: number };
+
+const EMPTY: FindingDraft = {
+  title: "",
+  severity: "medium",
+  status: "new",
+  category: "",
+  confidence: "medium",
+  description: "",
+  affectedTarget: "",
+  cve: "",
+  evidence: [],
+  reproduction: "",
+  technicalDetails: "",
+  remediation: "",
+  tags: [],
+  assignee: "",
+  dueDate: null,
+};
+
+export function draftOf(f: Finding): FindingDraft {
+  const { projectId: _p, source: _s, createdAt: _c, updatedAt: _u, ...draft } = f;
+  return draft;
+}
 
 export function FindingFormModal({
   isOpen,
@@ -56,7 +76,7 @@ export function FindingFormModal({
 
   useEffect(() => {
     if (isOpen) {
-      setD(initial ? { ...initial, evidence: initial.evidence.map((e) => ({ ...e })) } : EMPTY);
+      setD(initial ? { ...initial, evidence: initial.evidence.map((e) => ({ ...e })), tags: [...initial.tags] } : EMPTY);
       setError(null);
     }
   }, [isOpen, initial]);
@@ -103,16 +123,14 @@ export function FindingFormModal({
         <TextInput label="Title" value={d.title} onChange={(v) => set("title", v)} placeholder="Reflected XSS in search parameter" isRequired autoFocus className="md:col-span-2" />
         <SelectInput label="Severity" value={d.severity} onChange={(v) => set("severity", v as Severity)} options={SEVERITY_OPTIONS} />
         <SelectInput label="Status" value={d.status} onChange={(v) => set("status", v as FindingStatus)} options={FINDING_STATUS_OPTIONS} />
+        <TextInput label="Category" value={d.category} onChange={(v) => set("category", v)} placeholder="Injection, access control, misconfiguration" />
+        <SelectInput label="Confidence" value={d.confidence} onChange={(v) => set("confidence", v as Confidence)} options={CONFIDENCE_OPTIONS} />
         <TextInput label="Affected target" value={d.affectedTarget} onChange={(v) => set("affectedTarget", v)} placeholder="https://app.example.com/search?q=" mono />
         <TextInput label="CVE (optional)" value={d.cve} onChange={(v) => set("cve", v)} placeholder="CVE-2024-12345" mono />
-        <TextAreaInput
-          label="Description"
-          value={d.description}
-          onChange={(v) => set("description", v)}
-          rows={6}
-          placeholder="Impact, reproduction steps, remediation"
-          className="md:col-span-2"
-        />
+        <TextAreaInput label="Description" value={d.description} onChange={(v) => set("description", v)} rows={5} placeholder="What the issue is and its impact" className="md:col-span-2" />
+        <TextAreaInput label="Reproduction steps" value={d.reproduction} onChange={(v) => set("reproduction", v)} rows={4} placeholder="1. Open … 2. Send … 3. Observe …" className="md:col-span-2" />
+        <TextAreaInput label="Technical details" value={d.technicalDetails} onChange={(v) => set("technicalDetails", v)} rows={3} placeholder="Requests, parameters, versions" className="md:col-span-2" />
+        <TextAreaInput label="Remediation" value={d.remediation} onChange={(v) => set("remediation", v)} rows={3} placeholder="How to fix it and how to verify the fix" className="md:col-span-2" />
       </div>
       <div>
         <div className="mb-2 flex items-center justify-between">
@@ -165,13 +183,13 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
     setOpen(true);
   };
   const openEdit = (f: Finding) => {
-    setEditing({ id: f.id, title: f.title, severity: f.severity, status: f.status, description: f.description, affectedTarget: f.affectedTarget, cve: f.cve, evidence: f.evidence });
+    setEditing(draftOf(f));
     setOpen(true);
   };
 
   const changeStatus = async (f: Finding, next: FindingStatus) => {
     try {
-      await api.findingUpsert({ id: f.id, projectId, title: f.title, severity: f.severity, status: next, description: f.description, affectedTarget: f.affectedTarget, cve: f.cve, evidence: f.evidence });
+      await api.findingSetStatus(f.id, next);
       invalidate("findings", "projects");
       notify.success(`Marked as ${FINDING_STATUS_META[next].label.toLowerCase()}`);
     } catch (e) {
@@ -254,7 +272,11 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
                         <ChevronDown className="size-3 text-muted" />
                       </Button>
                       <Dropdown.Popover placement="bottom start">
-                        <Dropdown.Menu aria-label="Finding status" onAction={(k) => k !== f.status && changeStatus(f, k as FindingStatus)}>
+                        <Dropdown.Menu
+                          aria-label="Finding status"
+                          disabledKeys={FINDING_STATUS_OPTIONS.filter((o) => !canChangeStatus(f.status, o.id)).map((o) => o.id)}
+                          onAction={(k) => canChangeStatus(f.status, k as FindingStatus) && changeStatus(f, k as FindingStatus)}
+                        >
                           {FINDING_STATUS_OPTIONS.map((o) => (
                             <Dropdown.Item key={o.id} id={o.id} textValue={o.label}>
                               {o.label}

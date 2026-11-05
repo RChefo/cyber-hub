@@ -161,7 +161,16 @@ export interface ScopeCheck {
 }
 
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
-export type FindingStatus = "open" | "confirmed" | "reported" | "resolved" | "false_positive";
+export type FindingStatus =
+  | "new"
+  | "under_review"
+  | "confirmed"
+  | "accepted_risk"
+  | "in_remediation"
+  | "resolved"
+  | "reopened"
+  | "false_positive";
+export type Confidence = "low" | "medium" | "high";
 
 export interface Evidence {
   label: string;
@@ -174,12 +183,127 @@ export interface Finding {
   title: string;
   severity: Severity;
   status: FindingStatus;
+  category: string;
+  confidence: Confidence;
   description: string;
   affectedTarget: string;
   cve: string;
+  /** Free-form references; stored evidence is attached through finding links. */
   evidence: Evidence[];
+  reproduction: string;
+  technicalDetails: string;
+  remediation: string;
+  /** Who recorded it: user, mcp, osint, manual (before schema 9)… */
+  source: string;
+  tags: string[];
+  assignee: string;
+  dueDate: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** What the backend accepts when saving; fields added in schema 9 are optional. */
+export type FindingInput = Pick<Finding, "projectId" | "title" | "severity" | "status"> &
+  Partial<Omit<Finding, "id" | "projectId" | "title" | "severity" | "status" | "source" | "createdAt" | "updatedAt">> & { id?: number };
+
+export interface FindingEvent {
+  id: number;
+  kind: "created" | "status" | "updated" | "note" | "link" | "unlink" | "migrated";
+  fromStatus: FindingStatus | null;
+  toStatus: FindingStatus | null;
+  note: string;
+  source: string;
+  at: string;
+}
+
+export type FindingLinkKind = "asset" | "vulnerability" | "osint_entity" | "execution" | "evidence";
+
+export interface FindingLink {
+  kind: FindingLinkKind;
+  refId: number;
+  /** Null when the linked record was deleted since. */
+  label: string | null;
+  createdAt: string;
+}
+
+export type AssetType = "domain" | "subdomain" | "ip" | "dns_record" | "service" | "http_service" | "certificate" | "technology" | "endpoint";
+export type AssetStatus = "active" | "not_observed" | "retired";
+
+export interface Asset {
+  id: number;
+  projectId: number;
+  type: AssetType;
+  value: string;
+  status: AssetStatus;
+  confidence: Confidence;
+  source: string;
+  osintEntityId: number | null;
+  data: unknown;
+  firstSeen: string;
+  lastSeen: string;
+  updatedAt: string;
+}
+
+export interface AssetObservation {
+  id: number;
+  snapshotId: number | null;
+  observedAt: string;
+  source: string;
+  data: unknown;
+}
+
+export interface EvidenceRecord {
+  id: number;
+  projectId: number;
+  kind: "file" | "text" | "execution" | "osint_evidence";
+  title: string;
+  description: string;
+  source: string;
+  sha256: string | null;
+  size: number | null;
+  fileName: string | null;
+  content: string | null;
+  executionId: number | null;
+  osintEvidenceId: number | null;
+  createdAt: string;
+}
+
+export type TimelineEventType =
+  | "execution"
+  | "finding"
+  | "scope"
+  | "evidence"
+  | "investigation"
+  | "discovery"
+  | "asset"
+  | "workflow"
+  | "remediation"
+  | "report"
+  | "note";
+
+export interface TimelineEvent {
+  type: TimelineEventType;
+  title: string;
+  detail: string;
+  refKind: string | null;
+  refId: number | null;
+  at: string;
+}
+
+export interface ScopeEvent {
+  id: number;
+  action: "added" | "updated" | "removed" | "blocked";
+  value: string;
+  kind: string;
+  inScope: boolean | null;
+  note: string;
+  source: string;
+  at: string;
+}
+
+export interface ScopeDecision {
+  mode: "passive" | "active";
+  verdicts: ScopeCheck[];
 }
 
 export interface ProjectExecution {

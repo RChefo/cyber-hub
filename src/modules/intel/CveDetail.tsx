@@ -77,7 +77,7 @@ function AddAsFinding({ record, isOpen, onOpenChange }: { record: CveRecord; isO
         projectId: Number(projectId),
         title,
         severity: severityOf(best),
-        status: "open",
+        status: "new",
         description: `${record.description}\n\n${best ? `CVSS ${best.version} ${best.score} (${best.vector})\n` : ""}Source: NVD record, confirm applicability to the affected target before reporting.`.slice(0, 50000),
         affectedTarget: "",
         cve: record.id,

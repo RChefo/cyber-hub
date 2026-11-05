@@ -100,9 +100,36 @@ export const api = {
   projectTargetDelete: (id: number) => call<void>("project_target_delete", { id }),
   scopeCheck: (projectId: number, targets: string[]) => call<T.ScopeCheck[]>("scope_check", { projectId, targets }),
   findingsList: (projectId?: number | null) => call<T.Finding[]>("findings_list", { projectId: projectId ?? null }),
-  findingUpsert: (input: Omit<T.Finding, "id" | "createdAt" | "updatedAt"> & { id?: number }) =>
-    call<number>("finding_upsert", { input }),
+  findingUpsert: (input: T.FindingInput) => call<number>("finding_upsert", { input }),
   findingDelete: (id: number) => call<void>("finding_delete", { id }),
+  findingSetStatus: (id: number, status: T.FindingStatus, note?: string) => call<T.FindingStatus>("finding_set_status", { id, status, note: note ?? null }),
+  findingAddNote: (id: number, note: string) => call<void>("finding_add_note", { id, note }),
+  findingHistory: (id: number) => call<T.FindingEvent[]>("finding_history", { id }),
+  findingLinks: (id: number) => call<T.FindingLink[]>("finding_links", { id }),
+  findingLink: (id: number, kind: T.FindingLinkKind, refId: number) => call<boolean>("finding_link", { id, kind, refId }),
+  findingUnlink: (id: number, kind: T.FindingLinkKind, refId: number) => call<boolean>("finding_unlink", { id, kind, refId }),
+  // shared project data (schema 9, docs/DATA_MODEL.md)
+  assetsList: (projectId: number, filter: { kind?: T.AssetType; status?: T.AssetStatus; limit?: number; offset?: number } = {}) =>
+    call<T.Asset[]>("assets_list", { projectId, kind: filter.kind ?? null, status: filter.status ?? null, limit: filter.limit ?? null, offset: filter.offset ?? null }),
+  assetAdd: (input: { projectId: number; type: T.AssetType; value: string; confidence?: T.Confidence; data?: unknown }) =>
+    call<T.Asset>("asset_add", { input: { ...input, source: "manual" } }),
+  assetSetStatus: (id: number, status: T.AssetStatus) => call<T.Asset>("asset_set_status", { id, status }),
+  assetObservations: (id: number) => call<T.AssetObservation[]>("asset_observations", { id }),
+  assetDelete: (id: number) => call<void>("asset_delete", { id }),
+  scopeHistory: (projectId: number, limit?: number) => call<T.ScopeEvent[]>("scope_history", { projectId, limit: limit ?? null }),
+  scopeDecide: (projectId: number | null, targets: string[], mode: "passive" | "active") => call<T.ScopeDecision>("scope_decide", { projectId, targets, mode }),
+  projectTimeline: (projectId: number, opts: { types?: T.TimelineEventType[]; before?: string; limit?: number } = {}) =>
+    call<T.TimelineEvent[]>("project_timeline", { projectId, types: opts.types ?? null, before: opts.before ?? null, limit: opts.limit ?? null }),
+  evidenceList: (projectId: number) => call<T.EvidenceRecord[]>("evidence_list", { projectId }),
+  evidenceAddText: (projectId: number, title: string, content: string, description?: string) =>
+    call<T.EvidenceRecord>("evidence_add_text", { projectId, title, content, description: description ?? null }),
+  evidenceAddFile: (projectId: number, title?: string, description?: string) =>
+    call<T.EvidenceRecord | null>("evidence_add_file", { projectId, title: title ?? null, description: description ?? null }),
+  evidenceLinkExecution: (projectId: number, executionId: number, title?: string) =>
+    call<T.EvidenceRecord>("evidence_link_execution", { projectId, executionId, title: title ?? null }),
+  evidenceLinkOsint: (projectId: number, osintEvidenceId: number) => call<T.EvidenceRecord>("evidence_link_osint", { projectId, osintEvidenceId }),
+  evidenceExport: (id: number) => call<string | null>("evidence_export", { id }),
+  evidenceDelete: (id: number) => call<void>("evidence_delete", { id }),
   projectToolHistory: (projectId: number) => call<T.ProjectExecution[]>("project_tool_history", { projectId }),
   projectReport: (id: number) => call<string>("project_report", { id }),
   /** native save dialog; returns the file name or null when cancelled */

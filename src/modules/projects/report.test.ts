@@ -12,17 +12,26 @@ const f = (id: number, severity: Finding["severity"], status: Finding["status"],
   affectedTarget: "app.acme.test",
   cve: id === 2 ? "CVE-2021-44228" : "",
   evidence: id === 2 ? [{ label: "Request", reference: "evidence/req-2.txt" }] : [],
+  category: "",
+  confidence: "medium",
+  reproduction: "",
+  technicalDetails: "",
+  remediation: "",
+  source: "user",
+  tags: [],
+  assignee: "",
+  dueDate: null,
   createdAt: updatedAt,
   updatedAt,
 });
 
 describe("findings helpers", () => {
   it("sorts by severity then most recent", () => {
-    const sorted = sortFindings([f(1, "low", "open"), f(2, "critical", "open"), f(3, "low", "open", "2026-11-03T00:00:00Z")]);
+    const sorted = sortFindings([f(1, "low", "new"), f(2, "critical", "new"), f(3, "low", "new", "2026-11-03T00:00:00Z")]);
     expect(sorted.map((x) => x.id)).toEqual([2, 3, 1]);
   });
   it("counts severities, optionally excluding closed findings", () => {
-    const list = [f(1, "high", "open"), f(2, "high", "resolved"), f(3, "info", "false_positive")];
+    const list = [f(1, "high", "new"), f(2, "high", "resolved"), f(3, "info", "false_positive"), f(4, "info", "accepted_risk")];
     expect(countBySeverity(list).high).toBe(2);
     expect(countBySeverity(list, true)).toEqual({ critical: 0, high: 1, medium: 0, low: 0, info: 0 });
   });

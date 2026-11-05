@@ -9,10 +9,10 @@ use crate::db::Db;
 use crate::error::{validation, AppError, AppResult};
 use crate::scope::{self, ScopeEntry};
 use crate::util::{clean, now, one_of};
+use crate::workspace::findings::{self as lifecycle, OPEN_SQL};
 
 const STATUSES: &[&str] = &["planning", "active", "paused", "completed", "archived"];
 const SEVERITIES: &[&str] = &["critical", "high", "medium", "low", "info"];
-const FINDING_STATUSES: &[&str] = &["open", "confirmed", "reported", "resolved", "false_positive"];
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -85,14 +85,14 @@ fn date_opt(field: &str, v: &Option<String>) -> AppResult<Option<String>> {
 #[tauri::command]
 pub async fn projects_list(db: State<'_, Db>) -> AppResult<Vec<ProjectSummary>> {
     db.with(|c| {
-        let mut stmt = c.prepare(
+        let mut stmt = c.prepare(&format!(
             "SELECT p.id, p.name, p.description, p.status, p.start_date, p.end_date,
                 (SELECT COUNT(*) FROM project_targets t WHERE t.project_id = p.id),
                 (SELECT COUNT(*) FROM findings f WHERE f.project_id = p.id),
-                (SELECT COUNT(*) FROM findings f WHERE f.project_id = p.id AND f.status IN ('open','confirmed')),
+                (SELECT COUNT(*) FROM findings f WHERE f.project_id = p.id AND f.status IN {OPEN_SQL}),
                 p.created_at, p.updated_at
-             FROM projects p ORDER BY p.updated_at DESC",
-        )?;
+             FROM projects p ORDER BY p.updated_at DESC"
+        ))?;
         let rows = stmt
             .query_map([], |r| {
                 Ok(ProjectSummary {
@@ -244,23 +244,67 @@ pub async fn scope_classify(value: String) -> AppResult<(String, String)> {
 pub async fn project_target_add(db: State<'_, Db>, project_id: i64, input: TargetInput) -> AppResult<i64> {
     let (value, kind) = scope::classify(&input.value)?;
     let note = clean("Note", &input.note, 300, false)?;
-    db.with(|c| {
-        c.execute(
-            "INSERT INTO project_targets (project_id, value, kind, in_scope, note, created_at) VALUES (?1,?2,?3,?4,?5,?6)
-             ON CONFLICT(project_id, value) DO UPDATE SET in_scope=excluded.in_scope, note=excluded.note",
-            params![project_id, value, kind, input.in_scope as i64, note, now()],
+    db.with(|c| target_add(c, project_id, &value, kind, input.in_scope, &note))
+}
+
+/// Adds or changes a scope entry and records the change in the project's scope history.
+pub(crate) fn target_add(c: &Connection, project_id: i64, value: &str, kind: &str, in_scope: bool, note: &str) -> AppResult<i64> {
+    let tx = c.unchecked_transaction()?;
+    let before: Option<(i64, bool, String)> = tx
+        .query_row("SELECT id, in_scope, note FROM project_targets WHERE project_id=?1 AND value=?2", params![project_id, value], |r| Ok((r.get(0)?, r.get::<_, i64>(1)? != 0, r.get(2)?)))
+        .optional()?;
+    let ts = now();
+    let id = match &before {
+        Some((id, ..)) => {
+            tx.execute("UPDATE project_targets SET in_scope=?2, note=?3 WHERE id=?1", params![id, in_scope as i64, note])?;
+            *id
+        }
+        None => {
+            tx.execute(
+                "INSERT INTO project_targets (project_id, value, kind, in_scope, note, created_at) VALUES (?1,?2,?3,?4,?5,?6)",
+                params![project_id, value, kind, in_scope as i64, note, ts],
+            )?;
+            tx.last_insert_rowid()
+        }
+    };
+    let action = match &before {
+        None => Some("added"),
+        Some((_, was, old_note)) if *was != in_scope || old_note != note => Some("updated"),
+        Some(_) => None,
+    };
+    if let Some(action) = action {
+        tx.execute(
+            "INSERT INTO scope_events (project_id, action, value, kind, in_scope, note, source, at) VALUES (?1,?2,?3,?4,?5,?6,'user',?7)",
+            params![project_id, action, value, kind, in_scope as i64, note, ts],
         )?;
-        c.execute("UPDATE projects SET updated_at=?2 WHERE id=?1", params![project_id, now()])?;
-        Ok(c.last_insert_rowid())
-    })
+    }
+    tx.execute("UPDATE projects SET updated_at=?2 WHERE id=?1", params![project_id, ts])?;
+    tx.commit()?;
+    Ok(id)
 }
 
 #[tauri::command]
 pub async fn project_target_delete(db: State<'_, Db>, id: i64) -> AppResult<()> {
-    db.with(|c| {
-        c.execute("DELETE FROM project_targets WHERE id=?1", params![id])?;
-        Ok(())
-    })
+    db.with(|c| target_delete(c, id))
+}
+
+/// Removes a scope entry; the removal stays in the project's scope history.
+pub(crate) fn target_delete(c: &Connection, id: i64) -> AppResult<()> {
+    let tx = c.unchecked_transaction()?;
+    let row: Option<(i64, String, String, bool)> = tx
+        .query_row("SELECT project_id, value, kind, in_scope FROM project_targets WHERE id=?1", params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)? != 0)))
+        .optional()?;
+    if let Some((project_id, value, kind, in_scope)) = row {
+        let ts = now();
+        tx.execute("DELETE FROM project_targets WHERE id=?1", params![id])?;
+        tx.execute(
+            "INSERT INTO scope_events (project_id, action, value, kind, in_scope, source, at) VALUES (?1,'removed',?2,?3,?4,'user',?5)",
+            params![project_id, value, kind, in_scope as i64, ts],
+        )?;
+        tx.execute("UPDATE projects SET updated_at=?2 WHERE id=?1", params![project_id, ts])?;
+    }
+    tx.commit()?;
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -305,15 +349,27 @@ pub struct Finding {
     pub title: String,
     pub severity: String,
     pub status: String,
+    pub category: String,
+    pub confidence: String,
     pub description: String,
     pub affected_target: String,
     pub cve: String,
+    /// Free-form references (labels and paths/URLs) kept from earlier versions; stored evidence
+    /// lives in the evidence registry and is attached through finding links.
     pub evidence: Vec<Evidence>,
+    pub reproduction: String,
+    pub technical_details: String,
+    pub remediation: String,
+    pub source: String,
+    pub tags: Vec<String>,
+    pub assignee: String,
+    pub due_date: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
 
-#[derive(Debug, Deserialize)]
+/// Fields added after the first release default to empty, so older clients keep working.
+#[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct FindingInput {
     pub id: Option<i64>,
@@ -322,6 +378,10 @@ pub struct FindingInput {
     pub severity: String,
     pub status: String,
     #[serde(default)]
+    pub category: String,
+    #[serde(default)]
+    pub confidence: Option<String>,
+    #[serde(default)]
     pub description: String,
     #[serde(default)]
     pub affected_target: String,
@@ -329,45 +389,91 @@ pub struct FindingInput {
     pub cve: String,
     #[serde(default)]
     pub evidence: Vec<Evidence>,
+    #[serde(default)]
+    pub reproduction: String,
+    #[serde(default)]
+    pub technical_details: String,
+    #[serde(default)]
+    pub remediation: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub assignee: String,
+    #[serde(default)]
+    pub due_date: Option<String>,
+}
+
+const FINDING_COLS: &str = "id, project_id, title, severity, status, category, confidence, description, affected_target, cve, evidence,
+    reproduction, technical_details, remediation, source, tags, assignee, due_date, created_at, updated_at";
+
+fn finding_row(r: &rusqlite::Row) -> rusqlite::Result<Finding> {
+    Ok(Finding {
+        id: r.get(0)?,
+        project_id: r.get(1)?,
+        title: r.get(2)?,
+        severity: r.get(3)?,
+        status: r.get(4)?,
+        category: r.get(5)?,
+        confidence: r.get(6)?,
+        description: r.get(7)?,
+        affected_target: r.get(8)?,
+        cve: r.get(9)?,
+        evidence: serde_json::from_str(&r.get::<_, String>(10)?).unwrap_or_default(),
+        reproduction: r.get(11)?,
+        technical_details: r.get(12)?,
+        remediation: r.get(13)?,
+        source: r.get(14)?,
+        tags: serde_json::from_str(&r.get::<_, String>(15)?).unwrap_or_default(),
+        assignee: r.get(16)?,
+        due_date: r.get(17)?,
+        created_at: r.get(18)?,
+        updated_at: r.get(19)?,
+    })
+}
+
+pub(crate) fn finding_get(c: &Connection, id: i64) -> AppResult<Finding> {
+    c.query_row(&format!("SELECT {FINDING_COLS} FROM findings WHERE id = ?1"), params![id], finding_row)
+        .optional()?
+        .ok_or_else(|| AppError::NotFound(format!("finding {id}")))
 }
 
 #[tauri::command]
 pub async fn findings_list(db: State<'_, Db>, project_id: Option<i64>) -> AppResult<Vec<Finding>> {
     db.with(|c| {
-        let mut stmt = c.prepare(
-            "SELECT id, project_id, title, severity, status, description, affected_target, cve, evidence, created_at, updated_at
-             FROM findings WHERE (?1 IS NULL OR project_id = ?1)
-             ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, updated_at DESC",
-        )?;
-        let rows = stmt
-            .query_map(params![project_id], |r| {
-                Ok(Finding {
-                    id: r.get(0)?,
-                    project_id: r.get(1)?,
-                    title: r.get(2)?,
-                    severity: r.get(3)?,
-                    status: r.get(4)?,
-                    description: r.get(5)?,
-                    affected_target: r.get(6)?,
-                    cve: r.get(7)?,
-                    evidence: serde_json::from_str(&r.get::<_, String>(8)?).unwrap_or_default(),
-                    created_at: r.get(9)?,
-                    updated_at: r.get(10)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut stmt = c.prepare(&format!(
+            "SELECT {FINDING_COLS} FROM findings WHERE (?1 IS NULL OR project_id = ?1)
+             ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, updated_at DESC"
+        ))?;
+        let rows = stmt.query_map(params![project_id], finding_row)?.collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
     })
 }
 
 #[tauri::command]
 pub async fn finding_upsert(db: State<'_, Db>, input: FindingInput) -> AppResult<i64> {
-    let title = clean("Title", &input.title, 200, true)?;
-    let severity = one_of("Severity", &input.severity, SEVERITIES)?;
-    let status = one_of("Status", &input.status, FINDING_STATUSES)?;
-    let description = clean("Description", &input.description, 50_000, false)?;
-    let affected = clean("Affected target", &input.affected_target, 500, false)?;
-    let cve = clean("CVE", &input.cve, 200, false)?.to_uppercase();
+    db.with(|c| finding_save(c, &input, "user"))
+}
+
+/// Validated finding in its stored form.
+struct CleanFinding {
+    title: String,
+    severity: String,
+    status: &'static str,
+    category: String,
+    confidence: String,
+    description: String,
+    affected: String,
+    cve: String,
+    evidence_json: String,
+    reproduction: String,
+    technical: String,
+    remediation: String,
+    tags_json: String,
+    assignee: String,
+    due_date: Option<String>,
+}
+
+fn clean_finding(input: &FindingInput) -> AppResult<CleanFinding> {
     if input.evidence.len() > 50 {
         return Err(validation("At most 50 evidence references"));
     }
@@ -378,36 +484,128 @@ pub async fn finding_upsert(db: State<'_, Db>, input: FindingInput) -> AppResult
             reference: clean("Evidence reference", &e.reference, 2000, true)?,
         });
     }
-    let evidence_json = serde_json::to_string(&evidence)?;
-    let ts = now();
-    db.with(|c| {
-        let id = match input.id {
-            Some(id) => {
-                c.execute(
-                    "UPDATE findings SET title=?2, severity=?3, status=?4, description=?5, affected_target=?6, cve=?7, evidence=?8, updated_at=?9 WHERE id=?1",
-                    params![id, title, severity, status, description, affected, cve, evidence_json, ts],
-                )?;
-                id
-            }
-            None => {
-                c.execute(
-                    "INSERT INTO findings (project_id, title, severity, status, description, affected_target, cve, evidence, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9)",
-                    params![input.project_id, title, severity, status, description, affected, cve, evidence_json, ts],
-                )?;
-                let id = c.last_insert_rowid();
-                log(c, "finding", &format!("Recorded {severity} finding “{title}”"), "", Some("finding"), Some(&id.to_string()), Some(input.project_id))?;
-                id
-            }
-        };
-        c.execute("UPDATE projects SET updated_at=?2 WHERE id=?1", params![input.project_id, ts])?;
-        Ok(id)
+    if input.tags.len() > 20 {
+        return Err(validation("At most 20 tags"));
+    }
+    let mut tags: Vec<String> = Vec::new();
+    for t in &input.tags {
+        let t = clean("Tag", t, 40, true)?;
+        if !tags.contains(&t) {
+            tags.push(t);
+        }
+    }
+    let confidence = input.confidence.as_deref().unwrap_or("medium");
+    if !lifecycle::CONFIDENCES.contains(&confidence) {
+        return Err(validation("Confidence must be low, medium or high"));
+    }
+    let due_date = match input.due_date.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+        None => None,
+        Some(d) => Some(chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| validation("The due date must be a date (YYYY-MM-DD)"))?.to_string()),
+    };
+    Ok(CleanFinding {
+        title: clean("Title", &input.title, 200, true)?,
+        severity: one_of("Severity", &input.severity, SEVERITIES)?,
+        status: lifecycle::status_or_err(&input.status)?,
+        category: clean("Category", &input.category, 100, false)?,
+        confidence: confidence.to_string(),
+        description: clean("Description", &input.description, 50_000, false)?,
+        affected: clean("Affected target", &input.affected_target, 500, false)?,
+        cve: clean("CVE", &input.cve, 200, false)?.to_uppercase(),
+        evidence_json: serde_json::to_string(&evidence)?,
+        reproduction: clean("Reproduction steps", &input.reproduction, 50_000, false)?,
+        technical: clean("Technical details", &input.technical_details, 50_000, false)?,
+        remediation: clean("Remediation", &input.remediation, 50_000, false)?,
+        tags_json: serde_json::to_string(&tags)?,
+        assignee: clean("Assignee", &input.assignee, 100, false)?,
+        due_date,
     })
+}
+
+/// Creates or updates a finding and records what changed in its history. `source` says who made
+/// the change (`user`, `mcp`, …).
+pub(crate) fn finding_save(c: &Connection, input: &FindingInput, source: &str) -> AppResult<i64> {
+    let f = clean_finding(input)?;
+    let ts = now();
+    let tx = c.unchecked_transaction()?;
+    let id = match input.id {
+        Some(id) => {
+            let old = finding_get(&tx, id)?;
+            if old.project_id != input.project_id {
+                return Err(validation("A finding cannot be moved to another project"));
+            }
+            if old.status != f.status {
+                lifecycle::transition_ok(&old.status, f.status).map_err(validation)?;
+            }
+            tx.execute(
+                "UPDATE findings SET title=?2, severity=?3, status=?4, category=?5, confidence=?6, description=?7, affected_target=?8, cve=?9, evidence=?10,
+                     reproduction=?11, technical_details=?12, remediation=?13, tags=?14, assignee=?15, due_date=?16, updated_at=?17 WHERE id=?1",
+                params![id, f.title, f.severity, f.status, f.category, f.confidence, f.description, f.affected, f.cve, f.evidence_json, f.reproduction, f.technical, f.remediation, f.tags_json, f.assignee, f.due_date, ts],
+            )?;
+            let new = finding_get(&tx, id)?;
+            let changed = changed_fields(&old, &new);
+            if !changed.is_empty() {
+                lifecycle::record_event(&tx, id, new.project_id, "updated", (None, None), &format!("Changed: {}", changed.join(", ")), source)?;
+            }
+            if old.status != new.status {
+                lifecycle::record_event(&tx, id, new.project_id, "status", (Some(&old.status), Some(&new.status)), "", source)?;
+            }
+            id
+        }
+        None => {
+            tx.execute(
+                "INSERT INTO findings (project_id, title, severity, status, category, confidence, description, affected_target, cve, evidence,
+                     reproduction, technical_details, remediation, source, tags, assignee, due_date, created_at, updated_at)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?18)",
+                params![input.project_id, f.title, f.severity, f.status, f.category, f.confidence, f.description, f.affected, f.cve, f.evidence_json, f.reproduction, f.technical, f.remediation, source, f.tags_json, f.assignee, f.due_date, ts],
+            )?;
+            let id = tx.last_insert_rowid();
+            lifecycle::record_event(&tx, id, input.project_id, "created", (None, Some(f.status)), "", source)?;
+            log(&tx, "finding", &format!("Recorded {} finding “{}”", f.severity, f.title), "", Some("finding"), Some(&id.to_string()), Some(input.project_id))?;
+            id
+        }
+    };
+    tx.execute("UPDATE projects SET updated_at=?2 WHERE id=?1", params![input.project_id, ts])?;
+    tx.commit()?;
+    Ok(id)
+}
+
+/// Names of the fields that differ (the status has its own history entry).
+fn changed_fields(a: &Finding, b: &Finding) -> Vec<&'static str> {
+    [
+        ("title", a.title != b.title),
+        ("severity", a.severity != b.severity),
+        ("category", a.category != b.category),
+        ("confidence", a.confidence != b.confidence),
+        ("description", a.description != b.description),
+        ("affected target", a.affected_target != b.affected_target),
+        ("CVE", a.cve != b.cve),
+        ("evidence references", serde_json::to_string(&a.evidence).ok() != serde_json::to_string(&b.evidence).ok()),
+        ("reproduction steps", a.reproduction != b.reproduction),
+        ("technical details", a.technical_details != b.technical_details),
+        ("remediation", a.remediation != b.remediation),
+        ("tags", a.tags != b.tags),
+        ("assignee", a.assignee != b.assignee),
+        ("due date", a.due_date != b.due_date),
+    ]
+    .into_iter()
+    .filter(|(_, d)| *d)
+    .map(|(n, _)| n)
+    .collect()
 }
 
 #[tauri::command]
 pub async fn finding_delete(db: State<'_, Db>, id: i64) -> AppResult<()> {
     db.with(|c| {
-        c.execute("DELETE FROM findings WHERE id=?1", params![id])?;
+        let tx = c.unchecked_transaction()?;
+        // the finding's own history goes with it; the project timeline keeps that it existed
+        if let Some((project_id, title, severity)) = tx
+            .query_row("SELECT project_id, title, severity FROM findings WHERE id=?1", params![id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)))
+            .optional()?
+        {
+            tx.execute("DELETE FROM findings WHERE id=?1", params![id])?;
+            crate::workspace::timeline::record(&tx, project_id, "finding", &format!("Finding deleted: {title}"), &severity, None, None)?;
+        }
+        tx.commit()?;
         Ok(())
     })
 }
@@ -452,7 +650,16 @@ pub async fn project_tool_history(db: State<'_, Db>, project_id: i64) -> AppResu
 /* ─────────────── assessment report (shared by the GUI and MCP) ─────────────── */
 
 const SEVERITY_LABEL: &[(&str, &str)] = &[("critical", "Critical"), ("high", "High"), ("medium", "Medium"), ("low", "Low"), ("info", "Info")];
-const STATUS_LABEL: &[(&str, &str)] = &[("open", "Open"), ("confirmed", "Confirmed"), ("reported", "Reported"), ("resolved", "Resolved"), ("false_positive", "False positive")];
+const STATUS_LABEL: &[(&str, &str)] = &[
+    ("new", "New"),
+    ("under_review", "Under review"),
+    ("confirmed", "Confirmed"),
+    ("accepted_risk", "Accepted risk"),
+    ("in_remediation", "In remediation"),
+    ("resolved", "Resolved"),
+    ("reopened", "Reopened"),
+    ("false_positive", "False positive"),
+];
 
 fn label<'a>(table: &'a [(&'a str, &'a str)], key: &'a str) -> &'a str {
     table.iter().find(|(k, _)| *k == key).map(|(_, v)| *v).unwrap_or(key)
@@ -540,9 +747,20 @@ pub fn markdown_report(project: &Project, findings: &[Finding], generated: &str)
             if !f.cve.is_empty() {
                 l.push(format!("- **CVE:** {}", f.cve));
             }
+            if !f.category.trim().is_empty() {
+                l.push(format!("- **Category:** {}", f.category.trim()));
+            }
             if !f.description.trim().is_empty() {
                 l.push(String::new());
                 l.push(f.description.trim().to_string());
+            }
+            for (heading, text) in [("Reproduction", &f.reproduction), ("Technical details", &f.technical_details), ("Remediation", &f.remediation)] {
+                if !text.trim().is_empty() {
+                    l.push(String::new());
+                    l.push(format!("**{heading}**"));
+                    l.push(String::new());
+                    l.push(text.trim().to_string());
+                }
             }
             if !f.evidence.is_empty() {
                 l.push(String::new());
@@ -632,6 +850,15 @@ mod report_tests {
             affected_target: "app.acme.test".into(),
             cve: if id == 2 { "CVE-2021-44228".into() } else { String::new() },
             evidence: if id == 2 { vec![Evidence { label: "Request".into(), reference: "evidence/req-2.txt".into() }] } else { vec![] },
+            category: String::new(),
+            confidence: "medium".into(),
+            reproduction: String::new(),
+            technical_details: String::new(),
+            remediation: if id == 2 { "Upgrade log4j-core to 2.17.1.".into() } else { String::new() },
+            source: "user".into(),
+            tags: vec![],
+            assignee: String::new(),
+            due_date: None,
             created_at: "2026-11-02T00:00:00Z".into(),
             updated_at: "2026-11-02T00:00:00Z".into(),
         }
@@ -639,7 +866,7 @@ mod report_tests {
 
     #[test]
     fn report_includes_summary_scope_and_findings_in_severity_order() {
-        let md = markdown_report(&project(true), &[f(1, "low", "open"), f(2, "critical", "confirmed")], "2026-11-03");
+        let md = markdown_report(&project(true), &[f(1, "low", "new"), f(2, "critical", "in_remediation")], "2026-11-03");
         assert!(md.contains("# Acme external assessment"));
         assert!(md.contains("generated by Cyber Hub on 2026-11-03"));
         assert!(md.contains("Critical 1"));
@@ -650,11 +877,106 @@ mod report_tests {
         assert!(md.contains("Production VPN \\| do not touch"));
         assert!(md.contains("| `vpn.acme.test` | domain | Out of scope |"));
         assert!(md.contains("- **Status:** Active"));
+        assert!(md.contains("- **Status:** In remediation"));
+        assert!(md.contains("**Remediation**
+
+Upgrade log4j-core to 2.17.1."));
     }
 
     #[test]
     fn empty_projects_do_not_fabricate_content() {
         let md = markdown_report(&project(false), &[], "2026-11-03");
         assert!(md.contains("No scope entries recorded.") && md.contains("No findings recorded."));
+    }
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+
+    fn setup(db: &Db) -> i64 {
+        db.with(|c| {
+            c.execute("INSERT INTO projects (name, status, created_at, updated_at) VALUES ('P','active','t','t')", [])?;
+            Ok(c.last_insert_rowid())
+        })
+        .unwrap()
+    }
+
+    fn input(p: i64) -> FindingInput {
+        FindingInput { project_id: p, title: "Open redirect".into(), severity: "medium".into(), status: "open".into(), ..Default::default() }
+    }
+
+    #[test]
+    fn saving_findings_maps_legacy_statuses_and_records_history() {
+        let db = Db::open_in_memory().unwrap();
+        let p = setup(&db);
+        db.with(|c| {
+            let id = finding_save(c, &input(p), "mcp")?;
+            let f = finding_get(c, id)?;
+            assert_eq!((f.status.as_str(), f.source.as_str(), f.confidence.as_str()), ("new", "mcp", "medium"), "\"open\" from older clients is stored as \"new\"");
+            finding_save(c, &FindingInput { id: Some(id), status: "reported".into(), remediation: "Allow-list redirect targets".into(), tags: vec!["web".into(), "web".into()], due_date: Some("2026-12-01".into()), ..input(p) }, "user")?;
+            let f = finding_get(c, id)?;
+            assert_eq!(f.status, "confirmed");
+            assert_eq!(f.tags, vec!["web"]);
+            assert_eq!(f.source, "mcp", "the original source is kept");
+            let h = lifecycle::history(c, id)?;
+            let kinds: Vec<&str> = h.iter().map(|e| e.kind.as_str()).collect();
+            assert_eq!(kinds, vec!["created", "updated", "status"]);
+            assert_eq!(h[1].note, "Changed: remediation, tags, due date");
+            assert_eq!((h[2].from_status.as_deref(), h[2].to_status.as_deref()), (Some("new"), Some("confirmed")));
+            // saving without changes records nothing
+            finding_save(c, &FindingInput { id: Some(id), status: "confirmed".into(), remediation: "Allow-list redirect targets".into(), tags: vec!["web".into()], due_date: Some("2026-12-01".into()), ..input(p) }, "user")?;
+            assert_eq!(lifecycle::history(c, id)?.len(), 3);
+            // invalid input changes nothing
+            for bad in [
+                FindingInput { id: Some(id), status: "reopened".into(), ..input(p) },
+                FindingInput { id: Some(id), status: "closed".into(), ..input(p) },
+                FindingInput { id: Some(id), confidence: Some("certain".into()), ..input(p) },
+                FindingInput { id: Some(id), due_date: Some("next week".into()), ..input(p) },
+                FindingInput { id: Some(id), project_id: p + 1, ..input(p) },
+            ] {
+                assert!(finding_save(c, &bad, "user").is_err());
+            }
+            assert_eq!(finding_get(c, id)?.status, "confirmed");
+            assert_eq!(lifecycle::history(c, id)?.len(), 3);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn open_finding_counts_use_the_new_lifecycle() {
+        let db = Db::open_in_memory().unwrap();
+        let p = setup(&db);
+        db.with(|c| {
+            for s in lifecycle::STATUSES {
+                c.execute("INSERT INTO findings (project_id, title, severity, status, created_at, updated_at) VALUES (?1,'x','low',?2,'t','t')", params![p, s])?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        let open: i64 = db.with(|c| Ok(c.query_row(&format!("SELECT COUNT(*) FROM findings WHERE project_id = ?1 AND status IN {OPEN_SQL}"), params![p], |r| r.get(0))?)).unwrap();
+        assert_eq!(open, 5, "resolved, accepted risk and false positives are not open");
+    }
+
+    #[test]
+    fn scope_changes_are_recorded() {
+        let db = Db::open_in_memory().unwrap();
+        let p = setup(&db);
+        db.with(|c| {
+            let id = target_add(c, p, "example.com", "domain", true, "")?;
+            assert_eq!(target_add(c, p, "example.com", "domain", true, "")?, id, "re-adding the same entry is not a change");
+            target_add(c, p, "example.com", "domain", false, "Out of scope since the call")?;
+            target_delete(c, id)?;
+            target_delete(c, id)?;
+            let mut st = c.prepare("SELECT action, in_scope, note FROM scope_events WHERE project_id = ?1 ORDER BY id")?;
+            let rows: Vec<(String, Option<i64>, String)> = st.query_map(params![p], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.collect::<Result<_, _>>()?;
+            assert_eq!(
+                rows,
+                vec![("added".into(), Some(1), String::new()), ("updated".into(), Some(0), "Out of scope since the call".into()), ("removed".into(), Some(0), String::new())]
+            );
+            Ok(())
+        })
+        .unwrap();
     }
 }

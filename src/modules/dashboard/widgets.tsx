@@ -217,7 +217,7 @@ export function KpiWidget() {
   const tiles = [
     { label: "Installed tools", value: installed, icon: Boxes, hint: detections.size ? "From the last scan" : "Not scanned yet", tone: "default" },
     { label: "Active projects", value: active, icon: FolderKanban, hint: `${projects.data?.length ?? 0} total`, tone: "default" },
-    { label: "Open findings", value: openFindings, icon: Search, hint: openFindings ? "Open or confirmed" : "None recorded", tone: openFindings ? "warning" : "success" },
+    { label: "Open findings", value: openFindings, icon: Search, hint: openFindings ? "Not yet resolved or accepted" : "None recorded", tone: openFindings ? "warning" : "success" },
     { label: "Commands this week", value: commandsWeek, icon: SquareTerminal, hint: `${pending} pending tasks`, tone: "default" },
   ] as const;
 
