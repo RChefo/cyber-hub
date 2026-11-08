@@ -13,8 +13,9 @@ This document states exactly what an upgrade does, what was tested, and how far 
 |---|---|
 | 0.1.0 (first build, commit `d1cf064` and earlier) | 8 |
 | 0.1.0 with the platform expansion (phases 1–8) | 12 |
+| development after the final QA audit (scan import) | 13 |
 
-The schema version is SQLite's `user_version`. Migrations 9–12 are listed in [DATA_MODEL.md](DATA_MODEL.md). They add tables and columns, rebuild `findings` once to give it the new lifecycle, and map the old finding statuses: `open` becomes `new`, `reported` becomes `confirmed`, and every finding that was `reported` gets a history entry recording the mapping. Ids and all other columns are kept.
+The schema version is SQLite's `user_version`. Migrations 9–13 are listed in [DATA_MODEL.md](DATA_MODEL.md). Migration 13 only adds two tables (`scan_imports`, `finding_fingerprints`) and changes nothing that exists. They add tables and columns, rebuild `findings` once to give it the new lifecycle, and map the old finding statuses: `open` becomes `new`, `reported` becomes `confirmed`, and every finding that was `reported` gets a history entry recording the mapping. Ids and all other columns are kept.
 
 ## What happens at startup
 

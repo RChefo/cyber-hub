@@ -574,12 +574,20 @@ fn clean_finding(input: &FindingInput) -> AppResult<CleanFinding> {
 /// Creates or updates a finding and records what changed in its history. `source` says who made
 /// the change (`user`, `mcp`, …).
 pub(crate) fn finding_save(c: &Connection, input: &FindingInput, source: &str) -> AppResult<i64> {
+    let tx = c.unchecked_transaction()?;
+    let id = finding_write(&tx, input, source, true)?;
+    tx.commit()?;
+    Ok(id)
+}
+
+/// [`finding_save`] without its own transaction, for callers that already hold one (imports).
+/// `log_activity` adds the activity-log line for a new finding (bulk callers log once instead).
+pub(crate) fn finding_write(tx: &Connection, input: &FindingInput, source: &str, log_activity: bool) -> AppResult<i64> {
     let f = clean_finding(input)?;
     let ts = now();
-    let tx = c.unchecked_transaction()?;
     let id = match input.id {
         Some(id) => {
-            let old = finding_get(&tx, id)?;
+            let old = finding_get(tx, id)?;
             if old.project_id != input.project_id {
                 return Err(validation("A finding cannot be moved to another project"));
             }
@@ -591,13 +599,13 @@ pub(crate) fn finding_save(c: &Connection, input: &FindingInput, source: &str) -
                      reproduction=?11, technical_details=?12, remediation=?13, tags=?14, assignee=?15, due_date=?16, updated_at=?17 WHERE id=?1",
                 params![id, f.title, f.severity, f.status, f.category, f.confidence, f.description, f.affected, f.cve, f.evidence_json, f.reproduction, f.technical, f.remediation, f.tags_json, f.assignee, f.due_date, ts],
             )?;
-            let new = finding_get(&tx, id)?;
+            let new = finding_get(tx, id)?;
             let changed = changed_fields(&old, &new);
             if !changed.is_empty() {
-                lifecycle::record_event(&tx, id, new.project_id, "updated", (None, None), &format!("Changed: {}", changed.join(", ")), source)?;
+                lifecycle::record_event(tx, id, new.project_id, "updated", (None, None), &format!("Changed: {}", changed.join(", ")), source)?;
             }
             if old.status != new.status {
-                lifecycle::record_event(&tx, id, new.project_id, "status", (Some(&old.status), Some(&new.status)), "", source)?;
+                lifecycle::record_event(tx, id, new.project_id, "status", (Some(&old.status), Some(&new.status)), "", source)?;
             }
             id
         }
@@ -609,13 +617,14 @@ pub(crate) fn finding_save(c: &Connection, input: &FindingInput, source: &str) -
                 params![input.project_id, f.title, f.severity, f.status, f.category, f.confidence, f.description, f.affected, f.cve, f.evidence_json, f.reproduction, f.technical, f.remediation, source, f.tags_json, f.assignee, f.due_date, ts],
             )?;
             let id = tx.last_insert_rowid();
-            lifecycle::record_event(&tx, id, input.project_id, "created", (None, Some(f.status)), "", source)?;
-            log(&tx, "finding", &format!("Recorded {} finding “{}”", f.severity, f.title), "", Some("finding"), Some(&id.to_string()), Some(input.project_id))?;
+            lifecycle::record_event(tx, id, input.project_id, "created", (None, Some(f.status)), "", source)?;
+            if log_activity {
+                log(tx, "finding", &format!("Recorded {} finding “{}”", f.severity, f.title), "", Some("finding"), Some(&id.to_string()), Some(input.project_id))?;
+            }
             id
         }
     };
     tx.execute("UPDATE projects SET updated_at=?2 WHERE id=?1", params![input.project_id, ts])?;
-    tx.commit()?;
     Ok(id)
 }
 

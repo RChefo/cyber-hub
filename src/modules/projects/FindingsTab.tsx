@@ -1,5 +1,5 @@
 import { Button, Checkbox, Dropdown, Tooltip } from "@heroui/react";
-import { ChevronDown, History, Link2, Pencil, Plus, ShieldAlert, Trash2, X } from "lucide-react";
+import { ChevronDown, FileUp, History, Link2, Pencil, Plus, ShieldAlert, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FINDING_STATUS_META, SeverityBadge, ToneChip } from "@/components/ui/Badges";
 import { AppModal, useConfirm } from "@/components/ui/Dialogs";
@@ -15,6 +15,7 @@ import type { Confidence, Evidence, Finding, FindingLinkKind, FindingStatus, Sev
 import { useShowMore } from "@/lib/showMore";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/utils";
 import { filterFindings, parseTags, sortFindings, tagsOf } from "./report";
+import { ScanImportModal } from "./ScanImportModal";
 
 export const SEVERITY_OPTIONS: { id: Severity; label: string }[] = [
   { id: "critical", label: "Critical" },
@@ -281,6 +282,7 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
   const [tag, setTag] = useState("all");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [detail, setDetail] = useState<number | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const list = useMemo(() => filterFindings(sortFindings(findings), { severity: sev, status, query, tag }), [findings, sev, status, query, tag]);
   const tags = useMemo(() => tagsOf(findings), [findings]);
@@ -343,6 +345,10 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
           {tags.length > 0 && <SelectInput aria-label="Filter by tag" value={tag} onChange={setTag} options={[{ id: "all", label: "All tags" }, ...tags.map((t) => ({ id: t, label: t }))]} className="w-36" />}
           <SelectInput aria-label="Filter by severity" value={sev} onChange={setSev} options={[{ id: "all", label: "All severities" }, ...SEVERITY_OPTIONS]} className="w-40" />
           <SelectInput aria-label="Filter by status" value={status} onChange={setStatus} options={[{ id: "all", label: "All statuses" }, ...FINDING_STATUS_OPTIONS]} className="w-40" />
+          <Button variant="secondary" size="sm" onPress={() => setImporting(true)}>
+            <FileUp className="size-3.5" />
+            Import results
+          </Button>
           <Button variant="primary" size="sm" onPress={openNew}>
             <Plus className="size-3.5" />
             Record finding
@@ -350,16 +356,23 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
         </>
       }
     >
+      <ScanImportModal isOpen={importing} onOpenChange={setImporting} projectId={projectId} />
       {findings.length === 0 ? (
         <EmptyBlock
           icon={ShieldAlert}
           title="No findings recorded"
-          description="Record verified issues with severity, affected target and evidence references."
+          description="Record verified issues with severity, affected target and evidence references, or import the results of Nmap, Nuclei, Nessus, Burp Suite, OWASP ZAP or a SARIF tool."
           action={
-            <Button size="sm" variant="primary" onPress={openNew}>
-              <Plus className="size-3.5" />
-              Record finding
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="secondary" onPress={() => setImporting(true)}>
+                <FileUp className="size-3.5" />
+                Import results
+              </Button>
+              <Button size="sm" variant="primary" onPress={openNew}>
+                <Plus className="size-3.5" />
+                Record finding
+              </Button>
+            </div>
           }
         />
       ) : list.length === 0 ? (

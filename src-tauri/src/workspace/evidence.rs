@@ -233,18 +233,54 @@ impl EvidenceStore {
             out.sync_all()?;
             (hex(&hasher.finalize()), size)
         };
+        self.register(db, project_id, &tmp, (&sha, size), (&name, &title, &description), source)
+    }
+
+    /// Stores bytes held in memory (an imported scan file) as file evidence, like [`Self::add_file`].
+    pub fn add_bytes(&self, db: &Db, project_id: i64, file_name: &str, bytes: &[u8], (title, description): (&str, &str), source: &str) -> AppResult<EvidenceRecord> {
+        db.with(|c| require_project(c, project_id))?;
+        if bytes.len() as u64 > MAX_FILE {
+            return Err(validation("Evidence files are limited to 256 MB"));
+        }
+        let title = clean("Title", title, 200, true)?;
+        let description = clean("Description", description, 5000, false)?;
+        let name = display_name(file_name);
+        safe_dir(&self.root)?;
+        let tmp_dir = self.root.join("incoming");
+        safe_dir(&tmp_dir)?;
+        let mut nonce = [0u8; 8];
+        let _ = getrandom::fill(&mut nonce);
+        let tmp = tmp_dir.join(format!("{}-{}", std::process::id(), hex(&nonce)));
+        let sha = hex(&Sha256::digest(bytes));
+        let written = (|| -> AppResult<()> {
+            let mut out = File::create(&tmp)?;
+            out.write_all(bytes)?;
+            out.sync_all()?;
+            Ok(())
+        })();
+        if let Err(e) = written {
+            let _ = fs::remove_file(&tmp);
+            return Err(e);
+        }
+        self.register(db, project_id, &tmp, (&sha, bytes.len() as u64), (&name, &title, &description), source)
+    }
+
+    /// Moves a hashed temporary file to its place in the store and registers it (the same content
+    /// in the same project returns the existing record).
+    fn register(&self, db: &Db, project_id: i64, tmp: &Path, (sha, size): (&str, u64), (name, title, description): (&str, &str, &str), source: &str) -> AppResult<EvidenceRecord> {
+        let sha = sha.to_string();
         let dest = self.blob(&sha);
         let placed = (|| -> AppResult<()> {
             safe_dir(dest.parent().expect("blob has a parent"))?;
             if dest.exists() {
-                fs::remove_file(&tmp)?;
+                fs::remove_file(tmp)?;
             } else {
-                fs::rename(&tmp, &dest)?;
+                fs::rename(tmp, &dest)?;
             }
             Ok(())
         })();
         if let Err(e) = placed {
-            let _ = fs::remove_file(&tmp);
+            let _ = fs::remove_file(tmp);
             return Err(e);
         }
         db.with(|c| {

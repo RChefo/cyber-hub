@@ -280,3 +280,139 @@ pub async fn report_save_evidence(db: State<'_, Db>, project_id: i64, options: c
 pub async fn report_printed(db: State<'_, Db>, project_id: i64) -> AppResult<()> {
     db.with(|c| timeline::record(c, project_id, "report", "Report printed", "", None, None))
 }
+
+/* ───────────────────────── scan import ───────────────────────── */
+
+use crate::workspace::scan_import::{self, ImportRecord, ImportResult, Options as ImportOptions, Parsed, Preview};
+
+/// A file that was read and previewed but not imported yet.
+pub struct PendingScan {
+    project_id: i64,
+    file_name: String,
+    sha256: String,
+    bytes: Vec<u8>,
+    parsed: Parsed,
+}
+
+/// Pending scan imports by token. At most two are held (each up to 50 MB).
+#[derive(Default)]
+pub struct ScanImports(std::sync::Mutex<std::collections::HashMap<String, PendingScan>>);
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanImportPreview {
+    token: String,
+    file_name: String,
+    sha256: String,
+    size: usize,
+    #[serde(flatten)]
+    preview: Preview,
+}
+
+fn import_token() -> String {
+    let mut b = [0u8; 16];
+    let _ = getrandom::fill(&mut b);
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// Choose a scan result file (native dialog), read and preview it. Nothing is imported.
+#[tauri::command]
+pub async fn scan_import_pick(app: AppHandle, project_id: i64, options: Option<ImportOptions>) -> AppResult<Option<ScanImportPreview>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    main_window_dialog(&app, "Import scan results")
+        .add_filter("Scan results", &["xml", "nessus", "json", "jsonl", "sarif"])
+        .add_filter("All files", &["*"])
+        .pick_file(move |f| {
+            let _ = tx.send(f.and_then(|f| f.into_path().ok()));
+        });
+    let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
+    let handle = app.clone();
+    let opts = options.unwrap_or_default();
+    // reading and parsing up to 50 MB must not hold up the async runtime
+    let (pending, preview) = tauri::async_runtime::spawn_blocking(move || -> AppResult<(PendingScan, Preview)> {
+        let meta = std::fs::metadata(&path)?;
+        if !meta.is_file() {
+            return Err(crate::error::validation("Choose a file"));
+        }
+        if meta.len() as usize > scan_import::MAX_FILE_BYTES {
+            return Err(crate::error::validation(format!("The file is larger than {} MB", scan_import::MAX_FILE_BYTES / 1024 / 1024)));
+        }
+        let bytes = std::fs::read(&path)?;
+        if bytes.len() > scan_import::MAX_FILE_BYTES {
+            return Err(crate::error::validation("The file grew while it was read"));
+        }
+        let text = String::from_utf8_lossy(&bytes).into_owned();
+        let parsed = scan_import::parse(&text).map_err(AppError::Validation)?;
+        let preview = handle.state::<Db>().with(|c| scan_import::preview(c, project_id, &parsed, opts))?;
+        let sha256 = {
+            use sha2::Digest;
+            sha2::Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect()
+        };
+        let file_name = evidence::display_name(&path.to_string_lossy()).chars().take(200).collect();
+        Ok((PendingScan { project_id, file_name, sha256, bytes, parsed }, preview))
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("reading the scan file failed: {e}")))??;
+    let out = ScanImportPreview { token: import_token(), file_name: pending.file_name.clone(), sha256: pending.sha256.clone(), size: pending.bytes.len(), preview };
+    let state = app.state::<ScanImports>();
+    let mut m = state.0.lock().map_err(|_| AppError::Internal("scan import state poisoned".into()))?;
+    if m.len() >= 2 {
+        m.clear();
+    }
+    m.insert(out.token.clone(), pending);
+    Ok(Some(out))
+}
+
+/// The preview again with other options (informational findings included or not).
+#[tauri::command]
+pub async fn scan_import_preview(db: State<'_, Db>, imports: State<'_, ScanImports>, token: String, options: ImportOptions) -> AppResult<Preview> {
+    let m = imports.0.lock().map_err(|_| AppError::Internal("scan import state poisoned".into()))?;
+    let p = m.get(&token).ok_or_else(|| crate::error::validation("This preview has expired; choose the file again"))?;
+    db.with(|c| scan_import::preview(c, p.project_id, &p.parsed, options))
+}
+
+/// Imports a previewed file: stores it as evidence, then records findings and assets.
+#[tauri::command]
+pub async fn scan_import_commit(app: AppHandle, token: String, options: ImportOptions) -> AppResult<ImportResult> {
+    // taken out first, so a second click cannot import the same file twice
+    let pending = {
+        let state = app.state::<ScanImports>();
+        let mut m = state.0.lock().map_err(|_| AppError::Internal("scan import state poisoned".into()))?;
+        m.remove(&token).ok_or_else(|| crate::error::validation("This preview has expired; choose the file again"))?
+    };
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<ImportResult> {
+        let db = handle.state::<Db>();
+        let store = handle.state::<Arc<EvidenceStore>>();
+        let existed: Option<i64> = db.with(|c| {
+            use rusqlite::OptionalExtension;
+            Ok(c.query_row("SELECT id FROM evidence WHERE project_id = ?1 AND kind = 'file' AND sha256 = ?2", params![pending.project_id, pending.sha256], |r| r.get(0)).optional()?)
+        })?;
+        let tool = pending.parsed.tool.clone();
+        let rec = store.add_bytes(&db, pending.project_id, &pending.file_name, &pending.bytes, (&format!("{tool} results: {}", pending.file_name), &format!("Imported scan results ({tool}). SHA-256 {}", pending.sha256)), "import")?;
+        let info = scan_import::FileInfo { file_name: &pending.file_name, sha256: &pending.sha256, evidence_id: Some(rec.id) };
+        let result = db.with(|c| scan_import::import(c, pending.project_id, &pending.parsed, options, &info));
+        if result.is_err() && existed.is_none() {
+            // the import was not recorded: do not leave its file behind
+            let _ = store.delete(&db, rec.id);
+        }
+        result
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("the import failed: {e}")))?
+}
+
+/// Forgets a previewed file without importing it.
+#[tauri::command]
+pub async fn scan_import_discard(imports: State<'_, ScanImports>, token: String) -> AppResult<()> {
+    if let Ok(mut m) = imports.0.lock() {
+        m.remove(&token);
+    }
+    Ok(())
+}
+
+/// Imports recorded for a project, newest first.
+#[tauri::command]
+pub async fn scan_imports_list(db: State<'_, Db>, project_id: i64) -> AppResult<Vec<ImportRecord>> {
+    db.with(|c| scan_import::history(c, project_id))
+}

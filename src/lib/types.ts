@@ -293,6 +293,64 @@ export interface EvidenceRecord {
   createdAt: string;
 }
 
+/** What importing one finding of a scan file would do (docs/DATA_MODEL.md#scan-import). */
+export type ScanImportOutcome = "new" | "seen_again" | "recurring" | "dismissed" | "out_of_scope" | "info";
+
+export interface ScanImportOptions {
+  includeInfo: boolean;
+  reopenResolved: boolean;
+}
+
+export interface ScanImportPreview {
+  format: string;
+  formatLabel: string;
+  tool: string;
+  findings: number;
+  bySeverity: Partial<Record<Severity, number>>;
+  counts: { new: number; seenAgain: number; recurring: number; dismissed: number; outOfScope: number; info: number };
+  assets: number;
+  assetsNew: number;
+  assetsOutOfScope: number;
+  outOfScopeHosts: string[];
+  items: { title: string; severity: Severity; target: string; outcome: ScanImportOutcome; findingId: number | null }[];
+  warnings: string[];
+  merged: number;
+  markedFalsePositive: number;
+  hasScope: boolean;
+}
+
+export interface ScanImportPending extends ScanImportPreview {
+  token: string;
+  fileName: string;
+  sha256: string;
+  size: number;
+}
+
+export interface ScanImportResult {
+  importId: number;
+  created: number;
+  seenAgain: number;
+  reopened: number;
+  dismissed: number;
+  outOfScope: number;
+  infoSkipped: number;
+  assetsNew: number;
+  assetsSeen: number;
+  summary: string;
+}
+
+export interface ScanImportRecord {
+  id: number;
+  format: string;
+  tool: string;
+  fileName: string;
+  sha256: string;
+  evidenceId: number | null;
+  snapshotId: number | null;
+  summary: { text?: string; created?: number; seenAgain?: number; reopened?: number };
+  createdAt: string;
+}
+
 export type TimelineEventType =
   | "execution"
   | "finding"

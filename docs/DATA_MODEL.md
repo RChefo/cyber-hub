@@ -1,4 +1,4 @@
-# Project data model (schema 12)
+# Project data model (schema 13)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -149,6 +149,26 @@ Projects → *Findings* provides:
   * Output: *Print or save as PDF* uses the system web view's print dialog (decision 3; no PDF library). *Save as HTML* writes the file through a native save dialog. *Keep a copy in the evidence* stores the HTML as text evidence.
   * Safety: the backend escapes all content, and the document has its own Content-Security-Policy (`default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'`). The print frame may not run scripts.
   * Exports, prints and saved copies appear on the timeline (`report`). The Markdown report (header button, MCP) is unchanged apart from the engagement details.
+
+## Scan import (schema 13)
+
+Projects → *Findings* → *Import results* reads the output of other tools into the project (`workspace/scan_import.rs`, commands in `commands/workspace.rs`). Reading a file never contacts anything.
+
+| Format | Recognized by | Findings | Assets |
+|---|---|---|---|
+| Nmap XML (`-oX`) | `<nmaprun>` root | none | up hosts, their names, open ports as services, products as technologies |
+| Nuclei (`-jsonl`, or the JSON list of `-json-export`) | `template-id` field | one per template, matcher and location; `info.severity`, CVE and CWE from `info.classification`, references, remediation, extracted values | web service (origin), address, technology for `tech` templates |
+| Nessus v2 (`.nessus`) | `<NessusClientData_v2>` root | one per plugin, host and port; `severity` 0–4, synopsis and description, solution, `see_also`, CVEs, plugin output | address, name (`host-fqdn`), services |
+| Burp Suite issue export (XML) | `<issues>` root | one per issue; severity, confidence (Certain/Firm/Tentative), detail and background, remediation, CWE, references, the request line | web service, address |
+| OWASP ZAP JSON report | `site` list | one per alert and site, with up to 25 instances; risk code, confidence, CWE, references | web service |
+| SARIF 2.1.0 | `version` 2.1.x and `runs` | one per result; `security-severity` mapped like GitHub code scanning (≥ 9 critical, ≥ 7 high, ≥ 4 medium, > 0 low), otherwise `level` (error high, warning medium, note low) | none (source-code locations have no network target) |
+
+* **Flow.** The file (at most 50 MB, 10,000 findings, 20,000 asset values) is chosen in a native dialog, read and previewed. The preview says what each finding would do: new, already recorded, resolved and reported again, dismissed earlier, outside the scope, or informational (not imported unless selected). Nothing is written until *Import* is pressed. The preview can be used once.
+* **Scope.** Every network target is checked against the project scope with the scope engine. Findings and assets outside it are counted and their hosts listed; they are not recorded. A project without in-scope entries records no network results. SARIF results have no network target and are always imported.
+* **Deduplication.** `finding_fingerprints` keeps one fingerprint per imported finding (SHA-256 of tool, rule and location; SARIF's `partialFingerprints` when present). A finding reported again is not duplicated: the sighting is added to its history and to `times_seen`. A resolved finding can be reopened (*Reopen resolved findings*, on by default in the preview). A finding marked as a false positive or an accepted risk stays as it is. Repeated results inside one file are merged.
+* **Records.** New findings have status `new`, source `import`, the tags `imported` and the tool, and the scanner's confidence. They link to the imported file (stored as file evidence with its SHA-256) and to their asset (web service, service or address) when it is in the inventory. Assets are recorded as one discovery snapshot (`manual`, source `import:<format>`); an import never marks other assets as no longer observed. `scan_imports` records each import (format, tool, file name, SHA-256, evidence, snapshot, summary). The timeline and the activity log get one entry per import.
+* **What is not copied.** Request and response bodies (Burp, Nuclei), curl commands and cookies stay only in the stored file. Copied text (plugin output, extracted values, evidence strings, the request line) passes through the secret redaction used for tool output. HTML in scanner descriptions becomes plain text.
+* **Archived projects** cannot receive imports.
 
 ## Analysis
 

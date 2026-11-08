@@ -776,6 +776,38 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE projects ADD COLUMN methodology TEXT NOT NULL DEFAULT '';
     ALTER TABLE projects ADD COLUMN contacts TEXT NOT NULL DEFAULT '';
     "#,
+    // 13: scanner-output import (docs/DATA_MODEL.md#scan-import): one record per imported file,
+    // and the fingerprints that keep imported findings from being duplicated by later imports.
+    // New tables only; nothing existing changes.
+    r#"
+    CREATE TABLE scan_imports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        format TEXT NOT NULL,
+        tool TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        sha256 TEXT NOT NULL,
+        evidence_id INTEGER REFERENCES evidence(id) ON DELETE SET NULL,
+        snapshot_id INTEGER REFERENCES discovery_snapshots(id) ON DELETE SET NULL,
+        summary TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_scan_imports ON scan_imports(project_id, id DESC);
+    CREATE TABLE finding_fingerprints (
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        fingerprint TEXT NOT NULL,
+        finding_id INTEGER NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+        tool TEXT NOT NULL,
+        rule_id TEXT NOT NULL,
+        first_import_id INTEGER REFERENCES scan_imports(id) ON DELETE SET NULL,
+        last_import_id INTEGER REFERENCES scan_imports(id) ON DELETE SET NULL,
+        times_seen INTEGER NOT NULL DEFAULT 1,
+        first_seen TEXT NOT NULL,
+        last_seen TEXT NOT NULL,
+        PRIMARY KEY (project_id, fingerprint)
+    );
+    CREATE INDEX idx_finding_fingerprints_finding ON finding_fingerprints(finding_id);
+    "#,
 ];
 
 /// Backups kept in `<data dir>/backups` (the newest ones; older copies are removed).
@@ -1139,6 +1171,69 @@ mod tests {
             Ok(())
         })
         .unwrap();
+    }
+
+    /// A database at schema 12 with a project, a finding and file evidence.
+    fn schema12_with_data() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        for (i, sql) in MIGRATIONS.iter().take(12).enumerate() {
+            conn.execute_batch(sql).unwrap();
+            conn.execute_batch(&format!("PRAGMA user_version = {}", i + 1)).unwrap();
+        }
+        conn.execute_batch(
+            "INSERT INTO projects (id, name, status, client, created_at, updated_at) VALUES (3, 'Acme', 'active', 'Acme Corp', '2026-11-01T00:00:00Z', '2026-11-01T00:00:00Z');
+             INSERT INTO findings (id, project_id, title, severity, status, created_at, updated_at) VALUES (21, 3, 'Weak TLS', 'medium', 'new', '2026-11-02T00:00:00Z', '2026-11-02T00:00:00Z');
+             INSERT INTO evidence (id, project_id, kind, title, sha256, size, file_name, created_at) VALUES (5, 3, 'file', 'scan.xml', 'aa', 10, 'scan.xml', '2026-11-02T00:00:00Z');",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn schema_12_gains_the_scan_import_tables_and_keeps_its_data() {
+        let db = Db::init(schema12_with_data()).unwrap();
+        assert!(db.schema_version().unwrap() >= 13);
+        db.with(|c| {
+            assert_eq!(count(c, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('scan_imports', 'finding_fingerprints')"), 2);
+            let kept: (String, String, String) = c.query_row("SELECT p.client, f.title, e.file_name FROM projects p JOIN findings f ON f.project_id = p.id JOIN evidence e ON e.project_id = p.id", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            assert_eq!(kept, ("Acme Corp".into(), "Weak TLS".into(), "scan.xml".into()), "existing rows are untouched");
+            c.execute_batch(
+                "INSERT INTO scan_imports (id, project_id, format, tool, file_name, sha256, evidence_id, created_at) VALUES (1, 3, 'nessus', 'Nessus', 'scan.nessus', 'aa', 5, '2026-11-03T00:00:00Z');
+                 INSERT INTO finding_fingerprints (project_id, fingerprint, finding_id, tool, rule_id, first_import_id, last_import_id, first_seen, last_seen) VALUES (3, 'fp', 21, 'Nessus', '1', 1, 1, 'x', 'x');",
+            )?;
+            assert_eq!(count(c, "SELECT COUNT(*) FROM pragma_foreign_key_check"), 0);
+            // deleting the evidence keeps the import record; deleting the finding forgets its fingerprint
+            c.execute("DELETE FROM evidence WHERE id = 5", [])?;
+            assert_eq!(count(c, "SELECT COUNT(*) FROM scan_imports WHERE evidence_id IS NULL"), 1);
+            c.execute("DELETE FROM findings WHERE id = 21", [])?;
+            assert_eq!(count(c, "SELECT COUNT(*) FROM finding_fingerprints"), 0);
+            c.execute("DELETE FROM projects WHERE id = 3", [])?;
+            assert_eq!(count(c, "SELECT COUNT(*) FROM scan_imports"), 0, "imports go with their project");
+            let integrity: String = c.query_row("PRAGMA integrity_check", [], |r| r.get(0))?;
+            assert_eq!(integrity, "ok");
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn an_interrupted_upgrade_to_schema_13_leaves_schema_12_intact() {
+        let conn = schema12_with_data();
+        // something in the way of the migration: it fails part-way through
+        conn.execute_batch("CREATE TABLE finding_fingerprints (x INTEGER);").unwrap();
+        let db = Db { conn: Mutex::new(conn) };
+        assert!(db.migrate().is_err());
+        assert_eq!(db.schema_version().unwrap(), 12, "the version is not advanced");
+        db.with(|c| {
+            assert_eq!(count(c, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'scan_imports'"), 0, "nothing of the failed step remains");
+            assert_eq!(count(c, "SELECT COUNT(*) FROM findings WHERE id = 21"), 1);
+            c.execute_batch("DROP TABLE finding_fingerprints;")?;
+            Ok(())
+        })
+        .unwrap();
+        db.migrate().unwrap();
+        assert_eq!(db.schema_version().unwrap(), MIGRATIONS.len() as i64, "the upgrade succeeds once the obstacle is gone");
     }
 
     #[test]

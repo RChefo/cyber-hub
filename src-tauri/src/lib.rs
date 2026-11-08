@@ -94,6 +94,7 @@ pub fn run() {
             app.manage(mcp::ops::LiveRuns::default());
             app.manage(std::sync::Arc::new(osint::discovery::OsintState::default()));
             app.manage(osint_commands::ImportState::default());
+            app.manage(workspace_commands::ScanImports::default());
             app.manage(std::sync::Arc::new(updates::Updates::load(&app.state::<db::Db>())));
             // evidence files (content-addressed, private folder); leftovers of an interrupted copy
             // and files no record refers to any more are removed
@@ -197,6 +198,11 @@ pub fn run() {
             workspace_commands::evidence_link_osint,
             workspace_commands::evidence_export,
             workspace_commands::evidence_delete,
+            workspace_commands::scan_import_pick,
+            workspace_commands::scan_import_preview,
+            workspace_commands::scan_import_commit,
+            workspace_commands::scan_import_discard,
+            workspace_commands::scan_imports_list,
             workspace_commands::report_html,
             workspace_commands::report_export_html,
             workspace_commands::report_save_evidence,
