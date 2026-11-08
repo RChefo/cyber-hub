@@ -240,7 +240,7 @@ fn imports_respect_scope_and_never_duplicate_findings() {
 
         // a dismissed finding stays dismissed
         lifecycle::set_status(c, fid, "false_positive", "not exploitable", "user")?;
-        let r4 = import(c, p, &parsed, Options { reopen_resolved: true, include_info: true }, &file)?;
+        let r4 = import(c, p, &parsed, Options { reopen_resolved: true, include_info: true, ..Default::default() }, &file)?;
         assert_eq!((r4.dismissed, r4.created), (1, 1), "only the informational item is new");
         assert_eq!(crate::commands::projects::finding_get(c, fid)?.status, "false_positive");
 
@@ -288,4 +288,67 @@ fn nmap_files_add_assets_only() {
         Ok(())
     })
     .unwrap();
+}
+
+#[test]
+fn library_templates_replace_scanner_text_for_matching_rules() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let p = setup(c);
+        let tid = crate::workspace::templates::save(
+            c,
+            &crate::workspace::templates::TemplateInput {
+                title: "Outdated Apache httpd".into(),
+                severity: "critical".into(),
+                category: "Vulnerable components".into(),
+                description: "Our vetted description.".into(),
+                remediation: "Upgrade httpd.".into(),
+                references: vec!["https://httpd.apache.org/security/vulnerabilities_24.html".into(), "https://internal/kb/42".into()],
+                tags: vec!["patching".into()],
+                rules: vec!["NESSUS:156860".into()],
+                ..Default::default()
+            },
+        )?;
+        let parsed = parse(NESSUS).unwrap();
+        let pv = preview(c, p, &parsed, Options::default())?;
+        assert_eq!(pv.templated, 1);
+        assert!(pv.items.iter().any(|i| i.template.as_deref() == Some("Outdated Apache httpd") && i.severity == "critical"));
+        let off = preview(c, p, &parsed, Options { use_templates: false, ..Default::default() })?;
+        assert_eq!(off.templated, 0);
+
+        let r = import(c, p, &parsed, Options::default(), &FileInfo { file_name: "weekly.nessus", sha256: "ab", evidence_id: None })?;
+        assert_eq!((r.created, r.templated), (1, 1));
+        let fid: i64 = c.query_row("SELECT id FROM findings", [], |r| r.get(0))?;
+        let f = crate::commands::projects::finding_get(c, fid)?;
+        assert_eq!((f.title.as_str(), f.severity.as_str(), f.description.as_str(), f.remediation.as_str()), ("Outdated Apache httpd", "critical", "Our vetted description.", "Upgrade httpd."));
+        assert_eq!(f.cve, "CVE-2021-44790, CVE-2021-44224", "the instance's CVEs stay");
+        assert!(f.technical_details.contains("Plugin output"), "the scanner's evidence stays");
+        let refs: Vec<&str> = f.evidence.iter().map(|e| e.reference.as_str()).collect();
+        assert_eq!(refs, vec!["https://httpd.apache.org/security/vulnerabilities_24.html", "https://internal/kb/42", "https://example.org/advisory"], "merged without duplicates");
+        assert!(f.tags.contains(&"patching".to_string()) && f.tags.contains(&"nessus".to_string()));
+        assert!(lifecycle::history(c, fid)?.iter().any(|e| e.note.contains("Outdated Apache httpd")));
+        assert_eq!(crate::workspace::templates::get(c, tid)?.use_count, 1);
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn unmatched_nuclei_results_and_passing_sarif_results_are_skipped() {
+    let nuclei = r#"{"template-id":"a","info":{"name":"A","severity":"high"},"host":"https://app.example.com","matched-at":"https://app.example.com/a","matcher-status":true}
+{"template-id":"b","info":{"name":"B","severity":"high"},"host":"https://app.example.com","matched-at":"https://app.example.com/b","matcher-status":false}"#;
+    let p = parse(nuclei).unwrap();
+    assert_eq!(p.findings.len(), 1);
+    assert!(p.warnings.iter().any(|w| w.contains("did not match")));
+
+    let sarif = json!({ "version": "2.1.0", "runs": [{ "tool": { "driver": { "name": "T" } }, "results": [
+        { "ruleId": "r1", "kind": "pass", "message": { "text": "ok" } },
+        { "ruleId": "r2", "kind": "review", "level": "error", "message": { "text": "look" } },
+        { "ruleId": "r3", "message": { "text": "bad" } }
+    ]}]}).to_string();
+    let p = parse(&sarif).unwrap();
+    assert_eq!(p.findings.len(), 2);
+    assert_eq!(p.findings[0].severity, "info", "a review result carries no severity");
+    assert_eq!(p.findings[1].severity, "medium", "no level means warning");
+    assert!(p.warnings.iter().any(|w| w.contains("pass or notApplicable")));
 }

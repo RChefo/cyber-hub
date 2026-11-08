@@ -37,6 +37,8 @@ export type Tag =
   | "vulns"
   /** project workflows and their runs */
   | "workflows"
+  /** the finding library (templates) */
+  | "templates"
   | "system";
 
 const versions = new Map<Tag, number>();

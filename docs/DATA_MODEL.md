@@ -1,4 +1,4 @@
-# Project data model (schema 13)
+# Project data model (schema 14)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -169,6 +169,26 @@ Projects → *Findings* → *Import results* reads the output of other tools int
 * **Records.** New findings have status `new`, source `import`, the tags `imported` and the tool, and the scanner's confidence. They link to the imported file (stored as file evidence with its SHA-256) and to their asset (web service, service or address) when it is in the inventory. Assets are recorded as one discovery snapshot (`manual`, source `import:<format>`); an import never marks other assets as no longer observed. `scan_imports` records each import (format, tool, file name, SHA-256, evidence, snapshot, summary). The timeline and the activity log get one entry per import.
 * **What is not copied.** Request and response bodies (Burp, Nuclei), curl commands and cookies stay only in the stored file. Copied text (plugin output, extracted values, evidence strings, the request line) passes through the secret redaction used for tool output. HTML in scanner descriptions becomes plain text.
 * **Archived projects** cannot receive imports.
+
+## Finding library (schema 14)
+
+The *Finding Library* page (Workspace group) keeps reusable write-ups in `finding_templates` (`workspace/templates.rs`). Templates belong to the workstation, not to a project, so they carry over between engagements.
+
+| Field | Notes |
+|---|---|
+| `title` | required, ≤ 200 characters, unique without regard to case |
+| `severity`, `category` | as for findings |
+| `description`, `remediation` | ≤ 50,000 characters each |
+| `refs` | JSON list of ≤ 30 references (URLs or citations), deduplicated |
+| `tags` | JSON list of ≤ 20 tags |
+| `rules` | JSON list of ≤ 50 import rules `format:rule` (`nmap`, `nuclei`, `nessus`, `burp`, `zap`, `sarif`; the rule as the tool names it: Nessus plugin ID, ZAP plugin ID, Burp issue type, Nuclei template ID, SARIF rule ID). A rule belongs to one template; rules match without regard to case. |
+| `use_count` | how often a finding was written from the template |
+
+* **Recording a finding.** *Start from a template* fills the title, severity, category, description, remediation, references and tags. Fields the template leaves empty keep what was typed. The target, reproduction steps and evidence of the instance are added by hand.
+* **Saving a finding as a template** copies its write-up (title, severity, category, description, remediation, URL references, tags) into a new template. Instance details stay with the finding.
+* **Scan imports.** A new imported finding whose rule matches a template's import rule is written from the template: its title, severity, category, description and remediation replace the scanner's, references are merged, and tags are added. The finding's target, CVEs and the scanner's evidence (technical details) stay. The finding's history notes the template and rule. The preview counts these findings and lists them, and *Write matching findings from your finding library templates* turns this off for one import. Findings already recorded are never rewritten.
+* **Starter templates.** *Add starter templates* adds 14 common findings with import rules for OWASP ZAP, Burp Suite and Nessus: SQL injection, reflected XSS, missing CSP, HSTS, X-Content-Type-Options and clickjacking protection, untrusted certificates, deprecated TLS, SSH CBC ciphers, SMB signing, directory listing, vulnerable components, default credentials and IDOR. It never overwrites a template with the same title. A rule that another template already owns is left out.
+* **Library files.** *Export* writes `{"format":"cyberhub-finding-templates","version":1,"templates":[…]}` through a native save dialog. *Import* reads such a file (≤ 5 MB, ≤ 2,000 templates) through a native open dialog. It adds templates whose titles are new, never overwrites existing ones, and reports invalid entries with the reason. The valid entries are added in one savepoint.
 
 ## Analysis
 

@@ -14,7 +14,7 @@ import { copyCommand, copyText, notify } from "@/lib/actions";
 import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { Finding, Project, ProjectStatus } from "@/lib/types";
-import { formatDate, formatDateTime, formatRelative, shellQuote } from "@/lib/utils";
+import { formatDate, formatDateTime, formatRelative, pluralize, shellQuote } from "@/lib/utils";
 import { AnalysisTab } from "./AnalysisTab";
 import { AssistantTab } from "./AssistantTab";
 import { AttackSurfaceTab } from "./AttackSurfaceTab";
@@ -287,7 +287,7 @@ export function ProjectDetail({ id }: { id: number }) {
   const remove = async () => {
     const ok = await confirm.ask({
       title: `Delete “${p.name}”?`,
-      body: `This permanently deletes the project, its ${p.targets.length} scope entries and ${f.length} findings. Tool run history is kept but unlinked.`,
+      body: `This permanently deletes the project, its ${pluralize(p.targets.length, "scope entry", "scope entries")} and ${pluralize(f.length, "finding")}. Tool run history is kept but unlinked.`,
       confirmLabel: "Delete project",
     });
     if (!ok) return;
@@ -352,7 +352,7 @@ export function ProjectDetail({ id }: { id: number }) {
               <ToneChip tone={PROJECT_STATUS_META[p.status].tone}>{PROJECT_STATUS_META[p.status].label}</ToneChip>
             </div>
             <p className="mt-0.5 max-w-[72ch] truncate text-[13.5px] text-muted">
-              {[p.startDate && p.endDate ? `${p.startDate} → ${p.endDate}` : null, `${p.targets.length} scope entries`, `${f.length} findings`].filter(Boolean).join(" · ")}
+              {[p.startDate && p.endDate ? `${p.startDate} → ${p.endDate}` : null, pluralize(p.targets.length, "scope entry", "scope entries"), pluralize(f.length, "finding")].filter(Boolean).join(" · ")}
             </p>
           </div>
         </div>

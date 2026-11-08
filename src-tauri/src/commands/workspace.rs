@@ -416,3 +416,66 @@ pub async fn scan_import_discard(imports: State<'_, ScanImports>, token: String)
 pub async fn scan_imports_list(db: State<'_, Db>, project_id: i64) -> AppResult<Vec<ImportRecord>> {
     db.with(|c| scan_import::history(c, project_id))
 }
+
+/* ───────────────────────── finding library ───────────────────────── */
+
+use crate::workspace::templates::{self, FindingTemplate, LibraryImport, TemplateInput};
+
+#[tauri::command]
+pub async fn finding_templates_list(db: State<'_, Db>) -> AppResult<Vec<FindingTemplate>> {
+    db.with(templates::list)
+}
+
+#[tauri::command]
+pub async fn finding_template_save(db: State<'_, Db>, input: TemplateInput) -> AppResult<FindingTemplate> {
+    db.with(|c| {
+        let id = templates::save(c, &input)?;
+        templates::get(c, id)
+    })
+}
+
+#[tauri::command]
+pub async fn finding_template_delete(db: State<'_, Db>, id: i64) -> AppResult<()> {
+    db.with(|c| templates::delete(c, id))
+}
+
+/// Counts a use of a template (a finding was recorded from it).
+#[tauri::command]
+pub async fn finding_template_used(db: State<'_, Db>, id: i64) -> AppResult<()> {
+    db.with(|c| templates::mark_used(c, id))
+}
+
+/// Adds the starter templates that are not in the library yet; returns how many were added.
+#[tauri::command]
+pub async fn finding_templates_add_starters(db: State<'_, Db>) -> AppResult<usize> {
+    db.with(templates::add_starters)
+}
+
+/// Saves the library as a JSON file (native dialog). Returns the file name, or None if cancelled.
+#[tauri::command]
+pub async fn finding_templates_export(app: AppHandle) -> AppResult<Option<String>> {
+    let json = app.state::<Db>().with(templates::export_json)?;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    main_window_dialog(&app, "Export finding library").set_file_name("cyberhub-finding-library.json").add_filter("JSON", &["json"]).save_file(move |f| {
+        let _ = tx.send(f.and_then(|f| f.into_path().ok()));
+    });
+    let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
+    std::fs::write(&path, json).map_err(|e| AppError::Internal(format!("Could not write the library file: {e}")))?;
+    Ok(Some(path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()))
+}
+
+/// Adds the templates of a library file (native dialog). Existing titles are never overwritten.
+#[tauri::command]
+pub async fn finding_templates_import(app: AppHandle) -> AppResult<Option<LibraryImport>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    main_window_dialog(&app, "Import finding library").add_filter("JSON", &["json"]).pick_file(move |f| {
+        let _ = tx.send(f.and_then(|f| f.into_path().ok()));
+    });
+    let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
+    let meta = std::fs::metadata(&path)?;
+    if meta.len() as usize > templates::MAX_LIBRARY_FILE {
+        return Err(crate::error::validation("The library file is larger than 5 MB"));
+    }
+    let text = std::fs::read_to_string(&path).map_err(|_| crate::error::validation("The file is not UTF-8 text"))?;
+    Ok(Some(app.state::<Db>().with(|c| templates::import_json(c, &text))?))
+}

@@ -16,6 +16,9 @@ import { useShowMore } from "@/lib/showMore";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/utils";
 import { filterFindings, parseTags, sortFindings, tagsOf } from "./report";
 import { ScanImportModal } from "./ScanImportModal";
+import { applyTemplate, templateFromFinding } from "@/modules/library/library";
+import { TemplateFormModal } from "@/modules/library/TemplateFormModal";
+import type { FindingTemplateInput } from "@/lib/types";
 
 export const SEVERITY_OPTIONS: { id: Severity; label: string }[] = [
   { id: "critical", label: "Critical" },
@@ -77,14 +80,27 @@ export function FindingFormModal({
   const [tagText, setTagText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [templateId, setTemplateId] = useState("");
+  const [asTemplate, setAsTemplate] = useState<FindingTemplateInput | null>(null);
+  const templates = useQuery(["templates"], api.findingTemplatesList, [], isOpen);
 
   useEffect(() => {
     if (isOpen) {
       setD(initial ? { ...initial, evidence: initial.evidence.map((e) => ({ ...e })), tags: [...initial.tags] } : EMPTY);
       setTagText((initial?.tags ?? []).join(", "));
       setError(null);
+      setTemplateId("");
     }
   }, [isOpen, initial]);
+
+  const useTemplate = (id: string) => {
+    setTemplateId(id);
+    const t = templates.data?.find((x) => String(x.id) === id);
+    if (!t) return;
+    const next = applyTemplate({ ...d, tags: parseTags(tagText) }, t);
+    setD(next);
+    setTagText(next.tags.join(", "));
+  };
 
   const set = <K extends keyof FindingDraft>(k: K, v: FindingDraft[K]) => setD((s) => ({ ...s, [k]: v }));
   const setEvidence = (i: number, patch: Partial<Evidence>) => set("evidence", d.evidence.map((e, j) => (j === i ? { ...e, ...patch } : e)));
@@ -96,6 +112,10 @@ export function FindingFormModal({
     setError(null);
     try {
       await api.findingUpsert({ ...d, tags: parseTags(tagText), projectId });
+      if (templateId) {
+        await api.findingTemplateUsed(Number(templateId)).catch(() => undefined);
+        invalidate("templates");
+      }
       invalidate("findings", "projects", "activity");
       notify.success(d.id ? "Finding updated" : "Finding recorded");
       onOpenChange(false);
@@ -115,6 +135,9 @@ export function FindingFormModal({
       size="lg"
       footer={
         <>
+          <Button variant="tertiary" className="mr-auto" onPress={() => setAsTemplate(templateFromFinding({ ...d, tags: parseTags(tagText) }))} isDisabled={!d.title.trim()}>
+            Save as template
+          </Button>
           <Button variant="tertiary" onPress={() => onOpenChange(false)}>
             Cancel
           </Button>
@@ -124,6 +147,15 @@ export function FindingFormModal({
         </>
       }
     >
+      <TemplateFormModal initial={asTemplate} onClose={() => setAsTemplate(null)} />
+      {!d.id && (templates.data?.length ?? 0) > 0 && (
+        <SelectInput
+          label="Start from a template"
+          value={templateId}
+          onChange={useTemplate}
+          options={[{ id: "", label: "No template" }, ...(templates.data ?? []).map((t) => ({ id: String(t.id), label: t.title, description: [t.severity, t.category].filter(Boolean).join(" · ") }))]}
+        />
+      )}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <TextInput label="Title" value={d.title} onChange={(v) => set("title", v)} placeholder="Reflected XSS in search parameter" isRequired autoFocus className="md:col-span-2" />
         <SelectInput label="Severity" value={d.severity} onChange={(v) => set("severity", v as Severity)} options={SEVERITY_OPTIONS} />

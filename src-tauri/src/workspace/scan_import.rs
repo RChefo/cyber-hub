@@ -14,7 +14,7 @@
 //!   that is copied (plugin output, extracted values, evidence strings) goes through the secret
 //!   redaction used for tool output.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -30,6 +30,7 @@ use crate::util::now;
 use crate::workspace::assets::{self, with_savepoint};
 use crate::workspace::discovery::{self, Batch, Certainty};
 use crate::workspace::findings as lifecycle;
+use crate::workspace::templates::{self, FindingTemplate};
 use crate::workspace::timeline;
 
 /// Largest file accepted for import.
@@ -591,9 +592,15 @@ fn parse_nuclei(text: &str) -> Result<Parsed, String> {
     if bad_lines > 0 {
         p.warnings.push(format!("{bad_lines} lines were not valid JSON and were skipped"));
     }
+    let mut failed = 0usize;
     for r in &records {
         let id = { let a = s(r, "template-id"); if a.is_empty() { s(r, "templateID") } else { a } };
         if id.is_empty() {
+            continue;
+        }
+        // `-ms` also writes templates that did not match (`matcher-status: false`)
+        if r.get("matcher-status").and_then(Value::as_bool) == Some(false) {
+            failed += 1;
             continue;
         }
         let info = r.get("info").cloned().unwrap_or(Value::Null);
@@ -662,6 +669,9 @@ fn parse_nuclei(text: &str) -> Result<Parsed, String> {
             tags: tool_tags("nuclei", tags.into_iter().take(5)),
             fingerprint: fingerprint(&["nuclei", &id, &matcher, &target]),
         });
+    }
+    if failed > 0 {
+        p.warnings.push(format!("{failed} results that did not match (matcher-status false) were skipped"));
     }
     Ok(p)
 }
@@ -1061,12 +1071,20 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
     let runs = v.get("runs").and_then(Value::as_array).cloned().unwrap_or_default();
     let tool = runs.first().map(|r| s(&r["tool"]["driver"], "name")).filter(|n| !n.is_empty()).unwrap_or_else(|| "SARIF".into());
     let mut p = Parsed::new(Format::Sarif, &trunc(&tool, 60));
+    let mut skipped_kinds = 0usize;
     for run in &runs {
         let driver = &run["tool"]["driver"];
         let run_tool = { let n = s(driver, "name"); if n.is_empty() { tool.clone() } else { n } };
         let rules: Vec<Value> = driver.get("rules").and_then(Value::as_array).cloned().unwrap_or_default();
         let rule_by_id: BTreeMap<String, &Value> = rules.iter().map(|r| (s(r, "id"), r)).collect();
         for res in run.get("results").and_then(Value::as_array).into_iter().flatten() {
+            // SARIF 2.1.0 §3.27.9: `pass` and `notApplicable` are not problems; other kinds
+            // than `fail` (the default) carry no severity
+            let kind = s(res, "kind");
+            if kind == "pass" || kind == "notApplicable" {
+                skipped_kinds += 1;
+                continue;
+            }
             let rule_id = { let r = s(res, "ruleId"); if r.is_empty() { res.get("rule").map(|x| s(x, "id")).unwrap_or_default() } else { r } };
             let rule = res.get("ruleIndex").and_then(Value::as_u64).and_then(|i| rules.get(i as usize)).or_else(|| rule_by_id.get(&rule_id).copied());
             let message = s(&res["message"], "text");
@@ -1080,7 +1098,11 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
             };
             let score = rule.and_then(|r| r["properties"].get("security-severity")).and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|t| t.parse().ok())));
             let level = { let l = s(res, "level"); if l.is_empty() { rule.map(|r| s(&r["defaultConfiguration"], "level")).unwrap_or_default() } else { l } };
-            let severity = score.map(security_severity).unwrap_or_else(|| sarif_level(if level.is_empty() { "warning" } else { &level }));
+            let severity = if !kind.is_empty() && kind != "fail" {
+                "info"
+            } else {
+                score.map(security_severity).unwrap_or_else(|| sarif_level(if level.is_empty() { "warning" } else { &level }))
+            };
             let title = rule.map(|r| { let t = s(&r["shortDescription"], "text"); if t.is_empty() { s(r, "name") } else { t } }).filter(|t| !t.is_empty()).unwrap_or_else(|| if rule_id.is_empty() { trunc(&message, 120) } else { rule_id.clone() });
             let rule_text = rule.map(|r| { let t = s(&r["fullDescription"], "text"); if t.is_empty() { s(&r["help"], "text") } else { t } }).unwrap_or_default();
             let description = [message.as_str(), rule_text.as_str()].iter().filter(|x| !x.is_empty()).copied().collect::<Vec<_>>().join("\n\n");
@@ -1114,12 +1136,15 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
             });
         }
     }
+    if skipped_kinds > 0 {
+        p.warnings.push(format!("{skipped_kinds} results of kind pass or notApplicable were skipped"));
+    }
     Ok(p)
 }
 
 /* ───────────────────────── preview and import ───────────────────────── */
 
-#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Options {
     /// also import informational findings (off by default: they are mostly inventory)
@@ -1128,6 +1153,65 @@ pub struct Options {
     /// reopen resolved findings that the file reports again
     #[serde(default)]
     pub reopen_resolved: bool,
+    /// use finding-library templates whose import rule matches (on by default)
+    #[serde(default = "yes")]
+    pub use_templates: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Options { include_info: false, reopen_resolved: false, use_templates: true }
+    }
+}
+
+type Library = HashMap<String, FindingTemplate>;
+
+fn library(c: &Connection, opts: Options) -> AppResult<Library> {
+    if opts.use_templates {
+        templates::by_rule(c)
+    } else {
+        Ok(HashMap::new())
+    }
+}
+
+/// The library template whose import rule names this finding's rule.
+fn template_for<'a>(lib: &'a Library, format: Format, f: &ImportedFinding) -> Option<&'a FindingTemplate> {
+    if f.rule_id.is_empty() {
+        return None;
+    }
+    lib.get(&templates::rule_key(format.as_str(), &f.rule_id))
+}
+
+/// A new finding written from a template: the template's vetted text replaces the scanner's
+/// boilerplate; the location, CVEs and the scanner's evidence (technical details) stay.
+fn apply_template(input: &mut FindingInput, t: &FindingTemplate) {
+    input.title = t.title.clone();
+    input.severity = t.severity.clone();
+    if !t.category.is_empty() {
+        input.category = t.category.clone();
+    }
+    if !t.description.is_empty() {
+        input.description = t.description.clone();
+    }
+    if !t.remediation.is_empty() {
+        input.remediation = t.remediation.clone();
+    }
+    let mut refs: Vec<Evidence> = t.references.iter().map(|u| Evidence { label: "Reference".into(), reference: u.clone() }).collect();
+    for e in input.evidence.drain(..) {
+        if refs.len() < 50 && !refs.iter().any(|r| r.reference == e.reference) {
+            refs.push(e);
+        }
+    }
+    input.evidence = refs;
+    for tag in &t.tags {
+        if input.tags.len() < 20 && !input.tags.contains(tag) {
+            input.tags.push(tag.clone());
+        }
+    }
 }
 
 /// What an imported finding would do to the project.
@@ -1149,10 +1233,12 @@ pub enum Outcome {
 #[serde(rename_all = "camelCase")]
 pub struct PreviewItem {
     pub title: String,
-    pub severity: &'static str,
+    pub severity: String,
     pub target: String,
     pub outcome: Outcome,
     pub finding_id: Option<i64>,
+    /// the library template a new finding would be written from
+    pub template: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -1184,6 +1270,8 @@ pub struct Preview {
     pub merged: usize,
     pub marked_false_positive: usize,
     pub has_scope: bool,
+    /// new findings that would be written from a library template
+    pub templated: usize,
 }
 
 const SEVERITY_ORDER: &[&str] = &["critical", "high", "medium", "low", "info"];
@@ -1271,9 +1359,14 @@ pub fn preview(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options) 
         pv.warnings.push("The project has no scope entries, so every host in the file is outside the scope. Add the scope first.".into());
     }
     let mut out_hosts: BTreeSet<String> = BTreeSet::new();
+    let lib = library(c, opts)?;
     for f in &parsed.findings {
         *pv.by_severity.entry(f.severity.to_string()).or_default() += 1;
         let (o, id) = outcome(c, project_id, &entries, f, opts)?;
+        let template = if o == Outcome::New { template_for(&lib, format, f) } else { None };
+        if template.is_some() {
+            pv.templated += 1;
+        }
         match o {
             Outcome::New => pv.counts.new += 1,
             Outcome::SeenAgain => pv.counts.seen_again += 1,
@@ -1289,7 +1382,14 @@ pub fn preview(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options) 
             }
             Outcome::Info => pv.counts.info += 1,
         }
-        pv.items.push(PreviewItem { title: f.title.clone(), severity: f.severity, target: f.target.clone(), outcome: o, finding_id: id });
+        pv.items.push(PreviewItem {
+            title: template.map(|t| t.title.clone()).unwrap_or_else(|| f.title.clone()),
+            severity: template.map(|t| t.severity.clone()).unwrap_or_else(|| f.severity.to_string()),
+            target: f.target.clone(),
+            outcome: o,
+            finding_id: id,
+            template: template.map(|t| t.title.clone()),
+        });
     }
     pv.items.sort_by_key(|i| (SEVERITY_ORDER.iter().position(|s| *s == i.severity).unwrap_or(9), i.outcome as u8));
     pv.items.truncate(200);
@@ -1333,6 +1433,7 @@ pub struct ImportResult {
     pub info_skipped: usize,
     pub assets_new: usize,
     pub assets_seen: usize,
+    pub templated: usize,
     pub summary: String,
 }
 
@@ -1380,6 +1481,7 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
             Some(sid)
         };
         let source_note = format!("{} import of {}", parsed.tool, trunc(file.file_name, 80));
+        let lib = library(c, opts)?;
         for f in &parsed.findings {
             let (o, existing) = outcome(c, project_id, &entries, f, opts)?;
             match o {
@@ -1407,7 +1509,7 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
                     }
                 }
                 Outcome::New => {
-                    let input = FindingInput {
+                    let mut input = FindingInput {
                         id: None,
                         project_id,
                         title: f.title.clone(),
@@ -1426,7 +1528,17 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
                         assignee: String::new(),
                         due_date: None,
                     };
+                    let template = template_for(&lib, format, f);
+                    if let Some(t) = template {
+                        apply_template(&mut input, t);
+                    }
                     let id = finding_write(c, &input, "import", false)?;
+                    if let Some(t) = template {
+                        let note = format!("Written from the finding library template “{}” (import rule {}:{})", t.title, format.as_str(), trunc(&f.rule_id, 100));
+                        lifecycle::add_note(c, id, &note, "import")?;
+                        templates::mark_used(c, t.id)?;
+                        r.templated += 1;
+                    }
                     c.execute(
                         "INSERT INTO finding_fingerprints (project_id, fingerprint, finding_id, tool, rule_id, first_import_id, last_import_id, times_seen, first_seen, last_seen)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 1, ?7, ?7)",
@@ -1444,7 +1556,7 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
                 }
             }
         }
-        let mut summary = format!("{} new, {} seen again", discovery::plural(r.created, "finding", "findings"), r.seen_again);
+        let mut summary = format!("{} new, {} seen again", discovery::plural(r.created, "finding", "findings"), r.seen_again).replacen(" finding new", " new finding", 1).replacen(" findings new", " new findings", 1);
         if r.reopened > 0 {
             summary.push_str(&format!(", {} reopened", r.reopened));
         }
@@ -1452,16 +1564,23 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
             summary.push_str(&format!(", {} still dismissed", r.dismissed));
         }
         if r.out_of_scope + left_out > 0 {
-            summary.push_str(&format!(", {} outside the scope (not recorded)", r.out_of_scope + left_out));
+            summary.push_str(&format!(
+                ", {} and {} outside the scope (not recorded)",
+                discovery::plural(r.out_of_scope, "finding", "findings"),
+                discovery::plural(left_out, "asset", "assets")
+            ));
         }
         if r.info_skipped > 0 {
             summary.push_str(&format!(", {} informational not imported", r.info_skipped));
+        }
+        if r.templated > 0 {
+            summary.push_str(&format!(", {} written from library templates", r.templated));
         }
         summary.push_str(&format!("; {} ({} new)", discovery::plural(r.assets_new + r.assets_seen, "asset", "assets"), r.assets_new));
         r.summary = summary.clone();
         c.execute(
             "UPDATE scan_imports SET snapshot_id = ?2, summary = ?3 WHERE id = ?1",
-            params![import_id, snapshot, json!({ "created": r.created, "seenAgain": r.seen_again, "reopened": r.reopened, "dismissed": r.dismissed, "outOfScope": r.out_of_scope + left_out, "infoSkipped": r.info_skipped, "assetsNew": r.assets_new, "assetsSeen": r.assets_seen, "text": summary }).to_string()],
+            params![import_id, snapshot, json!({ "created": r.created, "seenAgain": r.seen_again, "reopened": r.reopened, "dismissed": r.dismissed, "outOfScope": r.out_of_scope + left_out, "infoSkipped": r.info_skipped, "templated": r.templated, "assetsNew": r.assets_new, "assetsSeen": r.assets_seen, "text": summary }).to_string()],
         )?;
         let title = format!("Imported {} results from {}", parsed.tool, trunc(file.file_name, 80));
         timeline::record(c, project_id, "finding", &title, &summary, Some("scan_import"), Some(import_id))?;

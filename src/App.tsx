@@ -12,6 +12,7 @@ import { ErrorBlock, LoadingRows } from "@/components/ui/Feedback";
 const PAGES: Record<PageId, React.LazyExoticComponent<ComponentType>> = {
   dashboard: lazy(() => import("@/modules/dashboard/Dashboard")),
   projects: lazy(() => import("@/modules/projects/ProjectsPage")),
+  library: lazy(() => import("@/modules/library/FindingLibraryPage")),
   runs: lazy(() => import("@/modules/runs/RunsPage")),
   tools: lazy(() => import("@/modules/tools/ToolsPage")),
   commands: lazy(() => import("@/modules/commands/CommandCenter")),

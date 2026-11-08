@@ -17,7 +17,7 @@ const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
 export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: boolean; onOpenChange: (o: boolean) => void; projectId: number }) {
   const [pending, setPending] = useState<ScanImportPending | null>(null);
   const [preview, setPreview] = useState<ScanImportPreview | null>(null);
-  const [options, setOptions] = useState<ScanImportOptions>({ includeInfo: false, reopenResolved: true });
+  const [options, setOptions] = useState<ScanImportOptions>({ includeInfo: false, reopenResolved: true, useTemplates: true });
   const [busy, setBusy] = useState<"pick" | "preview" | "apply" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tokenRef = useRef<string | null>(null);
@@ -28,7 +28,7 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
       setPending(null);
       setPreview(null);
       setError(null);
-      setOptions({ includeInfo: false, reopenResolved: true });
+      setOptions({ includeInfo: false, reopenResolved: true, useTemplates: true });
     }
   }, [isOpen]);
 
@@ -61,8 +61,8 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
     }
   };
 
-  const changeInfo = async (includeInfo: boolean) => {
-    const next = { ...options, includeInfo };
+  const changeOption = async (patch: Partial<ScanImportOptions>) => {
+    const next = { ...options, ...patch };
     setOptions(next);
     if (!pending) return;
     setBusy("preview");
@@ -186,9 +186,17 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
             {preview.counts.info > 0 && (
               <SwitchInput
                 isSelected={options.includeInfo}
-                onChange={(v) => void changeInfo(v)}
+                onChange={(v) => void changeOption({ includeInfo: v })}
                 label={`Also import ${pluralize(preview.counts.info, "informational finding")}`}
                 description="Usually inventory (scan details, detected software). Hosts and services are recorded either way."
+              />
+            )}
+            {(preview.templated > 0 || !options.useTemplates) && (
+              <SwitchInput
+                isSelected={options.useTemplates}
+                onChange={(v) => void changeOption({ useTemplates: v })}
+                label={options.useTemplates ? `Write ${pluralize(preview.templated, "finding")} from your finding library templates` : "Write matching findings from your finding library templates"}
+                description="Templates whose import rule names the scanner rule replace its title, severity, description and remediation. Targets, CVEs and the scanner's evidence stay."
               />
             )}
             {preview.counts.dismissed > 0 && <Note tone="default">{pluralize(preview.counts.dismissed, "finding")} you dismissed earlier (false positive or accepted risk) stay dismissed.</Note>}
@@ -231,7 +239,10 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
                         <td className="py-1.5 pr-3">
                           <SeverityBadge severity={it.severity} />
                         </td>
-                        <td className="py-1.5 pr-3 text-foreground">{it.title}</td>
+                        <td className="py-1.5 pr-3 text-foreground">
+                          {it.title}
+                          {it.template && options.useTemplates && <div className="text-[11.5px] text-muted">From the library template</div>}
+                        </td>
                         <td className="max-w-[240px] py-1.5 pr-3 font-mono break-all text-muted">{it.target}</td>
                         <td className="py-1.5 whitespace-nowrap">
                           <ToneChip tone={OUTCOME_META[outcome].tone}>{OUTCOME_META[outcome].label}</ToneChip>

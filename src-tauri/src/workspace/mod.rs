@@ -10,6 +10,7 @@ pub mod findings;
 pub mod report;
 pub mod scan_import;
 pub mod scope_gate;
+pub mod templates;
 pub mod timeline;
 pub mod vulns;
 pub mod workflows;

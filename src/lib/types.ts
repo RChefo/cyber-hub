@@ -299,6 +299,32 @@ export type ScanImportOutcome = "new" | "seen_again" | "recurring" | "dismissed"
 export interface ScanImportOptions {
   includeInfo: boolean;
   reopenResolved: boolean;
+  useTemplates: boolean;
+}
+
+/** A reusable finding write-up from the finding library (docs/DATA_MODEL.md#finding-library-schema-14). */
+export interface FindingTemplate {
+  id: number;
+  title: string;
+  severity: Severity;
+  category: string;
+  description: string;
+  remediation: string;
+  references: string[];
+  tags: string[];
+  /** import rules `format:rule`, for example `nessus:57582` */
+  rules: string[];
+  useCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FindingTemplateInput = Pick<FindingTemplate, "title" | "severity" | "category" | "description" | "remediation" | "references" | "tags" | "rules"> & { id?: number };
+
+export interface LibraryImport {
+  created: number;
+  skipped: string[];
+  invalid: string[];
 }
 
 export interface ScanImportPreview {
@@ -312,11 +338,12 @@ export interface ScanImportPreview {
   assetsNew: number;
   assetsOutOfScope: number;
   outOfScopeHosts: string[];
-  items: { title: string; severity: Severity; target: string; outcome: ScanImportOutcome; findingId: number | null }[];
+  items: { title: string; severity: Severity; target: string; outcome: ScanImportOutcome; findingId: number | null; template: string | null }[];
   warnings: string[];
   merged: number;
   markedFalsePositive: number;
   hasScope: boolean;
+  templated: number;
 }
 
 export interface ScanImportPending extends ScanImportPreview {
@@ -336,6 +363,7 @@ export interface ScanImportResult {
   infoSkipped: number;
   assetsNew: number;
   assetsSeen: number;
+  templated: number;
   summary: string;
 }
 

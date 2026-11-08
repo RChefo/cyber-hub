@@ -808,6 +808,25 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_finding_fingerprints_finding ON finding_fingerprints(finding_id);
     "#,
+    // 14: finding library (docs/DATA_MODEL.md#finding-library-schema-14): reusable write-ups with
+    // optional import rules (`format:rule`). Workstation-wide, not per project. New table only.
+    r#"
+    CREATE TABLE finding_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        severity TEXT NOT NULL CHECK (severity IN ('critical','high','medium','low','info')),
+        category TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        remediation TEXT NOT NULL DEFAULT '',
+        refs TEXT NOT NULL DEFAULT '[]',
+        tags TEXT NOT NULL DEFAULT '[]',
+        rules TEXT NOT NULL DEFAULT '[]',
+        use_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX idx_finding_templates_title ON finding_templates(title COLLATE NOCASE);
+    "#,
 ];
 
 /// Backups kept in `<data dir>/backups` (the newest ones; older copies are removed).
@@ -1210,6 +1229,25 @@ mod tests {
             assert_eq!(count(c, "SELECT COUNT(*) FROM finding_fingerprints"), 0);
             c.execute("DELETE FROM projects WHERE id = 3", [])?;
             assert_eq!(count(c, "SELECT COUNT(*) FROM scan_imports"), 0, "imports go with their project");
+            let integrity: String = c.query_row("PRAGMA integrity_check", [], |r| r.get(0))?;
+            assert_eq!(integrity, "ok");
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn schema_13_gains_the_finding_library_with_unique_titles() {
+        let conn = schema12_with_data();
+        conn.execute_batch(MIGRATIONS[12]).unwrap();
+        conn.execute_batch("PRAGMA user_version = 13;").unwrap();
+        let db = Db::init(conn).unwrap();
+        assert_eq!(db.schema_version().unwrap(), MIGRATIONS.len() as i64);
+        db.with(|c| {
+            assert_eq!(count(c, "SELECT COUNT(*) FROM findings WHERE id = 21"), 1, "existing data is kept");
+            c.execute("INSERT INTO finding_templates (title, severity, created_at, updated_at) VALUES ('SQL injection', 'high', 'x', 'x')", [])?;
+            assert!(c.execute("INSERT INTO finding_templates (title, severity, created_at, updated_at) VALUES ('sql INJECTION', 'low', 'x', 'x')", []).is_err(), "titles are unique without regard to case");
+            assert!(c.execute("INSERT INTO finding_templates (title, severity, created_at, updated_at) VALUES ('Other', 'urgent', 'x', 'x')", []).is_err(), "severity is checked");
             let integrity: String = c.query_row("PRAGMA integrity_check", [], |r| r.get(0))?;
             assert_eq!(integrity, "ok");
             Ok(())
