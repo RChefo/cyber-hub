@@ -1,5 +1,5 @@
 import { Button, Checkbox, Dropdown, Tooltip } from "@heroui/react";
-import { ChevronDown, FileUp, History, Link2, Pencil, Plus, ShieldAlert, Trash2, X } from "lucide-react";
+import { ChevronDown, FileDown, FileUp, History, Link2, Pencil, Plus, ShieldAlert, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FINDING_STATUS_META, SeverityBadge, ToneChip } from "@/components/ui/Badges";
 import { AppModal, useConfirm } from "@/components/ui/Dialogs";
@@ -15,6 +15,7 @@ import type { Confidence, Evidence, Finding, FindingLinkKind, FindingStatus, Sev
 import { useShowMore } from "@/lib/showMore";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/utils";
 import { filterFindings, parseTags, sortFindings, tagsOf } from "./report";
+import { BulkEditModal } from "./BulkEditModal";
 import { CvssField } from "./CvssField";
 import { ScanImportModal } from "./ScanImportModal";
 import { applyTemplate, templateFromFinding } from "@/modules/library/library";
@@ -319,6 +320,7 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [detail, setDetail] = useState<number | null>(null);
   const [importing, setImporting] = useState(false);
+  const [bulkEditing, setBulkEditing] = useState(false);
 
   const list = useMemo(() => filterFindings(sortFindings(findings), { severity: sev, status, query, tag }), [findings, sev, status, query, tag]);
   const tags = useMemo(() => tagsOf(findings), [findings]);
@@ -338,6 +340,15 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
       notify.success(`${r.changed.length} marked as ${FINDING_STATUS_META[next].label.toLowerCase()}`, r.skipped.length ? `${r.skipped.length} left unchanged (${r.skipped[0][1]})` : undefined);
     } catch (e) {
       notify.error("Could not change the findings", e);
+    }
+  };
+
+  const exportList = async (format: "csv" | "json") => {
+    try {
+      const file = await api.findingsExport(projectId, list.map((f) => f.id), format);
+      if (file) notify.success(`${list.length} findings exported`, file);
+    } catch (e) {
+      notify.error("Could not export the findings", e);
     }
   };
 
@@ -385,6 +396,25 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
             <FileUp className="size-3.5" />
             Import results
           </Button>
+          {list.length > 0 && (
+            <Dropdown>
+              <Button variant="secondary" size="sm" className="gap-1" aria-label="Export the listed findings">
+                <FileDown className="size-3.5" />
+                Export
+                <ChevronDown className="size-3" />
+              </Button>
+              <Dropdown.Popover placement="bottom end">
+                <Dropdown.Menu aria-label="Export format" onAction={(k) => void exportList(k as "csv" | "json")}>
+                  <Dropdown.Item id="csv" textValue="CSV">
+                    CSV (spreadsheets)
+                  </Dropdown.Item>
+                  <Dropdown.Item id="json" textValue="JSON">
+                    JSON (other tools)
+                  </Dropdown.Item>
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown>
+          )}
           <Button variant="primary" size="sm" onPress={openNew}>
             <Plus className="size-3.5" />
             Record finding
@@ -393,6 +423,7 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
       }
     >
       <ScanImportModal isOpen={importing} onOpenChange={setImporting} projectId={projectId} />
+      <BulkEditModal ids={visibleSelected.map((f) => f.id)} isOpen={bulkEditing} onOpenChange={setBulkEditing} onDone={() => setSelected(new Set())} />
       {findings.length === 0 ? (
         <EmptyBlock
           icon={ShieldAlert}
@@ -433,6 +464,9 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
                   </Dropdown.Menu>
                 </Dropdown.Popover>
               </Dropdown>
+              <Button size="sm" variant="secondary" className="h-7" onPress={() => setBulkEditing(true)}>
+                Edit tags or assignee
+              </Button>
               <Button size="sm" variant="ghost" className="h-7" onPress={() => setSelected(new Set())}>
                 Clear selection
               </Button>

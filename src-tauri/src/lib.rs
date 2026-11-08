@@ -212,6 +212,7 @@ pub fn run() {
             workspace_commands::finding_templates_export,
             workspace_commands::finding_templates_import,
             workspace_commands::cvss_score,
+            workspace_commands::findings_export,
             workspace_commands::report_html,
             workspace_commands::report_export_html,
             workspace_commands::report_save_evidence,
@@ -236,6 +237,7 @@ pub fn run() {
             vuln_commands::vuln_delete,
             vuln_commands::vuln_create_finding,
             vuln_commands::findings_bulk_status,
+            vuln_commands::findings_bulk_edit,
             // workflow automation
             workflow_commands::workflow_nodes,
             workflow_commands::workflow_templates,

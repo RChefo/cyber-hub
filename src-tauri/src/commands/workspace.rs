@@ -487,3 +487,41 @@ pub async fn finding_templates_import(app: AppHandle) -> AppResult<Option<Librar
 pub async fn cvss_score(vector: String) -> AppResult<crate::cvss::Cvss> {
     crate::cvss::parse(&vector).map_err(AppError::Validation)
 }
+
+/* ───────────────────────── findings export ───────────────────────── */
+
+/// Saves the chosen findings of a project as CSV or JSON through a native save dialog, in the
+/// order given. Returns the file name, or None if cancelled.
+#[tauri::command]
+pub async fn findings_export(app: AppHandle, project_id: i64, ids: Vec<i64>, format: String) -> AppResult<Option<String>> {
+    if ids.is_empty() || ids.len() > 50_000 {
+        return Err(crate::error::validation("Choose 1 to 50,000 findings to export"));
+    }
+    let (content, name, ext) = {
+        let db = app.state::<Db>();
+        let (name, all) = db.with(|c| {
+            let name: String = c.query_row("SELECT name FROM projects WHERE id = ?1", params![project_id], |r| r.get(0))?;
+            Ok((name, crate::commands::projects::findings_of(c, project_id)?))
+        })?;
+        let mut by_id: std::collections::HashMap<i64, crate::commands::projects::Finding> = all.into_iter().map(|f| (f.id, f)).collect();
+        let chosen: Vec<_> = ids.iter().filter_map(|id| by_id.remove(id)).collect();
+        if chosen.is_empty() {
+            return Err(crate::error::validation("None of these findings belong to the project"));
+        }
+        match format.as_str() {
+            "csv" => (crate::workspace::findings_export::csv(&chosen), name, "csv"),
+            "json" => (crate::workspace::findings_export::json(&name, &crate::util::now(), &chosen)?, name, "json"),
+            _ => return Err(crate::error::validation("Export as csv or json")),
+        }
+    };
+    let safe: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).take(60).collect();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    main_window_dialog(&app, "Export findings").set_file_name(format!("{safe}-findings.{ext}")).add_filter(ext.to_uppercase(), &[ext]).save_file(move |f| {
+        let _ = tx.send(f.and_then(|f| f.into_path().ok()));
+    });
+    let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
+    std::fs::write(&path, content).map_err(|e| AppError::Internal(format!("Could not write the export: {e}")))?;
+    let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let _ = app.state::<Db>().with(|c| timeline::record(c, project_id, "report", &format!("Findings exported ({})", ext.to_uppercase()), &file, None, None));
+    Ok(Some(file))
+}

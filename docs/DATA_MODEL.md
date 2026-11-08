@@ -131,6 +131,11 @@ Projects → *Findings* provides:
 * tags, assignee and due date in the editor;
 * history and links per finding, with notes;
 * bulk status changes. `findings_bulk_status` changes each selected finding on its own with the lifecycle rule, records every change, and reports the findings it left unchanged instead of failing.
+* bulk edits of tags and the assignee (*Edit tags or assignee* on a selection). `findings_bulk_edit` adds tags and removes them (matched without regard to case; at most 20 per finding), sets or clears the assignee, saves each finding on its own so that its history records what changed, and reports findings left unchanged;
+* export (*Export* → CSV or JSON) of the findings currently listed, in the order shown, through a native save dialog. The backend reads them from the database (`workspace/findings_export.rs`).
+  * **CSV** follows RFC 4180 (every field quoted, CRLF line ends) with a UTF-8 byte-order mark, and has 21 columns including the CVSS score and vector and the references. Finding text can come from scanners and so from the assessed systems, so cells starting with `=`, `+`, `-`, `@`, tab or carriage return get a leading apostrophe and are not read as formulas (CSV injection).
+  * **JSON** is `{"format":"cyberhub-findings","version":1,"project":…,"exportedAt":…,"findings":[…]}` with the full finding records.
+  * The project timeline records the export.
 
 ## Engagement workspace (schema 12)
 

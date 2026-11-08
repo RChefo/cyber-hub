@@ -1,11 +1,11 @@
 //! Vulnerability management and bulk finding commands (see `workspace::vulns`).
 
 use rusqlite::{params, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::commands::intel::{cve_search, CveRecord};
-use crate::commands::projects::{finding_get, finding_save, FindingInput};
+use crate::commands::projects::{finding_get, finding_save, finding_write, FindingInput};
 use crate::db::Db;
 use crate::error::{validation, AppResult};
 use crate::workspace::findings as lifecycle;
@@ -239,9 +239,135 @@ pub(crate) fn bulk_status(c: &rusqlite::Connection, ids: &[i64], status: &str, n
     Ok(out)
 }
 
+/// Tags to add or remove and an optional new assignee for several findings.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkEdit {
+    #[serde(default)]
+    pub add_tags: Vec<String>,
+    #[serde(default)]
+    pub remove_tags: Vec<String>,
+    /// None keeps each finding's assignee; an empty string clears it
+    #[serde(default)]
+    pub assignee: Option<String>,
+}
+
+/// Adds or removes tags and sets the assignee of several findings; each finding is saved on its
+/// own (its history records what changed), and findings that would not change are reported.
+#[tauri::command]
+pub async fn findings_bulk_edit(db: State<'_, Db>, ids: Vec<i64>, edit: BulkEdit) -> AppResult<BulkResult> {
+    if ids.is_empty() || ids.len() > 1000 {
+        return Err(validation("Select 1 to 1000 findings"));
+    }
+    db.with(|c| bulk_edit(c, &ids, &edit))
+}
+
+fn clean_tags(list: &[String]) -> AppResult<Vec<String>> {
+    if list.len() > 20 {
+        return Err(validation("At most 20 tags at a time"));
+    }
+    let mut out = Vec::new();
+    for t in list {
+        let v = crate::util::clean("Tag", t, 40, false)?;
+        if !v.is_empty() {
+            out.push(v);
+        }
+    }
+    Ok(out)
+}
+
+pub(crate) fn bulk_edit(c: &rusqlite::Connection, ids: &[i64], edit: &BulkEdit) -> AppResult<BulkResult> {
+    let add = clean_tags(&edit.add_tags)?;
+    let remove: Vec<String> = clean_tags(&edit.remove_tags)?.into_iter().map(|t| t.to_lowercase()).collect();
+    let assignee = match edit.assignee.as_deref() {
+        Some(a) => Some(crate::util::clean("Assignee", a, 100, false)?),
+        None => None,
+    };
+    if add.is_empty() && remove.is_empty() && assignee.is_none() {
+        return Err(validation("Choose tags to add or remove, or an assignee"));
+    }
+    let tx = c.unchecked_transaction()?;
+    let mut out = BulkResult { changed: vec![], skipped: vec![] };
+    for &id in ids {
+        let f = match finding_get(&tx, id) {
+            Ok(f) => f,
+            Err(e) => {
+                out.skipped.push((id, e.to_string()));
+                continue;
+            }
+        };
+        let mut tags: Vec<String> = f.tags.iter().filter(|t| !remove.contains(&t.to_lowercase())).cloned().collect();
+        for t in &add {
+            if !tags.iter().any(|x| x.eq_ignore_ascii_case(t)) {
+                tags.push(t.clone());
+            }
+        }
+        if tags.len() > 20 {
+            out.skipped.push((id, "It would have more than 20 tags".into()));
+            continue;
+        }
+        let new_assignee = assignee.clone().unwrap_or_else(|| f.assignee.clone());
+        if tags == f.tags && new_assignee == f.assignee {
+            out.skipped.push((id, "Nothing to change".into()));
+            continue;
+        }
+        let input = FindingInput {
+            id: Some(id),
+            project_id: f.project_id,
+            title: f.title,
+            severity: f.severity,
+            status: f.status,
+            category: f.category,
+            confidence: Some(f.confidence),
+            description: f.description,
+            affected_target: f.affected_target,
+            cve: f.cve,
+            evidence: f.evidence,
+            reproduction: f.reproduction,
+            technical_details: f.technical_details,
+            remediation: f.remediation,
+            tags,
+            assignee: new_assignee,
+            due_date: f.due_date,
+            cvss_vector: f.cvss_vector,
+        };
+        finding_write(&tx, &input, "user", false)?;
+        out.changed.push(id);
+    }
+    tx.commit()?;
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bulk_edit_adds_and_removes_tags_and_sets_assignees() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            c.execute("INSERT INTO projects (name, status, created_at, updated_at) VALUES ('P','active','t','t')", [])?;
+            let p = c.last_insert_rowid();
+            let mk = |c: &rusqlite::Connection, tags: &[&str]| {
+                finding_save(c, &FindingInput { project_id: p, title: "F".into(), severity: "low".into(), status: "new".into(), tags: tags.iter().map(|t| t.to_string()).collect(), ..Default::default() }, "user")
+            };
+            let a = mk(c, &["web", "old"])?;
+            let b = mk(c, &["Web"])?;
+            let r = bulk_edit(c, &[a, b, 9999], &BulkEdit { add_tags: vec!["retest".into(), " WEB ".into()], remove_tags: vec!["OLD".into()], assignee: Some("dana".into()) })?;
+            assert_eq!(r.changed, vec![a, b]);
+            assert_eq!(r.skipped.len(), 1, "a missing finding is reported");
+            let fa = finding_get(c, a)?;
+            assert_eq!((fa.tags.clone(), fa.assignee.as_str()), (vec!["web".to_string(), "retest".to_string()], "dana"), "case-insensitive add and remove");
+            assert!(lifecycle::history(c, a)?.iter().any(|e| e.note.contains("tags") && e.note.contains("assignee")));
+            let again = bulk_edit(c, &[a], &BulkEdit { add_tags: vec!["retest".into()], ..Default::default() })?;
+            assert_eq!(again.skipped[0].1, "Nothing to change");
+            bulk_edit(c, &[a], &BulkEdit { assignee: Some(String::new()), ..Default::default() })?;
+            assert_eq!(finding_get(c, a)?.assignee, "");
+            assert!(bulk_edit(c, &[a], &BulkEdit::default()).is_err(), "an empty edit is refused");
+            Ok(())
+        })
+        .unwrap();
+    }
 
     #[test]
     fn bulk_status_changes_valid_findings_and_reports_the_rest() {

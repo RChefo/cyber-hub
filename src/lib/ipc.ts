@@ -143,6 +143,9 @@ export const api = {
   findingTemplatesExport: () => call<string | null>("finding_templates_export"),
   findingTemplatesImport: () => call<T.LibraryImport | null>("finding_templates_import"),
   cvssScore: (vector: string) => call<T.CvssResult>("cvss_score", { vector }),
+  findingsBulkEdit: (ids: number[], edit: { addTags: string[]; removeTags: string[]; assignee: string | null }) =>
+    call<{ changed: number[]; skipped: [number, string][] }>("findings_bulk_edit", { ids, edit }),
+  findingsExport: (projectId: number, ids: number[], format: "csv" | "json") => call<string | null>("findings_export", { projectId, ids, format }),
   tiSavedExportStix: () => call<{ fileName: string; exported: number; skipped: string[] } | null>("ti_saved_export_stix"),
   reportHtml: (projectId: number, options: T.ReportOptions) => call<string>("report_html", { projectId, options }),
   reportExportHtml: (projectId: number, options: T.ReportOptions) => call<string | null>("report_export_html", { projectId, options }),
