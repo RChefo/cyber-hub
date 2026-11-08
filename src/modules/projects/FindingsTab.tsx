@@ -397,7 +397,7 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
         <EmptyBlock
           icon={ShieldAlert}
           title="No findings recorded"
-          description="Record verified issues with severity, affected target and evidence references, or import the results of Nmap, Nuclei, Nessus, Burp Suite, OWASP ZAP or a SARIF tool."
+          description="Record verified issues with severity, affected target and evidence references, or import the results of Nmap, Nuclei, Nessus, Greenbone/OpenVAS, Burp Suite, OWASP ZAP or a SARIF tool."
           action={
             <div className="flex gap-2">
               <Button size="sm" variant="secondary" onPress={() => setImporting(true)}>

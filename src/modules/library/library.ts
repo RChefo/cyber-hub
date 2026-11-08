@@ -9,7 +9,7 @@ export const SEVERITY_CHOICES: { id: Severity; label: string }[] = [
 ];
 
 /** Formats an import rule can name (the scan importer's formats). */
-export const RULE_FORMATS = ["nmap", "nuclei", "nessus", "burp", "zap", "sarif"] as const;
+export const RULE_FORMATS = ["nmap", "nuclei", "nessus", "burp", "zap", "sarif", "openvas"] as const;
 
 /** Non-empty, trimmed lines of a text area. */
 export function lines(text: string): string[] {

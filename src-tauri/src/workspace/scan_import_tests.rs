@@ -414,3 +414,45 @@ fn a_rescan_shows_fixed_findings_on_covered_hosts_only() {
     })
     .unwrap();
 }
+
+const OPENVAS: &str = r#"<report id="r1" format_id="a994b278-1f62-11e1-96ac-406186ea4fc5" extension="xml"><report id="r1"><gmp><version>22.4</version></gmp>
+<results start="1" max="100">
+<result id="a"><name>OpenSSH Multiple Vulnerabilities</name><host>93.184.215.7<asset asset_id="x"/><hostname>app.example.com</hostname></host><port>22/tcp</port>
+<nvt oid="1.3.6.1.4.1.25623.1.0.170001"><type>nvt</type><name>OpenSSH Multiple Vulnerabilities</name><family>General</family><cvss_base>8.1</cvss_base>
+<severities score="8.1"><severity type="cvss_base_v3"><score>8.1</score><value>CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H</value></severity></severities>
+<tags>cvss_base_vector=AV:N/AC:H/Au:N/C:C/I:C/A:C|summary=OpenSSH is prone to multiple vulnerabilities.|insight=A race condition in a signal handler.|affected=OpenSSH 8.5 through 9.7.|impact=Remote code execution as root.|solution=Update to version 9.8 or later.|vuldetect=Checks if a vulnerable version is present on the target host.|solution_type=VendorFix</tags>
+<solution type="VendorFix">Update to version 9.8 or later.</solution>
+<refs><ref type="cve" id="CVE-2024-6387"/><ref type="url" id="https://www.openssh.com/txt/release-9.8"/><ref type="cert-bund" id="WID-SEC-2024-1"/></refs></nvt>
+<threat>High</threat><severity>8.1</severity><qod><value>80</value><type>remote_banner</type></qod><description>Installed version: 9.6p1
+Fixed version: 9.8 password=hunter2</description></result>
+<result id="b"><name>OS Detection Consolidation</name><host>93.184.215.7</host><port>general/tcp</port><nvt oid="1.3.6.1.4.1.25623.1.0.105937"><name>OS Detection Consolidation</name><family>Product detection</family><tags>summary=OS detection.</tags></nvt><threat>Log</threat><severity>0.0</severity><qod><value>80</value></qod><description>Best matching OS: Debian</description></result>
+<result id="c"><name>Weak guess</name><host>93.184.215.7</host><port>80/tcp</port><nvt oid="1.3.6.1.4.1.25623.1.0.1"><name>Weak guess</name></nvt><threat>Medium</threat><severity>5.0</severity><qod><value>30</value></qod></result>
+<result id="d"><name>Dismissed</name><host>93.184.215.7</host><port>443/tcp</port><nvt oid="1.3.6.1.4.1.25623.1.0.2"><name>Dismissed</name></nvt><threat>False Positive</threat><severity>-1.0</severity><qod><value>99</value></qod></result>
+</results>
+<host><ip>93.184.215.7</ip><detail><name>hostname</name><value>app.example.com</value></detail></host>
+</report></report>"#;
+
+#[test]
+fn greenbone_reports_follow_its_default_filter() {
+    assert_eq!(detect(OPENVAS), Ok(Format::OpenVas));
+    assert!(detect("<report><title>x</title></report>").is_err(), "other XML with a report root is not mistaken for Greenbone");
+    let p = parse(OPENVAS).unwrap();
+    assert_eq!(p.tool, "Greenbone");
+    assert_eq!(p.findings.len(), 2, "the low-QoD and false-positive results are left out");
+    assert_eq!(p.marked_false_positive, 1);
+    assert!(p.warnings.iter().any(|w| w.contains("quality of detection below 70%")));
+    let ssh = &p.findings[0];
+    assert_eq!((ssh.severity, ssh.confidence, ssh.rule_id.as_str()), ("high", "medium", "1.3.6.1.4.1.25623.1.0.170001"));
+    assert_eq!(ssh.target, "93.184.215.7:22/tcp");
+    assert_eq!(ssh.cve, "CVE-2024-6387");
+    assert_eq!(ssh.cvss, "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H");
+    assert!(ssh.description.starts_with("OpenSSH is prone to multiple vulnerabilities."));
+    assert_eq!(ssh.remediation, "Update to version 9.8 or later.");
+    assert!(ssh.technical.contains("Installed version: 9.6p1") && ssh.technical.contains("Quality of detection: 80%"));
+    assert!(!ssh.technical.contains("hunter2"), "result text is redacted");
+    assert_eq!(ssh.references, vec!["https://www.openssh.com/txt/release-9.8"]);
+    assert_eq!(p.findings[1].severity, "info", "Log results are informational");
+    assert_eq!(p.findings[1].target, "93.184.215.7 (general/tcp)");
+    assert!(p.assets.iter().any(|a| a.kind == "service" && a.value == "93.184.215.7:22/tcp"));
+    assert!(p.assets.iter().any(|a| a.kind == "name" && a.value == "app.example.com"));
+}

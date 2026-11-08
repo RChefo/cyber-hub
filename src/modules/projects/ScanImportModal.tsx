@@ -105,7 +105,7 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
       onOpenChange={close}
       size="lg"
       title="Import scan results"
-      description="Nmap and Nessus XML, Burp Suite issue exports, Nuclei, OWASP ZAP and SARIF JSON. You see what the file contains before anything is recorded."
+      description="Nmap, Nessus and Greenbone/OpenVAS XML, Burp Suite issue exports, Nuclei, OWASP ZAP and SARIF JSON. You see what the file contains before anything is recorded."
       footer={
         <>
           <Button variant="tertiary" onPress={() => close(false)}>

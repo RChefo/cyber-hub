@@ -55,6 +55,7 @@ pub enum Format {
     Burp,
     Zap,
     Sarif,
+    OpenVas,
 }
 
 impl Format {
@@ -66,6 +67,7 @@ impl Format {
             Format::Burp => "burp",
             Format::Zap => "zap",
             Format::Sarif => "sarif",
+            Format::OpenVas => "openvas",
         }
     }
     pub fn label(self) -> &'static str {
@@ -76,6 +78,7 @@ impl Format {
             Format::Burp => "Burp Suite issues (XML)",
             Format::Zap => "OWASP ZAP report (JSON)",
             Format::Sarif => "SARIF 2.1.0",
+            Format::OpenVas => "Greenbone / OpenVAS report (XML)",
         }
     }
 }
@@ -388,6 +391,7 @@ pub fn detect(text: &str) -> Result<Format, String> {
             Some("nmaprun") => Ok(Format::Nmap),
             Some("NessusClientData_v2") => Ok(Format::Nessus),
             Some("issues") => Ok(Format::Burp),
+            Some("report") if t.contains("<results") || t.contains("<nvt") => Ok(Format::OpenVas),
             Some("NessusClientData") => Err("This is a Nessus v1 file; export the scan as .nessus (v2) instead".into()),
             Some(other) => Err(format!("XML files with a <{}> root are not a supported scan format", trunc(other, 40))),
             None => Err("The file is not valid XML".into()),
@@ -444,6 +448,7 @@ pub fn parse(text: &str) -> Result<Parsed, String> {
         Format::Burp => parse_burp(text),
         Format::Zap => parse_zap(text)?,
         Format::Sarif => parse_sarif(text)?,
+        Format::OpenVas => parse_openvas(text),
     };
     p.dedupe();
     if p.findings.is_empty() && p.assets.is_empty() {
@@ -1154,6 +1159,174 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
         p.warnings.push(format!("{skipped_kinds} results of kind pass or notApplicable were skipped"));
     }
     Ok(p)
+}
+
+/* ───────────────────────── Greenbone / OpenVAS ───────────────────────── */
+
+/// Greenbone's default results filter hides results below this quality of detection (QoD).
+pub const MIN_QOD: u32 = 70;
+
+/// `key=value|key=value` NVT tags.
+fn nvt_tags(tags: &str) -> BTreeMap<String, String> {
+    tags.split('|').filter_map(|p| p.split_once('=')).map(|(k, v)| (k.trim().to_string(), v.trim().to_string())).collect()
+}
+
+fn parse_openvas(text: &str) -> Parsed {
+    let mut p = Parsed::new(Format::OpenVas, "Greenbone");
+    let mut warnings = Vec::new();
+    let mut results: Vec<BTreeMap<String, String>> = Vec::new();
+    let mut cur: Option<BTreeMap<String, String>> = None;
+    walk_xml(text, &mut warnings, |step| match step {
+        Step::Open(stack) => {
+            let el = stack.last().expect("open element");
+            let parent = stack.len().checked_sub(2).map(|i| stack[i].name.as_str());
+            if el.name == "result" && parent == Some("results") {
+                cur = Some(BTreeMap::new());
+                return;
+            }
+            let Some(c) = cur.as_mut() else { return };
+            match el.name.as_str() {
+                "nvt" => {
+                    c.insert("oid".into(), el.attr("oid"));
+                }
+                "ref" => {
+                    let list = c.entry(format!("ref_{}", el.attr("type"))).or_default();
+                    if list.len() < 8_000 {
+                        if !list.is_empty() {
+                            list.push('\n');
+                        }
+                        list.push_str(&el.attr("id"));
+                    }
+                }
+                _ => {}
+            }
+        }
+        Step::Close(stack) => {
+            let el = stack.last().expect("closing element");
+            let parent = stack.len().checked_sub(2).map(|i| stack[i].name.as_str());
+            if el.name == "result" && parent == Some("results") {
+                if let Some(c) = cur.take() {
+                    results.push(c);
+                }
+                return;
+            }
+            let Some(c) = cur.as_mut() else { return };
+            let text = el.text.trim().to_string();
+            let key = match (el.name.as_str(), parent) {
+                ("host", Some("result")) => "host",
+                ("hostname", Some("host")) => "hostname",
+                ("port", Some("result")) => "port",
+                ("name", Some("result")) => "name",
+                ("family", Some("nvt")) => "family",
+                ("tags", Some("nvt")) => "tags",
+                ("solution", Some("nvt")) => "solution",
+                ("threat", Some("result")) => "threat",
+                ("severity", Some("result")) => "score",
+                ("value", Some("qod")) => "qod",
+                ("description", Some("result")) => "description",
+                ("value", Some("severity")) if text.starts_with("CVSS:") && !c.contains_key("cvss") => "cvss",
+                _ => return,
+            };
+            c.insert(key.into(), text);
+        }
+    });
+    p.warnings.extend(warnings);
+    let (mut low_qod, mut debug) = (0usize, 0usize);
+    for r in results {
+        let get = |k: &str| r.get(k).cloned().unwrap_or_default();
+        let threat = get("threat");
+        let severity = match threat.as_str() {
+            "False Positive" => {
+                p.marked_false_positive += 1;
+                continue;
+            }
+            "Debug" => {
+                debug += 1;
+                continue;
+            }
+            "Log" => "info",
+            "" => get("score").parse::<f64>().ok().map(|s| match crate::cvss::rating(s) {
+                "none" => "info",
+                other => severity_word(other),
+            }).unwrap_or("info"),
+            t => severity_word(t),
+        };
+        let qod: u32 = get("qod").parse().unwrap_or(MIN_QOD);
+        if qod < MIN_QOD {
+            low_qod += 1;
+            continue;
+        }
+        let host = get("host");
+        if host.is_empty() {
+            continue;
+        }
+        let hostname = get("hostname");
+        let port = get("port");
+        let (number, proto) = port.split_once('/').map(|(n, pr)| (n.parse::<u16>().ok(), pr.to_string())).unwrap_or((None, String::new()));
+        let is_ip = crate::osint::normalize::ip(&host).is_ok();
+        let svc = match (number, is_ip) {
+            (Some(n), true) if n > 0 => Some(format!("{}:{n}/{}", bracket(&host), if proto.is_empty() { "tcp" } else { &proto })),
+            _ => None,
+        };
+        if is_ip {
+            p.push_asset("ip", &host, &host, json!({ "names": if hostname.is_empty() { json!([]) } else { json!([hostname]) } }));
+        }
+        if !hostname.is_empty() {
+            p.push_asset("name", &hostname, &hostname, json!({ "addresses": if is_ip { json!([host]) } else { json!([]) } }));
+        }
+        if let Some(s) = svc.as_ref() {
+            p.push_asset("service", s, &host, json!({ "sources": ["greenbone"] }));
+        }
+        let tags = nvt_tags(&get("tags"));
+        let tag = |k: &str| tags.get(k).cloned().unwrap_or_default();
+        let description = [tag("summary"), tag("insight"), tag("impact")].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join("\n\n");
+        let mut technical = String::new();
+        let result_text = get("description");
+        if !result_text.is_empty() {
+            technical.push_str(&trunc(&result_text, 8_000));
+            technical.push_str("\n\n");
+        }
+        for (label, k) in [("Affected", "affected"), ("Detection", "vuldetect")] {
+            let v = tag(k);
+            if !v.is_empty() {
+                technical.push_str(&format!("{label}: {v}\n"));
+            }
+        }
+        technical.push_str(&format!("Quality of detection: {qod}%"));
+        let solution = { let s = get("solution"); if s.is_empty() { tag("solution") } else { s } };
+        let oid = get("oid");
+        let target = match svc.as_ref() {
+            Some(s) => s.clone(),
+            None if port.is_empty() => host.clone(),
+            None => format!("{host} ({port})"),
+        };
+        let references: Vec<String> = get("ref_url").lines().map(str::trim).filter(|u| u.starts_with("http")).take(20).map(String::from).collect();
+        p.push_finding(ImportedFinding {
+            rule_id: oid.clone(),
+            title: trunc(&{ let n = get("name"); if n.is_empty() { format!("Greenbone NVT {oid}") } else { n } }, 200),
+            severity,
+            confidence: if qod >= 95 { "high" } else { "medium" },
+            asset: svc.clone().map(|s| ("service", s)).or_else(|| is_ip.then(|| ("ip", host.clone()))),
+            target: trunc(&target, 500),
+            host: Some(host.clone()),
+            description: trunc(&description, 50_000),
+            remediation: trunc(&solution, 50_000),
+            technical: trunc(&redact_text(technical.trim()), 50_000),
+            references,
+            cve: cve_list(get("ref_cve").lines().map(String::from)),
+            category: trunc(&get("family"), 100),
+            tags: tool_tags("greenbone", std::iter::empty()),
+            cvss: valid_cvss(&get("cvss")),
+            fingerprint: fingerprint(&["openvas", &oid, &host, &port]),
+        });
+    }
+    if low_qod > 0 {
+        p.warnings.push(format!("{low_qod} results with a quality of detection below {MIN_QOD}% were not read (Greenbone hides them by default)"));
+    }
+    if debug > 0 {
+        p.warnings.push(format!("{debug} debug results were not read"));
+    }
+    p
 }
 
 /* ───────────────────────── preview and import ───────────────────────── */

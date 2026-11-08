@@ -108,7 +108,7 @@ export function TemplateFormModal({ initial, onClose, onSaved }: { initial: Find
             onChange={setRuleText}
             rows={3}
             placeholder={"nessus:57582\nzap:10038\nnuclei:CVE-2021-41773"}
-            description={ruleErrors[0] ?? "One format:rule per line (nmap, nuclei, nessus, burp, zap, sarif). A scan import writes matching findings from this template. A rule belongs to one template."}
+            description={ruleErrors[0] ?? "One format:rule per line (nmap, nuclei, nessus, burp, zap, sarif, openvas). A scan import writes matching findings from this template. A rule belongs to one template."}
             className="md:col-span-2"
           />
         </div>

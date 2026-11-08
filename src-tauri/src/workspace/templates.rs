@@ -15,7 +15,7 @@ use crate::util::{clean, now};
 
 pub const SEVERITIES: &[&str] = &["critical", "high", "medium", "low", "info"];
 /// Formats an import rule can name (the scan importer's formats).
-pub const RULE_FORMATS: &[&str] = &["nmap", "nuclei", "nessus", "burp", "zap", "sarif"];
+pub const RULE_FORMATS: &[&str] = &["nmap", "nuclei", "nessus", "burp", "zap", "sarif", "openvas"];
 pub const MAX_TEMPLATES: usize = 2_000;
 pub const MAX_LIBRARY_FILE: usize = 5 * 1024 * 1024;
 const FILE_FORMAT: &str = "cyberhub-finding-templates";

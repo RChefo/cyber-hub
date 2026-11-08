@@ -161,6 +161,7 @@ Projects → *Findings* → *Import results* reads the output of other tools int
 | Nessus v2 (`.nessus`) | `<NessusClientData_v2>` root | one per plugin, host and port; `severity` 0–4, synopsis and description, solution, `see_also`, CVEs, plugin output | address, name (`host-fqdn`), services |
 | Burp Suite issue export (XML) | `<issues>` root | one per issue; severity, confidence (Certain/Firm/Tentative), detail and background, remediation, CWE, references, the request line | web service, address |
 | OWASP ZAP JSON report | `site` list | one per alert and site, with up to 25 instances; risk code, confidence, CWE, references | web service |
+| Greenbone / OpenVAS report (GMP XML) | `<report>` root with `<results>` | one per NVT, host and port; `threat` High/Medium/Low/Critical, Log as informational, False Positive and Debug skipped; results with a quality of detection below 70 % left out (Greenbone's default filter); summary, insight and impact from the NVT tags, the result text, solution, CVEs, URL references, CVSS vector from `severities` | address, name, services |
 | SARIF 2.1.0 | `version` 2.1.x and `runs` | one per result; `security-severity` mapped like GitHub code scanning (≥ 9 critical, ≥ 7 high, ≥ 4 medium, > 0 low), otherwise `level` (error high, warning medium, note low) | none (source-code locations have no network target) |
 
 * **Flow.** The file (at most 50 MB, 10,000 findings, 20,000 asset values) is chosen in a native dialog, read and previewed. The preview says what each finding would do: new, already recorded, resolved and reported again, dismissed earlier, outside the scope, or informational (not imported unless selected). Nothing is written until *Import* is pressed. The preview can be used once.
@@ -182,7 +183,7 @@ The *Finding Library* page (Workspace group) keeps reusable write-ups in `findin
 | `description`, `remediation` | ≤ 50,000 characters each |
 | `refs` | JSON list of ≤ 30 references (URLs or citations), deduplicated |
 | `tags` | JSON list of ≤ 20 tags |
-| `rules` | JSON list of ≤ 50 import rules `format:rule` (`nmap`, `nuclei`, `nessus`, `burp`, `zap`, `sarif`; the rule as the tool names it: Nessus plugin ID, ZAP plugin ID, Burp issue type, Nuclei template ID, SARIF rule ID). A rule belongs to one template; rules match without regard to case. |
+| `rules` | JSON list of ≤ 50 import rules `format:rule` (`nmap`, `nuclei`, `nessus`, `burp`, `zap`, `sarif`, `openvas` (the NVT OID); the rule as the tool names it: Nessus plugin ID, ZAP plugin ID, Burp issue type, Nuclei template ID, SARIF rule ID). A rule belongs to one template; rules match without regard to case. |
 | `use_count` | how often a finding was written from the template |
 
 * **Recording a finding.** *Start from a template* fills the title, severity, category, description, remediation, references and tags. Fields the template leaves empty keep what was typed. The target, reproduction steps and evidence of the instance are added by hand.
