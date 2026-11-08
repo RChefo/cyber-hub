@@ -157,3 +157,30 @@ Entries are newest last. Times are UTC, measured with `date -u`.
 * The extractor found 7 indicators in defanged text and did not take `report.pdf` for a domain.
 * The STIX export went through the real save dialog, giving a bundle with 2 indicators and correct patterns.
 * My dialog helper failed to type the path, so the dialog saved under its default name into `Documents`. That test file was moved out of Documents to the scratchpad; no user file was touched.
+
+## 2026-11-08T22:50Z: feature 6, Greenbone/OpenVAS import (`99fe5ed`)
+
+**What:**
+* GMP XML reports become findings: one per NVT, host and port.
+* Greenbone's default filter is applied: QoD below 70 % is left out, False Positive and Debug are skipped, Log is info.
+* Text comes from the NVT tags (summary, insight, impact); remediation from the solution; also CVEs, URL references and the CVSS vector from `severities`.
+* Assets: addresses, names and services. `openvas:<OID>` import rules are accepted.
+
+**Tests:** 1 Rust parser test (16 scan-import tests in total).
+
+**GUI:** not separately verified; it shares the import dialog verified for features 1–3.
+
+## 2026-11-08T22:55Z: features 7 and 8, findings export and bulk edit (`0337e18`)
+
+**What:**
+* Export of the listed findings in the order shown, as RFC 4180 CSV (BOM, 21 columns, cells guarded against formula injection) or JSON.
+* Bulk add or remove of tags (case-insensitive) and setting or clearing the assignee, with a per-finding history entry.
+
+**Tests:**
+* 2 export tests (quoting and the formula guard; CSV and JSON content) and 1 bulk-edit test.
+* Full run: cargo test 291 passed, clippy clean, vitest 212 passed.
+
+**GUI:**
+* The bulk edit added a tag through the dialog.
+* The CSV export was produced through the native save dialog and has the expected header and rows. The dialog ignored the path set by the helper (`WM_SETTEXT`) and saved to `Documents` under the default name. That test file was moved to the scratchpad, and Documents holds no export files from this session.
+* Save-dialog GUI tests are not repeated in this session; see the memory note.

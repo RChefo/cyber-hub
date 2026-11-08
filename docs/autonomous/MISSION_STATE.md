@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | Implementation (features 6–9 next: OpenVAS import, findings export, bulk edit, WSTG checklist) |
+| Current phase | Implementation (feature 9 next: OWASP WSTG checklist) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -39,6 +39,9 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 3. Fix verification by rescan (`0e201f5`)
 4. CVSS 4.0/3.1 on findings with a calculator (`edad2bf`)
 5. IOC extractor, defang and refang, STIX 2.1 export (`38599a1`)
+6. Greenbone/OpenVAS import (`99fe5ed`)
+7. Findings CSV/JSON export (`0337e18`)
+8. Bulk tag and assignee edit (`0337e18`)
 
 ## Tests executed
 
@@ -59,10 +62,18 @@ None.
 | `efe8605` | docs(research): add market research, scored backlog and mission state |
 | `edad2bf` | feat(findings): add CVSS 4.0 and 3.1 vectors and a calculator to findings |
 | `38599a1` | feat(intel): add an IOC extractor, defang and refang, and STIX 2.1 export |
+| `3883ea5` | docs(mission): record features 4 and 5 in the mission log |
+| `99fe5ed` | feat(findings): import Greenbone/OpenVAS reports |
+| `0337e18` | feat(findings): export findings as CSV or JSON and edit tags in bulk |
 
 ## Next action
 
-Backlog items 6–9: OpenVAS/Greenbone XML import, findings CSV/JSON export, bulk tag and assignee edit, then the WSTG checklist (CC BY-SA 4.0 attribution required). Then a final regression and the report.
+Feature 9: an OWASP WSTG checklist per project.
+
+* Data comes from `OWASP/wstg` `checklists/checklist.json` (CC BY-SA 4.0: attribution, and ShareAlike for the adapted data file).
+* Schema 17 adds `checklist_items`. The UI is a project tab with coverage.
+
+Then the final regression (cargo audit, npm audit, gitleaks, bundle build) and the mission report.
 
 ## Resume instruction
 
