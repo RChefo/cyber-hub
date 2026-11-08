@@ -244,6 +244,38 @@ export interface CvssResult {
   label: string;
 }
 
+export interface WstgTest {
+  id: string;
+  name: string;
+  reference: string;
+  objectives: string[];
+}
+
+export interface WstgCategory {
+  id: string;
+  name: string;
+  tests: WstgTest[];
+}
+
+export interface WstgCatalog {
+  source: string;
+  url: string;
+  commit: string;
+  retrieved: string;
+  license: string;
+  categories: WstgCategory[];
+}
+
+export type ChecklistStatus = "not_started" | "in_progress" | "passed" | "failed" | "not_applicable";
+
+export interface ChecklistItem {
+  testId: string;
+  status: ChecklistStatus;
+  note: string;
+  findingId: number | null;
+  updatedAt: string;
+}
+
 export interface FindingEvent {
   id: number;
   kind: "created" | "status" | "updated" | "note" | "link" | "unlink" | "migrated";

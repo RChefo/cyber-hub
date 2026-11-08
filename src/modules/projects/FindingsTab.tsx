@@ -74,11 +74,14 @@ export function FindingFormModal({
   onOpenChange,
   projectId,
   initial,
+  onSaved,
 }: {
   isOpen: boolean;
   onOpenChange: (o: boolean) => void;
   projectId: number;
   initial?: FindingDraft | null;
+  /** called with the finding's ID after it was saved */
+  onSaved?: (id: number) => void;
 }) {
   const [d, setD] = useState<FindingDraft>(EMPTY);
   const [tagText, setTagText] = useState("");
@@ -115,7 +118,8 @@ export function FindingFormModal({
     setSaving(true);
     setError(null);
     try {
-      await api.findingUpsert({ ...d, tags: parseTags(tagText), projectId });
+      const savedId = await api.findingUpsert({ ...d, tags: parseTags(tagText), projectId });
+      onSaved?.(savedId);
       if (templateId) {
         await api.findingTemplateUsed(Number(templateId)).catch(() => undefined);
         invalidate("templates");

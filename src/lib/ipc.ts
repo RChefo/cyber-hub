@@ -146,6 +146,10 @@ export const api = {
   findingsBulkEdit: (ids: number[], edit: { addTags: string[]; removeTags: string[]; assignee: string | null }) =>
     call<{ changed: number[]; skipped: [number, string][] }>("findings_bulk_edit", { ids, edit }),
   findingsExport: (projectId: number, ids: number[], format: "csv" | "json") => call<string | null>("findings_export", { projectId, ids, format }),
+  wstgCatalog: () => call<T.WstgCatalog>("wstg_catalog"),
+  checklistItems: (projectId: number) => call<T.ChecklistItem[]>("checklist_items", { projectId }),
+  checklistSet: (projectId: number, testId: string, status: T.ChecklistStatus, note: string, findingId: number | null) =>
+    call<T.ChecklistItem>("checklist_set", { projectId, testId, status, note, findingId }),
   tiSavedExportStix: () => call<{ fileName: string; exported: number; skipped: string[] } | null>("ti_saved_export_stix"),
   reportHtml: (projectId: number, options: T.ReportOptions) => call<string>("report_html", { projectId, options }),
   reportExportHtml: (projectId: number, options: T.ReportOptions) => call<string | null>("report_export_html", { projectId, options }),

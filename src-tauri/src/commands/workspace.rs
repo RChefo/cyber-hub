@@ -525,3 +525,21 @@ pub async fn findings_export(app: AppHandle, project_id: i64, ids: Vec<i64>, for
     let _ = app.state::<Db>().with(|c| timeline::record(c, project_id, "report", &format!("Findings exported ({})", ext.to_uppercase()), &file, None, None));
     Ok(Some(file))
 }
+
+/* ───────────────────────── methodology checklist ───────────────────────── */
+
+/// The bundled OWASP WSTG test catalog.
+#[tauri::command]
+pub async fn wstg_catalog() -> AppResult<crate::methodology::Catalog> {
+    Ok(crate::methodology::catalog().clone())
+}
+
+#[tauri::command]
+pub async fn checklist_items(db: State<'_, Db>, project_id: i64) -> AppResult<Vec<crate::methodology::ItemState>> {
+    db.with(|c| crate::methodology::items(c, project_id))
+}
+
+#[tauri::command]
+pub async fn checklist_set(db: State<'_, Db>, project_id: i64, test_id: String, status: String, note: Option<String>, finding_id: Option<i64>) -> AppResult<crate::methodology::ItemState> {
+    db.with(|c| crate::methodology::set(c, project_id, &test_id, &status, note.as_deref().unwrap_or(""), finding_id))
+}

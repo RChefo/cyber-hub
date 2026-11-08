@@ -8,6 +8,7 @@ mod commands;
 mod confirm;
 mod cvss;
 mod db;
+mod methodology;
 mod detect;
 pub mod osint;
 mod error;
@@ -213,6 +214,9 @@ pub fn run() {
             workspace_commands::finding_templates_import,
             workspace_commands::cvss_score,
             workspace_commands::findings_export,
+            workspace_commands::wstg_catalog,
+            workspace_commands::checklist_items,
+            workspace_commands::checklist_set,
             workspace_commands::report_html,
             workspace_commands::report_export_html,
             workspace_commands::report_save_evidence,

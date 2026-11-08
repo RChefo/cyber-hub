@@ -19,6 +19,7 @@ import { AnalysisTab } from "./AnalysisTab";
 import { AssistantTab } from "./AssistantTab";
 import { AttackSurfaceTab } from "./AttackSurfaceTab";
 import { AutomationTab } from "./AutomationTab";
+import { ChecklistTab } from "./ChecklistTab";
 import { EvidenceVault, ReportTab, ScopeExtras, TimelineTab } from "./EngagementTabs";
 import { FindingsTab } from "./FindingsTab";
 import { ENGAGEMENT_TYPES, engagementOf, ProjectFormModal, STATUS_OPTIONS } from "./ProjectFormModal";
@@ -27,7 +28,7 @@ import { countBySeverity } from "./report";
 import { ScopeTab } from "./ScopeTab";
 import { VulnerabilitiesTab } from "./VulnerabilitiesTab";
 
-type TabId = "overview" | "scope" | "surface" | "vulns" | "findings" | "analysis" | "assistant" | "automation" | "timeline" | "evidence" | "report" | "notes" | "commands";
+type TabId = "overview" | "scope" | "surface" | "vulns" | "findings" | "checklist" | "analysis" | "assistant" | "automation" | "timeline" | "evidence" | "report" | "notes" | "commands";
 
 function NotesTab({ project }: { project: Project }) {
   const [notes, setNotes] = useState(project.notes);
@@ -327,6 +328,7 @@ export function ProjectDetail({ id }: { id: number }) {
     { id: "surface", label: "Attack surface" },
     { id: "vulns", label: "Vulnerabilities" },
     { id: "findings", label: `Findings (${f.length})` },
+    { id: "checklist", label: "Checklist" },
     { id: "analysis", label: "Analysis" },
     { id: "assistant", label: "Assistant" },
     { id: "automation", label: "Automation" },
@@ -434,6 +436,9 @@ export function ProjectDetail({ id }: { id: number }) {
         </Tabs.Panel>
         <Tabs.Panel id="evidence">
           <EvidenceVault project={p} findings={f} onOpenFindings={() => setTab("findings")} />
+        </Tabs.Panel>
+        <Tabs.Panel id="checklist">
+          <ChecklistTab projectId={p.id} />
         </Tabs.Panel>
         <Tabs.Panel id="timeline">
           <TimelineTab project={p} />

@@ -229,6 +229,23 @@ pub fn render(c: &Connection, project_id: i64, o: &ReportOptions, today: &str) -
         w.el("div", "label", "Methodology");
         w.el("div", "text", p.methodology.trim());
     }
+    let cov = crate::methodology::coverage(c, project_id)?;
+    if cov.done() + cov.in_progress > 0 {
+        w.el("div", "label", "Testing checklist");
+        w.el(
+            "div",
+            "text",
+            &format!(
+                "OWASP Web Security Testing Guide: {} of {} tests have a result ({} passed, {} failed, {} not applicable); {} in progress.",
+                cov.done(),
+                cov.total,
+                cov.passed,
+                cov.failed,
+                cov.not_applicable,
+                cov.in_progress
+            ),
+        );
+    }
 
     if o.include_scope {
         w.el("h2", "", "Scope");

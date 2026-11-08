@@ -1,4 +1,4 @@
-# Project data model (schema 16)
+# Project data model (schema 17)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -216,6 +216,16 @@ Findings can carry a CVSS vector (`findings.cvss_vector`). The backend computes 
 * **Imports.** Nuclei's `classification.cvss-metrics` and Nessus' `cvss4_vector` (else `cvss3_vector`) become the finding's vector when they are valid. Invalid vectors are ignored, but the reported text stays in the description or technical details.
 * **Reports.** The HTML and Markdown reports show the score together with its vector, as FIRST asks.
 * **Tests.** Tests cover all eight CVSS 4.0 examples in the table of FIRST's examples page, and CVSS 3.1 vectors from the specification's comparisons. Four captions on that page disagree with its own table (CVE-2023-48228, CVE-2016-5729, CVE-2015-2890, CVE-2018-3652); the table values are the calculator's.
+
+## Methodology checklist (schema 17)
+
+Projects → *Checklist* tracks the engagement's coverage of the **OWASP Web Security Testing Guide**. The app bundles the WSTG checklist (`src-tauri/src/methodology/wstg.json`): 115 tests in 13 categories, from the WSTG repository at commit `8f7da50`, retrieved 2026-11-08. It keeps only test IDs, names, objectives and reference links. The data is CC BY-SA 4.0; the tab and [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) give the attribution. Reference links are limited to `wstg.owasp.org` and open in the browser only when clicked.
+
+* **Records.** `checklist_items` keeps one row per project and test: status (`not_started`, `in_progress`, `passed`, `failed`, `not_applicable`), a note of up to 2,000 characters, and optionally the finding the test led to (same project only; it stays empty if the finding is deleted). Tests without a row are not started.
+* **Coverage.** The tab shows how many tests have a result (passed, failed or not applicable) out of the whole catalog, with counts per status. Tests can be filtered by status and searched by ID, name, objective or note.
+* **Findings.** *Record finding* on a failed test opens the finding form with the test's name, category, the note and the test objectives, a reference to the WSTG page, and the tags `wstg` and the test ID. Saving links the finding to the test.
+* **Report.** The HTML report states the coverage under the engagement details (tests with a result, per status), once at least one test has a status.
+* **Versions.** WSTG test IDs can change between guide versions. The bundled version is recorded in the data file, so a later update can map the IDs.
 
 ## Analysis
 

@@ -39,6 +39,8 @@ export type Tag =
   | "workflows"
   /** the finding library (templates) */
   | "templates"
+  /** project methodology checklists */
+  | "checklist"
   | "system";
 
 const versions = new Map<Tag, number>();

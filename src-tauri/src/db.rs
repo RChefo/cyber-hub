@@ -840,6 +840,19 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE findings ADD COLUMN cvss_vector TEXT NOT NULL DEFAULT '';
     ALTER TABLE findings ADD COLUMN cvss_score REAL;
     "#,
+    // 17: methodology checklist (docs/DATA_MODEL.md#methodology-checklist-schema-17): each project's
+    // status per OWASP WSTG test, with a note and the finding the test led to. New table only.
+    r#"
+    CREATE TABLE checklist_items (
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        test_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('not_started','in_progress','passed','failed','not_applicable')),
+        note TEXT NOT NULL DEFAULT '',
+        finding_id INTEGER REFERENCES findings(id) ON DELETE SET NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (project_id, test_id)
+    );
+    "#,
 ];
 
 /// Backups kept in `<data dir>/backups` (the newest ones; older copies are removed).

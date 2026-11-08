@@ -157,3 +157,19 @@ fn findings_keep_a_validated_cvss_vector_and_its_score() {
     })
     .unwrap();
 }
+
+#[test]
+fn the_report_states_checklist_coverage() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let p = project(c);
+        let html = report::render(c, p, &report::ReportOptions::default(), "2026-11-08")?;
+        assert!(!html.contains("Testing checklist"), "no checklist line without progress");
+        crate::methodology::set(c, p, "WSTG-INFO-01", "passed", "", None)?;
+        crate::methodology::set(c, p, "WSTG-ATHN-01", "failed", "", None)?;
+        let html = report::render(c, p, &report::ReportOptions::default(), "2026-11-08")?;
+        assert!(html.contains("OWASP Web Security Testing Guide: 2 of 115 tests have a result (1 passed, 1 failed, 0 not applicable); 0 in progress."));
+        Ok(())
+    })
+    .unwrap();
+}
