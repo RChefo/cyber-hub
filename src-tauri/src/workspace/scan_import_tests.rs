@@ -16,7 +16,7 @@ const NESSUS: &str = r#"<?xml version="1.0" ?>
 <ReportHost name="93.184.215.7"><HostProperties><tag name="host-ip">93.184.215.7</tag><tag name="host-fqdn">app.example.com</tag></HostProperties>
 <ReportItem port="0" svc_name="general" protocol="tcp" severity="0" pluginID="19506" pluginName="Nessus Scan Information" pluginFamily="Settings"><description>Info</description><plugin_output>Scanner IP : 10.0.0.5</plugin_output></ReportItem>
 <ReportItem port="443" svc_name="www" protocol="tcp" severity="3" pluginID="156860" pluginName="Apache 2.4.x &lt; 2.4.52 Multiple Vulnerabilities" pluginFamily="Web Servers"><synopsis>The remote web server is affected.</synopsis><description>The version of Apache httpd installed is prior to 2.4.52.</description><solution>Upgrade to Apache version 2.4.52 or later.</solution><see_also>https://httpd.apache.org/security/vulnerabilities_24.html
-https://example.org/advisory</see_also><cve>CVE-2021-44790</cve><cve>CVE-2021-44224</cve><cvss3_base_score>9.8</cvss3_base_score><plugin_output>Login with password=hunter2 succeeded</plugin_output></ReportItem>
+https://example.org/advisory</see_also><cve>CVE-2021-44790</cve><cve>CVE-2021-44224</cve><cvss3_base_score>9.8</cvss3_base_score><cvss3_vector>CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H</cvss3_vector><plugin_output>Login with password=hunter2 succeeded</plugin_output></ReportItem>
 </ReportHost>
 <ReportHost name="10.9.9.9"><HostProperties><tag name="host-ip">10.9.9.9</tag></HostProperties>
 <ReportItem port="22" svc_name="ssh" protocol="tcp" severity="2" pluginID="70658" pluginName="SSH Server CBC Mode Ciphers Enabled" pluginFamily="Misc."><description>CBC</description><solution>Disable CBC</solution></ReportItem>
@@ -90,6 +90,7 @@ fn nuclei_results_become_findings_with_redacted_details() {
     assert!(!crit.technical.contains("sk_live_1234567890abcdef"), "secrets in extracted values are redacted: {}", crit.technical);
     assert!(!crit.technical.contains("Bearer secret"), "the curl command is not copied");
     assert_eq!(crit.asset, Some(("http_service", "https://app.example.com".to_string())));
+    assert_eq!(crit.cvss, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N", "the template's vector is kept in canonical form");
     let tech = &p.findings[1];
     assert_eq!((tech.severity, tech.title.as_str()), ("info", "Wappalyzer Technology Detection (nginx)"));
     assert!(p.assets.iter().any(|a| a.kind == "technology" && a.value == "nginx"));
@@ -112,6 +113,7 @@ fn nessus_items_keep_host_port_cves_and_redact_output() {
     assert!(apache.technical.contains("9.8"));
     assert!(!apache.technical.contains("hunter2"), "plugin output is redacted: {}", apache.technical);
     assert_eq!(apache.asset, Some(("service", "93.184.215.7:443/tcp".to_string())));
+    assert_eq!(apache.cvss, "CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H");
     assert_eq!(p.findings.iter().find(|f| f.rule_id == "19506").unwrap().severity, "info");
     assert!(p.assets.iter().any(|a| a.kind == "name" && a.value == "app.example.com"));
     assert!(p.assets.iter().any(|a| a.kind == "service" && a.value == "10.9.9.9:22/tcp"));
@@ -219,6 +221,7 @@ fn imports_respect_scope_and_never_duplicate_findings() {
         let fid: i64 = c.query_row("SELECT id FROM findings", [], |r| r.get(0))?;
         let f = crate::commands::projects::finding_get(c, fid)?;
         assert_eq!((f.source.as_str(), f.status.as_str(), f.severity.as_str()), ("import", "new", "high"));
+        assert_eq!((f.cvss_vector.as_str(), f.cvss_score), ("CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", Some(9.8)), "the scanner's vector is scored");
         assert!(f.tags.contains(&"nessus".to_string()));
         let links = lifecycle::links(c, fid)?;
         assert!(links.iter().any(|l| l.kind == "evidence" && l.ref_id == ev.id), "linked to the imported file");

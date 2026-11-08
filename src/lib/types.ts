@@ -225,11 +225,24 @@ export interface Finding {
   dueDate: string | null;
   createdAt: string;
   updatedAt: string;
+  /** canonical CVSS v3.1 or v4.0 vector, empty when none was given */
+  cvssVector: string;
+  /** computed by the backend from the vector */
+  cvssScore: number | null;
 }
 
 /** What the backend accepts when saving; fields added in schema 9 are optional. */
 export type FindingInput = Pick<Finding, "projectId" | "title" | "severity" | "status"> &
   Partial<Omit<Finding, "id" | "projectId" | "title" | "severity" | "status" | "source" | "createdAt" | "updatedAt">> & { id?: number };
+
+export interface CvssResult {
+  version: "3.0" | "3.1" | "4.0";
+  vector: string;
+  score: number;
+  baseScore: number;
+  rating: "none" | "low" | "medium" | "high" | "critical";
+  label: string;
+}
 
 export interface FindingEvent {
   id: number;

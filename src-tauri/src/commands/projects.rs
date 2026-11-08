@@ -406,6 +406,10 @@ pub struct Finding {
     pub due_date: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    /// canonical CVSS v3.1 or v4.0 vector, empty when none was given
+    pub cvss_vector: String,
+    /// computed by the backend from `cvss_vector`
+    pub cvss_score: Option<f64>,
 }
 
 /// Fields added after the first release default to empty, so older clients keep working.
@@ -441,10 +445,13 @@ pub struct FindingInput {
     pub assignee: String,
     #[serde(default)]
     pub due_date: Option<String>,
+    /// CVSS v3.1 or v4.0 vector; the score is computed from it
+    #[serde(default)]
+    pub cvss_vector: String,
 }
 
 const FINDING_COLS: &str = "id, project_id, title, severity, status, category, confidence, description, affected_target, cve, evidence,
-    reproduction, technical_details, remediation, source, tags, assignee, due_date, created_at, updated_at";
+    reproduction, technical_details, remediation, source, tags, assignee, due_date, created_at, updated_at, cvss_vector, cvss_score";
 
 fn finding_row(r: &rusqlite::Row) -> rusqlite::Result<Finding> {
     Ok(Finding {
@@ -468,6 +475,8 @@ fn finding_row(r: &rusqlite::Row) -> rusqlite::Result<Finding> {
         due_date: r.get(17)?,
         created_at: r.get(18)?,
         updated_at: r.get(19)?,
+        cvss_vector: r.get(20)?,
+        cvss_score: r.get(21)?,
     })
 }
 
@@ -521,6 +530,8 @@ struct CleanFinding {
     tags_json: String,
     assignee: String,
     due_date: Option<String>,
+    cvss_vector: String,
+    cvss_score: Option<f64>,
 }
 
 fn clean_finding(input: &FindingInput) -> AppResult<CleanFinding> {
@@ -548,6 +559,13 @@ fn clean_finding(input: &FindingInput) -> AppResult<CleanFinding> {
     if !lifecycle::CONFIDENCES.contains(&confidence) {
         return Err(validation("Confidence must be low, medium or high"));
     }
+    let (cvss_vector, cvss_score) = match input.cvss_vector.trim() {
+        "" => (String::new(), None),
+        v => {
+            let c = crate::cvss::parse(v).map_err(|e| validation(format!("CVSS vector: {e}")))?;
+            (c.vector, Some(c.score))
+        }
+    };
     let due_date = match input.due_date.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
         None => None,
         Some(d) => Some(chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| validation("The due date must be a date (YYYY-MM-DD)"))?.to_string()),
@@ -568,6 +586,8 @@ fn clean_finding(input: &FindingInput) -> AppResult<CleanFinding> {
         tags_json: serde_json::to_string(&tags)?,
         assignee: clean("Assignee", &input.assignee, 100, false)?,
         due_date,
+        cvss_vector,
+        cvss_score,
     })
 }
 
@@ -596,8 +616,8 @@ pub(crate) fn finding_write(tx: &Connection, input: &FindingInput, source: &str,
             }
             tx.execute(
                 "UPDATE findings SET title=?2, severity=?3, status=?4, category=?5, confidence=?6, description=?7, affected_target=?8, cve=?9, evidence=?10,
-                     reproduction=?11, technical_details=?12, remediation=?13, tags=?14, assignee=?15, due_date=?16, updated_at=?17 WHERE id=?1",
-                params![id, f.title, f.severity, f.status, f.category, f.confidence, f.description, f.affected, f.cve, f.evidence_json, f.reproduction, f.technical, f.remediation, f.tags_json, f.assignee, f.due_date, ts],
+                     reproduction=?11, technical_details=?12, remediation=?13, tags=?14, assignee=?15, due_date=?16, updated_at=?17, cvss_vector=?18, cvss_score=?19 WHERE id=?1",
+                params![id, f.title, f.severity, f.status, f.category, f.confidence, f.description, f.affected, f.cve, f.evidence_json, f.reproduction, f.technical, f.remediation, f.tags_json, f.assignee, f.due_date, ts, f.cvss_vector, f.cvss_score],
             )?;
             let new = finding_get(tx, id)?;
             let changed = changed_fields(&old, &new);
@@ -612,9 +632,9 @@ pub(crate) fn finding_write(tx: &Connection, input: &FindingInput, source: &str,
         None => {
             tx.execute(
                 "INSERT INTO findings (project_id, title, severity, status, category, confidence, description, affected_target, cve, evidence,
-                     reproduction, technical_details, remediation, source, tags, assignee, due_date, created_at, updated_at)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?18)",
-                params![input.project_id, f.title, f.severity, f.status, f.category, f.confidence, f.description, f.affected, f.cve, f.evidence_json, f.reproduction, f.technical, f.remediation, source, f.tags_json, f.assignee, f.due_date, ts],
+                     reproduction, technical_details, remediation, source, tags, assignee, due_date, created_at, updated_at, cvss_vector, cvss_score)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?18,?19,?20)",
+                params![input.project_id, f.title, f.severity, f.status, f.category, f.confidence, f.description, f.affected, f.cve, f.evidence_json, f.reproduction, f.technical, f.remediation, source, f.tags_json, f.assignee, f.due_date, ts, f.cvss_vector, f.cvss_score],
             )?;
             let id = tx.last_insert_rowid();
             lifecycle::record_event(tx, id, input.project_id, "created", (None, Some(f.status)), "", source)?;
@@ -645,6 +665,7 @@ fn changed_fields(a: &Finding, b: &Finding) -> Vec<&'static str> {
         ("tags", a.tags != b.tags),
         ("assignee", a.assignee != b.assignee),
         ("due date", a.due_date != b.due_date),
+        ("CVSS vector", a.cvss_vector != b.cvss_vector),
     ]
     .into_iter()
     .filter(|(_, d)| *d)
@@ -808,6 +829,9 @@ pub fn markdown_report(project: &Project, findings: &[Finding], generated: &str)
             l.push(format!("### {}. {}", i + 1, f.title));
             l.push(String::new());
             l.push(format!("- **Severity:** {}", label(SEVERITY_LABEL, &f.severity)));
+            if let (Some(score), false) = (f.cvss_score, f.cvss_vector.is_empty()) {
+                l.push(format!("- **CVSS:** {score:.1} `{}`", f.cvss_vector));
+            }
             l.push(format!("- **Status:** {}", label(STATUS_LABEL, &f.status)));
             if !f.affected_target.is_empty() {
                 l.push(format!("- **Affected target:** `{}`", f.affected_target));
@@ -935,6 +959,8 @@ mod report_tests {
             due_date: None,
             created_at: "2026-11-02T00:00:00Z".into(),
             updated_at: "2026-11-02T00:00:00Z".into(),
+            cvss_vector: String::new(),
+            cvss_score: None,
         }
     }
 

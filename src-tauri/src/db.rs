@@ -834,6 +834,12 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE finding_fingerprints ADD COLUMN host TEXT NOT NULL DEFAULT '';
     CREATE INDEX idx_finding_fingerprints_tool ON finding_fingerprints(project_id, tool);
     "#,
+    // 16: CVSS on findings (docs/DATA_MODEL.md#cvss): the canonical v3.1 or v4.0 vector and the score
+    // computed from it by the backend. Existing findings get no vector and no score.
+    r#"
+    ALTER TABLE findings ADD COLUMN cvss_vector TEXT NOT NULL DEFAULT '';
+    ALTER TABLE findings ADD COLUMN cvss_score REAL;
+    "#,
 ];
 
 /// Backups kept in `<data dir>/backups` (the newest ones; older copies are removed).

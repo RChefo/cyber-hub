@@ -268,6 +268,10 @@ pub fn render(c: &Connection, project_id: i64, o: &ReportOptions, today: &str) -
                 if !f.cve.is_empty() {
                     kv.push(format!("CVE: {}", f.cve));
                 }
+                // FIRST: a CVSS score is always published together with its vector
+                if let (Some(score), false) = (f.cvss_score, f.cvss_vector.is_empty()) {
+                    kv.push(format!("CVSS {score:.1} ({})", f.cvss_vector));
+                }
                 if !f.affected_target.is_empty() {
                     kv.push(format!("Affected: {}", f.affected_target));
                 }

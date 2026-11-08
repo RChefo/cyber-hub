@@ -6,6 +6,7 @@
 mod catalog;
 mod commands;
 mod confirm;
+mod cvss;
 mod db;
 mod detect;
 pub mod osint;
@@ -210,6 +211,7 @@ pub fn run() {
             workspace_commands::finding_templates_add_starters,
             workspace_commands::finding_templates_export,
             workspace_commands::finding_templates_import,
+            workspace_commands::cvss_score,
             workspace_commands::report_html,
             workspace_commands::report_export_html,
             workspace_commands::report_save_evidence,

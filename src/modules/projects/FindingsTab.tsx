@@ -15,6 +15,7 @@ import type { Confidence, Evidence, Finding, FindingLinkKind, FindingStatus, Sev
 import { useShowMore } from "@/lib/showMore";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/utils";
 import { filterFindings, parseTags, sortFindings, tagsOf } from "./report";
+import { CvssField } from "./CvssField";
 import { ScanImportModal } from "./ScanImportModal";
 import { applyTemplate, templateFromFinding } from "@/modules/library/library";
 import { TemplateFormModal } from "@/modules/library/TemplateFormModal";
@@ -58,6 +59,8 @@ const EMPTY: FindingDraft = {
   tags: [],
   assignee: "",
   dueDate: null,
+  cvssVector: "",
+  cvssScore: null,
 };
 
 export function draftOf(f: Finding): FindingDraft {
@@ -164,6 +167,7 @@ export function FindingFormModal({
         <SelectInput label="Confidence" value={d.confidence} onChange={(v) => set("confidence", v as Confidence)} options={CONFIDENCE_OPTIONS} />
         <TextInput label="Affected target" value={d.affectedTarget} onChange={(v) => set("affectedTarget", v)} placeholder="https://app.example.com/search?q=" mono />
         <TextInput label="CVE (optional)" value={d.cve} onChange={(v) => set("cve", v)} placeholder="CVE-2024-12345" mono />
+        <CvssField value={d.cvssVector} onChange={(v) => set("cvssVector", v)} severity={d.severity} onSeverity={(v) => set("severity", v)} />
         <TextAreaInput label="Description" value={d.description} onChange={(v) => set("description", v)} rows={5} placeholder="What the issue is and its impact" className="md:col-span-2" />
         <TextAreaInput label="Reproduction steps" value={d.reproduction} onChange={(v) => set("reproduction", v)} rows={4} placeholder="1. Open … 2. Send … 3. Observe …" className="md:col-span-2" />
         <TextAreaInput label="Technical details" value={d.technicalDetails} onChange={(v) => set("technicalDetails", v)} rows={3} placeholder="Requests, parameters, versions" className="md:col-span-2" />
@@ -480,7 +484,7 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
                     </Checkbox>
                   </td>
                   <td className="py-2.5 pr-3">
-                    <SeverityBadge severity={f.severity} />
+                    <SeverityBadge severity={f.severity} score={f.cvssScore ?? undefined} />
                   </td>
                   <td className="max-w-[340px] py-2.5 pr-3">
                     <div className="truncate text-foreground">{f.title}</div>

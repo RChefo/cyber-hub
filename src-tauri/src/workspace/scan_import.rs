@@ -112,6 +112,15 @@ pub struct ImportedFinding {
     pub tags: Vec<String>,
     #[serde(skip)]
     pub fingerprint: String,
+    /// canonical CVSS vector reported by the tool, when it is a valid v3.x or v4.0 vector
+    #[serde(skip)]
+    pub cvss: String,
+}
+
+/// The canonical form of a tool's CVSS vector, or empty when it is missing or not valid (the text
+/// stays in the finding's details either way).
+fn valid_cvss(raw: &str) -> String {
+    crate::cvss::parse(raw).map(|c| c.vector).unwrap_or_default()
 }
 
 /// An asset value found in the file. `kind` `name` becomes a domain or subdomain once the scope is
@@ -668,6 +677,7 @@ fn parse_nuclei(text: &str) -> Result<Parsed, String> {
             category: trunc(&category, 100),
             tags: tool_tags("nuclei", tags.into_iter().take(5)),
             fingerprint: fingerprint(&["nuclei", &id, &matcher, &target]),
+            cvss: valid_cvss(&s(&class, "cvss-metrics")),
         });
     }
     if failed > 0 {
@@ -798,6 +808,7 @@ fn parse_nessus(text: &str) -> Parsed {
                 category: trunc(&get("pluginFamily"), 100),
                 tags: tool_tags("nessus", std::iter::empty()),
                 fingerprint: fingerprint(&["nessus", &plugin, &ip, &port.to_string(), &proto]),
+                cvss: { let v4 = valid_cvss(&field("cvss4_vector")); if v4.is_empty() { valid_cvss(&field("cvss3_vector")) } else { v4 } },
             });
         }
     }
@@ -915,6 +926,7 @@ fn parse_burp(text: &str) -> Parsed {
             cve: String::new(),
             category: trunc(&cwe, 100),
             tags: tool_tags("burp", std::iter::empty()),
+            cvss: String::new(),
             fingerprint: fingerprint(&["burp", &ty, &host_url, &path, &location]),
         });
     }
@@ -1033,6 +1045,7 @@ fn parse_zap(text: &str) -> Result<Parsed, String> {
                 cve: String::new(),
                 category: if cwe.is_empty() || cwe == "-1" || cwe == "0" { String::new() } else { format!("CWE-{cwe}") },
                 tags: tool_tags("zap", std::iter::empty()),
+                cvss: String::new(),
                 fingerprint: fingerprint(&["zap", &alert_ref, &name]),
             });
         }
@@ -1132,6 +1145,7 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
                 cve: String::new(),
                 category: trunc(&cwe.unwrap_or_default(), 100),
                 tags: tool_tags(&run_tool, tags.into_iter().filter(|t| !t.starts_with("external/")).take(4)),
+                cvss: String::new(),
                 fingerprint: fp,
             });
         }
@@ -1585,6 +1599,7 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
                         tags: f.tags.clone(),
                         assignee: String::new(),
                         due_date: None,
+                        cvss_vector: f.cvss.clone(),
                     };
                     let template = template_for(&lib, format, f);
                     if let Some(t) = template {

@@ -16,8 +16,9 @@ This document states exactly what an upgrade does, what was tested, and how far 
 | development after the final QA audit (scan import) | 13 |
 | development: finding library | 14 |
 | development: fix verification by rescan | 15 |
+| development: CVSS on findings | 16 |
 
-The schema version is SQLite's `user_version`. Migrations 9–15 are listed in [DATA_MODEL.md](DATA_MODEL.md). Migrations 13–15 only add tables (`scan_imports`, `finding_fingerprints`; `finding_templates`) and a column with a default (`finding_fingerprints.host`), and change nothing that exists. They add tables and columns, rebuild `findings` once to give it the new lifecycle, and map the old finding statuses: `open` becomes `new`, `reported` becomes `confirmed`, and every finding that was `reported` gets a history entry recording the mapping. Ids and all other columns are kept.
+The schema version is SQLite's `user_version`. Migrations 9–16 are listed in [DATA_MODEL.md](DATA_MODEL.md). Migrations 13–16 only add tables (`scan_imports`, `finding_fingerprints`; `finding_templates`) and columns with defaults (`finding_fingerprints.host`; `findings.cvss_vector`, `findings.cvss_score`), and change nothing that exists. They add tables and columns, rebuild `findings` once to give it the new lifecycle, and map the old finding statuses: `open` becomes `new`, `reported` becomes `confirmed`, and every finding that was `reported` gets a history entry recording the mapping. Ids and all other columns are kept.
 
 ## What happens at startup
 

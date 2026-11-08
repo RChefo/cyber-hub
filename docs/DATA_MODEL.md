@@ -1,4 +1,4 @@
-# Project data model (schema 14)
+# Project data model (schema 16)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -190,6 +190,26 @@ The *Finding Library* page (Workspace group) keeps reusable write-ups in `findin
 * **Scan imports.** A new imported finding whose rule matches a template's import rule is written from the template: its title, severity, category, description and remediation replace the scanner's, references are merged, and tags are added. The finding's target, CVEs and the scanner's evidence (technical details) stay. The finding's history notes the template and rule. The preview counts these findings and lists them, and *Write matching findings from your finding library templates* turns this off for one import. Findings already recorded are never rewritten.
 * **Starter templates.** *Add starter templates* adds 14 common findings with import rules for OWASP ZAP, Burp Suite and Nessus: SQL injection, reflected XSS, missing CSP, HSTS, X-Content-Type-Options and clickjacking protection, untrusted certificates, deprecated TLS, SSH CBC ciphers, SMB signing, directory listing, vulnerable components, default credentials and IDOR. It never overwrites a template with the same title. A rule that another template already owns is left out.
 * **Library files.** *Export* writes `{"format":"cyberhub-finding-templates","version":1,"templates":[…]}` through a native save dialog. *Import* reads such a file (≤ 5 MB, ≤ 2,000 templates) through a native open dialog. It adds templates whose titles are new, never overwrites existing ones, and reports invalid entries with the reason. The valid entries are added in one savepoint.
+
+## CVSS (schema 16)
+
+Findings can carry a CVSS vector (`findings.cvss_vector`). The backend computes `findings.cvss_score` from it whenever the finding is saved; the web view never supplies a score. The code is in `src-tauri/src/cvss/`.
+
+* **Versions.**
+  * **CVSS 4.0** follows FIRST's reference calculator: macrovector equivalence classes, the lookup table (BSD-2-Clause, see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)), and interpolation by severity distance. The arithmetic runs in the reference's order and is rounded like `Math.round`.
+  * **CVSS 3.1** follows the specification, including Appendix A's `Roundup`.
+  * **CVSS 3.0** vectors are scored with the 3.1 equations. Base scores are the same; 3.1 changed rounding edge cases and the environmental modified impact.
+* **Validation.**
+  * Every base metric must be present once, and only known metrics and values are accepted.
+  * Any order is accepted on input, because FIRST's own examples are not always in order.
+  * The stored vector is canonical: specification order, without `X` values.
+  * An invalid vector is refused with the reason, and the finding is not saved.
+* **Score.** The score covers everything in the vector. For 4.0 the label is `CVSS-B`, `-BT`, `-BE` or `-BTE`; for 3.x it is base, temporal or environmental. The base score is also shown. The qualitative rating uses the standard bands: none 0.0, low 0.1–3.9, medium 4.0–6.9, high 7.0–8.9, critical 9.0–10.0.
+* **Severity.** A finding's severity stays the analyst's choice. The form offers *Set severity to …* when it differs from the rating.
+* **Calculator.** The finding form has a calculator for the base metrics (and Exploit Maturity for 4.0). It keeps environmental and supplemental metrics that were typed into the vector.
+* **Imports.** Nuclei's `classification.cvss-metrics` and Nessus' `cvss4_vector` (else `cvss3_vector`) become the finding's vector when they are valid. Invalid vectors are ignored, but the reported text stays in the description or technical details.
+* **Reports.** The HTML and Markdown reports show the score together with its vector, as FIRST asks.
+* **Tests.** Tests cover all eight CVSS 4.0 examples in the table of FIRST's examples page, and CVSS 3.1 vectors from the specification's comparisons. Four captions on that page disagree with its own table (CVE-2023-48228, CVE-2016-5729, CVE-2015-2890, CVE-2018-3652); the table values are the calculator's.
 
 ## Analysis
 

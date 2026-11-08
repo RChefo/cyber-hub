@@ -479,3 +479,11 @@ pub async fn finding_templates_import(app: AppHandle) -> AppResult<Option<Librar
     let text = std::fs::read_to_string(&path).map_err(|_| crate::error::validation("The file is not UTF-8 text"))?;
     Ok(Some(app.state::<Db>().with(|c| templates::import_json(c, &text))?))
 }
+
+/* ───────────────────────── CVSS ───────────────────────── */
+
+/// Validates and scores a CVSS v3.1 or v4.0 vector (the finding form's calculator).
+#[tauri::command]
+pub async fn cvss_score(vector: String) -> AppResult<crate::cvss::Cvss> {
+    crate::cvss::parse(&vector).map_err(AppError::Validation)
+}

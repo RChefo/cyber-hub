@@ -142,6 +142,7 @@ export const api = {
   findingTemplatesAddStarters: () => call<number>("finding_templates_add_starters"),
   findingTemplatesExport: () => call<string | null>("finding_templates_export"),
   findingTemplatesImport: () => call<T.LibraryImport | null>("finding_templates_import"),
+  cvssScore: (vector: string) => call<T.CvssResult>("cvss_score", { vector }),
   reportHtml: (projectId: number, options: T.ReportOptions) => call<string>("report_html", { projectId, options }),
   reportExportHtml: (projectId: number, options: T.ReportOptions) => call<string | null>("report_export_html", { projectId, options }),
   reportSaveEvidence: (projectId: number, options: T.ReportOptions) => call<T.EvidenceRecord>("report_save_evidence", { projectId, options }),

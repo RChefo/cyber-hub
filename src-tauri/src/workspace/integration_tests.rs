@@ -128,3 +128,32 @@ fn volume() {
     })
     .unwrap();
 }
+
+#[test]
+fn findings_keep_a_validated_cvss_vector_and_its_score() {
+    use crate::commands::projects::{finding_get, finding_save, FindingInput};
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let p = project(c);
+        let input = |vector: &str| FindingInput { project_id: p, title: "RCE".into(), severity: "critical".into(), status: "new".into(), cvss_vector: vector.into(), ..Default::default() };
+        // stored in canonical order, scored by the backend
+        let id = finding_save(c, &input("CVSS:4.0/SA:N/SI:N/SC:N/VA:H/VI:H/VC:H/UI:N/PR:N/AT:N/AC:L/AV:N"), "user")?;
+        let f = finding_get(c, id)?;
+        assert_eq!((f.cvss_vector.as_str(), f.cvss_score), ("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N", Some(9.3)));
+        // a broken vector is refused with the reason, and nothing changes
+        let err = finding_save(c, &FindingInput { id: Some(id), ..input("CVSS:3.1/AV:N") }, "user").unwrap_err();
+        assert!(err.to_string().contains("CVSS vector") && err.to_string().contains("missing"), "{err}");
+        assert_eq!(finding_get(c, id)?.cvss_score, Some(9.3));
+        // clearing the vector clears the score; the change is in the history
+        finding_save(c, &FindingInput { id: Some(id), ..input("") }, "user")?;
+        let f = finding_get(c, id)?;
+        assert_eq!((f.cvss_vector.as_str(), f.cvss_score), ("", None));
+        assert!(findings::history(c, id)?.iter().any(|e| e.note.contains("CVSS vector")));
+        // reports show the score with its vector
+        finding_save(c, &FindingInput { id: Some(id), ..input("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H") }, "user")?;
+        let html = report::render(c, p, &report::ReportOptions::default(), "2026-11-08")?;
+        assert!(html.contains("CVSS 9.8 (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)"));
+        Ok(())
+    })
+    .unwrap();
+}
