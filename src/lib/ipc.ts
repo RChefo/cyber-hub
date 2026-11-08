@@ -147,6 +147,7 @@ export const api = {
     call<{ changed: number[]; skipped: [number, string][] }>("findings_bulk_edit", { ids, edit }),
   findingsExport: (projectId: number, ids: number[], format: "csv" | "json") => call<string | null>("findings_export", { projectId, ids, format }),
   wstgCatalog: () => call<T.WstgCatalog>("wstg_catalog"),
+  databaseBackup: () => call<{ fileName: string; size: number } | null>("database_backup"),
   checklistItems: (projectId: number) => call<T.ChecklistItem[]>("checklist_items", { projectId }),
   checklistSet: (projectId: number, testId: string, status: T.ChecklistStatus, note: string, findingId: number | null) =>
     call<T.ChecklistItem>("checklist_set", { projectId, testId, status, note, findingId }),

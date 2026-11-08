@@ -912,6 +912,34 @@ pub fn backup_before_upgrade(conn: &Connection, path: &Path, current: i64) -> Ap
     Ok(Some(dest))
 }
 
+/// Writes a consistent copy of the open database to `dest`: `VACUUM INTO` a temporary file next to
+/// it, `PRAGMA integrity_check` on that copy (opened read-only), then a rename over `dest`. A
+/// half-written or damaged copy never carries the chosen name. Returns the size in bytes.
+pub fn backup_to(conn: &Connection, dest: &Path) -> AppResult<u64> {
+    let name = dest.file_name().ok_or_else(|| AppError::Validation("Choose a file name for the backup".into()))?.to_string_lossy().to_string();
+    let partial = dest.with_file_name(format!("{name}.partial"));
+    let _ = std::fs::remove_file(&partial);
+    conn.execute("VACUUM INTO ?1", [partial.to_string_lossy().to_string()])?;
+    let checked = (|| -> AppResult<String> {
+        let copy = Connection::open_with_flags(&partial, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        Ok(copy.query_row("PRAGMA integrity_check", [], |r| r.get(0))?)
+    })();
+    match checked {
+        Ok(ref result) if result == "ok" => {}
+        Ok(result) => {
+            let _ = std::fs::remove_file(&partial);
+            return Err(AppError::Internal(format!("The copy failed its integrity check ({result}); no backup was written")));
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&partial);
+            return Err(e);
+        }
+    }
+    // replaces a file the save dialog already asked about
+    std::fs::rename(&partial, dest)?;
+    Ok(std::fs::metadata(dest)?.len())
+}
+
 impl Db {
     pub fn open(path: &Path) -> AppResult<Self> {
         let conn = Connection::open(path)?;
@@ -1299,6 +1327,24 @@ mod tests {
         .unwrap();
         db.migrate().unwrap();
         assert_eq!(db.schema_version().unwrap(), MIGRATIONS.len() as i64, "the upgrade succeeds once the obstacle is gone");
+    }
+
+    #[test]
+    fn a_backup_is_a_complete_checked_copy_and_replaces_the_chosen_file() {
+        let dir = std::env::temp_dir().join(format!("cyberhub-backup-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dest = dir.join("copy.db");
+        std::fs::write(&dest, b"an older file the user chose to overwrite").unwrap();
+        let db = Db::init(schema12_with_data()).unwrap();
+        let size = db.with(|c| backup_to(c, &dest)).unwrap();
+        assert!(size > 0);
+        assert!(!dir.join("copy.db.partial").exists(), "no temporary file is left");
+        let copy = Connection::open(&dest).unwrap();
+        let (v, title): (i64, String) = (copy.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap(), copy.query_row("SELECT title FROM findings WHERE id = 21", [], |r| r.get(0)).unwrap());
+        assert_eq!((v, title.as_str()), (MIGRATIONS.len() as i64, "Weak TLS"), "the copy has the current schema and the data");
+        drop(copy);
+        assert!(db.with(|c| backup_to(c, Path::new(""))).is_err(), "a path without a file name is refused");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

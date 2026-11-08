@@ -1,5 +1,5 @@
 import { Button } from "@heroui/react";
-import { FolderOpen, ShieldCheck, Trash2 } from "lucide-react";
+import { DatabaseBackup, FolderOpen, ShieldCheck, Trash2 } from "lucide-react";
 import { useApp } from "@/app/store";
 import { CopyButton, Kbd } from "@/components/ui/Code";
 import { useConfirm } from "@/components/ui/Dialogs";
@@ -25,6 +25,14 @@ function DataPanel() {
       notify.error(`Could not clear ${label}`, errorMessage(e));
     }
   };
+  const backup = async () => {
+    try {
+      const r = await api.databaseBackup();
+      if (r) notify.success("Database backed up", `${r.fileName} (${Math.max(1, Math.round(r.size / 1024))} KB, integrity checked)`);
+    } catch (e) {
+      notify.error("Could not back up the database", errorMessage(e));
+    }
+  };
   const rows: { label: string; body: string; fn: () => Promise<void>; tags: Parameters<typeof invalidate> }[] = [
     { label: "activity log", body: "Removes all recorded activity shown on the dashboard.", fn: api.activityClear, tags: ["activity"] },
     { label: "command history", body: "Removes copied and executed command history. Saved commands are kept.", fn: api.commandHistoryClear, tags: ["history"] },
@@ -38,6 +46,16 @@ function DataPanel() {
         <FolderOpen className="size-4 shrink-0 text-muted" />
         <code data-selectable className="min-w-0 flex-1 truncate font-mono text-[12px]">{system?.dataDir ?? "Desktop runtime not connected"}</code>
         {system && <CopyButton text={system.dataDir} label="Copy path" />}
+      </div>
+      <div className="tile mb-1.5 flex items-center justify-between gap-3 px-3 py-2">
+        <div className="min-w-0">
+          <div className="text-[13.5px]">Back up the database</div>
+          <div className="text-[12px] text-muted">Saves a checked copy of projects, findings, the finding library, evidence records and settings to a file you choose. Evidence files and stored credentials are not included. Restoring is described in docs/UPGRADE.md.</div>
+        </div>
+        <Button size="sm" variant="tertiary" isDisabled={!runtime} onPress={() => void backup()}>
+          <DatabaseBackup className="size-3.5" />
+          Back up
+        </Button>
       </div>
       <ul className="flex flex-col gap-1.5">
         {rows.map((r) => (

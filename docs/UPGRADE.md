@@ -31,6 +31,15 @@ The schema version is SQLite's `user_version`. Migrations 9–17 are listed in [
 
 Credentials (API keys) are not in the database. They stay in the operating system's credential store and are not affected by upgrades or by restoring a backup. Evidence files in `evidence/` are not part of the database backup.
 
+## Manual backups
+
+*Settings* → *Local data* → *Back up the database* saves a copy whenever you want, through a native save dialog. It is the same kind of copy as the upgrade backup:
+1. `VACUUM INTO` writes a consistent snapshot to `<chosen name>.partial`.
+2. The copy is opened read-only and must pass `PRAGMA integrity_check`. Otherwise it is deleted and nothing is written.
+3. It is renamed to the chosen name.
+
+The copy contains the database only. Evidence files (`evidence/`) and credentials (the system credential store) are not included. To restore, close Cyber Hub and replace `cyberhub.db` in the data folder with the copy (delete `cyberhub.db-wal` and `cyberhub.db-shm` first), as for an upgrade backup. A copy made by a newer version is refused by an older one.
+
 ## What was tested (November 2026)
 
 Tested on disposable copies, never on a real user database:

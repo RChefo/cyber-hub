@@ -217,6 +217,7 @@ pub fn run() {
             workspace_commands::wstg_catalog,
             workspace_commands::checklist_items,
             workspace_commands::checklist_set,
+            workspace_commands::database_backup,
             workspace_commands::report_html,
             workspace_commands::report_export_html,
             workspace_commands::report_save_evidence,

@@ -543,3 +543,35 @@ pub async fn checklist_items(db: State<'_, Db>, project_id: i64) -> AppResult<Ve
 pub async fn checklist_set(db: State<'_, Db>, project_id: i64, test_id: String, status: String, note: Option<String>, finding_id: Option<i64>) -> AppResult<crate::methodology::ItemState> {
     db.with(|c| crate::methodology::set(c, project_id, &test_id, &status, note.as_deref().unwrap_or(""), finding_id))
 }
+
+/* ───────────────────────── database backup ───────────────────────── */
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupResult {
+    file_name: String,
+    size: u64,
+}
+
+/// Saves a consistent, integrity-checked copy of the database through a native save dialog.
+/// Evidence files and credentials are not part of it. None when cancelled.
+#[tauri::command]
+pub async fn database_backup(app: AppHandle) -> AppResult<Option<BackupResult>> {
+    let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    main_window_dialog(&app, "Back up the database").set_file_name(format!("cyberhub-backup-{stamp}.db")).add_filter("SQLite database", &["db"]).save_file(move |f| {
+        let _ = tx.send(f.and_then(|f| f.into_path().ok()));
+    });
+    let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
+    let handle = app.clone();
+    // copying a large database must not hold up the async runtime
+    let (file_name, size) = tauri::async_runtime::spawn_blocking(move || -> AppResult<(String, u64)> {
+        let size = handle.state::<Db>().with(|c| crate::db::backup_to(c, &path))?;
+        let file_name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let _ = handle.state::<Db>().with(|c| crate::commands::activity::log(c, "backup", "Database backed up", &file_name, None, None, None));
+        Ok((file_name, size))
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("the backup failed: {e}")))??;
+    Ok(Some(BackupResult { file_name, size }))
+}
