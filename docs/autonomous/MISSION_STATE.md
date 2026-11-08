@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | Implementation (feature 4 next: CVSS calculator) |
+| Current phase | Implementation (features 6–9 next: OpenVAS import, findings export, bulk edit, WSTG checklist) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -37,6 +37,8 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 1. Scanner-output import (`b51615a`)
 2. Finding library with import rules (`95c8eac`)
 3. Fix verification by rescan (`0e201f5`)
+4. CVSS 4.0/3.1 on findings with a calculator (`edad2bf`)
+5. IOC extractor, defang and refang, STIX 2.1 export (`38599a1`)
 
 ## Tests executed
 
@@ -54,14 +56,13 @@ None.
 | `b51615a` | feat(findings): import Nmap, Nuclei, Nessus, Burp, ZAP and SARIF results |
 | `95c8eac` | feat(library): add a finding library with templates and import rules |
 | `0e201f5` | feat(findings): verify fixes when a rescan no longer reports a finding |
+| `efe8605` | docs(research): add market research, scored backlog and mission state |
+| `edad2bf` | feat(findings): add CVSS 4.0 and 3.1 vectors and a calculator to findings |
+| `38599a1` | feat(intel): add an IOC extractor, defang and refang, and STIX 2.1 export |
 
 ## Next action
 
-Feature 4: a CVSS 3.1 and 4.0 calculator on findings.
-
-* Compute in Rust only; the UI calls a command.
-* CVSS 4.0 needs FIRST's lookup tables (BSD-2-Clause, notice required). The format research ported them to `scratchpad/scripts/cvss4_reimpl.py` with test vectors.
-* Then IOC extraction, defang and STIX export.
+Backlog items 6–9: OpenVAS/Greenbone XML import, findings CSV/JSON export, bulk tag and assignee edit, then the WSTG checklist (CC BY-SA 4.0 attribution required). Then a final regression and the report.
 
 ## Resume instruction
 

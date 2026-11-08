@@ -116,3 +116,44 @@ Entries are newest last. Times are UTC, measured with `date -u`.
 * Restarting the debug build upgraded the QA database from 14 to 15, writing `backups/cyberhub-schema14-…db` first.
 * Re-importing week 1 recorded the host.
 * The week-2 file covering 93.184.215.7 without the Apache plugin listed that finding. With the switch on, it was resolved with the verification note.
+
+## 2026-11-08T22:37Z: feature 4, CVSS on findings (`edad2bf`)
+
+**What:**
+* `src-tauri/src/cvss/`: strict parsing of v4.0, v3.1 and v3.0 vectors, canonical order, scores.
+  * **v4.0** follows FIRST's `cvss_score.js` in the same arithmetic order.
+  * The 270-entry macrovector table was generated from FIRST's `cvss_lookup.js` and checked identical to Red Hat's `cvss40.js` (BSD-2-Clause; notice in `THIRD_PARTY_NOTICES.md`).
+  * **v3.1** follows the specification, including Appendix A Roundup.
+* Schema 16 adds `findings.cvss_vector` and `cvss_score`; the score is computed by the backend on save.
+* `cvss_score` command; a calculator in the finding form with a live score and a severity suggestion.
+* Imports take vectors from Nuclei and Nessus. The list shows the score; reports print the score with its vector.
+
+**Tests:**
+* 6 CVSS unit tests: all 8 table examples from FIRST's v4.0 examples page, v3.1 specification vectors, temporal and environmental scores, Roundup, invalid vectors.
+* A finding-storage test (canonical form, refusal, clearing, history, report line).
+* Import tests for Nuclei and Nessus vectors; 3 frontend helper tests.
+* Full run: cargo test 284 passed, clippy clean (one unused function removed), vitest 207 passed.
+
+**GUI verification:**
+* The calculator built `CVSS:4.0/…/VC:H/VI:H/VA:H/…` and showed 9.3 Critical (CVSS-B).
+* *Set severity to critical* worked and the finding saved with its score.
+* GUI testing showed the live score scrolled out of view while metrics were chosen. It now also shows in the calculator header.
+
+## 2026-11-08T22:46Z: feature 5, IOC extractor, defang/refang, STIX 2.1 export (`38599a1`)
+
+**What:**
+* `src/modules/utilities/lib/ioc.ts`: refang conventions; extraction of 10 kinds with guards against file names, versions, times and MACs; per-kind defang; whole-text defang.
+* IOC extractor tool (defanged or plain output, copy, Threat Intel lookup).
+* Workbench Defang and Refang operations.
+* `src-tauri/src/ti/stix.rs`: patterns with escaping, UUIDv5 indicator IDs and a UUIDv4 bundle ID, millisecond timestamps, no claimed verdicts.
+* *STIX 2.1* button on Saved indicators.
+
+**Tests:**
+* 5 frontend IOC tests, including the defang/refang round trip.
+* 3 Rust STIX tests: a UUIDv5 known-answer vector for the STIX SCO namespace, patterns and escaping, required properties and stable IDs.
+* Full run: cargo test 287 passed, clippy clean, tsc clean, vitest 212 passed.
+
+**GUI verification:**
+* The extractor found 7 indicators in defanged text and did not take `report.pdf` for a domain.
+* The STIX export went through the real save dialog, giving a bundle with 2 indicators and correct patterns.
+* My dialog helper failed to type the path, so the dialog saved under its default name into `Documents`. That test file was moved out of Documents to the scratchpad; no user file was touched.
