@@ -827,6 +827,13 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE UNIQUE INDEX idx_finding_templates_title ON finding_templates(title COLLATE NOCASE);
     "#,
+    // 15: fix verification by rescan (docs/DATA_MODEL.md#scan-import-schema-13): the host each
+    // imported finding is about, so a later file of the same tool that covers the host can show the
+    // findings it no longer reports. Rows of earlier imports keep an empty host and are not checked.
+    r#"
+    ALTER TABLE finding_fingerprints ADD COLUMN host TEXT NOT NULL DEFAULT '';
+    CREATE INDEX idx_finding_fingerprints_tool ON finding_fingerprints(project_id, tool);
+    "#,
 ];
 
 /// Backups kept in `<data dir>/backups` (the newest ones; older copies are removed).
@@ -1215,6 +1222,7 @@ mod tests {
         assert!(db.schema_version().unwrap() >= 13);
         db.with(|c| {
             assert_eq!(count(c, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('scan_imports', 'finding_fingerprints')"), 2);
+            assert_eq!(count(c, "SELECT COUNT(*) FROM pragma_table_info('finding_fingerprints') WHERE name = 'host'"), 1, "schema 15 records the host");
             let kept: (String, String, String) = c.query_row("SELECT p.client, f.title, e.file_name FROM projects p JOIN findings f ON f.project_id = p.id JOIN evidence e ON e.project_id = p.id", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
             assert_eq!(kept, ("Acme Corp".into(), "Weak TLS".into(), "scan.xml".into()), "existing rows are untouched");
             c.execute_batch(

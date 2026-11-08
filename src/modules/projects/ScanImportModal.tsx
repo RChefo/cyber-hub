@@ -17,7 +17,7 @@ const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
 export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: boolean; onOpenChange: (o: boolean) => void; projectId: number }) {
   const [pending, setPending] = useState<ScanImportPending | null>(null);
   const [preview, setPreview] = useState<ScanImportPreview | null>(null);
-  const [options, setOptions] = useState<ScanImportOptions>({ includeInfo: false, reopenResolved: true, useTemplates: true });
+  const [options, setOptions] = useState<ScanImportOptions>({ includeInfo: false, reopenResolved: true, useTemplates: true, resolveMissing: false });
   const [busy, setBusy] = useState<"pick" | "preview" | "apply" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tokenRef = useRef<string | null>(null);
@@ -28,7 +28,7 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
       setPending(null);
       setPreview(null);
       setError(null);
-      setOptions({ includeInfo: false, reopenResolved: true, useTemplates: true });
+      setOptions({ includeInfo: false, reopenResolved: true, useTemplates: true, resolveMissing: false });
     }
   }, [isOpen]);
 
@@ -209,6 +209,26 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
               </Note>
             )}
           </div>
+
+          {preview.notReportedCount > 0 && (
+            <div className="flex flex-col gap-2">
+              <SwitchInput
+                isSelected={options.resolveMissing}
+                onChange={(v) => setOptions({ ...options, resolveMissing: v })}
+                label={`Resolve ${pluralize(preview.notReportedCount, "open finding")} this rescan no longer reports`}
+                description={`They came from earlier ${preview.tool} imports, and this file covers their hosts without reporting them. Resolve them only if the scan covered the same checks. Otherwise each finding only gets a note.`}
+              />
+              <ul className="panel-inset max-h-40 overflow-auto px-3 py-2 text-[12.5px]">
+                {preview.notReported.map((m) => (
+                  <li key={m.findingId ?? m.title} className="flex items-baseline gap-2 py-0.5">
+                    <SeverityBadge severity={m.severity} />
+                    <span className="text-foreground">{m.title}</span>
+                    <span className="truncate font-mono text-muted">{m.target}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {preview.warnings.length > 0 && (
             <ul className="max-h-32 overflow-auto rounded-[10px] bg-warning-soft px-3 py-2 text-[12.5px] text-warning-soft-foreground">

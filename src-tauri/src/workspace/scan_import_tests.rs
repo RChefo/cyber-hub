@@ -352,3 +352,62 @@ fn unmatched_nuclei_results_and_passing_sarif_results_are_skipped() {
     assert_eq!(p.findings[1].severity, "medium", "no level means warning");
     assert!(p.warnings.iter().any(|w| w.contains("pass or notApplicable")));
 }
+
+/// A Nessus file with one item per (host, plugin, port, severity).
+fn nessus_doc(items: &[(&str, &str, u16, u8)]) -> String {
+    let mut hosts: Vec<&str> = items.iter().map(|i| i.0).collect();
+    hosts.dedup();
+    let mut out = String::from("<NessusClientData_v2><Report name=\"r\">");
+    for h in hosts {
+        out.push_str(&format!("<ReportHost name=\"{h}\"><HostProperties><tag name=\"host-ip\">{h}</tag></HostProperties>"));
+        for (_, plugin, port, sev) in items.iter().filter(|i| i.0 == h) {
+            out.push_str(&format!("<ReportItem port=\"{port}\" protocol=\"tcp\" severity=\"{sev}\" pluginID=\"{plugin}\" pluginName=\"Plugin {plugin}\" pluginFamily=\"F\"><description>d</description></ReportItem>"));
+        }
+        out.push_str("</ReportHost>");
+    }
+    out.push_str("</Report></NessusClientData_v2>");
+    out
+}
+
+#[test]
+fn a_rescan_shows_fixed_findings_on_covered_hosts_only() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let p = setup(c);
+        let file = |name: &'static str| FileInfo { file_name: name, sha256: "ab", evidence_id: None };
+        // first scan: two hosts, three findings
+        let first = parse(&nessus_doc(&[("93.184.215.7", "1001", 443, 3), ("93.184.215.7", "1002", 22, 2), ("93.184.215.8", "1003", 80, 2)])).unwrap();
+        assert_eq!(import(c, p, &first, Options::default(), &file("week1.nessus"))?.created, 3);
+        let id_of = |c: &Connection, plugin: &str| -> i64 { c.query_row("SELECT finding_id FROM finding_fingerprints WHERE rule_id = ?1", params![plugin], |r| r.get(0)).unwrap() };
+        let (f1001, f1002, f1003) = (id_of(c, "1001"), id_of(c, "1002"), id_of(c, "1003"));
+
+        // rescan of .7 only: 1002 is gone, 1001 is still there; .8 was not scanned
+        let second = parse(&nessus_doc(&[("93.184.215.7", "1001", 443, 3), ("93.184.215.7", "19506", 0, 0)])).unwrap();
+        let pv = preview(c, p, &second, Options::default())?;
+        assert_eq!(pv.not_reported_count, 1);
+        assert_eq!(pv.not_reported[0].finding_id, Some(f1002));
+        assert!(!pv.not_reported.iter().any(|m| m.finding_id == Some(f1003)), "a host the file did not cover proves nothing");
+
+        // without the option the finding stays open with a note
+        let r = import(c, p, &second, Options::default(), &file("week2.nessus"))?;
+        assert_eq!((r.not_reported, r.resolved), (1, 0));
+        assert_eq!(crate::commands::projects::finding_get(c, f1002)?.status, "new");
+        assert!(lifecycle::history(c, f1002)?.iter().any(|e| e.note.contains("Not reported again for 93.184.215.7")));
+
+        // with it, the finding is resolved as verified by the rescan
+        let r = import(c, p, &second, Options { resolve_missing: true, ..Default::default() }, &file("week2b.nessus"))?;
+        assert_eq!((r.not_reported, r.resolved), (1, 1));
+        let f = crate::commands::projects::finding_get(c, f1002)?;
+        assert_eq!(f.status, "resolved");
+        assert!(lifecycle::history(c, f1002)?.iter().any(|e| e.note.starts_with("Verified by rescan")));
+        assert_eq!(crate::commands::projects::finding_get(c, f1001)?.status, "new", "a finding still reported stays open");
+        assert_eq!(crate::commands::projects::finding_get(c, f1003)?.status, "new");
+
+        // a resolved finding is not listed again, and other tools' files never resolve Nessus findings
+        assert_eq!(preview(c, p, &second, Options::default())?.not_reported_count, 0);
+        let zap_like = parse(&zap()).unwrap();
+        assert!(not_reported(c, p, &zap_like)?.is_empty());
+        Ok(())
+    })
+    .unwrap();
+}

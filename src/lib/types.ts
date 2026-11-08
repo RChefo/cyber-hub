@@ -300,6 +300,8 @@ export interface ScanImportOptions {
   includeInfo: boolean;
   reopenResolved: boolean;
   useTemplates: boolean;
+  /** resolve open findings of earlier imports of the same tool that the file no longer reports on a host it covers */
+  resolveMissing: boolean;
 }
 
 /** A reusable finding write-up from the finding library (docs/DATA_MODEL.md#finding-library-schema-14). */
@@ -344,6 +346,9 @@ export interface ScanImportPreview {
   markedFalsePositive: number;
   hasScope: boolean;
   templated: number;
+  /** open findings of earlier imports of this tool that the file no longer reports (at most 200 listed) */
+  notReported: ScanImportPreview["items"];
+  notReportedCount: number;
 }
 
 export interface ScanImportPending extends ScanImportPreview {
@@ -364,6 +369,8 @@ export interface ScanImportResult {
   assetsNew: number;
   assetsSeen: number;
   templated: number;
+  notReported: number;
+  resolved: number;
   summary: string;
 }
 

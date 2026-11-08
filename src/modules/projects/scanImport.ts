@@ -20,9 +20,9 @@ export function knownCount(p: ScanImportPreview): number {
   return p.counts.seenAgain + p.counts.recurring + p.counts.dismissed;
 }
 
-/** True when importing would change nothing: no new findings, no sightings, no assets. */
+/** True when importing would change nothing: no new findings, no sightings, no assets, nothing no longer reported. */
 export function nothingToImport(p: ScanImportPreview, o: ScanImportOptions): boolean {
-  return importCount(p, o) === 0 && knownCount(p) === 0 && p.assets === 0;
+  return importCount(p, o) === 0 && knownCount(p) === 0 && p.assets === 0 && p.notReportedCount === 0;
 }
 
 /** The outcome shown for one item: an informational item becomes new once informational findings are included. */

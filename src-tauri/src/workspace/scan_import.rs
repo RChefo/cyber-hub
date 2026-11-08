@@ -1156,6 +1156,10 @@ pub struct Options {
     /// use finding-library templates whose import rule matches (on by default)
     #[serde(default = "yes")]
     pub use_templates: bool,
+    /// resolve open findings of earlier imports of the same tool that this file no longer reports
+    /// on a host it covers (off by default: the analyst decides)
+    #[serde(default)]
+    pub resolve_missing: bool,
 }
 
 fn yes() -> bool {
@@ -1164,7 +1168,7 @@ fn yes() -> bool {
 
 impl Default for Options {
     fn default() -> Self {
-        Options { include_info: false, reopen_resolved: false, use_templates: true }
+        Options { include_info: false, reopen_resolved: false, use_templates: true, resolve_missing: false }
     }
 }
 
@@ -1272,6 +1276,10 @@ pub struct Preview {
     pub has_scope: bool,
     /// new findings that would be written from a library template
     pub templated: usize,
+    /// open findings of earlier imports of this tool that the file no longer reports on a host
+    /// it covers (at most 200 listed)
+    pub not_reported: Vec<PreviewItem>,
+    pub not_reported_count: usize,
 }
 
 const SEVERITY_ORDER: &[&str] = &["critical", "high", "medium", "low", "info"];
@@ -1399,7 +1407,51 @@ pub fn preview(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options) 
     pv.assets_out_of_scope = left_out;
     pv.assets_new = count_new_assets(c, project_id, &parsed.assets, &entries)?;
     pv.out_of_scope_hosts = out_hosts.into_iter().take(20).collect();
+    let missing = not_reported(c, project_id, parsed)?;
+    pv.not_reported_count = missing.len();
+    pv.not_reported = missing
+        .into_iter()
+        .take(200)
+        .map(|m| PreviewItem { title: m.title, severity: m.severity, target: m.target, outcome: Outcome::SeenAgain, finding_id: Some(m.finding_id), template: None })
+        .collect();
     Ok(pv)
+}
+
+/// Hosts the file shows results for (findings and assets): a host it covers was scanned.
+pub fn covered_hosts(parsed: &Parsed) -> BTreeSet<String> {
+    let mut hosts: BTreeSet<String> = parsed.findings.iter().filter_map(|f| f.host.as_ref()).map(|h| h.trim().to_lowercase()).collect();
+    hosts.extend(parsed.assets.iter().map(|a| a.host.trim().to_lowercase()).filter(|h| !h.is_empty()));
+    hosts
+}
+
+/// An open finding of an earlier import that the file does not report again.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Missing {
+    pub finding_id: i64,
+    pub title: String,
+    pub severity: String,
+    pub target: String,
+    pub host: String,
+}
+
+/// Open findings first imported from the same tool, on hosts the file covers, whose fingerprints
+/// are not in the file. Findings without a recorded host (imported before schema 15) and source-code
+/// findings (no host) are never listed: their absence proves nothing.
+pub fn not_reported(c: &Connection, project_id: i64, parsed: &Parsed) -> AppResult<Vec<Missing>> {
+    let covered = covered_hosts(parsed);
+    if covered.is_empty() {
+        return Ok(Vec::new());
+    }
+    let present: BTreeSet<&str> = parsed.findings.iter().map(|f| f.fingerprint.as_str()).collect();
+    let mut stmt = c.prepare(&format!(
+        "SELECT x.fingerprint, x.host, f.id, f.title, f.severity, f.affected_target FROM finding_fingerprints x JOIN findings f ON f.id = x.finding_id
+         WHERE x.project_id = ?1 AND x.tool = ?2 AND x.host <> '' AND f.status IN {} ORDER BY f.id",
+        lifecycle::OPEN_SQL
+    ))?;
+    let rows = stmt
+        .query_map(params![project_id, parsed.tool], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, Missing { finding_id: r.get(2)?, title: r.get(3)?, severity: r.get(4)?, target: r.get(5)?, host: r.get(1)? })))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows.into_iter().filter(|(fp, host, _)| covered.contains(&host.to_lowercase()) && !present.contains(fp.as_str())).map(|(_, _, m)| m).collect())
 }
 
 fn count_new_assets(c: &Connection, project_id: i64, items: &[AssetItem], entries: &[ScopeEntry]) -> AppResult<usize> {
@@ -1434,6 +1486,10 @@ pub struct ImportResult {
     pub assets_new: usize,
     pub assets_seen: usize,
     pub templated: usize,
+    /// open findings of earlier imports that this file no longer reports (noted in their history)
+    pub not_reported: usize,
+    /// of those, resolved as verified by this rescan (when asked)
+    pub resolved: usize,
     pub summary: String,
 }
 
@@ -1482,6 +1538,8 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
         };
         let source_note = format!("{} import of {}", parsed.tool, trunc(file.file_name, 80));
         let lib = library(c, opts)?;
+        // decided before this file's findings are recorded
+        let missing = not_reported(c, project_id, parsed)?;
         for f in &parsed.findings {
             let (o, existing) = outcome(c, project_id, &entries, f, opts)?;
             match o {
@@ -1490,8 +1548,8 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
                 Outcome::SeenAgain | Outcome::Recurring | Outcome::Dismissed => {
                     let id = existing.expect("known finding");
                     c.execute(
-                        "UPDATE finding_fingerprints SET last_import_id = ?3, times_seen = times_seen + 1, last_seen = ?4 WHERE project_id = ?1 AND fingerprint = ?2",
-                        params![project_id, f.fingerprint, import_id, ts],
+                        "UPDATE finding_fingerprints SET last_import_id = ?3, times_seen = times_seen + 1, last_seen = ?4, host = CASE WHEN host = '' THEN ?5 ELSE host END WHERE project_id = ?1 AND fingerprint = ?2",
+                        params![project_id, f.fingerprint, import_id, ts, f.host.as_deref().unwrap_or("").to_lowercase()],
                     )?;
                     if o == Outcome::Recurring && opts.reopen_resolved {
                         lifecycle::set_status(c, id, "reopened", &format!("Reported again by the {source_note}"), "import")?;
@@ -1540,9 +1598,9 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
                         r.templated += 1;
                     }
                     c.execute(
-                        "INSERT INTO finding_fingerprints (project_id, fingerprint, finding_id, tool, rule_id, first_import_id, last_import_id, times_seen, first_seen, last_seen)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 1, ?7, ?7)",
-                        params![project_id, f.fingerprint, id, parsed.tool, trunc(&f.rule_id, 200), import_id, ts],
+                        "INSERT INTO finding_fingerprints (project_id, fingerprint, finding_id, tool, rule_id, first_import_id, last_import_id, times_seen, first_seen, last_seen, host)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 1, ?7, ?7, ?8)",
+                        params![project_id, f.fingerprint, id, parsed.tool, trunc(&f.rule_id, 200), import_id, ts, f.host.as_deref().unwrap_or("").to_lowercase()],
                     )?;
                     if let Some(ev) = file.evidence_id {
                         lifecycle::link(c, id, "evidence", ev, "import")?;
@@ -1555,6 +1613,15 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
                     r.created += 1;
                 }
             }
+        }
+        for m in &missing {
+            if opts.resolve_missing {
+                lifecycle::set_status(c, m.finding_id, "resolved", &format!("Verified by rescan: not reported again for {} by the {source_note}", m.host), "import")?;
+                r.resolved += 1;
+            } else {
+                lifecycle::add_note(c, m.finding_id, &format!("Not reported again for {} by the {source_note}", m.host), "import")?;
+            }
+            r.not_reported += 1;
         }
         let mut summary = format!("{} new, {} seen again", discovery::plural(r.created, "finding", "findings"), r.seen_again).replacen(" finding new", " new finding", 1).replacen(" findings new", " new findings", 1);
         if r.reopened > 0 {
@@ -1576,11 +1643,17 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
         if r.templated > 0 {
             summary.push_str(&format!(", {} written from library templates", r.templated));
         }
+        if r.not_reported > 0 {
+            summary.push_str(&format!(", {} no longer reported", r.not_reported));
+            if r.resolved > 0 {
+                summary.push_str(&format!(" ({} resolved as verified by this rescan)", r.resolved));
+            }
+        }
         summary.push_str(&format!("; {} ({} new)", discovery::plural(r.assets_new + r.assets_seen, "asset", "assets"), r.assets_new));
         r.summary = summary.clone();
         c.execute(
             "UPDATE scan_imports SET snapshot_id = ?2, summary = ?3 WHERE id = ?1",
-            params![import_id, snapshot, json!({ "created": r.created, "seenAgain": r.seen_again, "reopened": r.reopened, "dismissed": r.dismissed, "outOfScope": r.out_of_scope + left_out, "infoSkipped": r.info_skipped, "templated": r.templated, "assetsNew": r.assets_new, "assetsSeen": r.assets_seen, "text": summary }).to_string()],
+            params![import_id, snapshot, json!({ "created": r.created, "seenAgain": r.seen_again, "reopened": r.reopened, "dismissed": r.dismissed, "outOfScope": r.out_of_scope + left_out, "infoSkipped": r.info_skipped, "templated": r.templated, "notReported": r.not_reported, "resolved": r.resolved, "assetsNew": r.assets_new, "assetsSeen": r.assets_seen, "text": summary }).to_string()],
         )?;
         let title = format!("Imported {} results from {}", parsed.tool, trunc(file.file_name, 80));
         timeline::record(c, project_id, "finding", &title, &summary, Some("scan_import"), Some(import_id))?;
