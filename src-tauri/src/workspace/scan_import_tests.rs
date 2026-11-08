@@ -78,7 +78,7 @@ fn formats_are_recognized_from_the_content() {
 fn nuclei_results_become_findings_with_redacted_details() {
     let p = parse(NUCLEI).unwrap();
     assert_eq!(p.format, Some(Format::Nuclei));
-    assert!(p.warnings.iter().any(|w| w.contains("1 lines were not valid JSON")), "{:?}", p.warnings);
+    assert!(p.warnings.iter().any(|w| w.contains("1 line skipped (not valid JSON)")), "{:?}", p.warnings);
     assert_eq!(p.merged, 1, "the repeated result is merged");
     assert_eq!(p.findings.len(), 3);
     let crit = &p.findings[0];

@@ -644,7 +644,7 @@ fn parse_nuclei(text: &str) -> Result<Parsed, String> {
     let mut p = Parsed::new(Format::Nuclei, "Nuclei");
     if bad_lines > 0 {
         p.incomplete = true;
-        p.warnings.push(format!("{bad_lines} lines were not valid JSON and were skipped"));
+        p.warnings.push(format!("{} skipped (not valid JSON)", discovery::plural(bad_lines, "line", "lines")));
     }
     let mut failed = 0usize;
     for r in &records {
