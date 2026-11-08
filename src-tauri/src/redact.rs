@@ -156,7 +156,7 @@ mod credential_shape_tests {
 
     #[test]
     fn credential_shapes_and_colon_forms_are_redacted() {
-        let pem = "key:\n-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA1234\nabcd==\n-----END RSA PRIVATE KEY-----\nafter";
+        let pem = "key:\n-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA1234\nabcd==\n-----END RSA PRIVATE KEY-----\nafter"; // gitleaks:allow (made-up key text)
         let out = redact_text(pem);
         assert!(!out.contains("MIIEow") && out.contains("after"), "{out}");
         let cut = redact_text("-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEA\nAAAA");
