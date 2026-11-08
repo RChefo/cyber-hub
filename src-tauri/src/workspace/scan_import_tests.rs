@@ -4,7 +4,7 @@ use super::*;
 use crate::db::Db;
 use crate::workspace::evidence;
 
-const NUCLEI: &str = r#"{"template-id":"CVE-2021-41773","info":{"name":"Apache 2.4.49 - Path Traversal","severity":"critical","description":"<p>Path traversal &amp; RCE</p>","reference":["https://nvd.nist.gov/vuln/detail/CVE-2021-41773"],"tags":["cve","apache"],"classification":{"cve-id":["cve-2021-41773"],"cwe-id":["cwe-22"],"cvss-score":7.5,"cvss-metrics":"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"},"remediation":"Upgrade to 2.4.51"},"type":"http","host":"https://app.example.com","matched-at":"https://app.example.com/cgi-bin/.%2e/etc/passwd","ip":"93.184.215.7","extracted-results":["root:x:0:0","api_key=sk_live_1234567890abcdef"],"timestamp":"2026-11-01T10:00:00Z","curl-command":"curl -H 'Authorization: Bearer secret' https://app.example.com"}
+const NUCLEI: &str = r#"{"template-id":"CVE-2021-41773","info":{"name":"Apache 2.4.49 - Path Traversal","severity":"critical","description":"<p>Path traversal &amp; RCE</p>","reference":["https://nvd.nist.gov/vuln/detail/CVE-2021-41773"],"tags":["cve","apache"],"classification":{"cve-id":["cve-2021-41773"],"cwe-id":["cwe-22"],"cvss-score":7.5,"cvss-metrics":"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"},"remediation":"Upgrade to 2.4.51"},"type":"http","host":"https://app.example.com","matched-at":"https://app.example.com/cgi-bin/.%2e/etc/passwd","ip":"93.184.215.7","extracted-results":["root:x:0:0","api_key=FAKE-test-value-not-a-credential"],"timestamp":"2026-11-01T10:00:00Z","curl-command":"curl -H 'Authorization: Bearer secret' https://app.example.com"}
 not json
 {"template-id":"tech-detect","info":{"name":"Wappalyzer Technology Detection","severity":"info","tags":"tech,discovery"},"type":"http","host":"https://app.example.com","matched-at":"https://app.example.com","matcher-name":"nginx"}
 {"template-id":"CVE-2021-41773","info":{"name":"Apache 2.4.49 - Path Traversal","severity":"critical"},"host":"https://app.example.com","matched-at":"https://app.example.com/cgi-bin/.%2e/etc/passwd"}
@@ -87,7 +87,7 @@ fn nuclei_results_become_findings_with_redacted_details() {
     assert!(crit.description.contains("CVSS score reported by the template: 7.5"));
     assert_eq!(crit.host.as_deref(), Some("app.example.com"));
     assert!(crit.technical.contains("root:x:0:0"));
-    assert!(!crit.technical.contains("sk_live_1234567890abcdef"), "secrets in extracted values are redacted: {}", crit.technical);
+    assert!(!crit.technical.contains("FAKE-test-value-not-a-credential"), "secrets in extracted values are redacted: {}", crit.technical);
     assert!(!crit.technical.contains("Bearer secret"), "the curl command is not copied");
     assert_eq!(crit.asset, Some(("http_service", "https://app.example.com".to_string())));
     assert_eq!(crit.cvss, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N", "the template's vector is kept in canonical form");

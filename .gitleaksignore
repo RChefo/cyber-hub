@@ -1,3 +1,9 @@
 # Public example token from jwt.io (John Doe, demo secret), used as a test fixture: not a credential.
 # The fixture line carries an inline `gitleaks:allow`; this entry covers the commit that added it.
 4ba96110e880a0982c912189eb706b97ac71cafb:src/modules/utilities/lib/jwt.test.ts:jwt:11
+
+# Made-up value `sk_live_1234567890abcdef` in the scan-import test fixture (it checks that extracted
+# values are redacted): not a credential. The fixture now uses an obviously fake value; these
+# entries cover the commit that added the old one.
+b51615a4adeb5f0a082e459b85830292e8b40510:src-tauri/src/workspace/scan_import_tests.rs:stripe-access-token:7
+b51615a4adeb5f0a082e459b85830292e8b40510:src-tauri/src/workspace/scan_import_tests.rs:stripe-access-token:90
