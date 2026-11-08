@@ -184,3 +184,56 @@ Entries are newest last. Times are UTC, measured with `date -u`.
 * The bulk edit added a tag through the dialog.
 * The CSV export was produced through the native save dialog and has the expected header and rows. The dialog ignored the path set by the helper (`WM_SETTEXT`) and saved to `Documents` under the default name. That test file was moved to the scratchpad, and Documents holds no export files from this session.
 * Save-dialog GUI tests are not repeated in this session; see the memory note.
+
+## 2026-11-08T23:02Z: feature 9, OWASP WSTG checklist (`9c4ee92`)
+
+**What:**
+* `src-tauri/src/methodology/` bundles the WSTG checklist: OWASP/wstg `checklists/checklist.json` at commit `8f7da50ddfda9bc6929ca312eff9c9cb9a68ccc7`, 115 tests in 13 categories, CC BY-SA 4.0. It was validated at generation: ID format, unique IDs, references only on `wstg.owasp.org`.
+* Schema 17 adds `checklist_items`: status, note, and a linked finding (same project only; SET NULL on delete).
+* Checklist tab with coverage, filters and search, and *Record finding* from a failed test, which links the finding. The HTML report states the coverage. The attribution is in the tab and in THIRD_PARTY_NOTICES.md.
+
+**Tests:** 2 Rust tests (catalog integrity; progress, links and coverage), 1 report test, 3 frontend helper tests.
+
+**GUI:** a status change persisted and coverage showed 1/115. A failed test → *Record finding* gave a prefilled finding (#5) linked to the test.
+
+**Mistake caught:** I first wrote an invented full commit hash into THIRD_PARTY_NOTICES.md (only the first 12 characters were real). It was corrected to the real hash from the data file before the commit.
+
+## 2026-11-08T23:05Z: secret-scan fix (`e4985ba`)
+
+gitleaks flagged the made-up `sk_live_…` value in the scan-import fixture (stripe-access-token rule).
+* The fixture now uses an obviously fake value; the redaction test still keys on `api_key=`.
+* The two fingerprints in commit `b51615a` are recorded in `.gitleaksignore`, following the repository's existing convention.
+* Rescan: full history and the source trees report no leaks.
+
+## 2026-11-08T23:09Z: on-demand database backup (`4a320a8`)
+
+**What:** *Settings* → *Local data* → *Back up the database*.
+1. `VACUUM INTO <name>.partial`.
+2. A read-only `PRAGMA integrity_check` on the copy.
+3. A rename into place.
+Documented in UPGRADE.md, together with how to restore manually.
+
+**Tests:** 1 Rust test (a complete copy with the current schema and data, an existing file replaced, no temporary file left, a bad path refused).
+
+**GUI:** not driven, because of the save-dialog limitation.
+
+## 2026-11-08T23:10–23:20Z: final verification
+
+**Windows:**
+* cargo test: 295 passed, 1 ignored; with `--features provisioning`, 299.
+* clippy `-D warnings`: clean.
+* tsc: clean.
+* vitest: 215 passed (35 files).
+* `npm run build`: succeeded, with the existing INEFFECTIVE_DYNAMIC_IMPORT notice.
+
+**Audits:**
+* npm audit: 0 vulnerabilities.
+* cargo audit: 0 vulnerabilities, 8 allowed warnings (unchanged).
+* gitleaks: no leaks in the full history or the source trees, after `e4985ba`.
+
+**Linux (Docker, automated suites only):**
+* Ubuntu 24.04.5: tsc clean, vitest 215, cargo test 295 (one commit before the backup test).
+* Debian 12: tsc clean, vitest 215, cargo test 296.
+* The images have no clippy, so clippy was verified on Windows only. The Debian login shell resets PATH; use `bash -c`.
+
+**GUI smoke (Windows, debug build, isolated data):** all 16 sidebar pages and all 14 project tabs render, with no error boundary and no console errors.

@@ -31,9 +31,9 @@ Deferred or rejected items say why.
 | 6 | OpenVAS / Greenbone XML import | 3 | 3 | 5 | 4 | 3 | 5 | 37 | **Done** (`99fe5ed`) |
 | 7 | Findings export: CSV and JSON | 2 | 3 | 5 | 5 | 5 | 5 | 37 | **Done** (`0337e18`) |
 | 8 | Bulk edit of tags and assignee on findings | 2 | 3 | 5 | 5 | 5 | 5 | 37 | **Done** (`0337e18`) |
-| 9 | Methodology checklists (OWASP WSTG) with coverage per project | 3 | 4 | 3 | 5 | 3 | 4 | 35 | Next |
+| 9 | Methodology checklists (OWASP WSTG) with coverage per project | 3 | 4 | 3 | 5 | 3 | 4 | 35 | **Done** (`9c4ee92`) |
 | 10 | Notes on assets and vulnerabilities | 3 | 3 | 3 | 5 | 3 | 4 | 33 | Deferred: finding history notes and project notes cover part of it |
 | 11 | Path-level scope rules | 4 | 3 | 3 | 3 | 2 | 4 | 33 | Deferred: changes the security-critical scope engine; needs its own design and review |
-| 12 | User-facing database backup and restore | 2 | 3 | 4 | 3 | 3 | 4 | 30 | Deferred: restoring while running needs a restart-time swap; upgrade backups already exist |
+| 12 | User-facing database backup and restore | 2 | 3 | 4 | 3 | 3 | 4 | 30 | **Partly done** (`4a320a8`): on-demand checked backup. Restore stays a documented manual step, because swapping the open database needs a restart-time mechanism. |
 | — | Jira or ticketing integration | 2 | 2 | 1 | 3 | 2 | 2 | — | Rejected: needs external accounts and credentials, and does not fit local-first |
 | — | Collaborative or multi-user editing | 2 | 2 | 1 | 2 | 1 | 2 | — | Rejected: needs server infrastructure |
