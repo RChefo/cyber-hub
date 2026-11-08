@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | Implementation (feature 9 next: OWASP WSTG checklist) |
+| Current phase | **Complete** (2026-11-08T23:43Z): see [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -42,6 +42,9 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 6. Greenbone/OpenVAS import (`99fe5ed`)
 7. Findings CSV/JSON export (`0337e18`)
 8. Bulk tag and assignee edit (`0337e18`)
+9. OWASP WSTG checklist (`9c4ee92`)
+10. On-demand database backup (`4a320a8`)
+11. Security review fixes (`c3f26af`, `da545e8`, `bd6d73e`)
 
 ## Tests executed
 
@@ -49,7 +52,7 @@ See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md).
 
 ## Known failures
 
-None.
+None. The final results: Windows 302 Rust (306 with provisioning) and 217 frontend tests; Ubuntu 24.04 and Debian 12 303 Rust and 217 frontend tests; clippy, tsc, the build and the audits are clean.
 
 ## Commits during the mission
 
@@ -65,15 +68,19 @@ None.
 | `3883ea5` | docs(mission): record features 4 and 5 in the mission log |
 | `99fe5ed` | feat(findings): import Greenbone/OpenVAS reports |
 | `0337e18` | feat(findings): export findings as CSV or JSON and edit tags in bulk |
+| `21ed6f2` | docs(mission): record features 6 to 8 in the mission log |
+| `9c4ee92` | feat(projects): add an OWASP WSTG testing checklist with coverage |
+| `e4985ba` | test(findings): use an obviously fake value in the redaction fixture |
+| `4a320a8` | feat(settings): back up the database on demand with an integrity check |
+| `5afdcdc`, `9f1045d` | docs: test counts and mission pointers |
+| `6764014` | docs(mission): record feature 9, the backup and the final verification |
+| `c3f26af` | fix(security): harden scan import, redaction and IOC extraction |
+| `da545e8` | test(security): mark made-up secret fixtures for the secret scanner |
+| `bd6d73e` | fix(findings): count skipped Nuclei lines in singular and plural |
 
 ## Next action
 
-Feature 9: an OWASP WSTG checklist per project.
-
-* Data comes from `OWASP/wstg` `checklists/checklist.json` (CC BY-SA 4.0: attribution, and ShareAlike for the adapted data file).
-* Schema 17 adds `checklist_items`. The UI is a project tab with coverage.
-
-Then the final regression (cargo audit, npm audit, gitleaks, bundle build) and the mission report.
+None. The mission is complete. The next priorities for a new session are in MISSION_REPORT.md: restore in the app, MCP exposure of the new features, more import formats, and the deferred path-level scope rules. Release steps (installers, signing) need the owner's authorization.
 
 ## Resume instruction
 

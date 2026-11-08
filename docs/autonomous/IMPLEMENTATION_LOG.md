@@ -237,3 +237,35 @@ Documented in UPGRADE.md, together with how to restore manually.
 * The images have no clippy, so clippy was verified on Windows only. The Debian login shell resets PATH; use `bash -c`.
 
 **GUI smoke (Windows, debug build, isolated data):** all 16 sidebar pages and all 14 project tabs render, with no error boundary and no console errors.
+
+## 2026-11-08T23:15–23:40Z: independent security review and fixes (`c3f26af`, `da545e8`, `bd6d73e`)
+
+A separate reviewer agent (read-only, unanchored on my reasoning) reviewed `092e092..HEAD`. Its findings, and what was done about each:
+
+| Finding | Severity | Fix | Test |
+|---|---|---|---|
+| `decode_entities` sliced at byte 12. Multibyte text after `&` panicked, and with `panic = "abort"` the app ended | medium | byte-wise search for `;` | `parsers_never_panic_on_cut_or_multibyte_input` (every parser fed truncated and multibyte input; the 日 case would have panicked) |
+| Scope skipped when the host was None: SARIF URL locations, unparseable Nuclei/ZAP targets | medium | network findings without a host are out of scope; SARIF URL locations are scope-checked | `network_findings_without_a_usable_or_in_scope_host_are_left_out` |
+| Scope checked on a different value than the one stored: Nuclei `host` vs `matched-at`; Burp IP checked by hostname; `[v6]junk` | low/medium | each stored value is checked on its own host; bracket form requires a port or nothing | same test, plus `burp_address_assets_are_checked_as_addresses` |
+| Fix verification from partially read files (limits, broken XML, skipped lines) | medium | `Parsed.incomplete` turns *not reported* off, with a preview notice | `an_incomplete_file_never_verifies_fixes` |
+| Redaction gaps: Burp issue detail, SARIF message, targets; narrow patterns | medium | every copied field is redacted; PEM keys (also truncated), AWS key IDs, GitHub and Slack tokens and `key: value` added to the shared `redact_text` | `copied_text_is_redacted_in_every_field`, `credential_shapes_and_colon_forms_are_redacted` |
+| Quadratic regexes in `ioc.ts` (seconds per 40k chars, hours at 2M) | low | bounded quantifiers and look-behinds, linear URL trimming, one-pass `defangText` | `stays fast on long runs…` (6 hostile inputs, each < 500 ms) |
+| Memory and O(n²) on crafted files (Nmap names, SARIF rule text, URL dedupe, library dedupe) | low | caps: 50 names per host, 2,000 characters of rule text, 20 URLs, length checks before dedupe | covered by the parser sweep and the template tests |
+| One odd record aborted the whole import (NUL, long tool tag, empty title) | low | control characters stripped, fields cut to limits, fallback title | `one_odd_record_does_not_abort_an_import` |
+| Commit race and zero token on RNG failure (suspicion) | low | one commit at a time (mutex); RNG failure is an error | — |
+| Backup onto the live DB; `.partial` leftovers (suspicion) | low | live DB and its `-wal`/`-shm`/`-journal` refused; random temp name, removed on failure | backup test extended |
+
+**Also found during the fix:** the IOC extractor's file-extension list contained real TLDs (`com`, `zip`, `mov`, `pl`, `sh`, `md`, `rs`, `py`), so a standalone `evil.com` was not extracted. Fixed, with a regression test.
+
+**Secret scan:** the new credential-shaped fixtures, and my own `.gitleaksignore` comment that quoted the fake Stripe value, were flagged. The PEM fixture line now has an inline `gitleaks:allow`; the comment was reworded; both historical fingerprints are recorded. gitleaks reports no leaks in the full history or in the `src-tauri/src`, `src` and `docs` trees.
+
+**After the fixes (Windows):**
+* cargo test: 302 passed, 1 ignored;
+* clippy: clean;
+* tsc: clean;
+* vitest: 217 passed.
+
+**GUI after the fixes:**
+* All 30 page and tab smoke checks pass.
+* A Nuclei preview showed the scope filtering, the merge, the skipped-line notice and the new incomplete-file notice. It was cancelled, so the QA data is unchanged.
+* The visible "1 lines" text was fixed (`bd6d73e`).
