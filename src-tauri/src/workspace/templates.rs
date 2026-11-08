@@ -127,6 +127,10 @@ struct Clean {
 }
 
 fn dedup_clean(field: &str, items: &[String], max_items: usize, max_len: usize) -> AppResult<Vec<String>> {
+    // checked first: deduplication below is quadratic in the number of entries
+    if items.len() > max_items * 4 {
+        return Err(validation(format!("At most {max_items} entries in {}", field.to_lowercase())));
+    }
     let mut out: Vec<String> = Vec::new();
     for i in items {
         let v = clean(field, i, max_len, false)?;
@@ -144,6 +148,9 @@ fn clean_input(input: &TemplateInput) -> AppResult<Clean> {
     let severity = input.severity.trim().to_lowercase();
     if !SEVERITIES.contains(&severity.as_str()) {
         return Err(validation("Severity must be critical, high, medium, low or info"));
+    }
+    if input.rules.len() > 200 {
+        return Err(validation("At most 50 import rules"));
     }
     let mut rules: Vec<String> = Vec::new();
     for r in input.rules.iter().filter(|r| !r.trim().is_empty()) {

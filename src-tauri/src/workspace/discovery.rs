@@ -648,7 +648,8 @@ pub fn parse_nmap(xml: &str) -> Result<NmapRun, String> {
                     "hostname" => {
                         if let Some(h) = host.as_mut() {
                             let n = get("name");
-                            if !n.is_empty() && !h.hostnames.contains(&n) {
+                            // bounded: names are copied into every service of the host
+                            if !n.is_empty() && h.hostnames.len() < 50 && !h.hostnames.contains(&n) {
                                 h.hostnames.push(n);
                             }
                         }

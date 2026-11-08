@@ -26,10 +26,29 @@ export type IocResult = Record<IocKind, string[]>;
 /** Items kept per kind (a pasted log can be huge). */
 export const MAX_PER_KIND = 5000;
 
-/** File extensions that look like top-level domains in `report.pdf`, `payload.exe`, `run.sh`. */
+/**
+ * File extensions that look like top-level domains (`report.pdf`, `payload.exe`). Extensions that are
+ * also real top-level domains (com, zip, mov, pl, sh, md, rs, py) are not listed: missing a domain
+ * is worse than listing a file name.
+ */
 const FILE_EXTENSIONS = new Set(
-  "exe dll sys drv scr com bat cmd ps1 psm1 vbs vbe js jse wsf hta msi msp lnk jar class py pyc pl rb sh bash php asp aspx jsp cgi go rs c h cpp cs java kt swift txt log md csv tsv json xml yaml yml ini cfg conf toml html htm css svg png jpg jpeg gif bmp ico tif tiff webp pdf doc docx docm xls xlsx xlsm ppt pptx pptm rtf odt ods odp zip rar 7z gz tgz bz2 xz tar iso img dmg apk ipa bin dat tmp bak old db sqlite eml msg pst ost evtx etl pcap pcapng mp3 mp4 avi mkv mov wav".split(" "),
+  "exe dll sys drv scr bat cmd ps1 psm1 vbs vbe js jse wsf hta msi msp lnk jar class pyc rb bash php asp aspx jsp cgi c h cpp java kt swift txt log csv tsv json xml yaml yml ini cfg conf toml html htm css svg png jpg jpeg gif bmp ico tif tiff webp pdf doc docx docm xls xlsx xlsm ppt pptx pptm rtf odt ods odp rar 7z gz tgz bz2 xz tar iso img dmg apk ipa bin dat tmp bak old db sqlite eml msg pst ost evtx etl pcap pcapng mp3 mp4 avi mkv wav".split(" "),
 );
+
+// Patterns shared by extraction and defanging. Every repetition is bounded or anchored by a
+// look-behind, so a long run of similar characters is tried once, not at every position (the
+// unbounded forms were quadratic: about a second per 40,000 characters).
+const URL_RE = /\b(?:https?|ftp):\/\/[^\s<>"'`\]}|]+/gi;
+const EMAIL_RE = /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.){1,10}[A-Za-z]{2,24}\b/g;
+const IPV4_RE = /(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?![\d.]*\d)/g;
+const IPV6_RE = /(?<![\w:.])(?:[A-Fa-f0-9]{0,4}:){2,7}[A-Fa-f0-9]{0,4}(?![\w:])/g;
+const DOMAIN_RE = /(?<![\w@.-])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.){1,30}[a-z][a-z0-9-]{0,22}[a-z0-9](?![\w-])/gi;
+/** One pass for defanging a whole text; the patterns have no capturing groups of their own. */
+const DEFANG_RE = new RegExp(`(${URL_RE.source})|(${EMAIL_RE.source})|(${IPV4_RE.source})|(${IPV6_RE.source})|(${DOMAIN_RE.source})`, "gi");
+
+function isFileName(domain: string): boolean {
+  return FILE_EXTENSIONS.has(domain.slice(domain.lastIndexOf(".") + 1).toLowerCase());
+}
 
 /** Turns defanged indicators back into their usable form. */
 export function refang(text: string): string {
@@ -38,8 +57,9 @@ export function refang(text: string): string {
     .replace(/\b[hH][xX]{2}[pP]([sS]?)\b/g, (_m, s: string) => `http${s.toLowerCase()}`)
     .replace(/[[({]\s*:\/\/\s*[\])}]/g, "://")
     .replace(/[[({]\s*:\s*[\])}]\/\//g, "://")
-    .replace(/\s*[[({]\s*(?:\.|dot|,)\s*[\])}]\s*/gi, ".")
-    .replace(/\s*[[({]\s*(?:@|at)\s*[\])}]\s*/gi, "@")
+    // bounded spaces: an unbounded leading `\s*` is quadratic on long runs of whitespace
+    .replace(/[ \t]{0,3}[[({][ \t]{0,3}(?:\.|dot|,)[ \t]{0,3}[\])}][ \t]{0,3}/gi, ".")
+    .replace(/[ \t]{0,3}[[({][ \t]{0,3}(?:@|at)[ \t]{0,3}[\])}][ \t]{0,3}/gi, "@")
     .replace(/[[({]:[\])}]/g, ":")
     .replace(/\\\./g, ".");
 }
@@ -71,10 +91,21 @@ function push(list: string[], seen: Set<string>, value: string) {
 
 /** Trailing characters that end a sentence rather than a URL. */
 function trimUrl(u: string): string {
-  let out = u.replace(/[.,;:!?'"]+$/, "");
+  // linear loops, not regular expressions or repeated counts (those are quadratic on long runs)
+  let end = u.length;
+  while (end > 0 && ".,;:!?'\"".includes(u[end - 1])) end--;
+  let open = 0;
+  let close = 0;
+  for (let i = 0; i < end; i++) {
+    if (u[i] === "(") open++;
+    else if (u[i] === ")") close++;
+  }
   // a closing parenthesis without an opening one belongs to the text
-  while (out.endsWith(")") && (out.match(/\(/g)?.length ?? 0) < (out.match(/\)/g)?.length ?? 0)) out = out.slice(0, -1);
-  return out;
+  while (end > 0 && u[end - 1] === ")" && open < close) {
+    end--;
+    close--;
+  }
+  return u.slice(0, end);
 }
 
 function isIpv6(candidate: string): boolean {
@@ -94,19 +125,18 @@ export function extractIocs(input: string): IocResult {
   const seen = Object.fromEntries(IOC_KINDS.map((k) => [k.id, new Set<string>()])) as unknown as Record<IocKind, Set<string>>;
   const add = (kind: IocKind, v: string) => push(out[kind], seen[kind], v);
 
-  for (const m of text.matchAll(/\b(?:https?|ftp):\/\/[^\s<>"'`\]}|]+/gi)) {
+  for (const m of text.matchAll(URL_RE)) {
     const u = trimUrl(m[0]);
     if (u.length > 10) add("url", u);
   }
-  for (const m of text.matchAll(/\b[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,24}\b/g)) add("email", m[0]);
-  for (const m of text.matchAll(/(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?![\d.]*\d)/g)) add("ipv4", m[0]);
-  for (const m of text.matchAll(/(?<![\w:.])(?:[A-Fa-f0-9]{0,4}:){2,7}[A-Fa-f0-9]{0,4}(?![\w:])/g)) {
+  for (const m of text.matchAll(EMAIL_RE)) add("email", m[0]);
+  for (const m of text.matchAll(IPV4_RE)) add("ipv4", m[0]);
+  for (const m of text.matchAll(IPV6_RE)) {
     if (isIpv6(m[0])) add("ipv6", m[0].toLowerCase());
   }
-  for (const m of text.matchAll(/(?<![\w@.-])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,22}[a-z0-9](?![\w-])/gi)) {
+  for (const m of text.matchAll(DOMAIN_RE)) {
     const d = m[0].toLowerCase();
-    const tld = d.slice(d.lastIndexOf(".") + 1);
-    if (!FILE_EXTENSIONS.has(tld)) add("domain", d);
+    if (!isFileName(d)) add("domain", d);
   }
   // hosts of URLs and e-mail addresses are domains too
   for (const u of out.url) {
@@ -130,18 +160,17 @@ export function iocCount(r: IocResult): number {
   return IOC_KINDS.reduce((n, k) => n + r[k.id].length, 0);
 }
 
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 /** The text with every URL, e-mail address, IP address and domain in it defanged. */
 export function defangText(text: string): string {
-  const r = extractIocs(text);
-  let out = refang(text);
-  for (const kind of ["url", "email", "ipv6", "ipv4", "domain"] as const) {
-    for (const v of [...r[kind]].sort((a, b) => b.length - a.length)) {
-      out = out.replace(new RegExp(`(?<![\\w[])${escapeRegExp(v)}(?![\\w\\]])`, "gi"), (m) => defang(m, kind));
+  return refang(text).replace(DEFANG_RE, (m: string, url?: string, email?: string, ipv4?: string, ipv6?: string, domain?: string) => {
+    if (url) {
+      const kept = trimUrl(url);
+      return defang(kept, "url") + url.slice(kept.length);
     }
-  }
-  return out;
+    if (email) return defang(email, "email");
+    if (ipv4) return defang(ipv4, "ipv4");
+    if (ipv6) return isIpv6(ipv6) ? defang(ipv6, "ipv6") : m;
+    if (domain) return isFileName(domain) ? m : defang(domain, "domain");
+    return m;
+  });
 }

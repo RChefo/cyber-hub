@@ -917,8 +917,24 @@ pub fn backup_before_upgrade(conn: &Connection, path: &Path, current: i64) -> Ap
 /// half-written or damaged copy never carries the chosen name. Returns the size in bytes.
 pub fn backup_to(conn: &Connection, dest: &Path) -> AppResult<u64> {
     let name = dest.file_name().ok_or_else(|| AppError::Validation("Choose a file name for the backup".into()))?.to_string_lossy().to_string();
-    let partial = dest.with_file_name(format!("{name}.partial"));
-    let _ = std::fs::remove_file(&partial);
+    let live: String = conn.query_row("SELECT file FROM pragma_database_list WHERE name = 'main'", [], |r| r.get(0))?;
+    if !live.is_empty() {
+        // compared on the canonical parent folder; without regard to case, as on Windows
+        let norm = |p: &Path| -> Option<String> {
+            let dir = p.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+            Some(dir.canonicalize().ok()?.join(p.file_name()?).to_string_lossy().to_lowercase())
+        };
+        let target = norm(dest);
+        for suffix in ["", "-wal", "-shm", "-journal"] {
+            if target.is_some() && target == norm(Path::new(&format!("{live}{suffix}"))) {
+                return Err(AppError::Validation("Choose another file: this is Cyber Hub's own database".into()));
+            }
+        }
+    }
+    let mut nonce = [0u8; 6];
+    getrandom::fill(&mut nonce).map_err(|e| AppError::Internal(format!("no random source: {e}")))?;
+    let nonce: String = nonce.iter().map(|b| format!("{b:02x}")).collect();
+    let partial = dest.with_file_name(format!(".{name}.{nonce}.partial"));
     conn.execute("VACUUM INTO ?1", [partial.to_string_lossy().to_string()])?;
     let checked = (|| -> AppResult<String> {
         let copy = Connection::open_with_flags(&partial, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
@@ -936,7 +952,10 @@ pub fn backup_to(conn: &Connection, dest: &Path) -> AppResult<u64> {
         }
     }
     // replaces a file the save dialog already asked about
-    std::fs::rename(&partial, dest)?;
+    if let Err(e) = std::fs::rename(&partial, dest) {
+        let _ = std::fs::remove_file(&partial);
+        return Err(e.into());
+    }
     Ok(std::fs::metadata(dest)?.len())
 }
 
@@ -1338,12 +1357,19 @@ mod tests {
         let db = Db::init(schema12_with_data()).unwrap();
         let size = db.with(|c| backup_to(c, &dest)).unwrap();
         assert!(size > 0);
-        assert!(!dir.join("copy.db.partial").exists(), "no temporary file is left");
+        assert!(std::fs::read_dir(&dir).unwrap().flatten().all(|e| !e.file_name().to_string_lossy().ends_with(".partial")), "no temporary file is left");
         let copy = Connection::open(&dest).unwrap();
         let (v, title): (i64, String) = (copy.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap(), copy.query_row("SELECT title FROM findings WHERE id = 21", [], |r| r.get(0)).unwrap());
         assert_eq!((v, title.as_str()), (MIGRATIONS.len() as i64, "Weak TLS"), "the copy has the current schema and the data");
         drop(copy);
         assert!(db.with(|c| backup_to(c, Path::new(""))).is_err(), "a path without a file name is refused");
+        // the live database file is refused
+        let live = dir.join("live.db");
+        let file_db = Db::open(&live).unwrap();
+        let err = file_db.with(|c| backup_to(c, &live)).unwrap_err().to_string();
+        assert!(err.contains("own database"), "{err}");
+        assert!(file_db.with(|c| backup_to(c, &dir.join("live.db-wal"))).is_err());
+        drop(file_db);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

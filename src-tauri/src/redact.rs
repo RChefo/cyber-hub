@@ -25,6 +25,19 @@ static KV: Lazy<Regex> = Lazy::new(|| {
 static USER_PASS_AT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(^|[\s/])([^\s/:@]+):([^\s@]+)@([^\s@]+)").unwrap());
 /// JSON Web Tokens
 static JWT: Lazy<Regex> = Lazy::new(|| Regex::new(r"\beyJ[A-Za-z0-9_-]{5,}\.eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*").unwrap());
+/// PEM private keys, also when the end marker is missing (truncated output)
+static PRIVATE_KEY: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----(?:.*?-----END [A-Z0-9 ]*PRIVATE KEY-----|[A-Za-z0-9+/=\s]*)").unwrap()
+});
+/// Credential shapes: AWS access key IDs, GitHub tokens, Slack tokens
+static TOKEN_SHAPES: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\b(?:(?:AKIA|ASIA)[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255}|xox[abposr]-[A-Za-z0-9-]{10,})\b").unwrap()
+});
+/// `Password : admin`, `"api_key": "value"`, `secret = value` (colon or spaced forms; `key=value`
+/// is handled by KV)
+static KEY_COLON: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?i)\b([a-z0-9_.-]*(?:pass(?:word|wd)?|pwd|secret|token|api[-_]?key|apikey|credential|private[-_]?key)[a-z0-9_.-]*)("?\s*:\s*"?|\s+=\s*"?|"\s*=\s*"?)([^\s"',;&]+)"#).unwrap()
+});
 
 /// Redact secrets inside a free-form text (one argument, a command line, or output).
 pub fn redact_text(s: &str) -> String {
@@ -39,7 +52,12 @@ pub fn redact_text(s: &str) -> String {
         // e-mail like `user@host` has no `:secret` part and is never matched
         format!("{}{}:{MASK}@{}", &c[1], &c[2], &c[4])
     });
-    JWT.replace_all(&s, MASK).into_owned()
+    let s = JWT.replace_all(&s, MASK);
+    let s = PRIVATE_KEY.replace_all(&s, MASK);
+    let s = TOKEN_SHAPES.replace_all(&s, MASK);
+    KEY_COLON
+        .replace_all(&s, |c: &Captures| if &c[3] == MASK { c[0].to_string() } else { format!("{}{}{MASK}", &c[1], &c[2]) })
+        .into_owned()
 }
 
 /// `--password value`, `--api-key="v"`, `-token 'v'` inside a free-form command line.
@@ -129,5 +147,28 @@ mod tests {
     fn redacts_text_blocks() {
         let t = redact_text("GET / HTTP/1.1\nCookie: session=abc\nX-Api-Key: zzz\n");
         assert!(!t.contains("abc") && !t.contains("zzz"), "{t}");
+    }
+}
+
+#[cfg(test)]
+mod credential_shape_tests {
+    use super::*;
+
+    #[test]
+    fn credential_shapes_and_colon_forms_are_redacted() {
+        let pem = "key:\n-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA1234\nabcd==\n-----END RSA PRIVATE KEY-----\nafter";
+        let out = redact_text(pem);
+        assert!(!out.contains("MIIEow") && out.contains("after"), "{out}");
+        let cut = redact_text("-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEA\nAAAA");
+        assert!(!cut.contains("b3BlbnNz"), "a truncated key is still hidden: {cut}");
+        for secret in ["AKIAIOSFODNN7EXAMPLE", "ghp_abcdefghijklmnopqrstuvwxyz0123456789", "xoxb-1234567890-abcdefghij"] {
+            assert!(!redact_text(&format!("found {secret} in config")).contains(secret), "{secret}");
+        }
+        assert_eq!(redact_text("Password : admin"), format!("Password : {MASK}"));
+        assert_eq!(redact_text(r#"{"api_key": "abc123"}"#), format!(r#"{{"api_key": "{MASK}"}}"#));
+        assert_eq!(redact_text("db_password = hunter2"), format!("db_password = {MASK}"));
+        // already-masked values and ordinary prose stay readable
+        assert_eq!(redact_text(&format!("token={MASK}")), format!("token={MASK}"));
+        assert_eq!(redact_text("The login page has no rate limit."), "The login page has no rate limit.");
     }
 }

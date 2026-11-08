@@ -456,3 +456,115 @@ fn greenbone_reports_follow_its_default_filter() {
     assert!(p.assets.iter().any(|a| a.kind == "service" && a.value == "93.184.215.7:22/tcp"));
     assert!(p.assets.iter().any(|a| a.kind == "name" && a.value == "app.example.com"));
 }
+
+#[test]
+fn parsers_never_panic_on_cut_or_multibyte_input() {
+    // with panic = "abort" a parser panic would end the app
+    let zap_multibyte = zap().replace("CSP is missing.", "R&amp;D 日本語 &x日本語; caf&eacute; &#x1F600;");
+    assert!(parse(&zap_multibyte).unwrap().findings[0].description.contains("R&D 日本語"));
+    assert_eq!(html_to_text("a&日本語日本語日本語;b"), "a&日本語日本語日本語;b");
+    for doc in [NUCLEI.to_string(), NESSUS.to_string(), BURP.to_string(), NMAP.to_string(), OPENVAS.to_string(), zap_multibyte, sarif()] {
+        let doc = doc.replace("Path traversal", "Pfad-Überquerung &日本").replace("OpenSSH is prone", "OpenSSH é &日本 prone");
+        for (i, _) in doc.char_indices().step_by(7) {
+            let _ = parse(&doc[..i]);
+        }
+    }
+}
+
+#[test]
+fn network_findings_without_a_usable_or_in_scope_host_are_left_out() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let p = setup(c);
+        let nuclei = r#"{"template-id":"a","info":{"name":"Bad port","severity":"high"},"matched-at":"http://out.example:99999/a"}
+{"template-id":"b","info":{"name":"Mismatch","severity":"high"},"host":"https://app.example.com","matched-at":"https://evil.example.org/x"}
+{"template-id":"c","info":{"name":"Fine","severity":"high"},"host":"https://app.example.com","matched-at":"https://app.example.com/x"}"#;
+        let pv = preview(c, p, &parse(nuclei).unwrap(), Options::default())?;
+        assert_eq!((pv.counts.new, pv.counts.out_of_scope), (1, 2), "an unparseable target and a target outside the scope are left out");
+        let sarif_urls = json!({ "version": "2.1.0", "runs": [{ "tool": { "driver": { "name": "DAST" } }, "results": [
+            { "ruleId": "x", "message": { "text": "m" }, "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "https://other.org/login" } } }] },
+            { "ruleId": "y", "message": { "text": "m" }, "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "https://app.example.com/login" } } }] },
+            { "ruleId": "z", "message": { "text": "m" }, "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/app.py" }, "region": { "startLine": 1 } } }] }
+        ]}]}).to_string();
+        let pv = preview(c, p, &parse(&sarif_urls).unwrap(), Options::default())?;
+        assert_eq!((pv.counts.new, pv.counts.out_of_scope), (2, 1), "URL locations in SARIF are scope-checked, file paths are not");
+        assert_eq!(host_of("[2001:db8::1]evil.example"), None);
+        assert_eq!(host_of("[2001:db8::1]:443"), Some("2001:db8::1".into()));
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn burp_address_assets_are_checked_as_addresses() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        c.execute("INSERT INTO projects (name, status, created_at, updated_at) VALUES ('Names only','active','t','t')", [])?;
+        let p = c.last_insert_rowid();
+        crate::commands::projects::target_add(c, p, "*.example.com", "wildcard", true, "")?;
+        import(c, p, &parse(BURP).unwrap(), Options::default(), &FileInfo { file_name: "b.xml", sha256: "x", evidence_id: None })?;
+        assert_eq!(count(c, "SELECT COUNT(*) FROM assets WHERE type = 'ip'"), 0, "the address is not in the scope even though the name is");
+        assert_eq!(count(c, "SELECT COUNT(*) FROM assets WHERE type = 'http_service'"), 1);
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn an_incomplete_file_never_verifies_fixes() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let p = setup(c);
+        let full = parse(&nessus_doc(&[("93.184.215.7", "1001", 443, 3), ("93.184.215.7", "1002", 22, 2)])).unwrap();
+        import(c, p, &full, Options::default(), &FileInfo { file_name: "w1", sha256: "a", evidence_id: None })?;
+        // the second file breaks off after the first item of the host
+        let doc = nessus_doc(&[("93.184.215.7", "1001", 443, 3), ("93.184.215.7", "1002", 22, 2)]);
+        let cut = &doc[..doc.find("pluginID=\"1002\"").unwrap()];
+        let partial = parse(cut).unwrap();
+        assert!(partial.incomplete);
+        let pv = preview(c, p, &partial, Options::default())?;
+        assert_eq!(pv.not_reported_count, 0, "nothing is listed as fixed from a partial file");
+        assert!(pv.warnings.iter().any(|w| w.contains("not read completely")));
+        let r = import(c, p, &partial, Options { resolve_missing: true, ..Default::default() }, &FileInfo { file_name: "w2", sha256: "b", evidence_id: None })?;
+        assert_eq!(r.resolved, 0);
+        assert_eq!(count(c, "SELECT COUNT(*) FROM findings WHERE status = 'resolved'"), 0);
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn copied_text_is_redacted_in_every_field() {
+    let nuclei = r#"{"template-id":"t","info":{"name":"Token in URL","severity":"high"},"host":"https://app.example.com","matched-at":"https://app.example.com/cb?access_token=abc123secret","extracted-results":["AKIAIOSFODNN7EXAMPLE"]}"#;
+    let f = &parse(nuclei).unwrap().findings[0];
+    assert!(!f.target.contains("abc123secret") && f.target.contains("access_token="), "{}", f.target);
+    assert!(!f.technical.contains("AKIAIOSFODNN7EXAMPLE") && !f.technical.contains("abc123secret"), "{}", f.technical);
+    let burp = BURP.replace("appears to be vulnerable &xxe; here.", "leaks session=abcdef0123 here.");
+    assert!(!parse(&burp).unwrap().findings[0].description.contains("abcdef0123"));
+    let nessus = NESSUS.replace("Login with password=hunter2 succeeded", "Password : admin");
+    let apache = parse(&nessus).unwrap().findings.into_iter().find(|f| f.rule_id == "156860").unwrap();
+    assert!(!apache.technical.contains("admin"), "{}", apache.technical);
+    let sarif_msg = json!({ "version": "2.1.0", "runs": [{ "tool": { "driver": { "name": "T" } }, "results": [
+        { "ruleId": "", "message": { "text": "Hard-coded api_key=zzzSECRETzzz" }, "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "a.py" } } }] }
+    ]}]}).to_string();
+    let s = &parse(&sarif_msg).unwrap().findings[0];
+    assert!(!s.title.contains("zzzSECRETzzz") && !s.description.contains("zzzSECRETzzz"));
+}
+
+#[test]
+fn one_odd_record_does_not_abort_an_import() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let p = setup(c);
+        let nul = "{\"template-id\":\"n\",\"info\":{\"name\":\"Null\\u0000byte\",\"severity\":\"low\",\"tags\":[\"a-tag-that-is-much-longer-than-forty-characters-for-sure\"]},\"host\":\"https://app.example.com\",\"matched-at\":\"https://app.example.com/\\u0000x\"}";
+        let r = import(c, p, &parse(nul).unwrap(), Options::default(), &FileInfo { file_name: "n.jsonl", sha256: "a", evidence_id: None })?;
+        assert_eq!(r.created, 1);
+        let long_tool = json!({ "version": "2.1.0", "runs": [{ "tool": { "driver": { "name": "An Exceptionally Long Static Analysis Tool Name Beyond Forty" } }, "results": [
+            { "ruleId": "", "message": { "text": "" }, "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "a.py" } } }] }
+        ]}]}).to_string();
+        let r = import(c, p, &parse(&long_tool).unwrap(), Options::default(), &FileInfo { file_name: "s.sarif", sha256: "b", evidence_id: None })?;
+        assert_eq!(r.created, 1, "an empty title and a long tool name do not fail the import");
+        Ok(())
+    })
+    .unwrap();
+}

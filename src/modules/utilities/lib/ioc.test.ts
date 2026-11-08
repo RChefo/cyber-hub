@@ -59,5 +59,26 @@ Again: https://login-micros0ft.com/auth?x=1.`;
     expect(r.ipv6).toHaveLength(1);
     expect(r.sha1).toHaveLength(0);
     expect(iocCount(extractIocs(""))).toBe(0);
+    // real top-level domains that are also file extensions are domains
+    expect(extractIocs("C2 at evil.com, staging at files.example.zip and allegro.pl").domain).toEqual(["evil.com", "files.example.zip", "allegro.pl"]);
   });
 });
+
+describe("IOC handling on hostile input", () => {
+  it("stays fast on long runs of similar characters", () => {
+    const cases = [" ".repeat(40_000) + "[.]", "http://x.example/" + ".".repeat(40_000), "http://x.example/a" + ")".repeat(40_000), "a.".repeat(20_000), "1.".repeat(20_000), "a".repeat(40_000) + "@"];
+    for (const c of cases) {
+      const t0 = performance.now();
+      extractIocs(c);
+      defangText(c);
+      expect(performance.now() - t0, c.slice(0, 20)).toBeLessThan(500);
+    }
+  });
+
+  it("keeps URL trimming and parentheses right", () => {
+    expect(extractIocs("see (https://x.example/a(b)c). next").url).toEqual(["https://x.example/a(b)c"]);
+    expect(extractIocs("go to https://x.example/path...").url).toEqual(["https://x.example/path"]);
+    expect(defangText("(https://x.example/a).")).toBe("(hxxps[://]x[.]example/a).");
+  });
+});
+

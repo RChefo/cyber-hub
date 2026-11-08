@@ -38,7 +38,7 @@ Credentials (API keys) are not in the database. They stay in the operating syste
 2. The copy is opened read-only and must pass `PRAGMA integrity_check`. Otherwise it is deleted and nothing is written.
 3. It is renamed to the chosen name.
 
-The copy contains the database only. Evidence files (`evidence/`) and credentials (the system credential store) are not included. To restore, close Cyber Hub and replace `cyberhub.db` in the data folder with the copy (delete `cyberhub.db-wal` and `cyberhub.db-shm` first), as for an upgrade backup. A copy made by a newer version is refused by an older one.
+The live database file and its `-wal`, `-shm` and `-journal` files are refused as targets. The temporary file has a random name and is removed if anything fails. The copy contains the database only. Evidence files (`evidence/`) and credentials (the system credential store) are not included. To restore, close Cyber Hub and replace `cyberhub.db` in the data folder with the copy (delete `cyberhub.db-wal` and `cyberhub.db-shm` first), as for an upgrade backup. A copy made by a newer version is refused by an older one.
 
 ## What was tested (November 2026)
 

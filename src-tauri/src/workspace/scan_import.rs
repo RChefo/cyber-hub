@@ -118,6 +118,16 @@ pub struct ImportedFinding {
     /// canonical CVSS vector reported by the tool, when it is a valid v3.x or v4.0 vector
     #[serde(skip)]
     pub cvss: String,
+    /// about a network target: without a usable host it counts as outside the scope
+    #[serde(skip)]
+    pub network: bool,
+}
+
+/// Text without control characters (a NUL fails validation and would abort the whole import),
+/// cut to `max` characters.
+fn clean_text(s: &str, max: usize) -> String {
+    let kept: String = s.chars().filter(|c| !c.is_control() || *c == '\n' || *c == '\t').collect();
+    trunc(&kept, max)
 }
 
 /// The canonical form of a tool's CVSS vector, or empty when it is missing or not valid (the text
@@ -149,18 +159,42 @@ pub struct Parsed {
     pub marked_false_positive: usize,
     /// findings with the same fingerprint inside the file, merged into the first
     pub merged: usize,
+    /// the file was not read completely (limits, a broken document, skipped lines): findings it
+    /// does not report prove nothing
+    pub incomplete: bool,
 }
 
 impl Parsed {
     fn new(format: Format, tool: &str) -> Self {
         Parsed { format: Some(format), tool: tool.into(), ..Default::default() }
     }
-    fn push_finding(&mut self, f: ImportedFinding) {
+    /// Adds a finding in its stored form: every copied text redacted and free of control
+    /// characters, within the field limits, with a title.
+    fn push_finding(&mut self, mut f: ImportedFinding) {
         if self.findings.len() >= MAX_FINDINGS {
             self.truncated += 1;
-        } else {
-            self.findings.push(f);
+            self.incomplete = true;
+            return;
         }
+        f.title = clean_text(&redact_text(&f.title), 200);
+        if f.title.is_empty() {
+            f.title = if f.rule_id.trim().is_empty() { "Imported finding".into() } else { clean_text(&f.rule_id, 200) };
+        }
+        f.target = clean_text(&redact_text(&f.target), 500);
+        f.description = clean_text(&redact_text(&f.description), 50_000);
+        f.remediation = clean_text(&redact_text(&f.remediation), 50_000);
+        f.technical = clean_text(&redact_text(&f.technical), 50_000);
+        f.category = clean_text(&f.category, 100);
+        f.cve = clean_text(&f.cve, 200);
+        f.references = f.references.iter().map(|r| clean_text(r, 2000)).filter(|r| !r.is_empty()).collect();
+        let mut tags: Vec<String> = Vec::new();
+        for t in f.tags.iter().map(|t| clean_text(t, 40)) {
+            if !t.is_empty() && !tags.contains(&t) && tags.len() < 20 {
+                tags.push(t);
+            }
+        }
+        f.tags = tags;
+        self.findings.push(f);
     }
     fn push_asset(&mut self, kind: &'static str, value: &str, host: &str, data: Value) {
         if value.trim().is_empty() {
@@ -168,6 +202,7 @@ impl Parsed {
         }
         if self.assets.len() >= MAX_ASSETS {
             self.truncated += 1;
+            self.incomplete = true;
         } else {
             self.assets.push(AssetItem { kind, value: value.trim().to_string(), host: host.trim().to_string(), data });
         }
@@ -250,7 +285,8 @@ fn decode_entities(s: &str) -> String {
     while let Some(i) = rest.find('&') {
         out.push_str(&rest[..i]);
         let after = &rest[i..];
-        let semi = after[..after.len().min(12)].find(';');
+        // searched in bytes: `;` is ASCII, so the index is always a character boundary
+        let semi = after.as_bytes()[..after.len().min(12)].iter().position(|&b| b == b';');
         let decoded = semi.and_then(|j| {
             let name = &after[1..j];
             let ch = match name {
@@ -312,7 +348,9 @@ pub fn host_of(s: &str) -> Option<String> {
     }
     let s = s.split('/').next().unwrap_or(s);
     if let Some(v6) = s.strip_prefix('[') {
-        return v6.split(']').next().map(str::to_lowercase);
+        let (inside, rest) = v6.split_once(']')?;
+        let port_only = rest.is_empty() || rest.strip_prefix(':').is_some_and(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()));
+        return port_only.then(|| inside.to_lowercase());
     }
     match s.rsplit_once(':') {
         // one colon and a numeric suffix: host:port (several colons: a bare IPv6 address)
@@ -564,6 +602,7 @@ fn parse_nmap(text: &str) -> Result<Parsed, String> {
     let run = discovery::parse_nmap(text)?;
     let mut p = Parsed::new(Format::Nmap, "Nmap");
     if !run.finished {
+        p.incomplete = true;
         p.warnings.push("The scan did not finish (no <finished> element); hosts it had not reached are not in the file".into());
     }
     for h in run.hosts.iter().filter(|h| h.up) {
@@ -604,6 +643,7 @@ fn parse_nuclei(text: &str) -> Result<Parsed, String> {
     }
     let mut p = Parsed::new(Format::Nuclei, "Nuclei");
     if bad_lines > 0 {
+        p.incomplete = true;
         p.warnings.push(format!("{bad_lines} lines were not valid JSON and were skipped"));
     }
     let mut failed = 0usize;
@@ -623,12 +663,16 @@ fn parse_nuclei(text: &str) -> Result<Parsed, String> {
         let url = s(r, "url");
         let host_field = s(r, "host");
         let target = [matched.as_str(), url.as_str(), host_field.as_str()].into_iter().find(|x| !x.is_empty()).unwrap_or("").to_string();
-        let host = host_of(&host_field).or_else(|| host_of(&target));
+        // the scope is decided on what is stored: the target, then the host field
+        let host = if target.is_empty() { host_of(&host_field) } else { host_of(&target) };
         let matcher = s(r, "matcher-name");
         let ip = s(r, "ip");
         let origin = origin_of(&target).or_else(|| origin_of(&url)).or_else(|| origin_of(&host_field));
-        if let (Some(o), Some(h)) = (origin.as_ref(), host.as_ref()) {
-            p.push_asset("http_service", o, h, json!({ "sources": ["nuclei"] }));
+        if let Some(o) = origin.as_ref() {
+            // each asset is checked against its own host
+            if let Some(oh) = host_of(o) {
+                p.push_asset("http_service", o, &oh, json!({ "sources": ["nuclei"] }));
+            }
         }
         if !ip.is_empty() {
             p.push_asset("ip", &ip, &ip, json!({ "names": host.iter().filter(|h| crate::osint::normalize::ip(h).is_err()).collect::<Vec<_>>() }));
@@ -683,6 +727,7 @@ fn parse_nuclei(text: &str) -> Result<Parsed, String> {
             tags: tool_tags("nuclei", tags.into_iter().take(5)),
             fingerprint: fingerprint(&["nuclei", &id, &matcher, &target]),
             cvss: valid_cvss(&s(&class, "cvss-metrics")),
+            network: true,
         });
     }
     if failed > 0 {
@@ -756,6 +801,8 @@ fn parse_nessus(text: &str) -> Parsed {
             }
         }
     });
+    // walk_xml only warns when the document broke off or nested too deeply
+    p.incomplete |= !warnings.is_empty();
     p.warnings.extend(warnings);
     for (h, items) in done {
         let ip = h.props.get("host-ip").cloned().filter(|x| !x.is_empty()).unwrap_or_else(|| h.name.clone());
@@ -814,6 +861,7 @@ fn parse_nessus(text: &str) -> Parsed {
                 tags: tool_tags("nessus", std::iter::empty()),
                 fingerprint: fingerprint(&["nessus", &plugin, &ip, &port.to_string(), &proto]),
                 cvss: { let v4 = valid_cvss(&field("cvss4_vector")); if v4.is_empty() { valid_cvss(&field("cvss3_vector")) } else { v4 } },
+                network: true,
             });
         }
     }
@@ -880,6 +928,8 @@ fn parse_burp(text: &str) -> Parsed {
             }
         }
     });
+    // walk_xml only warns when the document broke off or nested too deeply
+    p.incomplete |= !warnings.is_empty();
     p.warnings.extend(warnings);
     for (f, ip) in issues {
         let get = |k: &str| f.get(k).cloned().unwrap_or_default();
@@ -893,7 +943,7 @@ fn parse_burp(text: &str) -> Parsed {
         }
         if !ip.is_empty() {
             if let Some(h) = host.as_ref() {
-                p.push_asset("ip", &ip, h, json!({ "names": [h] }));
+                p.push_asset("ip", &ip, &ip, json!({ "names": [h] }));
             }
         }
         let target = format!("{}{}", host_url.trim_end_matches('/'), if path.starts_with('/') { path.clone() } else { format!("/{path}") });
@@ -931,6 +981,7 @@ fn parse_burp(text: &str) -> Parsed {
             cve: String::new(),
             category: trunc(&cwe, 100),
             tags: tool_tags("burp", std::iter::empty()),
+            network: true,
             cvss: String::new(),
             fingerprint: fingerprint(&["burp", &ty, &host_url, &path, &location]),
         });
@@ -963,6 +1014,9 @@ fn decode_base64(s: &str) -> Option<String> {
 fn extract_urls(html: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for part in html.split(|c: char| c == '"' || c == '\'' || c == '<' || c == '>' || c.is_whitespace()) {
+        if out.len() >= 20 {
+            break;
+        }
         if (part.starts_with("http://") || part.starts_with("https://")) && part.len() <= 2000 && !out.iter().any(|x| x == part) {
             out.push(decode_entities(part));
         }
@@ -1050,6 +1104,7 @@ fn parse_zap(text: &str) -> Result<Parsed, String> {
                 cve: String::new(),
                 category: if cwe.is_empty() || cwe == "-1" || cwe == "0" { String::new() } else { format!("CWE-{cwe}") },
                 tags: tool_tags("zap", std::iter::empty()),
+                network: true,
                 cvss: String::new(),
                 fingerprint: fingerprint(&["zap", &alert_ref, &name]),
             });
@@ -1122,7 +1177,10 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
                 score.map(security_severity).unwrap_or_else(|| sarif_level(if level.is_empty() { "warning" } else { &level }))
             };
             let title = rule.map(|r| { let t = s(&r["shortDescription"], "text"); if t.is_empty() { s(r, "name") } else { t } }).filter(|t| !t.is_empty()).unwrap_or_else(|| if rule_id.is_empty() { trunc(&message, 120) } else { rule_id.clone() });
-            let rule_text = rule.map(|r| { let t = s(&r["fullDescription"], "text"); if t.is_empty() { s(&r["help"], "text") } else { t } }).unwrap_or_default();
+            // the rule's text repeats for each of its results: capped so a small file cannot expand to gigabytes
+            let rule_text = trunc(&rule.map(|r| { let t = s(&r["fullDescription"], "text"); if t.is_empty() { s(&r["help"], "text") } else { t } }).unwrap_or_default(), 2_000);
+            // DAST tools write URLs as locations: those are network targets and are scope-checked
+            let url_location = uri.contains("://");
             let description = [message.as_str(), rule_text.as_str()].iter().filter(|x| !x.is_empty()).copied().collect::<Vec<_>>().join("\n\n");
             let partial = res.get("partialFingerprints").or_else(|| res.get("fingerprints")).and_then(Value::as_object).and_then(|m| m.values().next()).and_then(Value::as_str).unwrap_or("").to_string();
             let line_s = line.map(|l| l.to_string()).unwrap_or_default();
@@ -1142,7 +1200,7 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
                 },
                 asset: None,
                 target: trunc(&target, 500),
-                host: None,
+                host: if url_location { host_of(&uri) } else { None },
                 description: trunc(&description, 50_000),
                 remediation: String::new(),
                 technical: trunc(&redact_text(&if snippet.is_empty() { format!("Location: {target}") } else { format!("Location: {target}\n{}", trunc(&snippet, 2_000)) }), 50_000),
@@ -1152,6 +1210,7 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
                 tags: tool_tags(&run_tool, tags.into_iter().filter(|t| !t.starts_with("external/")).take(4)),
                 cvss: String::new(),
                 fingerprint: fp,
+                network: url_location,
             });
         }
     }
@@ -1230,6 +1289,8 @@ fn parse_openvas(text: &str) -> Parsed {
             c.insert(key.into(), text);
         }
     });
+    // walk_xml only warns when the document broke off or nested too deeply
+    p.incomplete |= !warnings.is_empty();
     p.warnings.extend(warnings);
     let (mut low_qod, mut debug) = (0usize, 0usize);
     for r in results {
@@ -1317,6 +1378,7 @@ fn parse_openvas(text: &str) -> Parsed {
             category: trunc(&get("family"), 100),
             tags: tool_tags("greenbone", std::iter::empty()),
             cvss: valid_cvss(&get("cvss")),
+            network: true,
             fingerprint: fingerprint(&["openvas", &oid, &host, &port]),
         });
     }
@@ -1487,10 +1549,10 @@ fn known(c: &Connection, project_id: i64, fp: &str) -> AppResult<Option<(i64, St
 }
 
 fn outcome(c: &Connection, project_id: i64, entries: &[ScopeEntry], f: &ImportedFinding, opts: Options) -> AppResult<(Outcome, Option<i64>)> {
-    if let Some(h) = f.host.as_deref() {
-        if !in_scope(entries, h) {
-            return Ok((Outcome::OutOfScope, None));
-        }
+    match f.host.as_deref() {
+        Some(h) if !in_scope(entries, h) => return Ok((Outcome::OutOfScope, None)),
+        None if f.network => return Ok((Outcome::OutOfScope, None)),
+        _ => {}
     }
     match known(c, project_id, &f.fingerprint)? {
         Some((id, status)) => Ok((
@@ -1550,6 +1612,9 @@ pub fn preview(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options) 
         has_scope: entries.iter().any(|e| e.in_scope),
         ..Default::default()
     };
+    if parsed.incomplete {
+        pv.warnings.push("The file was not read completely, so findings it does not report are not listed as fixed".into());
+    }
     if !pv.has_scope {
         pv.warnings.push("The project has no scope entries, so every host in the file is outside the scope. Add the scope first.".into());
     }
@@ -1625,6 +1690,9 @@ pub struct Missing {
 /// are not in the file. Findings without a recorded host (imported before schema 15) and source-code
 /// findings (no host) are never listed: their absence proves nothing.
 pub fn not_reported(c: &Connection, project_id: i64, parsed: &Parsed) -> AppResult<Vec<Missing>> {
+    if parsed.incomplete {
+        return Ok(Vec::new());
+    }
     let covered = covered_hosts(parsed);
     if covered.is_empty() {
         return Ok(Vec::new());

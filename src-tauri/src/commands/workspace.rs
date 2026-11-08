@@ -309,11 +309,15 @@ pub struct ScanImportPreview {
     preview: Preview,
 }
 
-fn import_token() -> String {
+fn import_token() -> AppResult<String> {
     let mut b = [0u8; 16];
-    let _ = getrandom::fill(&mut b);
-    b.iter().map(|x| format!("{x:02x}")).collect()
+    getrandom::fill(&mut b).map_err(|e| AppError::Internal(format!("no random source for the import token: {e}")))?;
+    Ok(b.iter().map(|x| format!("{x:02x}")).collect())
 }
+
+/// One scan import is committed at a time: the evidence check, the evidence record and the import
+/// must not interleave with another commit of the same file.
+static COMMIT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Choose a scan result file (native dialog), read and preview it. Nothing is imported.
 #[tauri::command]
@@ -353,7 +357,7 @@ pub async fn scan_import_pick(app: AppHandle, project_id: i64, options: Option<I
     })
     .await
     .map_err(|e| AppError::Internal(format!("reading the scan file failed: {e}")))??;
-    let out = ScanImportPreview { token: import_token(), file_name: pending.file_name.clone(), sha256: pending.sha256.clone(), size: pending.bytes.len(), preview };
+    let out = ScanImportPreview { token: import_token()?, file_name: pending.file_name.clone(), sha256: pending.sha256.clone(), size: pending.bytes.len(), preview };
     let state = app.state::<ScanImports>();
     let mut m = state.0.lock().map_err(|_| AppError::Internal("scan import state poisoned".into()))?;
     if m.len() >= 2 {
@@ -382,6 +386,7 @@ pub async fn scan_import_commit(app: AppHandle, token: String, options: ImportOp
     };
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || -> AppResult<ImportResult> {
+        let _one_at_a_time = COMMIT_LOCK.lock().map_err(|_| AppError::Internal("scan import lock poisoned".into()))?;
         let db = handle.state::<Db>();
         let store = handle.state::<Arc<EvidenceStore>>();
         let existed: Option<i64> = db.with(|c| {
