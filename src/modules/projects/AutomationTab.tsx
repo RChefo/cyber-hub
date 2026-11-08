@@ -13,7 +13,7 @@ import { notify } from "@/lib/actions";
 import { api, errorMessage, runtimeAvailable } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { Project, Workflow, WorkflowDefinition, WorkflowNodeSpec, WorkflowStep } from "@/lib/types";
-import { formatDateTime, formatRelative } from "@/lib/utils";
+import { formatDateTime, formatRelative, pluralize } from "@/lib/utils";
 import { draftProblems, hasActiveStep, moveStep, newStep, parseTargets, RUN_STATUS_META } from "./workflow";
 
 function useWorkflowEvents(projectId: number) {
@@ -310,7 +310,7 @@ function WorkflowCard({ w, onEdit, onOpenRun }: { w: Workflow; onEdit: () => voi
     <Panel
       title={w.name}
       description={[
-        `${w.definition.steps.length} steps`,
+        pluralize(w.definition.steps.length, "step"),
         w.scheduleHours ? `every ${w.scheduleHours} h${w.enabled && w.nextRunAt ? `, next ${formatRelative(w.nextRunAt)}` : ""}` : "run by hand",
         w.enabled ? null : "disabled",
         w.description || null,

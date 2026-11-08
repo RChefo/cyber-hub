@@ -778,9 +778,69 @@ const MIGRATIONS: &[&str] = &[
     "#,
 ];
 
+/// Backups kept in `<data dir>/backups` (the newest ones; older copies are removed).
+pub const BACKUPS_KEPT: usize = 3;
+
+/// A database written by a newer version is never changed by an older one: its tables and
+/// statuses may not be what this version expects.
+pub fn check_supported(version: i64) -> AppResult<()> {
+    let latest = MIGRATIONS.len() as i64;
+    if version > latest {
+        return Err(AppError::Internal(format!(
+            "This database was written by a newer version of Cyber Hub (schema {version}; this version supports up to {latest}).              Install the newer version again, or restore a backup made before the upgrade (data folder, backups)."
+        )));
+    }
+    Ok(())
+}
+
+/// Before migrating an existing database, writes a consistent copy (`VACUUM INTO`) to
+/// `<data dir>/backups/cyberhub-schema<N>-<time>.db`. If the copy cannot be made, nothing is
+/// migrated: the app does not start rather than upgrade without a way back.
+pub fn backup_before_upgrade(conn: &Connection, path: &Path, current: i64) -> AppResult<Option<std::path::PathBuf>> {
+    if current == 0 || current >= MIGRATIONS.len() as i64 {
+        return Ok(None);
+    }
+    let dir = path.parent().unwrap_or(Path::new(".")).join("backups");
+    std::fs::create_dir_all(&dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
+    let dest = dir.join(format!("cyberhub-schema{current}-{stamp}.db"));
+    // written under a temporary name and renamed when complete: an interrupted copy never looks
+    // like a usable backup
+    let partial = dir.join(format!("cyberhub-schema{current}-{stamp}.db.partial"));
+    let _ = std::fs::remove_file(&partial);
+    let fail = |e: String| AppError::Internal(format!("Cyber Hub needs to upgrade its database and could not make a backup first ({e}). Nothing was changed. Free some disk space and start Cyber Hub again."));
+    conn.execute("VACUUM INTO ?1", [partial.to_string_lossy().to_string()]).map_err(|e| fail(e.to_string()))?;
+    std::fs::rename(&partial, &dest).map_err(|e| fail(e.to_string()))?;
+    // leftovers of copies interrupted earlier
+    for e in std::fs::read_dir(&dir)?.flatten() {
+        if e.file_name().to_string_lossy().ends_with(".db.partial") {
+            let _ = std::fs::remove_file(e.path());
+        }
+    }
+    // keep the newest copies
+    let mut copies: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("cyberhub-schema") && n.to_string_lossy().ends_with(".db")))
+        .collect();
+    copies.sort_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
+    while copies.len() > BACKUPS_KEPT {
+        let _ = std::fs::remove_file(copies.remove(0));
+    }
+    Ok(Some(dest))
+}
+
 impl Db {
     pub fn open(path: &Path) -> AppResult<Self> {
         let conn = Connection::open(path)?;
+        let current: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        check_supported(current)?;
+        backup_before_upgrade(&conn, path, current)?;
         Self::init(conn)
     }
 
@@ -944,6 +1004,48 @@ mod tests {
         // running the migrations again changes nothing
         db.migrate().unwrap();
         assert_eq!(db.schema_version().unwrap(), MIGRATIONS.len() as i64);
+    }
+
+    #[test]
+    fn upgrades_are_backed_up_and_newer_databases_are_refused() {
+        let dir = std::env::temp_dir().join(format!("cyberhub-backup-{}-{}", std::process::id(), crate::util::now().replace(':', "")));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("cyberhub.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+            for (i, sql) in MIGRATIONS.iter().take(8).enumerate() {
+                conn.execute_batch(sql).unwrap();
+                conn.execute_batch(&format!("PRAGMA user_version = {}", i + 1)).unwrap();
+            }
+            conn.execute_batch("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'Old', 'active', 't', 't'); INSERT INTO findings (project_id, title, severity, status, created_at, updated_at) VALUES (1, 'F', 'low', 'open', 't', 't');").unwrap();
+        }
+        let db = Db::open(&path).unwrap();
+        assert_eq!(db.schema_version().unwrap(), MIGRATIONS.len() as i64);
+        drop(db);
+        let backups: Vec<_> = std::fs::read_dir(dir.join("backups")).unwrap().flatten().map(|e| e.path()).collect();
+        assert_eq!(backups.len(), 1, "one complete copy before the upgrade, no partial file left");
+        assert!(backups[0].extension().is_some_and(|e| e == "db"));
+        let copy = Connection::open(&backups[0]).unwrap();
+        let (v, status): (i64, String) = (copy.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap(), copy.query_row("SELECT status FROM findings", [], |r| r.get(0)).unwrap());
+        assert_eq!((v, status.as_str()), (8, "open"), "the copy is the database as it was before");
+        drop(copy);
+        // reopening a current database makes no further copy
+        drop(Db::open(&path).unwrap());
+        assert_eq!(std::fs::read_dir(dir.join("backups")).unwrap().count(), 1);
+        // a database from a newer version is refused and left as it is
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(&format!("PRAGMA user_version = {}", MIGRATIONS.len() + 1)).unwrap();
+        }
+        let err = Db::open(&path).err().expect("refused");
+        assert!(err.to_string().contains("newer version"), "{err}");
+        let v: i64 = Connection::open(&path).unwrap().query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, MIGRATIONS.len() as i64 + 1);
+        for ext in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{ext}", path.display()));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

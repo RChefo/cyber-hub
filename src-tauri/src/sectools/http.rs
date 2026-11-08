@@ -93,8 +93,14 @@ pub fn prepare(input: &HttpRequestInput) -> Result<Prepared, String> {
     Ok(Prepared { method: method.parse().map_err(|_| "Invalid method".to_string())?, url, headers, targets })
 }
 
-pub async fn send(p: Prepared, body: String, insecure: bool) -> Result<HttpResponseOut, String> {
-    let client = reqwest::Client::builder()
+/// Sends the request. `pin` holds the vetted addresses of the URL's host name: the client
+/// connects only to them (no second DNS resolution).
+pub async fn send(p: Prepared, body: String, insecure: bool, pin: Option<(String, Vec<std::net::SocketAddr>)>) -> Result<HttpResponseOut, String> {
+    let mut builder = reqwest::Client::builder();
+    if let Some((host, addrs)) = &pin {
+        builder = builder.resolve_to_addrs(host, addrs);
+    }
+    let client = builder
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(20))
         .connect_timeout(Duration::from_secs(8))
@@ -115,7 +121,7 @@ pub async fn send(p: Prepared, body: String, insecure: bool) -> Result<HttpRespo
         } else if e.is_connect() {
             "Could not connect".to_string()
         } else {
-            e.to_string()
+            format!("The service did not answer with valid HTTP ({})", root_cause(&e))
         }
     })?;
     let status = resp.status();
@@ -124,7 +130,7 @@ pub async fn send(p: Prepared, body: String, insecure: bool) -> Result<HttpRespo
     let mut resp = resp;
     let mut raw = Vec::new();
     let mut truncated = false;
-    while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
+    while let Some(chunk) = resp.chunk().await.map_err(|e| if e.is_timeout() { "The response did not finish within 20 seconds".to_string() } else { format!("The response ended early or was not valid ({})", root_cause(&e)) })? {
         if raw.len() + chunk.len() > MAX_RESPONSE {
             raw.extend_from_slice(&chunk[..MAX_RESPONSE - raw.len()]);
             truncated = true;
@@ -142,6 +148,15 @@ pub async fn send(p: Prepared, body: String, insecure: bool) -> Result<HttpRespo
         truncated,
         elapsed_ms: started.elapsed().as_millis() as u64,
     })
+}
+
+/// The innermost error message (reqwest's own text only repeats the URL).
+fn root_cause(e: &(dyn std::error::Error + 'static)) -> String {
+    let mut cur = e;
+    while let Some(next) = cur.source() {
+        cur = next;
+    }
+    cur.to_string()
 }
 
 #[cfg(test)]
@@ -167,5 +182,22 @@ mod tests {
         assert!(prepare(&input("GET", "https://a.example.com", &[("Content-Length", "5")])).is_err());
         let many: Vec<(&str, &str)> = (0..51).map(|_| ("X-A", "1")).collect();
         assert!(prepare(&input("GET", "https://a.example.com", &many)).is_err());
+    }
+
+    #[tokio::test]
+    async fn a_service_that_does_not_speak_http_gets_a_readable_error() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 2048];
+            let _ = sock.read(&mut buf).await;
+            let _ = sock.write_all(b"\x00\x01garbage-not-http\r\n\r\n").await;
+        });
+        let p = prepare(&input("GET", &format!("http://{addr}/"), &[])).unwrap();
+        let err = send(p, String::new(), false, None).await.unwrap_err();
+        assert!(err.starts_with("The service did not answer with valid HTTP ("), "{err}");
+        assert!(!err.contains("error sending request"), "{err}");
     }
 }

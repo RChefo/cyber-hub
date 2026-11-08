@@ -64,7 +64,7 @@ export function AssistantTab({ project }: { project: Project }) {
         {
           role: "assistant",
           text: a.text,
-          meta: `${a.model}${a.fallback ? " (fallback model)" : ""} · ${a.inputTokens.toLocaleString()} in${a.cacheReadTokens ? ` (${a.cacheReadTokens.toLocaleString()} cached)` : ""} / ${a.outputTokens.toLocaleString()} out`,
+          meta: `${a.fallback ? `Answered by the fallback model ${a.model} because ${a.fallbackFrom ?? "the first model"} declined the request` : `Answered by ${a.model}`} · ${a.inputTokens.toLocaleString()} in${a.cacheReadTokens ? ` (${a.cacheReadTokens.toLocaleString()} cached)` : ""} / ${a.outputTokens.toLocaleString()} out`,
         },
       ]);
     } catch (e) {

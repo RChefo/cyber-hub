@@ -28,11 +28,12 @@ Project data comes from targets and public sources (page titles, DNS names, OSIN
 | Setting | Value |
 |---|---|
 | Endpoint | `POST https://api.anthropic.com/v1/messages` (no redirects followed, 300 s time limit, at most 4 MB read) |
-| Headers | `x-api-key`, `anthropic-version: 2026-10-21`, `anthropic-beta: server-side-fallback-2026-07-01` |
+| Headers | `x-api-key`, `anthropic-version: 2026-10-21`, and `anthropic-beta: server-side-fallback-2026-07-01` while the fallback is on |
 | Model | `claude-opus-5-5`; thinking at the model's default (adaptive), `output_config.effort: medium`, `max_tokens: 16000` |
-| Fallback | `fallbacks: "default"`: if a safety classifier declines, the API retries on a fallback model in the same call; the answer says when a fallback model answered |
+| Fallback | On by default; Settings → Preferences → *Assistant: retry with a fallback model when a request is declined* (`assistant.fallback`). When on, `fallbacks: "default"` is sent: if a safety classifier declines, the API retries on a fallback model in the same call. Every answer names the model that wrote it; after a fallback it says "Answered by the fallback model X because Y declined the request". When off, neither the field nor the beta header is sent and a decline is shown as a refusal |
 | Caching | automatic prompt caching (`cache_control: ephemeral`), so follow-up questions reuse the system prompt and project data |
 | History | earlier assistant turns are sent back exactly as returned (required for preserved thinking) |
 
 * **Errors.** A refusal of the whole chain (`stop_reason: refusal`) is shown with its category. An answer cut off at the length limit says so. Errors are mapped to readable messages: rejected key (401/403), rate limit with `retry-after` (429), service unavailable (5xx/529), invalid request with the API's message. None of them contain the key.
 * **Limits.** A question is limited to 8,000 characters and a conversation to 30 turns.
+* **Verification.** An automated test runs the real request code against a local mock server: a fallback answer (beta header and `fallbacks` sent, both models named), the fallback turned off (neither sent), 401, 429 with `retry-after`, 529, 400 with the API's message, an unreadable body, a refusal, a server that does not answer within the time limit and an unreachable server; no error contains the key. The live API has not been exercised: no Anthropic key was provisioned on the test machine.

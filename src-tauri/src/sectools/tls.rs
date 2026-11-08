@@ -212,7 +212,7 @@ struct Handshake {
     verdict: Option<Result<(), String>>,
 }
 
-async fn handshake(host: &str, port: u16, versions: &[&'static rustls::SupportedProtocolVersion], provider: &Arc<CryptoProvider>, trust: &Option<Arc<WebPkiServerVerifier>>) -> Result<Handshake, String> {
+async fn handshake(host: &str, addrs: &[std::net::SocketAddr], versions: &[&'static rustls::SupportedProtocolVersion], provider: &Arc<CryptoProvider>, trust: &Option<Arc<WebPkiServerVerifier>>) -> Result<Handshake, String> {
     let recorder = Arc::new(Recorder { inner: trust.clone(), provider: provider.clone(), chain: Mutex::new(vec![]), verdict: Mutex::new(None) });
     let mut config = ClientConfig::builder_with_provider(provider.clone())
         .with_protocol_versions(versions)
@@ -222,7 +222,7 @@ async fn handshake(host: &str, port: u16, versions: &[&'static rustls::Supported
         .with_no_client_auth();
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     let name = ServerName::try_from(host.to_string()).map_err(|_| format!("{host} is not a valid server name"))?;
-    let tcp = tokio::time::timeout(Duration::from_secs(10), tokio::net::TcpStream::connect((host, port)))
+    let tcp = tokio::time::timeout(Duration::from_secs(10), tokio::net::TcpStream::connect(addrs))
         .await
         .map_err(|_| "The connection timed out".to_string())?
         .map_err(|e| format!("Could not connect: {e}"))?;
@@ -241,13 +241,13 @@ async fn handshake(host: &str, port: u16, versions: &[&'static rustls::Supported
     Ok(out)
 }
 
-/// Analyzes a TLS service. The host must already be scope-checked by the caller.
-pub async fn analyze(host: &str, port: u16) -> Result<TlsReport, String> {
+/// Analyzes a TLS service at the given (scope-checked, vetted) addresses of `host`.
+pub async fn analyze(host: &str, port: u16, addrs: &[std::net::SocketAddr]) -> Result<TlsReport, String> {
     let provider = provider();
     let trust = trust_verifier(&provider);
-    let main = handshake(host, port, &[&rustls::version::TLS13, &rustls::version::TLS12], &provider, &trust).await?;
-    let tls13 = main.protocol == "TLS 1.3" || handshake(host, port, &[&rustls::version::TLS13], &provider, &trust).await.is_ok();
-    let tls12 = main.protocol == "TLS 1.2" || handshake(host, port, &[&rustls::version::TLS12], &provider, &trust).await.is_ok();
+    let main = handshake(host, addrs, &[&rustls::version::TLS13, &rustls::version::TLS12], &provider, &trust).await?;
+    let tls13 = main.protocol == "TLS 1.3" || handshake(host, addrs, &[&rustls::version::TLS13], &provider, &trust).await.is_ok();
+    let tls12 = main.protocol == "TLS 1.2" || handshake(host, addrs, &[&rustls::version::TLS12], &provider, &trust).await.is_ok();
     let now = chrono::Utc::now().timestamp();
     let chain = main.chain.iter().filter_map(|d| parse_cert(d, now).ok()).collect();
     let (trusted, trust_error) = match main.verdict {

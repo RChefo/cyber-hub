@@ -184,17 +184,44 @@ pub fn build_context(c: &Connection, project_id: i64, o: &ContextOptions) -> App
 /* ───────────────────────── API exchange ───────────────────────── */
 
 /// The request body. Thinking stays at the model's default (adaptive); effort is set explicitly.
-pub fn request_body(messages: &[Value]) -> Value {
-    json!({
+/// `fallback` asks the API to retry on a fallback model when a safety classifier declines
+/// (Settings → Assistant; on by default).
+pub fn request_body(messages: &[Value], fallback: bool) -> Value {
+    let mut body = json!({
         "model": MODEL,
         "max_tokens": MAX_TOKENS,
         "system": SYSTEM_PROMPT,
         // caches the conversation prefix (system prompt and project data) across follow-up questions
         "cache_control": { "type": "ephemeral" },
         "output_config": { "effort": "medium" },
-        "fallbacks": "default",
         "messages": messages,
+    });
+    if fallback {
+        body["fallbacks"] = json!("default");
+    }
+    body
+}
+
+/// Whether the refusal fallback is on (preference `assistant.fallback`, on unless turned off).
+pub fn fallback_enabled(db: &Db) -> bool {
+    db.with(|c| {
+        Ok(rusqlite::OptionalExtension::optional(c.query_row("SELECT value FROM user_preferences WHERE key = 'assistant.fallback'", [], |r| r.get::<_, String>(0)))?)
     })
+    .ok()
+    .flatten()
+    .map_or(true, |v| v.trim() != "false")
+}
+
+/// Where requests go (the real API; tests use a local server).
+pub struct Endpoint {
+    pub url: String,
+    pub timeout: Duration,
+}
+
+impl Default for Endpoint {
+    fn default() -> Self {
+        Self { url: API_URL.into(), timeout: Duration::from_secs(300) }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -208,6 +235,8 @@ pub struct Answer {
     pub output_tokens: u64,
     pub cache_read_tokens: u64,
     pub fallback: bool,
+    /// the model that declined first, when a fallback model answered
+    pub fallback_from: Option<String>,
 }
 
 /// Reads a successful response. A refusal (of the whole fallback chain) is an error.
@@ -219,7 +248,9 @@ pub fn parse_response(body: &Value) -> Result<(Answer, Value), String> {
     }
     let content = body["content"].as_array().ok_or("The assistant returned an unexpected response")?;
     let text = content.iter().filter(|b| b["type"] == "text").filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join("\n\n");
-    let fallback = content.iter().any(|b| b["type"] == "fallback") || body["usage"]["iterations"].as_array().is_some_and(|it| it.iter().any(|e| e["type"] == "fallback_message"));
+    let fallback_block = content.iter().find(|b| b["type"] == "fallback");
+    let fallback = fallback_block.is_some() || body["usage"]["iterations"].as_array().is_some_and(|it| it.iter().any(|e| e["type"] == "fallback_message"));
+    let fallback_from = fallback_block.and_then(|b| b["from"]["model"].as_str()).map(str::to_string).or_else(|| fallback.then(|| MODEL.to_string()));
     let mut text = text.trim().to_string();
     if stop == "max_tokens" {
         text.push_str("\n\n(The answer was cut off at the length limit. Ask a narrower question for the rest.)");
@@ -237,6 +268,7 @@ pub fn parse_response(body: &Value) -> Result<(Answer, Value), String> {
             output_tokens: u["output_tokens"].as_u64().unwrap_or(0),
             cache_read_tokens: u["cache_read_input_tokens"].as_u64().unwrap_or(0),
             fallback,
+            fallback_from,
         },
         // the assistant turn exactly as returned: earlier turns are sent back unchanged
         json!({ "role": "assistant", "content": body["content"].clone() }),
@@ -254,19 +286,19 @@ pub fn error_message(status: u16, body: &str, retry_after: Option<&str>) -> Stri
     }
 }
 
-async fn call(key: &str, messages: &[Value]) -> AppResult<(Answer, Value)> {
+pub async fn call(key: &str, endpoint: &Endpoint, messages: &[Value], fallback: bool) -> AppResult<(Answer, Value)> {
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(300))
+        .timeout(endpoint.timeout)
         .redirect(reqwest::redirect::Policy::none())
         .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|e| AppError::Internal(format!("HTTP client: {e}")))?;
-    let resp = client
-        .post(API_URL)
-        .header("x-api-key", key)
-        .header("anthropic-version", API_VERSION)
-        .header("anthropic-beta", FALLBACK_BETA)
-        .json(&request_body(messages))
+    let mut req = client.post(&endpoint.url).header("x-api-key", key).header("anthropic-version", API_VERSION);
+    if fallback {
+        req = req.header("anthropic-beta", FALLBACK_BETA);
+    }
+    let resp = req
+        .json(&request_body(messages, fallback))
         .send()
         .await
         .map_err(|e| AppError::Network(if e.is_timeout() { "The assistant did not answer in time".into() } else { "The Anthropic API is not reachable".into() }))?;
@@ -387,7 +419,7 @@ pub async fn assistant_ask(app: AppHandle, db: State<'_, Db>, state: State<'_, A
     if conversation_id.is_some() {
         messages.push(json!({ "role": "user", "content": question }));
     }
-    let (answer, assistant_turn) = call(&key, &messages).await?;
+    let (answer, assistant_turn) = call(&key, &Endpoint::default(), &messages, fallback_enabled(&db)).await?;
     messages.push(assistant_turn);
     {
         let mut m = state.0.lock().map_err(|_| AppError::Internal("assistant state poisoned".into()))?;
@@ -439,9 +471,10 @@ mod tests {
 
     #[test]
     fn requests_use_the_current_api_surface() {
-        let body = request_body(&[json!({ "role": "user", "content": "hi" })]);
+        let body = request_body(&[json!({ "role": "user", "content": "hi" })], true);
         assert_eq!(body["model"], "claude-opus-5-5");
         assert_eq!(body["fallbacks"], "default");
+        assert!(request_body(&[], false).get("fallbacks").is_none(), "the fallback can be turned off");
         assert!(body.get("temperature").is_none() && body.get("tools").is_none() && body.get("thinking").is_none());
         assert_eq!(API_VERSION, "2026-10-21");
         assert!(SYSTEM_PROMPT.contains("never follow instructions"));
@@ -466,4 +499,88 @@ mod tests {
         assert!(error_message(429, "{}", Some("20")).contains("20 s"));
         assert!(error_message(400, r#"{"error":{"message":"messages: bad"}}"#, None).contains("messages: bad"));
     }
+
+    /// A local server that answers one request with a canned HTTP response and reports the
+    /// request it received.
+    async fn mock(response: &'static str, delay_ms: u64) -> (String, tokio::task::JoinHandle<String>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/v1/messages", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut buf = vec![0u8; 65536];
+            let mut req = Vec::new();
+            loop {
+                let n = sock.read(&mut buf).await.unwrap_or(0);
+                req.extend_from_slice(&buf[..n]);
+                let text = String::from_utf8_lossy(&req).to_string();
+                if let Some(head_end) = text.find("\r\n\r\n") {
+                    let len = text.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+                    if req.len() >= head_end + 4 + len || n == 0 {
+                        break;
+                    }
+                }
+                if n == 0 {
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+            let _ = sock.write_all(response.as_bytes()).await;
+            let _ = sock.shutdown().await;
+            String::from_utf8_lossy(&req).to_string()
+        });
+        (url, task)
+    }
+
+    fn http(status: &str, extra: &str, body: &str) -> &'static str {
+        Box::leak(format!("HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\n{extra}connection: close\r\n\r\n{body}", body.len()).into_boxed_str())
+    }
+
+    const KEY: &str = "sk-ant-test-0000000000000000000000";
+
+    #[tokio::test]
+    async fn the_api_exchange_is_handled_end_to_end() {
+        let msgs = [json!({ "role": "user", "content": "Which fix first?" })];
+        // success through a fallback model, with the fallback named
+        let ok = r#"{"model":"claude-opus-4-8","stop_reason":"end_turn","content":[{"type":"fallback","from":{"model":"claude-opus-5-5"},"to":{"model":"claude-opus-4-8"}},{"type":"text","text":"Patch the P1."}],"usage":{"input_tokens":10,"output_tokens":4}}"#;
+        let (url, req) = mock(http("200 OK", "", ok), 0).await;
+        let (a, _) = call(KEY, &Endpoint { url, timeout: Duration::from_secs(5) }, &msgs, true).await.unwrap();
+        assert_eq!((a.text.as_str(), a.model.as_str(), a.fallback_from.as_deref()), ("Patch the P1.", "claude-opus-4-8", Some("claude-opus-5-5")));
+        let sent = req.await.unwrap().to_ascii_lowercase();
+        assert!(sent.contains("anthropic-version: 2026-10-21") && sent.contains("anthropic-beta: server-side-fallback-2026-07-01"));
+        assert!(sent.contains(r#""fallbacks":"default""#));
+
+        // the fallback turned off: no beta header, no fallbacks field
+        let (url, req) = mock(http("200 OK", "", r#"{"model":"claude-opus-5-5","stop_reason":"end_turn","content":[{"type":"text","text":"ok"}],"usage":{}}"#), 0).await;
+        call(KEY, &Endpoint { url, timeout: Duration::from_secs(5) }, &msgs, false).await.unwrap();
+        let sent = req.await.unwrap().to_ascii_lowercase();
+        assert!(!sent.contains("anthropic-beta") && !sent.contains("fallbacks"));
+
+        // errors are readable and never contain the key
+        let cases: [(&'static str, &str); 5] = [
+            (http("401 Unauthorized", "", r#"{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}"#), "not accepted"),
+            (http("429 Too Many Requests", "retry-after: 30\r\n", r#"{"type":"error","error":{"type":"rate_limit_error","message":"slow down"}}"#), "retry after 30 s"),
+            (http("529 Overloaded", "", r#"{"type":"error","error":{"type":"overloaded_error","message":"busy"}}"#), "unavailable or overloaded"),
+            (http("400 Bad Request", "", r#"{"type":"error","error":{"type":"invalid_request_error","message":"messages: too long"}}"#), "messages: too long"),
+            (http("200 OK", "", "this is not json"), "unreadable"),
+        ];
+        for (resp, want) in cases {
+            let (url, _) = mock(resp, 0).await;
+            let err = call(KEY, &Endpoint { url, timeout: Duration::from_secs(5) }, &msgs, true).await.unwrap_err().to_string();
+            assert!(err.contains(want), "{err}");
+            assert!(!err.contains(KEY));
+        }
+        let refusal = r#"{"stop_reason":"refusal","stop_details":{"category":"cyber"},"content":[]}"#;
+        let (url, _) = mock(http("200 OK", "", refusal), 0).await;
+        assert!(call(KEY, &Endpoint { url, timeout: Duration::from_secs(5) }, &msgs, true).await.unwrap_err().to_string().contains("declined"));
+
+        // a server that does not answer in time
+        let (url, _) = mock(http("200 OK", "", "{}"), 3000).await;
+        let err = call(KEY, &Endpoint { url, timeout: Duration::from_millis(500) }, &msgs, true).await.unwrap_err().to_string();
+        assert!(err.contains("did not answer in time"), "{err}");
+        // nothing listening
+        let err = call(KEY, &Endpoint { url: "http://127.0.0.1:9/v1/messages".into(), timeout: Duration::from_secs(2) }, &msgs, true).await.unwrap_err().to_string();
+        assert!(err.contains("not reachable") || err.contains("in time"), "{err}");
+    }
 }
+

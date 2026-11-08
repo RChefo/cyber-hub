@@ -12,7 +12,8 @@ import { invalidate, useQuery } from "@/lib/query";
 import { useApp } from "@/app/store";
 import { canChangeStatus } from "@/lib/findings";
 import type { Confidence, Evidence, Finding, FindingLinkKind, FindingStatus, Severity } from "@/lib/types";
-import { formatDateTime, formatRelative } from "@/lib/utils";
+import { useShowMore } from "@/lib/showMore";
+import { formatDateTime, formatNumber, formatRelative } from "@/lib/utils";
 import { filterFindings, parseTags, sortFindings, tagsOf } from "./report";
 
 export const SEVERITY_OPTIONS: { id: Severity; label: string }[] = [
@@ -283,8 +284,10 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
 
   const list = useMemo(() => filterFindings(sortFindings(findings), { severity: sev, status, query, tag }), [findings, sev, status, query, tag]);
   const tags = useMemo(() => tagsOf(findings), [findings]);
+  // thousands of rows would block the window; they are rendered in steps
+  const shown = useShowMore(list, `${sev}|${status}|${query}|${tag}`);
   const visibleSelected = list.filter((f) => selected.has(f.id));
-  const allSelected = list.length > 0 && visibleSelected.length === list.length;
+  const allSelected = shown.visible.length > 0 && shown.visible.every((f) => selected.has(f.id));
 
   const bulk = async (next: FindingStatus) => {
     try {
@@ -390,7 +393,7 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
             <thead>
               <tr className="text-[12px] text-muted">
                 <th className="w-8 py-2 pr-2 font-medium">
-                  <Checkbox isSelected={allSelected} isIndeterminate={!allSelected && visibleSelected.length > 0} onChange={(v) => setSelected(v ? new Set(list.map((f) => f.id)) : new Set())} aria-label="Select all shown findings">
+                  <Checkbox isSelected={allSelected} isIndeterminate={!allSelected && visibleSelected.length > 0} onChange={(v) => setSelected(v ? new Set(shown.visible.map((f) => f.id)) : new Set())} aria-label="Select all shown findings">
                     <Checkbox.Content>
                       <Checkbox.Control>
                         <Checkbox.Indicator />
@@ -409,7 +412,7 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
               </tr>
             </thead>
             <tbody>
-              {list.map((f) => (
+              {shown.visible.map((f) => (
                 <tr key={f.id} className="align-top transition-colors hover:bg-white/[0.025]">
                   <td className="py-2.5 pr-2">
                     <Checkbox
@@ -487,6 +490,16 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
               ))}
             </tbody>
           </table>
+          {shown.hidden > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-2 text-[12.5px] text-muted">
+              <span>
+                Showing {formatNumber(shown.visible.length)} of {formatNumber(list.length)} findings. Search or filter to narrow the list.
+              </span>
+              <Button size="sm" variant="ghost" onPress={shown.more}>
+                Show {formatNumber(Math.min(shown.step, shown.hidden))} more
+              </Button>
+            </div>
+          )}
         </div>
       )}
       <FindingFormModal isOpen={open} onOpenChange={setOpen} projectId={projectId} initial={editing} />

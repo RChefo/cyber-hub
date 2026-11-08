@@ -95,7 +95,7 @@ Assets recorded by hand are never marked. Nothing is deleted.
 
 **Results.**
 * Passive runs record names, addresses and DNS records. Addresses are flagged `inScope` and `nonPublic`, so the inventory shows when a name points outside the authorized scope.
-* Web checks record web services (status, title, server, certificate trust) and technologies seen in headers.
+* Web checks record web services (status, title, server, certificate trust) and technologies announced in the headers that name software (`Server`, `X-Powered-By`, `X-AspNet-Version`, `X-AspNetMvc-Version`, `X-Generator`, `X-Drupal-Cache`, `X-Varnish`, `Via`). Before November 2026 other headers were parsed too, so older inventories can hold entries such as `GMT` or `text/html`; the comparison of the next web check lists them as missing, but their status stays active (web checks only decide about web services), so retire them by hand.
 * Service scans record addresses, open services (service, product, version) and products as technologies.
 
 ## Vulnerabilities (schema 10)

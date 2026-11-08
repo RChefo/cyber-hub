@@ -5,7 +5,7 @@ use serde::{Serialize, Serializer};
 /// so the frontend can render meaningful error states.
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
-    #[error("Database error: {0}")]
+    #[error("{}", db_message(.0))]
     Db(#[from] rusqlite::Error),
     #[error("File system error: {0}")]
     Io(#[from] std::io::Error),
@@ -79,6 +79,40 @@ impl From<tauri::Error> for AppError {
 
 pub type AppResult<T> = Result<T, AppError>;
 
+/// A locked database (another program holds a write lock longer than the busy timeout) gets a
+/// message that says what to do; other database errors keep SQLite's text.
+fn db_message(e: &rusqlite::Error) -> String {
+    match e.sqlite_error_code() {
+        Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => {
+            "The Cyber Hub database is busy because another program is using it (for example a database browser). Nothing was saved. Close the other program and try again.".into()
+        }
+        _ => format!("Database error: {e}"),
+    }
+}
+
 pub fn validation(msg: impl Into<String>) -> AppError {
     AppError::Validation(msg.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_locked_database_says_what_to_do() {
+        let dir = std::env::temp_dir().join(format!("cyberhub-lock-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("t.db");
+        let a = rusqlite::Connection::open(&path).unwrap();
+        a.execute_batch("PRAGMA journal_mode = WAL; CREATE TABLE t (x); BEGIN IMMEDIATE; INSERT INTO t VALUES (1);").unwrap();
+        let b = rusqlite::Connection::open(&path).unwrap();
+        b.busy_timeout(std::time::Duration::from_millis(50)).unwrap();
+        let err = AppError::from(b.execute("INSERT INTO t VALUES (2)", []).unwrap_err());
+        assert_eq!(err.kind(), "database");
+        assert!(err.to_string().starts_with("The Cyber Hub database is busy"), "{err}");
+        let other = AppError::from(rusqlite::Error::QueryReturnedNoRows);
+        assert!(other.to_string().starts_with("Database error: "));
+        drop((a, b));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

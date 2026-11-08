@@ -461,15 +461,13 @@ pub async fn passive_collect(db: &Db, entries: &[ScopeEntry], roots: &[String], 
 
 /* ───────────────────────── active: HTTP probe ───────────────────────── */
 
-fn http_client(insecure: bool) -> AppResult<reqwest::Client> {
+fn http_client_builder(insecure: bool) -> reqwest::ClientBuilder {
     reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(10))
         .connect_timeout(Duration::from_secs(6))
         .user_agent("Cyber Hub attack surface check")
         .danger_accept_invalid_certs(insecure)
-        .build()
-        .map_err(|e| AppError::Internal(format!("HTTP client: {e}")))
 }
 
 /// Text of the first `<title>` in (the start of) an HTML body.
@@ -504,26 +502,44 @@ async fn probe_one(verified: &reqwest::Client, insecure: &reqwest::Client, origi
     Ok((status, headers, title, trusted))
 }
 
-/// Requests `/` over HTTPS and HTTP on each host. Hosts must already be scope-checked.
-pub async fn http_collect(hosts: &[String], cancel: &AtomicBool, progress: Progress) -> AppResult<(Batch, Vec<String>, BTreeSet<String>)> {
-    let verified = http_client(false)?;
-    let insecure = http_client(true)?;
+/// Requests `/` over HTTPS and HTTP on each host. Hosts must already be scope-checked; each name
+/// is resolved and vetted ([`scope_gate::resolve_vetted`]) and the requests go only to the vetted
+/// addresses. Hosts refused by that check are reported as problems.
+pub async fn http_collect(hosts: &[String], entries: &[ScopeEntry], cancel: &AtomicBool, progress: Progress) -> AppResult<(Batch, Vec<String>, BTreeSet<String>)> {
     let mut batch = Batch::default();
     let mut problems = Vec::new();
     let mut probed = BTreeSet::new();
     let sem = Arc::new(tokio::sync::Semaphore::new(6));
     let mut set = tokio::task::JoinSet::new();
     for host in hosts.iter().take(MAX_HTTP_HOSTS) {
-        let shown = if host.contains(':') { format!("[{host}]") } else { host.clone() };
-        for scheme in ["https", "http"] {
-            let origin = format!("{scheme}://{shown}");
-            let (v, i, sem, host) = (verified.clone(), insecure.clone(), sem.clone(), host.clone());
-            set.spawn(async move {
-                let _permit = sem.acquire_owned().await;
+        let (sem, host, entries) = (sem.clone(), host.clone(), entries.to_vec());
+        set.spawn(async move {
+            let _permit = sem.acquire_owned().await;
+            let addrs = match crate::workspace::scope_gate::resolve_vetted(&entries, &host, 443).await {
+                Ok(a) => a,
+                Err(reason) => return (host, Err(reason)),
+            };
+            let named = host.parse::<std::net::IpAddr>().is_err();
+            let client = |insecure: bool| -> Result<reqwest::Client, String> {
+                let mut b = http_client_builder(insecure);
+                if named {
+                    b = b.resolve_to_addrs(&host, &addrs);
+                }
+                b.build().map_err(|e| e.to_string())
+            };
+            let (v, i) = match (client(false), client(true)) {
+                (Ok(v), Ok(i)) => (v, i),
+                (Err(e), _) | (_, Err(e)) => return (host, Err(e)),
+            };
+            let shown = if host.contains(':') { format!("[{host}]") } else { host.clone() };
+            let mut results = Vec::new();
+            for scheme in ["https", "http"] {
+                let origin = format!("{scheme}://{shown}");
                 let r = probe_one(&v, &i, &origin).await;
-                (host, origin, r)
-            });
-        }
+                results.push((origin, r));
+            }
+            (host, Ok(results))
+        });
     }
     progress(format!("Checking {} hosts over HTTP and HTTPS", hosts.len().min(MAX_HTTP_HOSTS)));
     while let Some(res) = set.join_next().await {
@@ -532,21 +548,30 @@ pub async fn http_collect(hosts: &[String], cancel: &AtomicBool, progress: Progr
             problems.push("Cancelled".into());
             break;
         }
-        let Ok((host, origin, r)) = res else { continue };
-        probed.insert(host);
-        // no answer on one scheme is normal (many hosts serve only HTTPS) and not a problem
-        if let Ok((status, headers, title, trusted)) = r {
-            {
-                let header = |n: &str| headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(n)).map(|(_, v)| v.clone());
-                let mut data = json!({ "status": status, "server": header("server"), "title": title, "location": header("location") });
-                if let Some(t) = trusted {
-                    data["tlsTrusted"] = json!(t);
-                }
-                batch.add("http_service", &origin, Certainty::Confirmed, data);
-                for (k, v) in &headers {
-                    for tech in crate::osint::providers::web::technologies(k, v) {
-                        batch.add("technology", &tech, Certainty::Confirmed, json!({ "seenOn": [origin.clone()] }));
-                    }
+        let Ok((host, outcome)) = res else { continue };
+        let results = match outcome {
+            Ok(r) => r,
+            // a name that points at an unauthorized internal address is refused and reported
+            Err(reason) if reason.contains("authorized scope") => {
+                problems.push(reason);
+                continue;
+            }
+            // a name that does not resolve (common for names from certificate logs) is not a problem
+            Err(_) => continue,
+        };
+        probed.insert(host.clone());
+        for (origin, r) in results {
+            // no answer on one scheme is normal (many hosts serve only HTTPS) and not a problem
+            let Ok((status, headers, title, trusted)) = r else { continue };
+            let header = |n: &str| headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(n)).map(|(_, v)| v.clone());
+            let mut data = json!({ "status": status, "server": header("server"), "title": title, "location": header("location") });
+            if let Some(t) = trusted {
+                data["tlsTrusted"] = json!(t);
+            }
+            batch.add("http_service", &origin, Certainty::Confirmed, data);
+            for (k, v) in &headers {
+                for tech in crate::osint::providers::web::technologies(k, v) {
+                    batch.add("technology", &tech, Certainty::Confirmed, json!({ "seenOn": [origin.clone()] }));
                 }
             }
         }

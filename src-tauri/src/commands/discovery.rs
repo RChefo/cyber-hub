@@ -276,7 +276,8 @@ pub(crate) fn http_begin(app: &AppHandle, project_id: i64, hosts: &[String]) -> 
 pub(crate) async fn http_run(app: AppHandle, project_id: i64, snapshot_id: i64, cancel: Arc<AtomicBool>, hosts: Vec<String>) -> RunOutcome {
     let guard = RunGuard { app: app.clone(), project_id, snapshot_id };
     let db = app.state::<Db>();
-    let result = match disc::http_collect(&hosts, &cancel, progress(&app, project_id, snapshot_id)).await {
+    let entries = db.with(|c| scope_entries(c, project_id)).unwrap_or_default();
+    let result = match disc::http_collect(&hosts, &entries, &cancel, progress(&app, project_id, snapshot_id)).await {
         Ok((batch, problems, probed)) => {
             let status = run_status(cancel.load(Ordering::Relaxed), batch.len(), &problems);
             let covers = move |a: &assets::Asset| a.kind == "http_service" && disc::origin_host(&a.value).is_some_and(|h| probed.contains(&h));
@@ -328,7 +329,21 @@ pub(crate) async fn start_scan(app: &AppHandle, project_id: i64, targets: Vec<St
         return Err(validation("Give 1 to 64 targets (hosts, addresses or networks)"));
     }
     let args = disc::nmap_args(profile, &targets)?;
-    db.with(|c| scope_gate::enforce(c, Some(project_id), &targets, scope_gate::Mode::Active, "Service scan").map(|_| ()))?;
+    let entries = db.with(|c| {
+        scope_gate::enforce(c, Some(project_id), &targets, scope_gate::Mode::Active, "Service scan")?;
+        scope_entries(c, project_id)
+    })?;
+    // names must not point at unauthorized internal addresses (Nmap resolves them again itself)
+    for t in &targets {
+        if let Some(crate::scope::Target::Host(h)) = crate::scope::parse_target(t) {
+            if let Err(reason) = scope_gate::resolve_vetted(&entries, &h, 80).await {
+                if reason.contains("authorized scope") {
+                    db.with(|c| scope_gate::record_blocked(c, project_id, &h, &reason, "Service scan"))?;
+                    return Err(AppError::Scope(format!("Service scan was not started. {reason}")));
+                }
+            }
+        }
+    }
     let snapshot_id = db.with(|c| assets::start_snapshot(c, project_id, "active", "nmap", None, None))?;
     let hook: FinishHook = Box::new(move |app: &AppHandle, execution_id: i64, ok: bool| {
         let db = app.state::<Db>();

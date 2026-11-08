@@ -10,6 +10,8 @@
 //! Tool runs keep their own, stricter path (`targets.rs`: arguments and target files, snapshots);
 //! both use the same scope engine and the same rules.
 
+use std::net::IpAddr;
+
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 
@@ -141,10 +143,7 @@ pub fn enforce(c: &Connection, project_id: Option<i64>, targets: &[String], mode
     let blocked = d.blocked();
     if let (Mode::Active, Some(pid)) = (mode, project_id) {
         for b in blocked.iter().take(50) {
-            c.execute(
-                "INSERT INTO scope_events (project_id, action, value, kind, in_scope, note, source, at) VALUES (?1, 'blocked', ?2, '', NULL, ?3, ?4, ?5)",
-                params![pid, b.target.chars().take(255).collect::<String>(), b.reason.chars().take(500).collect::<String>(), operation.chars().take(100).collect::<String>(), now()],
-            )?;
+            record_blocked(c, pid, &b.target, &b.reason, operation)?;
         }
         // refused attempts are kept, but only the newest ones: the history cannot be flooded
         c.execute(
@@ -155,6 +154,57 @@ pub fn enforce(c: &Connection, project_id: Option<i64>, targets: &[String], mode
     }
     let list = blocked.iter().map(|b| if b.target.is_empty() { b.reason.clone() } else { format!("{}: {}", b.target, b.reason) }).collect::<Vec<_>>().join("; ");
     Err(AppError::Scope(format!("{operation} was not started. {list}")))
+}
+
+/// Records a refused active attempt in the project's scope history (bounded, see [`enforce`]).
+pub fn record_blocked(c: &Connection, project_id: i64, target: &str, reason: &str, operation: &str) -> AppResult<()> {
+    c.execute(
+        "INSERT INTO scope_events (project_id, action, value, kind, in_scope, note, source, at) VALUES (?1, 'blocked', ?2, '', NULL, ?3, ?4, ?5)",
+        params![project_id, target.chars().take(255).collect::<String>(), reason.chars().take(500).collect::<String>(), operation.chars().take(100).collect::<String>(), now()],
+    )?;
+    Ok(())
+}
+
+/// Checks the addresses an in-scope name resolves to. Public addresses are accepted (the scope is
+/// name-based); a private, loopback, link-local or reserved address is accepted only when that
+/// address is itself in the authorized scope. A name therefore cannot be pointed at internal
+/// systems (DNS rebinding, SSRF-style redirection) unless the analyst authorized them.
+pub fn vet_addresses(entries: &[ScopeEntry], host: &str, addrs: &[IpAddr]) -> Result<(), String> {
+    if addrs.is_empty() {
+        return Err(format!("{host} did not resolve to any address"));
+    }
+    let refused: Vec<String> = addrs
+        .iter()
+        .map(|ip| ip.to_canonical())
+        .filter(|ip| is_non_public(ip) && scope::check_target(entries, &Target::Ip(*ip)).is_err())
+        .map(|ip| ip.to_string())
+        .collect();
+    if refused.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{host} resolves to {}: a private, loopback, link-local or reserved address that is not in the authorized scope. Add the address or its range to the scope if it is part of the engagement.",
+            refused.join(", ")
+        ))
+    }
+}
+
+/// Resolves a host for an active operation and vets the result. The caller connects only to the
+/// returned addresses, so the name cannot resolve differently between the check and the
+/// connection. Address literals are returned as they are (the scope gate already checked them).
+pub async fn resolve_vetted(entries: &[ScopeEntry], host: &str, port: u16) -> Result<Vec<std::net::SocketAddr>, String> {
+    let bare = host.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = bare.parse::<IpAddr>() {
+        return Ok(vec![std::net::SocketAddr::new(ip.to_canonical(), port)]);
+    }
+    let addrs: Vec<std::net::SocketAddr> = tokio::time::timeout(std::time::Duration::from_secs(8), tokio::net::lookup_host((bare, port)))
+        .await
+        .map_err(|_| format!("{host} could not be resolved in time"))?
+        .map_err(|e| format!("{host} could not be resolved: {e}"))?
+        .map(|a| std::net::SocketAddr::new(a.ip().to_canonical(), a.port()))
+        .collect();
+    vet_addresses(entries, host, &addrs.iter().map(|a| a.ip()).collect::<Vec<_>>())?;
+    Ok(addrs)
 }
 
 #[cfg(test)]
@@ -246,6 +296,40 @@ mod tests {
             Ok(())
         })
         .unwrap();
+    }
+
+    #[test]
+    fn names_resolving_to_internal_addresses_need_those_addresses_in_scope() {
+        let entries = |v: &[(&str, bool)]| -> Vec<ScopeEntry> {
+            v.iter()
+                .map(|(x, s)| {
+                    let (value, kind) = scope::classify(x).unwrap();
+                    ScopeEntry { value, kind: kind.into(), in_scope: *s }
+                })
+                .collect()
+        };
+        let ip = |s: &str| s.parse::<IpAddr>().unwrap();
+        let web = entries(&[("*.example.com", true)]);
+        assert!(vet_addresses(&web, "app.example.com", &[ip("93.184.215.14")]).is_ok(), "public addresses of in-scope names are fine");
+        for internal in ["10.0.0.5", "127.0.0.1", "169.254.169.254", "::1", "fd00::5", "::ffff:192.168.1.1", "100.64.0.1"] {
+            let err = vet_addresses(&web, "app.example.com", &[ip("93.184.215.14"), ip(internal)]).unwrap_err();
+            assert!(err.contains("not in the authorized scope"), "{internal}: {err}");
+        }
+        let internal = entries(&[("*.corp.example.com", true), ("10.20.0.0/16", true), ("10.20.9.9", false)]);
+        assert!(vet_addresses(&internal, "intranet.corp.example.com", &[ip("10.20.1.5")]).is_ok(), "authorized internal ranges are allowed");
+        assert!(vet_addresses(&internal, "intranet.corp.example.com", &[ip("10.20.9.9")]).is_err(), "excluded addresses stay refused");
+        assert!(vet_addresses(&internal, "x.corp.example.com", &[]).is_err());
+    }
+
+    #[tokio::test]
+    async fn resolution_is_vetted_and_literals_pass_through() {
+        let none: Vec<ScopeEntry> = vec![];
+        // localhost resolves to loopback, which is not authorized here
+        assert!(resolve_vetted(&none, "localhost", 80).await.is_err());
+        let lo = vec![ScopeEntry { value: "127.0.0.0/8".into(), kind: "cidr".into(), in_scope: true }, ScopeEntry { value: "::1".into(), kind: "ip".into(), in_scope: true }];
+        assert!(resolve_vetted(&lo, "localhost", 80).await.is_ok());
+        let lit = resolve_vetted(&none, "[2001:db8::1]", 443).await.unwrap();
+        assert_eq!(lit[0].to_string(), "[2001:db8::1]:443");
     }
 
     #[test]

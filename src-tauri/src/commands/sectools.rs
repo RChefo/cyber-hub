@@ -43,8 +43,18 @@ pub fn tls_target(raw: &str, port: Option<u16>) -> AppResult<(String, u16)> {
 #[tauri::command]
 pub async fn tls_analyze(db: State<'_, Db>, project_id: i64, target: String, port: Option<u16>) -> AppResult<tls::TlsReport> {
     let (host, port) = tls_target(&target, port)?;
-    db.with(|c| scope_gate::enforce(c, Some(project_id), std::slice::from_ref(&host), scope_gate::Mode::Active, "TLS analysis").map(|_| ()))?;
-    let report = tls::analyze(&host, port).await.map_err(AppError::Network)?;
+    let entries = db.with(|c| {
+        scope_gate::enforce(c, Some(project_id), std::slice::from_ref(&host), scope_gate::Mode::Active, "TLS analysis")?;
+        crate::commands::projects::scope_entries(c, project_id)
+    })?;
+    let addrs = match scope_gate::resolve_vetted(&entries, &host, port).await {
+        Ok(a) => a,
+        Err(reason) => {
+            db.with(|c| scope_gate::record_blocked(c, project_id, &host, &reason, "TLS analysis"))?;
+            return Err(AppError::Scope(format!("TLS analysis was not started. {reason}")));
+        }
+    };
+    let report = tls::analyze(&host, port, &addrs).await.map_err(AppError::Network)?;
     db.with(|c| {
         if let Some(leaf) = report.chain.first() {
             let input = assets::AssetInput {
@@ -80,9 +90,22 @@ pub async fn dns_intel(db: State<'_, Db>, project_id: Option<i64>, domain: Strin
 #[tauri::command]
 pub async fn http_send(db: State<'_, Db>, input: http::HttpRequestInput) -> AppResult<http::HttpResponseOut> {
     let prepared = http::prepare(&input).map_err(validation)?;
-    db.with(|c| scope_gate::enforce(c, Some(input.project_id), &prepared.targets, scope_gate::Mode::Active, "HTTP request").map(|_| ()))?;
+    let entries = db.with(|c| {
+        scope_gate::enforce(c, Some(input.project_id), &prepared.targets, scope_gate::Mode::Active, "HTTP request")?;
+        crate::commands::projects::scope_entries(c, input.project_id)
+    })?;
+    let host = prepared.url.host_str().unwrap_or("").to_string();
+    let port = prepared.url.port_or_known_default().unwrap_or(443);
+    let addrs = match scope_gate::resolve_vetted(&entries, &host, port).await {
+        Ok(a) => a,
+        Err(reason) => {
+            db.with(|c| scope_gate::record_blocked(c, input.project_id, &host, &reason, "HTTP request"))?;
+            return Err(AppError::Scope(format!("HTTP request was not sent. {reason}")));
+        }
+    };
+    let pin = (host.parse::<std::net::IpAddr>().is_err() && !host.starts_with('[')).then(|| (host.clone(), addrs));
     let summary = format!("{} {}", prepared.method, redact_text(prepared.url.as_str()));
-    let out = http::send(prepared, input.body.clone(), input.insecure).await.map_err(AppError::Network)?;
+    let out = http::send(prepared, input.body.clone(), input.insecure, pin).await.map_err(AppError::Network)?;
     db.with(|c| log(c, "utility", "HTTP request", &format!("{summary} → {}", out.status), Some("project"), Some(&input.project_id.to_string()), Some(input.project_id)))?;
     Ok(out)
 }

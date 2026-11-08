@@ -259,13 +259,65 @@ Fixed during QA:
 
 ### Release readiness
 
+Updated by the final QA audit (section 15).
+
 | Item | State |
 |---|---|
-| Rust tests, clippy `-D warnings`, frontend typecheck and tests, bundle build | pass on Windows (250 Rust tests, 195 frontend tests). Linux (Debian bookworm container, Rust 1.99.1, WebKitGTK 4.1): all 251 Rust tests pass, including the Unix-only symlinked-evidence-folder test; clippy was not run there (not installed in the image) |
-| Migrations 9–12 | tested on populated older databases, with an injected failure and recovery of interrupted runs; downgrade is not supported (documented) |
-| `cargo audit` / `npm audit` | no vulnerabilities; the existing allowed `glib` warnings remain (Tauri's Linux stack) |
+| Rust tests, clippy `-D warnings`, frontend typecheck and tests, bundle build | pass on Windows: 257 Rust tests (261 with the `provisioning` feature; the opt-in volume test also passes), 197 frontend tests, clippy clean with and without `provisioning` |
+| Migrations 9–12 | upgrade from a real 0.1.0 (schema 8) database verified table by table, with an automatic pre-upgrade backup; interrupted upgrades roll back and complete on the next start; newer databases are refused. 0.1.0 itself misbehaves on an upgraded database: restoring the backup is the only way back ([UPGRADE.md](UPGRADE.md)) |
+| `cargo audit` / `npm audit` | no vulnerabilities; 8 allowed warnings (unmaintained or unsound transitive crates in Tauri's Linux stack) |
+| Secret scan | gitleaks: no leaks in the 26 commits of history or in the working tree |
 | Installers (MSI, NSIS, AppImage, DEB, RPM) | **not built**: the final release step, after release authorization |
-| Windows code signing (Authenticode) | **required before release**: Defender flagged an unsigned test build (see UPDATER.md) |
-| Live checks not possible here | Anthropic assistant (no key provisioned); service scans and web checks against authorized targets; visual QA on Linux |
+| Windows code signing (Authenticode) | **release blocker**: not set up. Procedure in [SIGNING.md](SIGNING.md) |
+| Anthropic assistant | live API **not verified** (no key provisioned). Request and error handling verified against a local mock server |
 | Version and changelog | unchanged (0.1.0); bump and release notes belong to the release step |
 
+## 15. Final QA, stability and release-readiness audit (November 2026)
+
+Local QA only, on disposable data. The real user database and installation were not touched, and no installer was built.
+
+### Fixed
+
+* **DNS rebinding and SSRF in active utilities.** The HTTP request builder, the TLS analyzer and web checks checked names against the scope but connected to whatever the name resolved to. They now resolve once, refuse non-public addresses that are not in scope (recorded in the scope history), and pin the connection to the vetted addresses. Service scans run the same check before starting (Nmap resolves again; documented). Regression tests: `scope_gate` unit and resolver tests. Verified live against local servers: a name resolving to loopback is refused unless loopback is in scope, and a 302 to the cloud-metadata address is not followed.
+* **Pre-upgrade backup and newer-database refusal** (`db.rs`), with a test.
+* **Assistant fallback setting.** The fallback can be turned off (on by default); the answer names the model that wrote it. Mock-server test covering success, fallback, 401, 429, 529, 400, a malformed body, a refusal, a timeout and an unreachable server.
+* **Junk technologies from web checks.** `Date` and `Content-Type` values were recorded as technologies (`GMT`, `Thu`, `text/html`); only software headers count now. Test added.
+* **Readable errors.** A non-HTTP response now says so instead of showing reqwest's text, and a database locked by another program says what to do. Tests added.
+* **UI freezes with large data.** The Findings tab rendered every row: 20,000 findings froze the window for 44 s and search took 10 s. The Evidence tab with 10,000 records froze for 10 s. Both now render in steps of 200 with "Show more": 0.6 s and 73 ms for findings, 0.7 s for evidence. Test for the list helper.
+* "1 steps" on workflow cards.
+
+### Verified
+
+* **Windows (live app, WebView2, disposable data).** Every module and project tab, the OSINT graph (render, drag, select), Settings switches, restart persistence and a hard kill. HTTP builder, TLS analyzer, web check and Nmap service scan were run against local authorized targets through the native confirmations (cancel and confirm), including scope refusals, a redirect, the 20 s timeout, a malformed response, self-signed certificates, cancellation and duplicate-run refusal. Workflow checks:
+  * a failed step with a retry, with and without continue-on-error;
+  * cancellation (settles in about 1 s);
+  * duplicate-run and delete-while-running refusal;
+  * scope refusal before start, and active steps refused in schedules;
+  * an interrupted run marked failed after a hard kill;
+  * a due schedule runs once on an active project and not on an archived one.
+* **Concurrency.** 40 writes while another process held 2 s write locks: all saved. A 7 s lock gives a clear error after the 5 s busy timeout, writes nothing partial, and the next write succeeds. Integrity checks clean.
+* **Performance** (optimized build; 30,000 assets, 20,000 findings, 10,000 evidence records, 5,000 runs, 3,000 workflow runs, a 2,000-entity and 4,000-link graph):
+  * startup in 2.1 s;
+  * findings list 0.33 s;
+  * graph load 30 ms with no long tasks while it settles;
+  * Attack surface (1,000-row page) 0.6 s;
+  * other views under 0.2 s.
+* **Linux, with real UI** (Ubuntu 24.04.5 and Debian 12 containers, Xvfb with Openbox, WebKitGTK through WebDriver and xdotool). Steps:
+  * started from a copy of a 0.1.0 database: upgraded to schema 12 with a backup, data folder and `backups/` at mode 0700;
+  * all 15 modules and the 13 tabs of the migrated project, with no runtime errors;
+  * GTK save dialog wrote the report;
+  * clipboard (X selection) and toasts;
+  * OSINT graph canvas and zoom;
+  * HTTP builder scope checks;
+  * web check and Nmap scan through the GTK confirmations (confirm and cancel);
+  * workflow cancel and duplicate refusal;
+  * restart persistence, and recovery after SIGKILL.
+
+  Limits of this environment: virtual display and window manager only (no GNOME or KDE session, no compositor or HiDPI); the clipboard is an X selection; desktop notifications are not used by the app (in-app toasts only); Wayland was not tested.
+
+### Not verified or open
+
+* Live Anthropic API (no key); Authenticode signing (not set up); installers (not built).
+* The HTTP header analyzer in Security Utilities fetches any URL the user types, without a scope gate (pre-existing; not reachable by MCP or the assistant). Decision for the owner: keep, or gate it like the HTTP builder.
+* Linux: the database file is created with the default umask (0644) inside the 0700 data folder; tightening it to 0600 is optional hardening.
+* Version 0.1.0 has no newer-database check, so opening an upgraded database with it is unsafe (documented in UPGRADE.md).

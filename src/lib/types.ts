@@ -553,6 +553,8 @@ export interface AssistantAnswer {
   outputTokens: number;
   cacheReadTokens: number;
   fallback: boolean;
+  /** the model that declined first, when a fallback model answered */
+  fallbackFrom: string | null;
 }
 
 export interface ToolIssue {

@@ -135,7 +135,7 @@ pub async fn activity_daily(db: State<'_, Db>, days: Option<i64>) -> AppResult<V
 const PREF_KEYS: &[&str] = &[
     "dashboard.layout", "dashboard.hidden", "ui.sidebarCollapsed", "ui.reducedMotion", "ui.density",
     "terminal.preferred", "tools.lastScan", "dorks.defaultEngine", "onboarding.dismissed",
-    "cve.preferLive", "user.displayName", "notifications.lastSeen", "vt.uploadLimitMb", "epss.enabled",
+    "cve.preferLive", "user.displayName", "notifications.lastSeen", "vt.uploadLimitMb", "epss.enabled", "assistant.fallback",
 ];
 
 #[tauri::command]

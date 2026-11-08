@@ -12,7 +12,8 @@ import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { EvidenceRecord, Finding, Project, ReportOptions, Severity, TimelineEventType } from "@/lib/types";
-import { cn, formatDateTime, formatRelative } from "@/lib/utils";
+import { useShowMore } from "@/lib/showMore";
+import { cn, formatDateTime, formatNumber, formatRelative } from "@/lib/utils";
 
 /* ───────────────────────── scope history and tester ───────────────────────── */
 
@@ -60,6 +61,20 @@ function formatSize(n: number | null) {
   return n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function ShowMoreRow({ hidden, shown, step, noun, onMore }: { hidden: number; shown: number; step: number; noun: string; onMore: () => void }) {
+  if (hidden === 0) return null;
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 px-3 pt-1 text-[12.5px] text-muted">
+      <span>
+        Showing {formatNumber(shown)} of {formatNumber(shown + hidden)} {noun}
+      </span>
+      <Button size="sm" variant="ghost" onPress={onMore}>
+        Show {formatNumber(Math.min(step, hidden))} more
+      </Button>
+    </li>
+  );
+}
+
 export function EvidenceVault({ project, findings, onOpenFindings }: { project: Project; findings: Finding[]; onOpenFindings: () => void }) {
   const { runtime } = useApp();
   const confirm = useConfirm();
@@ -68,7 +83,10 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
   const [note, setNote] = useState<{ title: string; content: string } | null>(null);
   const [view, setView] = useState<EvidenceRecord | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const refs = findings.flatMap((f) => f.evidence.map((e, i) => ({ key: `${f.id}-${i}`, finding: f, ...e })));
+  const refs = useMemo(() => findings.flatMap((f) => f.evidence.map((e, i) => ({ key: `${f.id}-${i}`, finding: f, ...e }))), [findings]);
+  // thousands of records would block the window; they are rendered in steps
+  const records = useShowMore(list.data ?? [], project.id);
+  const shownRefs = useShowMore(refs, project.id);
 
   const act = async (key: string, fn: () => Promise<unknown>, done?: string) => {
     setBusy(key);
@@ -128,7 +146,7 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
           <EmptyBlock compact icon={FileText} title="No evidence yet" description="Add screenshots, request and response files, notes or tool runs. Link evidence to findings from a finding's history and links." />
         ) : (
           <ul className="flex flex-col gap-1">
-            {list.data.map((e) => (
+            {records.visible.map((e) => (
               <li key={e.id} className="panel-inset flex items-center gap-3 px-3 py-2 text-[12.5px]">
                 <span className="w-24 shrink-0 text-muted">{KIND_LABEL[e.kind]}</span>
                 <div className="min-w-0 flex-1">
@@ -176,6 +194,7 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
                 </Button>
               </li>
             ))}
+            <ShowMoreRow hidden={records.hidden} shown={records.visible.length} step={records.step} noun="records" onMore={records.more} />
           </ul>
         )}
       </Panel>
@@ -189,7 +208,7 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
           </p>
         ) : (
           <ul className="flex flex-col gap-1">
-            {refs.map((r) => (
+            {shownRefs.visible.map((r) => (
               <li key={r.key} className="tile flex items-center gap-3 px-3 py-2">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px]">
@@ -202,6 +221,7 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
                 <CopyButton text={r.reference} label="Copy reference" />
               </li>
             ))}
+            <ShowMoreRow hidden={shownRefs.hidden} shown={shownRefs.visible.length} step={shownRefs.step} noun="references" onMore={shownRefs.more} />
           </ul>
         )}
       </Panel>

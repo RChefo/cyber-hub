@@ -71,6 +71,18 @@ function PreferencesPanel() {
           isSelected={prefs["cve.preferLive"] !== false}
           onChange={(v) => setPref("cve.preferLive", v)}
         />
+        <SwitchInput
+          label="Use EPSS scores for vulnerability priorities"
+          description="Sends only CVE IDs to FIRST.org when a vulnerability is tracked or scores are updated."
+          isSelected={prefs["epss.enabled"] !== false}
+          onChange={(v) => setPref("epss.enabled", v)}
+        />
+        <SwitchInput
+          label="Assistant: retry with a fallback model when a request is declined"
+          description="If Claude's safety classifiers decline a question, the Anthropic API answers it with a fallback model in the same request. The answer always says which model wrote it."
+          isSelected={prefs["assistant.fallback"] !== false}
+          onChange={(v) => setPref("assistant.fallback", v)}
+        />
         <div>
           <div className="mb-1.5 text-[12.5px] font-medium text-muted">Extra wordlist folder</div>
           <div className="flex items-center gap-2">

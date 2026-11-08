@@ -76,13 +76,15 @@ async fn resolve(host: &str) -> Result<Vec<IpAddr>, Error> {
     Ok(l.iter().collect())
 }
 
-/// Parse "nginx/1.18.0 (Ubuntu)" → ["nginx/1.18.0"]; "Apache" → ["Apache"].
+/// Parse "nginx/1.18.0 (Ubuntu)" → ["nginx/1.18.0"]; "Apache" → ["Apache"]. Only headers that
+/// announce software count (a Date or Content-Type header is not a technology).
 pub fn technologies(header: &str, value: &str) -> Vec<String> {
+    let header = header.to_ascii_lowercase();
     let v = value.trim();
-    if v.is_empty() || v.len() > 200 {
+    if v.is_empty() || v.len() > 200 || !TECH_HEADERS.contains(&header.as_str()) {
         return vec![];
     }
-    match header {
+    match header.as_str() {
         "via" => v.split(',').filter_map(|p| p.split_whitespace().nth(1)).map(|s| s.trim_matches(|c| c == '(' || c == ')').to_string()).filter(|s| s.chars().any(char::is_alphabetic) && !s.contains('.')).take(3).collect(),
         "x-varnish" | "x-drupal-cache" => vec![if header == "x-varnish" { "Varnish".into() } else { "Drupal".into() }],
         "x-aspnet-version" => vec![format!("ASP.NET/{v}")],
@@ -173,6 +175,15 @@ pub async fn run(t: EntityType, value: &str) -> Result<Output, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_software_headers_name_technologies() {
+        assert_eq!(technologies("Server", "QA-Target/1.0 Python/3.14.3"), vec!["QA-Target/1.0", "Python/3.14.3"]);
+        assert_eq!(technologies("x-powered-by", "PHP/8.1.2"), vec!["PHP/8.1.2"]);
+        for (h, v) in [("date", "Thu, 05 Nov 2026 21:29:20 GMT"), ("content-type", "text/html"), ("set-cookie", "session=abc; Path=/"), ("cache-control", "no-store")] {
+            assert!(technologies(h, v).is_empty(), "{h}");
+        }
+    }
 
     #[test]
     fn pinned_addresses_leave_the_port_to_the_request() {
