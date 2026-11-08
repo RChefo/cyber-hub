@@ -694,6 +694,48 @@ pub async fn ti_export(app: AppHandle, db: State<'_, Db>, query: String, format:
     Ok(Some(path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()))
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StixExport {
+    pub file_name: String,
+    pub exported: usize,
+    /// saved values that cannot be expressed as a STIX pattern (for example a hash of unknown length)
+    pub skipped: Vec<String>,
+}
+
+/// Saves the saved indicators as a STIX 2.1 bundle through a native save dialog. None when cancelled.
+#[tauri::command]
+pub async fn ti_saved_export_stix(app: AppHandle) -> AppResult<Option<StixExport>> {
+    let rows: Vec<(String, String, String, String)> = app.state::<Db>().with(|c| {
+        let mut stmt = c.prepare("SELECT kind, indicator, note, created_at FROM ti_saved ORDER BY created_at")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    })?;
+    if rows.is_empty() {
+        return Err(validation("There are no saved indicators to export"));
+    }
+    let items: Vec<crate::ti::stix::Saved> = rows.iter().map(|(k, v, n, t)| crate::ti::stix::Saved { kind: k, value: v, note: n, saved_at: t }).collect();
+    let (bundle, skipped) = crate::ti::stix::bundle(&items);
+    let exported = items.len() - skipped.len();
+    if exported == 0 {
+        return Err(validation("None of the saved indicators can be written as a STIX pattern"));
+    }
+    let content = serde_json::to_string_pretty(&bundle)?;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut d = app.dialog().file().set_title("Export saved indicators (STIX 2.1)").set_file_name("cyberhub-indicators.stix.json").add_filter("STIX 2.1 JSON", &["json"]);
+    if let Some(w) = app.get_webview_window("main") {
+        d = d.set_parent(&w);
+    }
+    d.save_file(move |f| {
+        let _ = tx.send(f.and_then(|f| f.into_path().ok()));
+    });
+    let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
+    std::fs::write(&path, content).map_err(|e| AppError::Internal(format!("Could not write the bundle: {e}")))?;
+    let file_name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let _ = app.state::<Db>().with(|c| log(c, "ti_export", &format!("Exported {exported} saved indicators as STIX 2.1"), &file_name, Some("ti"), None, None));
+    Ok(Some(StixExport { file_name, exported, skipped }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

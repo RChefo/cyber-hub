@@ -12,6 +12,7 @@ import {
   Link2,
   Radar,
   RefreshCw,
+  FileDown,
   Search,
   Settings2,
   Trash2,
@@ -297,6 +298,14 @@ export default function ThreatIntelPage() {
   const overview = useQuery(["ti"], api.tiProviders, [], runtime);
   const history = useQuery(["ti"], () => api.tiHistory(20), [], runtime);
   const saved = useQuery(["ti"], api.tiSavedList, [], runtime);
+  const exportStix = async () => {
+    try {
+      const r = await api.tiSavedExportStix();
+      if (r) notify.success(`${r.exported} indicators exported as STIX 2.1`, r.skipped.length ? `${r.fileName}; not exportable: ${r.skipped.slice(0, 3).join(", ")}` : r.fileName);
+    } catch (e) {
+      notify.error("Could not export the indicators", e);
+    }
+  };
   const confirm = useConfirm();
 
   const [query, setQuery] = useState(route.params?.q ?? "");
@@ -557,7 +566,18 @@ export default function ThreatIntelPage() {
         </div>
 
         <div className="flex flex-col gap-3">
-          <Panel title="Saved indicators" contentClassName="px-2 pb-2">
+          <Panel
+            title="Saved indicators"
+            contentClassName="px-2 pb-2"
+            actions={
+              (saved.data?.length ?? 0) > 0 ? (
+                <Button size="sm" variant="ghost" className="h-7" onPress={() => void exportStix()} aria-label="Export saved indicators as STIX 2.1">
+                  <FileDown className="size-3.5" />
+                  STIX 2.1
+                </Button>
+              ) : undefined
+            }
+          >
             <QueryView query={saved} rows={3} isEmpty={(d) => d.length === 0} empty={<EmptyBlock compact icon={Bookmark} title="Nothing saved yet" />}>
               {(items) => (
                 <ul className="flex flex-col gap-0.5">

@@ -16,6 +16,7 @@ import {
   urlEncode,
 } from "./encoding";
 import { formatJson } from "./format";
+import { defangText, refang } from "./ioc";
 import { md5Hex } from "./md5";
 
 export interface Operation {
@@ -37,6 +38,8 @@ export const OPERATIONS: Operation[] = [
   { id: "html-enc", name: "HTML entity encode", group: "Encoding", run: htmlEscape },
   { id: "html-dec", name: "HTML entity decode", group: "Encoding", run: htmlUnescape },
   { id: "uni-esc", name: "Unicode escape (\\uXXXX)", group: "Encoding", run: unicodeEscape },
+  { id: "defang", name: "Defang indicators", group: "Text", run: defangText },
+  { id: "refang", name: "Refang indicators", group: "Text", run: refang },
   { id: "uni-unesc", name: "Unicode unescape", group: "Encoding", run: unicodeUnescape },
   { id: "bin-enc", name: "To binary", group: "Encoding", run: binaryEncode },
   { id: "bin-dec", name: "From binary", group: "Encoding", run: binaryDecode },

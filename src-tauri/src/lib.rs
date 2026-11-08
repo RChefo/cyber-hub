@@ -312,6 +312,7 @@ pub fn run() {
             threat_intel::ti_history_clear,
             threat_intel::ti_cache_clear,
             threat_intel::ti_saved_list,
+            threat_intel::ti_saved_export_stix,
             threat_intel::ti_saved_add,
             threat_intel::ti_saved_remove,
             threat_intel::ti_export,

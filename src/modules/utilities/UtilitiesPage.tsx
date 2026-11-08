@@ -9,6 +9,7 @@ import { HashCalcTool, HashIdTool, JwtTool, UserAgentTool } from "./tools/Analys
 import { Base64Tool, HexTool, UrlTool } from "./tools/EncodingTools";
 import { DnsTool, HeadersTool, IpTool, UrlParserTool } from "./tools/NetworkTools";
 import { HtmlTool, JsonTool, RegexTool, XmlTool } from "./tools/TextTools";
+import { IocTool } from "./tools/IocTool";
 import { WorkbenchTool } from "./tools/Workbench";
 import { DnsIntelTool, HttpBuilderTool, PortsTool, SecretsTool, SubdomainMonitorTool, TlsTool } from "./tools/AssessmentTools";
 
@@ -20,6 +21,7 @@ const VIEWS: Record<UtilityId, ComponentType> = {
   jwt: JwtTool,
   "hash-id": HashIdTool,
   "hash-calc": HashCalcTool,
+  ioc: IocTool,
   regex: RegexTool,
   json: JsonTool,
   xml: XmlTool,

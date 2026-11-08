@@ -9,6 +9,7 @@ import {
   Telescope,
   Braces,
   Code2,
+  Crosshair,
   FileCode2,
   Fingerprint,
   Globe2,
@@ -32,6 +33,7 @@ export type UtilityId =
   | "jwt"
   | "hash-id"
   | "hash-calc"
+  | "ioc"
   | "regex"
   | "json"
   | "xml"
@@ -66,6 +68,7 @@ export const UTILITIES: UtilityDef[] = [
   { id: "jwt", name: "JWT inspector", description: "Decode JSON Web Tokens and review claims locally.", icon: KeyRound, group: "Analysis" },
   { id: "hash-id", name: "Hash identifier", description: "Suggest likely algorithms for a hash string.", icon: Fingerprint, group: "Analysis" },
   { id: "hash-calc", name: "Hash calculator", description: "MD5, SHA-1, SHA-256, SHA-384 and SHA-512 digests.", icon: Hash, group: "Analysis" },
+  { id: "ioc", name: "IOC extractor", description: "Extract, refang and defang URLs, domains, IPs, e-mail, hashes and CVE IDs from text.", icon: Crosshair, group: "Analysis" },
   { id: "regex", name: "Regex tester", description: "Test JavaScript regular expressions with live matches.", icon: Regex, group: "Analysis" },
   { id: "user-agent", name: "User-Agent parser", description: "Identify browser, engine, OS and device from a UA string.", icon: UserRound, group: "Analysis" },
   { id: "json", name: "JSON formatter", description: "Validate, pretty-print and minify JSON.", icon: Braces, group: "Formatting" },

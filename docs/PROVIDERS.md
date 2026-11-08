@@ -31,3 +31,12 @@ ThreatFox was not in the original list. It was added because it uses the same fr
 * A coarse colour bucket (malicious / suspicious / benign / informational / no verdict) is used only for sorting and colour. The mapping for each provider is documented in its parser (`src-tauri/src/ti/*.rs`) and shown on each result card.
 * The summary lists which providers reported what. It is a grouping, not a score.
 * Each result shows its source (live or cache), retrieval time and a link to the provider's own page.
+
+## STIX 2.1 export
+
+*Saved indicators* → *STIX 2.1* writes every saved indicator as a STIX 2.1 `indicator` in one `bundle`, through a native save dialog (`src-tauri/src/ti/stix.rs`).
+
+* **Patterns.** `[ipv4-addr:value = '…']`, `[ipv6-addr:value = '…']`, `[domain-name:value = '…']`, `[url:value = '…']`, and `[file:hashes.MD5 / 'SHA-1' / 'SHA-256' / 'SHA-512' = '…']` by hash length. String literals escape only `\` and `'`, as the patterning language requires. A hash of another length is reported and left out.
+* **Identifiers.** Indicator IDs are UUIDv5 values derived from the indicator (a fixed Cyber Hub namespace), so exporting the same indicator again gives the same ID and an importing platform updates one object. The bundle ID is a random UUIDv4. `created`, `modified` and `valid_from` are the time the indicator was saved, in UTC with milliseconds.
+* **Content.** The description is the analyst's note. No provider verdicts are claimed: `indicator_types`, labels and confidence are left out, so the bundle states only what the analyst saved.
+

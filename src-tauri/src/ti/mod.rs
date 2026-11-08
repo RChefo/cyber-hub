@@ -12,6 +12,7 @@ pub mod limit;
 pub mod model;
 pub mod otx;
 pub mod shodan;
+pub mod stix;
 
 use std::time::Duration;
 
