@@ -21,3 +21,22 @@ describe("triage helpers", () => {
     expect(captureSpan(null, null)).toBe("no timestamps");
   });
 });
+
+describe("Windows event log findings", () => {
+  it("carry the ATT&CK technique in the details and as a tag", () => {
+    const f = logFinding(5, "Security.evtx", {
+      rule: "EVT-LOG-CLEARED",
+      severity: "high",
+      title: "Event log cleared",
+      detail: "An event log was cleared.",
+      remediation: "Find out who cleared it.",
+      count: 1,
+      sources: [{ ip: "user01", count: 1, examples: ["2019-03-19T23:34:25 · WS01 · event 1102 · record 7 · Security log cleared by user01"] }],
+      technique: "T1070.001 Indicator Removal: Clear Windows Event Logs",
+    });
+    expect(f.title).toBe("Event log cleared (Security.evtx)");
+    expect(f.technicalDetails).toContain("MITRE ATT&CK: T1070.001 Indicator Removal: Clear Windows Event Logs");
+    expect(f.tags).toEqual(["logs", "windows", "T1070.001"]);
+  });
+});
+

@@ -33,9 +33,11 @@ export function logFinding(projectId: number, file: string, d: LogDetection): Fi
     confidence: "medium",
     description: `${d.detail}\n\nSources in ${file}:\n${sources.join("\n")}${examples.length ? `\n\nExamples:\n${examples.map((e) => `- ${e}`).join("\n")}` : ""}`,
     affectedTarget: file,
-    technicalDetails: `Rule ${d.rule} (log triage). Matches are attempts; check the responses before treating them as successful.`,
+    technicalDetails: d.technique
+      ? `Rule ${d.rule} (Windows event log triage). MITRE ATT&CK: ${d.technique}. A detection is a lead for the investigation, not proof of a compromise.`
+      : `Rule ${d.rule} (log triage). Matches are attempts; check the responses before treating them as successful.`,
     remediation: d.remediation,
-    tags: ["logs"],
+    tags: d.technique ? ["logs", "windows", d.technique.split(" ")[0]] : ["logs"],
   };
 }
 

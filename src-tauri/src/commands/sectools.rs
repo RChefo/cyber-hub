@@ -283,12 +283,20 @@ pub struct LogScan {
 /// Choose a log file (native dialog) and triage it locally. None when cancelled.
 #[tauri::command]
 pub async fn log_analyze_pick(app: AppHandle) -> AppResult<Option<LogScan>> {
-    let Some(path) = pick_one(&app, "Analyze a log file", ("Logs", &["log", "txt", "1", "gz"])).await else { return Ok(None) };
+    let Some(path) = pick_one(&app, "Analyze a log file", ("Logs and Windows event logs", &["log", "txt", "1", "gz", "evtx"])).await else { return Ok(None) };
     if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("gz")) {
         return Err(validation("Decompress the log first (compressed logs are not read)"));
     }
     let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    let report = tauri::async_runtime::spawn_blocking(move || -> AppResult<logs::Report> { logs::analyze(open_limited(&path, logs::MAX_FILE_BYTES)?).map_err(AppError::Validation) })
+    let report = tauri::async_runtime::spawn_blocking(move || -> AppResult<logs::Report> {
+        // a Windows event log is recognised by its signature, whatever its name
+        let mut magic = [0u8; 8];
+        let evtx = std::io::Read::read_exact(&mut std::fs::File::open(&path)?, &mut magic).is_ok() && &magic == b"ElfFile\0";
+        if evtx {
+            return crate::sectools::winevents::analyze(open_limited(&path, logs::MAX_FILE_BYTES)?).map_err(AppError::Validation);
+        }
+        logs::analyze(open_limited(&path, logs::MAX_FILE_BYTES)?).map_err(AppError::Validation)
+    })
         .await
         .map_err(|e| AppError::Internal(format!("the analysis failed: {e}")))??;
     Ok(Some(LogScan { file, report }))

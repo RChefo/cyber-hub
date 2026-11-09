@@ -1665,10 +1665,12 @@ export interface LogDetection {
   remediation: string;
   count: number;
   sources: { ip: string; count: number; examples: string[] }[];
+  /** the MITRE ATT&CK technique, for Windows event log detections */
+  technique?: string;
 }
 
 export interface LogReport {
-  kind: "web" | "ssh" | "mixed" | "unknown";
+  kind: "web" | "ssh" | "mixed" | "windows" | "unknown";
   lines: number;
   recognised: number;
   first: string;
@@ -1676,4 +1678,8 @@ export interface LogReport {
   clients: { ip: string; requests: number; clientErrors: number; serverErrors: number; sshFailures: number; sshLogins: number }[];
   detections: LogDetection[];
   warnings: string[];
+  /** Windows event logs: the most frequent event IDs */
+  events?: { id: number; channel: string; name: string; count: number }[];
+  /** Windows event logs: the computers that wrote the events */
+  computers?: string[];
 }

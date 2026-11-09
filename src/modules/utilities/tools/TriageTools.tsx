@@ -242,7 +242,7 @@ export function LogTool() {
   const sources = r ? [...new Set(r.detections.flatMap((d) => d.sources.map((s) => s.ip)))] : [];
   return (
     <div className="flex flex-col gap-4">
-      <PrivacyNote>Reads web server access logs (Apache, Nginx) and OpenSSH authentication logs on this device; nothing is contacted. Matches are attempts, not proof of a compromise; examples are shown with credentials redacted.</PrivacyNote>
+      <PrivacyNote>Reads web server access logs (Apache, Nginx), OpenSSH authentication logs and Windows event log files (EVTX) on this device; nothing is contacted. Matches are attempts or leads, not proof of a compromise; examples are shown with credentials redacted.</PrivacyNote>
       <TextAreaInput label="Log lines" value={text} onChange={setText} rows={8} mono placeholder={'203.0.113.7 - - [09/Nov/2026:10:00:01 +0000] "GET /item?id=1%27%20OR%20%271%27=%271 HTTP/1.1" 200 512 "-" "sqlmap/1.7"'} />
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" onPress={() => void run("text")} isPending={busy === "text"} isDisabled={!text.trim()}>
@@ -261,7 +261,8 @@ export function LogTool() {
             <span className="font-medium">{scan.file}</span>
             <span className="text-muted">
               {" "}
-              · {r.kind === "web" ? "web access log" : r.kind === "ssh" ? "SSH authentication log" : r.kind === "mixed" ? "web and SSH lines" : "format not recognised"} · {r.recognised.toLocaleString()} of {r.lines.toLocaleString()} lines read
+              · {r.kind === "web" ? "web access log" : r.kind === "ssh" ? "SSH authentication log" : r.kind === "mixed" ? "web and SSH lines" : r.kind === "windows" ? "Windows event log" : "format not recognised"} · {r.recognised.toLocaleString()} of {r.lines.toLocaleString()} {r.kind === "windows" ? "events" : "lines"} read
+              {r.computers?.length ? ` · ${r.computers.slice(0, 3).join(", ")}${r.computers.length > 3 ? ` and ${r.computers.length - 3} more` : ""}` : ""}
               {r.first ? ` · ${r.first} to ${r.last}` : ""}
             </span>
           </div>
@@ -271,12 +272,12 @@ export function LogTool() {
             </p>
           ))}
           {r.detections.length === 0 ? (
-            <EmptyBlock compact icon={ScrollText} title="Nothing suspicious found" description="No attack pattern, scan or password guessing was matched." />
+            <EmptyBlock compact icon={ScrollText} title="Nothing suspicious found" description={r.kind === "windows" ? "None of the Windows event detections matched." : "No attack pattern, scan or password guessing was matched."} />
           ) : (
             <section className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="flex-1 text-[13.5px] font-medium">Detections ({r.detections.length})</h3>
-                {sources.length > 0 && <CopyButton text={sources.join("\n")} label="Copy source addresses" />}
+                {sources.length > 0 && <CopyButton text={sources.join("\n")} label={r.kind === "windows" ? "Copy sources" : "Copy source addresses"} />}
                 <RecordBar picked={picked.size} build={(pid) => r.detections.filter((d) => picked.has(d.rule)).map((d) => logFinding(pid, scan.file, d))} onDone={() => setPicked(new Set())} />
               </div>
               {r.detections.map((d) => (
@@ -289,6 +290,11 @@ export function LogTool() {
                       <ToneChip tone="default" dot={false}>
                         {d.count.toLocaleString()}
                       </ToneChip>
+                      {d.technique && (
+                        <ToneChip tone="accent" dot={false} className="text-[11px]">
+                          ATT&CK {d.technique}
+                        </ToneChip>
+                      )}
                     </div>
                     <p className="text-[12.5px] text-muted">{d.detail}</p>
                     {d.sources.length > 0 && (
@@ -307,10 +313,17 @@ export function LogTool() {
               ))}
             </section>
           )}
-          <section className="flex flex-col gap-1.5">
-            <h3 className="text-[13.5px] font-medium">Most active clients</h3>
-            <Table head={["Address", "Requests", "4xx", "5xx", "SSH failures", "SSH logins"]} rows={r.clients.slice(0, 50).map((c) => [c.ip, c.requests, c.clientErrors, c.serverErrors, c.sshFailures, c.sshLogins])} />
-          </section>
+          {r.kind === "windows" ? (
+            <section className="flex flex-col gap-1.5">
+              <h3 className="text-[13.5px] font-medium">Most frequent events</h3>
+              <Table head={["Event ID", "Log", "Meaning", "Count"]} rows={(r.events ?? []).map((e) => [e.id, e.channel, e.name || "—", e.count.toLocaleString()])} />
+            </section>
+          ) : (
+            <section className="flex flex-col gap-1.5">
+              <h3 className="text-[13.5px] font-medium">Most active clients</h3>
+              <Table head={["Address", "Requests", "4xx", "5xx", "SSH failures", "SSH logins"]} rows={r.clients.slice(0, 50).map((c) => [c.ip, c.requests, c.clientErrors, c.serverErrors, c.sshFailures, c.sshLogins])} />
+            </section>
+          )}
         </div>
       )}
     </div>

@@ -89,7 +89,7 @@ export const UTILITIES: UtilityDef[] = [
   { id: "secrets", name: "Secrets scanner", description: "Find API keys, tokens, private keys and passwords in text, files or folders.", icon: FileKey, group: "Analysis" },
   { id: "containers", name: "Container & Kubernetes checks", description: "Check Dockerfiles, Compose files and Kubernetes manifests against the Pod Security Standards and the CIS Docker Benchmark, and RBAC for ways to more privileges.", icon: Container, group: "Analysis" },
   { id: "pcap", name: "Packet capture triage", description: "Hosts, DNS, HTTP, TLS server names and cleartext credentials in a pcap or pcapng file.", icon: Cable, group: "Analysis" },
-  { id: "logs", name: "Log triage", description: "Attacks, scans and password guessing in web access logs and SSH authentication logs.", icon: ScrollText, group: "Analysis" },
+  { id: "logs", name: "Log triage", description: "Attacks, scans and password guessing in web access and SSH logs; ATT&CK-mapped detections in Windows event logs (EVTX).", icon: ScrollText, group: "Analysis" },
   { id: "http-builder", name: "HTTP request builder", description: "Send one crafted request to an in-scope target and inspect the response.", icon: ArrowLeftRight, group: "Assessment", network: true },
   { id: "tls", name: "TLS analyzer", description: "Protocols, cipher, certificate chain and trust of an in-scope service.", icon: Lock, group: "Assessment", network: true },
   { id: "subdomain-monitor", name: "Subdomain monitor", description: "New and missing names across passive discovery runs, on a schedule.", icon: Telescope, group: "Assessment", network: true },

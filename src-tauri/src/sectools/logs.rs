@@ -40,6 +40,20 @@ pub struct Detection {
     pub count: u64,
     /// the clients behind it, most active first (at most 20)
     pub sources: Vec<Source>,
+    /// the MITRE ATT&CK technique ("T1070.001 Indicator Removal: Clear Windows Event Logs"), when one fits
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub technique: String,
+}
+
+/// How often an event ID occurs in a Windows event log.
+#[derive(Debug, Clone, Serialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct EventCount {
+    pub id: u32,
+    pub channel: String,
+    /// what the event means, for well-known IDs
+    pub name: String,
+    pub count: u64,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Default)]
@@ -66,6 +80,12 @@ pub struct Report {
     pub clients: Vec<Client>,
     pub detections: Vec<Detection>,
     pub warnings: Vec<String>,
+    /// Windows event logs: the most frequent event IDs
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub events: Vec<EventCount>,
+    /// Windows event logs: the computers that wrote the events
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub computers: Vec<String>,
 }
 
 static WEB: Lazy<Regex> = Lazy::new(|| Regex::new(r#"^(\S+) \S+ \S+ \[([^\]]+)\] "([^"]*)" (\d{3}) (\S+)(?: "([^"]*)" "([^"]*)")?"#).expect("valid pattern"));
@@ -293,7 +313,7 @@ impl Acc {
         let mut out: Vec<Detection> = Vec::new();
         let mut push = |rule: &str, severity: &str, title: &str, detail: String, remediation: &str, hits: &Hits| {
             if hits.count > 0 {
-                out.push(Detection { rule: rule.into(), severity: severity.into(), title: title.into(), detail, remediation: remediation.into(), count: hits.count, sources: hits.sources() });
+                out.push(Detection { rule: rule.into(), severity: severity.into(), title: title.into(), detail, remediation: remediation.into(), count: hits.count, sources: hits.sources(), technique: String::new() });
             }
         };
         for p in REQUEST_PATTERNS.iter() {
