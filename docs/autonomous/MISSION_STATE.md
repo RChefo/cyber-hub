@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | **Resumed** 2026-11-09T06:32:12Z on the owner's instruction ("continue"). The first segment ended 2026-11-08T23:43Z: see [MISSION_REPORT.md](MISSION_REPORT.md) |
+| Current phase | **Complete** (second segment 2026-11-09T06:32:12Z–08:07Z, after "continue"; the first segment ran 2026-11-08T21:31:01Z–23:43Z): see [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -50,6 +50,7 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 14. MCP tools for CVSS, the finding library and the checklist (`aaa7d0a`)
 15. Clippy 0.1.99 lints fixed (`7fb4008`)
 16. CSV findings import with a column mapping (`53dac93`)
+17. Second review's fixes: CSV detection panic, redaction gaps, MCP approval checks (`9d6dba6`)
 
 ## Tests executed
 
@@ -57,7 +58,7 @@ See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md).
 
 ## Known failures
 
-None. The final results: Windows 302 Rust (306 with provisioning) and 217 frontend tests; Ubuntu 24.04 and Debian 12 303 Rust and 217 frontend tests; clippy, tsc, the build and the audits are clean.
+None. The final results at `9d6dba6`: Windows 321 Rust (325 with provisioning) and 224 frontend tests; Ubuntu 24.04 and Debian 12 321 Rust tests and all 36 frontend test files; clippy (0.1.94 and 0.1.99), tsc, the build and the audits are clean.
 
 ## Commits during the mission
 
@@ -89,6 +90,8 @@ None. The final results: Windows 302 Rust (306 with provisioning) and 217 fronte
 | `aaa7d0a` | feat(mcp): expose CVSS scoring, the finding library and the WSTG checklist |
 | `7fb4008` | fix(osint): resolve the lints reported by clippy 0.1.99 |
 | `53dac93` | feat(findings): import findings from CSV files with a column mapping |
+| `04114e8` | docs(mission): record the MCP tools, Linux clippy and the CSV import |
+| `9d6dba6` | fix(security): harden the CSV import and the new MCP approvals |
 
 ## Next action
 
@@ -98,7 +101,10 @@ Second segment (from 2026-11-09T06:32Z), in this order:
 3. ~~Expose the new capabilities through MCP~~: done (`aaa7d0a`), 49 tools.
 4. ~~More import formats~~: generic CSV import with a column mapping done (`53dac93`).
 5. ~~Clippy on Linux~~: done; three lints from clippy 0.1.99 fixed (`7fb4008`).
-6. **Next:** independent review of `aaa7d0a`, `53dac93` and `b46a075` (running), performance at volume, final regression on Windows and Linux, report.
+6. ~~Independent review of `aaa7d0a`, `53dac93` and `b46a075`~~: done; fixes in `9d6dba6`.
+7. ~~Performance at the import limits, final regression on Windows and Linux, report~~: done.
+
+The remaining candidates are in MISSION_REPORT.md: path-level scope rules (needs the owner's decision), notes on assets, more native formats, the Linux GUI for the new features. Release steps (installers, signing) need the owner's authorization.
 
 Release steps (installers, signing) need the owner's authorization.
 

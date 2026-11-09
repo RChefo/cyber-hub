@@ -2,6 +2,12 @@
 
 All times are UTC, measured with `date -u` at the start, at each commit and at the end. Nothing in this report was estimated.
 
+The mission ran in two segments:
+* **First segment:** 2026-11-08T21:31Z–23:43Z, about 2 h 12 min.
+* **Second segment:** 2026-11-09T06:32Z–08:07Z, about 1 h 35 min, after the owner's "continue".
+
+Together that is about 3 h 47 min of the targeted eight hours. The second segment is reported in [its own section](#second-segment-2026-11-09); the sections before it describe the first.
+
 ## Statistics
 
 | Item | Value |
@@ -137,10 +143,12 @@ All were fixed, each with a regression test (see IMPLEMENTATION_LOG.md). Fixing 
 
 ## Remaining limitations and next priorities
 
-1. **Restore from backup in the app:** needs a restart-time swap. Today it is a manual step, documented in UPGRADE.md.
-2. **MCP:** the new capabilities (templates, checklist, CVSS, imports) are not exposed through MCP yet.
-3. **Path-level scope rules:** deferred. They change the security-critical scope engine and need their own design and review.
-4. **More import formats:** Qualys XML, Nmap greppable output, generic CSV mapping. These are requested in competitor trackers.
+These were the priorities after the first segment. The second segment did items 1 and 2, and item 4 for CSV.
+
+1. ~~Restore from backup in the app~~: done (`2eb4209`).
+2. ~~MCP access to the new capabilities~~: done for CVSS, the finding library and the checklist (`aaa7d0a`). Scan imports stay in the app, because they need a file chosen by the user.
+3. **Path-level scope rules:** deferred. They change the security-critical scope engine and need a decision from the owner: may host-level tools (for example Nmap) run when only some paths of a host are in scope?
+4. **More import formats:** CSV with a column mapping is done (`53dac93`). It covers Qualys, Nessus and Greenbone CSV exports. Native Qualys XML and Nmap greppable output are not done.
 5. **Notes on assets and vulnerabilities.**
 6. **Release:** installers, Authenticode signing and the live assistant API remain blocked on authorization or credentials, as stated in the final QA audit.
 
@@ -148,3 +156,56 @@ All were fixed, each with a regression test (see IMPLEMENTATION_LOG.md). Fixing 
 * No installers were built and nothing was published or deployed, as the mission's boundaries require.
 * The new code is tested on Windows and on two Linux distributions, reviewed for security, and documented.
 * The schema went from 12 to 17; existing data is preserved and backed up before each upgrade.
+
+## Second segment (2026-11-09)
+
+### Statistics
+
+| Item | Value |
+|---|---|
+| Start | 2026-11-09T06:32:12Z (the owner wrote "continue") |
+| End | 2026-11-09T08:07Z: about 1 h 35 min |
+| Commits | 9: `b46a075`, `2eb4209`, `3602269`, `aaa7d0a`, `7fb4008`, `53dac93`, `04114e8`, `9d6dba6` and the final docs commit |
+| Size | 40 files, about 3,500 insertions before the final docs commit |
+| Tests added | Rust 302 → 321 on Windows, plus 2 ignored tests (the full CVSS comparison and the import timing); frontend 217 → 224 |
+| Independent reviews | 2: the restore (11 findings) and the MCP, CSV and CVSS commits (10 findings). All findings were fixed before or right after the commit, with tests. |
+
+### Implementation
+
+| Commit | What |
+|---|---|
+| `b46a075` | **CVSS checked against FIRST's own calculators.** 709,160 vectors: every base vector of 4.0, 3.1 and 3.0, plus 200,000 random vectors each. 4.0 and 3.1 matched exactly. 3.0 did not: 10,043 vectors differed, because 3.0 vectors were scored with the 3.1 equations. Fixed. A 484-vector subset runs in the regular suite (`scripts/cvss-reference.mjs`). |
+| `2eb4209` | **Restore a backup in the app.** The file is checked: integrity, schema version, and the exact schema SQL. It is then copied, and Cyber Hub restarts and swaps it in before the database opens. The previous database (with its `-wal`) and the evidence files only it refers to are kept in `backups/before-restore-<time>/`, so a restore can be undone the same way. A journal makes an interrupted swap resume. A locked database postpones the restore, and Settings can cancel it. A restored database never turns the MCP bridge on, and the app connection runs with `trusted_schema` off. This also fixes a data-loss risk in the documented manual restore: the next start's evidence sweep deleted the replaced database's evidence files. |
+| `aaa7d0a` | **MCP tools for the assessment features** (49 tools in total): CVSS scoring, the finding library, the WSTG checklist (read, and change with approval), and `cvss_vector`/`remediation` on `cyberhub_create_finding`. |
+| `7fb4008` | Three lints that the newer clippy on Linux (0.1.99) reports in older OSINT code. |
+| `53dac93` | **CSV findings import with a column mapping.** Spreadsheets and Qualys, Nessus or Greenbone CSV exports. The columns are suggested from the headers and can be changed in the preview. Severity is read as words, levels 1–5 or CVSS scores. The rows get the same scope checks, redaction and deduplication as the other formats. A CSV file never marks findings as fixed. |
+| `9d6dba6` | Fixes from the second review. The most important: a CSV detection panic on multibyte text past 64 KB, which would have ended the app. |
+
+### Verification
+
+**Automated suites (final, at `9d6dba6`):**
+
+| Check | Windows | Ubuntu 24.04.5 | Debian 12 |
+|---|---|---|---|
+| cargo test | 321 passed, 3 ignored (325 with `provisioning`) | 321 passed | 321 passed |
+| clippy `-D warnings` | clean (0.1.94) | clean (0.1.99, first time on Linux) | clean (0.1.99) |
+| tsc / vitest | clean / 224 passed | clean / 36 of 36 files | clean / 36 of 36 files |
+| build, npm audit, cargo audit, gitleaks | succeeded; 0; 0 (8 allowed warnings, unchanged); no leaks | — | — |
+
+**In the real Windows app (debug build, isolated data):**
+* **Restore:** a schema-14 backup, then the kept copy back. The QA database had an unflushed `-wal` from a forced stop, and its content survived the move. The restart, the notice, the upgrade, the evidence round trip, and a postponed restore cancelled in Settings all worked.
+* **MCP:** through the real `cyberhub-mcp` sidecar and bridge. Invalid requests were refused before any approval was shown, and two approvals were decided in the app.
+* **CSV import:** a Qualys-style file through the open dialog. A column was remapped, 3 findings were imported, copied passwords were masked, and an out-of-scope host was left out.
+* **Volume:** 4,000 imported findings, timed in the GUI and in a test at 10,000 findings (see IMPLEMENTATION_LOG.md).
+* **Smoke:** all 16 pages and 14 project tabs, with no errors.
+
+**Not verified:**
+* the new features in the Linux GUI (automated suites only);
+* the full 709,160-vector CVSS comparison is reproducible with the script but needs FIRST's JavaScript downloaded; only the 484-vector subset runs in the suite;
+* release-build timings (all measurements are debug builds);
+* a restore of a backup made by an older app version than the QA data, and restores on Linux in the GUI;
+* Save dialogs driven from the GUI (no new save dialogs in this segment).
+
+### Final assessment
+
+The deferred and unverified items from the first segment were closed one by one: the CVSS scorer is now proven against FIRST's own code, restore exists and was tested through the real restart path, MCP clients can use the assessment features under the same approval model, clippy runs on Linux, and imports were measured at their limits. Both independent reviews found real defects in my own new code, a crash among them, and all were fixed with regression tests before the end of the segment. Nothing was pushed, built for release, published or deployed; the owner's real data folder was never used.

@@ -399,3 +399,60 @@ The Linux images now install clippy (`rustup component add clippy`). Results at 
 * The private host was listed as outside the scope.
 * Changing *Target* from IP to DNS refreshed the preview; the out-of-scope host became `intranet.local`.
 * Importing created 3 findings with `host:port` targets and CVEs. A password in two copied columns was masked.
+
+## 2026-11-09T07:53–08:00Z: performance at the limits, second independent review (`9d6dba6`)
+
+**Performance at the import limits.** `import_at_the_limits`, an ignored test, measures 10,000 findings on 500 hosts (half outside the scope) in a debug build:
+
+| Format | Parse | Preview | Import | Import again |
+|---|---|---|---|---|
+| Nessus XML (1.5 MB) | 0.92 s | 0.29 s | 2.4 s | 2.0 s |
+| CSV (0.7 MB) | 0.88 s | 0.15 s | 1.3 s | 0.6 s |
+
+The same check in the GUI, with a separate data folder and an 11 MB CSV of 10,000 rows with realistic descriptions:
+* the preview appeared 5.6 s after the dialog opened, including the dialog automation;
+* the import of 4,000 findings took 3.1 s;
+* `findings_list` returned 4,000 findings (5.9 MB) in 292 ms;
+* the Findings tab showed its first 200 rows 1.3 s after opening, with the rest available through *Show more*;
+* a search narrowed the 4,000 findings to 250 in 726 ms.
+
+All of these are debug builds with the Vite dev server.
+
+**Second independent review** of `53dac93`, `aaa7d0a` and `b46a075`, by a reviewer agent without my conclusions. Fixed in `9d6dba6`, with tests:
+
+| Finding | Severity | Fix |
+|---|---|---|
+| CSV detection sliced the text at byte 65,536: a CSV over 64 KB with a multibyte character there panicked, ending the app (`panic = "abort"`) | high | the start of a text is cut on a character boundary; tests with 2-byte and CJK text above 64 KB |
+| Rule IDs (a user-chosen CSV column) and references were stored without redaction | medium | redacted and cleaned in `push_finding` for every format |
+| CSV header names and the out-of-scope hosts in the preview were shown raw | low/medium | redacted and cleaned |
+| A column number could overflow the error message | low | `saturating_add` |
+| CSV rows without a target skipped the scope check | low (intent) | with a target column, an empty target counts as outside the scope; without one, the preview warns |
+| Delimiter detection and the row splitter used different quoting rules; leading blank lines failed | low | one rule: the delimiter that splits the header and the next rows into the same number of columns |
+| `cyberhub_create_finding` showed approvals for findings the save would refuse (title 201–300 characters, bad status, control characters) | low | the save's own checks run before the approval; schema title limit 200 |
+| The checklist approval cut the note without its length, did not say it replaced a note, and did not check it like the write | low | the note is checked as on write, and the approval shows its length and "replaces the existing note" |
+| Template search text unbounded | low | capped at 200 characters |
+
+The reviewer confirmed the CVSS 3.0 change and the wiring of the reference tests, and found the MCP checklist and template tools, the CSV parser's bounds, scope handling and formula-safe exports sound.
+
+## 2026-11-09T08:00–08:06Z: final verification of the second segment
+
+At `9d6dba6`:
+
+| Check | Windows | Ubuntu 24.04.5 | Debian 12 |
+|---|---|---|---|
+| cargo test | 321 passed, 3 ignored (325 with `provisioning`) | 321 passed, 3 ignored | 321 passed, 3 ignored |
+| clippy `-D warnings` | clean (0.1.94) | clean (0.1.99) | clean (0.1.99) |
+| tsc | clean | clean | clean |
+| vitest | 224 passed (36 files) | 36 of 36 files passed | 36 of 36 files passed |
+| bundle build | succeeded | — | — |
+| npm audit | 0 vulnerabilities | — | — |
+| cargo audit | 0 vulnerabilities, 8 allowed warnings (unchanged) | — | — |
+| gitleaks | no leaks (full history; `src-tauri/src`, `src`, `docs`, `scripts`) | — | — |
+
+**GUI smoke (Windows, QA data):** all 16 pages and 14 project tabs render with no error boundary and no console errors.
+
+**Housekeeping:**
+* The QA app and the Vite server I started were stopped; port 1420 is free.
+* MCP was turned off again in the QA data.
+* No file was written to Documents.
+* QA and performance data stay in the scratchpad.
