@@ -176,6 +176,7 @@ export function ConfigCheckTool({ config }: { config: ConfigCheckConfig }) {
                 </ToneChip>
                 <span className="text-[12px] text-muted">{f.error ? "" : countSummary(f.issues)}</span>
               </div>
+              {f.sha256 && <span className="font-mono text-[11.5px] break-all text-muted">SHA-256 {f.sha256}</span>}
               {f.error && <p className="rounded-[8px] bg-warning-soft px-2.5 py-1.5 text-[12.5px] text-warning-soft-foreground">{f.error}</p>}
               {f.issues.length > 0 && (
                 <ul className="flex flex-col gap-1.5">

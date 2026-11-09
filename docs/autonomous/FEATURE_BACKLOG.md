@@ -110,7 +110,7 @@ Each criterion is rated from 1 to 5, where 5 is best: D demand (×3), U professi
 | 32 | Prowler results (OCSF JSON) import | 4 | 4 | 4 | 5 | 4 | 5 | 4 | 3 | 54 | **Done** (Mission 2) |
 | 33 | OWASP ASVS 5.0 checklist next to WSTG | 4 | 4 | 4 | 5 | 3 | 5 | 4 | 3 | 53 | Candidate |
 | 34 | API definition comparison: new, removed and changed endpoints, lost authentication | 3 | 4 | 4 | 4 | 5 | 5 | 5 | 5 | 53 | **Done** (Mission 2) |
-| 35 | Linux persistence triage from collected files | 3 | 4 | 5 | 4 | 4 | 5 | 5 | 4 | 53 | Candidate |
+| 35 | Linux persistence triage from collected files | 3 | 4 | 5 | 4 | 4 | 5 | 5 | 4 | 53 | **Done** (Mission 2) |
 | 36 | OAuth 2.0 and OpenID Connect configuration review (RFC 9700) | 3 | 4 | 5 | 3 | 5 | 5 | 5 | 4 | 52 | **Done** (Mission 2) |
 | 37 | SBOM comparison between versions | 3 | 3 | 4 | 4 | 5 | 5 | 5 | 5 | 51 | Candidate |
 | 38 | ATT&CK technique view and Navigator layer per project | 3 | 4 | 4 | 5 | 3 | 5 | 4 | 3 | 50 | Candidate |

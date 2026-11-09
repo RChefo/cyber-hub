@@ -157,6 +157,8 @@ export const api = {
   containerScanPick: (folder: boolean) => call<T.ContainerScan | null>("container_scan_pick", { folder }),
   iacScanText: (text: string, kind: string) => call<T.ContainerFileReport>("iac_scan_text", { text, kind }),
   iacScanPick: (folder: boolean) => call<T.ContainerScan | null>("iac_scan_pick", { folder }),
+  linuxPersistScanText: (text: string, kind: string) => call<T.ContainerFileReport>("linux_persist_scan_text", { text, kind }),
+  linuxPersistScanPick: (folder: boolean) => call<T.ContainerScan | null>("linux_persist_scan_pick", { folder }),
   binaryAnalyzePick: () => call<T.BinaryScan | null>("binary_analyze_pick"),
   // Packet capture and log triage (local only)
   pcapAnalyzePick: () => call<{ file: string; report: T.CaptureReport } | null>("pcap_analyze_pick"),

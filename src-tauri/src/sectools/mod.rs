@@ -7,6 +7,7 @@ pub mod evtx;
 pub mod http;
 pub mod iac;
 pub mod iam;
+pub mod linux_persist;
 pub mod logs;
 pub mod pcap;
 pub mod containers;

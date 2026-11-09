@@ -4,6 +4,7 @@
 
 use rusqlite::params;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
@@ -259,6 +260,59 @@ pub async fn iac_scan_pick(app: AppHandle, folder: bool) -> AppResult<Option<Con
     let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
     let root = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string_lossy().to_string());
     let result = tauri::async_runtime::spawn_blocking(move || crate::sectools::iac::scan_path(&path)).await.map_err(|e| AppError::Internal(format!("check failed: {e}")))?;
+    Ok(Some(ContainerScan { root, result }))
+}
+
+/// Check a pasted Linux start-up file (crontab, unit, shell profile, authorized_keys, sudoers,
+/// passwd, ...) for persistence. Nothing is contacted or run.
+#[tauri::command]
+pub async fn linux_persist_scan_text(text: String, kind: String) -> AppResult<containers::FileReport> {
+    use crate::sectools::linux_persist;
+    if text.len() > linux_persist::MAX_TEXT {
+        return Err(validation(format!("The text is larger than {} MB", linux_persist::MAX_TEXT / 1024 / 1024)));
+    }
+    if !linux_persist::KINDS.contains(&kind.as_str()) {
+        return Err(validation("Unknown file type"));
+    }
+    tauri::async_runtime::spawn_blocking(move || linux_persist::analyze("pasted text", &text, &kind))
+        .await
+        .map_err(|e| AppError::Internal(format!("check failed: {e}")))?
+        .ok_or_else(|| validation("Choose the type of this file"))
+}
+
+/// Choose a Linux file system (a mounted or copied image, a triage collection) or one file in a
+/// native dialog and check it for persistence. Files are only read. None when cancelled.
+#[tauri::command]
+pub async fn linux_persist_scan_pick(app: AppHandle, folder: bool) -> AppResult<Option<ContainerScan>> {
+    use crate::sectools::linux_persist;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut d = app.dialog().file().set_title(if folder { "Choose a Linux file system (the folder that holds etc/)" } else { "Choose a Linux start-up file" });
+    if let Some(w) = app.get_webview_window("main") {
+        d = d.set_parent(&w);
+    }
+    let send = move |p: Option<tauri_plugin_dialog::FilePath>| {
+        let _ = tx.send(p.and_then(|f| f.into_path().ok()));
+    };
+    if folder {
+        d.pick_folder(send);
+    } else {
+        d.pick_file(send);
+    }
+    let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
+    let root = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string_lossy().to_string());
+    let result = tauri::async_runtime::spawn_blocking(move || -> AppResult<containers::ScanResult> {
+        if folder {
+            return linux_persist::scan_path(&path).map_err(AppError::Validation);
+        }
+        let mut data = Vec::new();
+        std::io::Read::read_to_end(&mut open_limited(&path, linux_persist::MAX_FILE_BYTES)?, &mut data)?;
+        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let mut report = linux_persist::analyze(&name, &String::from_utf8_lossy(&data), "auto").ok_or_else(|| validation("This file is none of the start-up files the check knows"))?;
+        report.sha256 = Sha256::digest(&data).iter().map(|b| format!("{b:02x}")).collect();
+        Ok(containers::ScanResult { files: vec![report], files_seen: 1, truncated: false })
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("check failed: {e}")))??;
     Ok(Some(ContainerScan { root, result }))
 }
 

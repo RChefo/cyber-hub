@@ -1641,6 +1641,8 @@ export interface ContainerFileReport {
   kind: string;
   issues: ContainerIssue[];
   error: string;
+  /** SHA-256 of the file's bytes, where the checker keeps it (Linux persistence) */
+  sha256?: string;
 }
 
 export interface ContainerScanResult {

@@ -14,6 +14,7 @@ import { WorkbenchTool } from "./tools/Workbench";
 import { DnsIntelTool, HttpBuilderTool, PortsTool, SecretsTool, SubdomainMonitorTool, TlsTool } from "./tools/AssessmentTools";
 import { CloudTool } from "./tools/CloudTool";
 import { FileTriageTool } from "./tools/FileTriageTool";
+import { LinuxTool } from "./tools/LinuxTool";
 import { OAuthTool } from "./tools/OAuthTool";
 import { ContainerTool } from "./tools/ContainerTool";
 import { CaptureTool, LogTool } from "./tools/TriageTools";
@@ -46,6 +47,7 @@ const VIEWS: Record<UtilityId, ComponentType> = {
   containers: ContainerTool,
   cloud: CloudTool,
   "file-triage": FileTriageTool,
+  "linux-persistence": LinuxTool,
   pcap: CaptureTool,
   logs: LogTool,
 };

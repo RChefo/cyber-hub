@@ -42,6 +42,9 @@ pub struct FileReport {
     pub issues: Vec<Issue>,
     /// why the file could not be read ("" when it was)
     pub error: String,
+    /// SHA-256 of the file's bytes, where the checker keeps it (evidence for findings)
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Default)]
