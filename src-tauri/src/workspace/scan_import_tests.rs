@@ -398,6 +398,62 @@ fn unmatched_nuclei_results_and_passing_sarif_results_are_skipped() {
     assert!(p.warnings.iter().any(|w| w.contains("pass or notApplicable")));
 }
 
+#[test]
+fn suppressed_sarif_results_are_skipped_unless_the_suppression_is_not_accepted() {
+    let sarif = json!({ "version": "2.1.0", "runs": [{ "tool": { "driver": { "name": "T" } }, "results": [
+        { "ruleId": "accepted", "message": { "text": "a" }, "suppressions": [{ "kind": "external", "status": "accepted", "justification": "false positive" }] },
+        { "ruleId": "in-source", "message": { "text": "b" }, "suppressions": [{ "kind": "inSource" }] },
+        { "ruleId": "under-review", "message": { "text": "c" }, "suppressions": [{ "kind": "external", "status": "underReview" }] },
+        { "ruleId": "rejected", "message": { "text": "d" }, "suppressions": [{ "kind": "external", "status": "rejected" }] },
+        { "ruleId": "empty", "message": { "text": "e" }, "suppressions": [] },
+        { "ruleId": "plain", "message": { "text": "f" } }
+    ]}]}).to_string();
+    let p = parse(&sarif).unwrap();
+    let kept: Vec<&str> = p.findings.iter().map(|f| f.rule_id.as_str()).collect();
+    assert_eq!(kept, ["under-review", "rejected", "empty", "plain"]);
+    assert!(p.warnings.iter().any(|w| w.starts_with("2 suppressed results")), "{:?}", p.warnings);
+}
+
+/// Findings exported as SARIF come back with their titles, severities and locations, and an export
+/// imported twice is recognized by its fingerprints.
+#[test]
+fn cyber_hub_sarif_exports_import_back() {
+    use crate::commands::projects::{finding_save, findings_of, FindingInput};
+    let db = crate::db::Db::open_in_memory().unwrap();
+    let findings = db
+        .with(|c| {
+            c.execute("INSERT INTO projects (name, status, created_at, updated_at) VALUES ('Shop', 'active', 't', 't')", [])?;
+            let pid = c.last_insert_rowid();
+            for (title, severity, target, status) in [
+                ("Container runs as root", "high", "deploy/Dockerfile", "new"),
+                ("Outdated TLS", "medium", "https://shop.example.com/", "confirmed"),
+                ("Server banner", "info", "shop.example.com", "new"),
+                ("Old jQuery", "low", "static/js/jquery.js", "false_positive"),
+                ("Remote code execution", "critical", "pkg:npm/minimist@1.2.5", "new"),
+            ] {
+                finding_save(c, &FindingInput { project_id: pid, title: title.into(), severity: severity.into(), status: status.into(), affected_target: target.into(), ..Default::default() }, "user")?;
+            }
+            findings_of(c, pid)
+        })
+        .unwrap();
+    let text = crate::workspace::findings_export::sarif("Shop", "2026-11-09T00:00:00Z", &findings).unwrap();
+    let p = parse(&text).unwrap();
+    assert_eq!(p.tool, "Cyber Hub");
+    let got: Vec<(&str, &str, &str)> = p.findings.iter().map(|f| (f.title.as_str(), f.severity, f.target.as_str())).collect();
+    for want in [
+        ("Container runs as root", "high", "deploy/Dockerfile"),
+        ("Outdated TLS", "medium", "https://shop.example.com/"),
+        ("Server banner", "info", ""),
+        ("Remote code execution", "critical", ""),
+    ] {
+        assert!(got.contains(&want), "{want:?} not in {got:?}");
+    }
+    assert_eq!(p.findings.len(), 4, "the false positive stays dismissed");
+    assert!(p.findings.iter().find(|f| f.title == "Outdated TLS").is_some_and(|f| f.network), "a URL location is a network target");
+    let again = parse(&text).unwrap();
+    assert_eq!(p.findings.iter().map(|f| &f.fingerprint).collect::<Vec<_>>(), again.findings.iter().map(|f| &f.fingerprint).collect::<Vec<_>>());
+}
+
 /// A Nessus file with one item per (host, plugin, port, severity).
 fn nessus_doc(items: &[(&str, &str, u16, u8)]) -> String {
     let mut hosts: Vec<&str> = items.iter().map(|i| i.0).collect();

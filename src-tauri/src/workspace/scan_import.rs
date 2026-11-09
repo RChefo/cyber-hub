@@ -1201,6 +1201,7 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
     let tool = runs.first().map(|r| s(&r["tool"]["driver"], "name")).filter(|n| !n.is_empty()).unwrap_or_else(|| "SARIF".into());
     let mut p = Parsed::new(Format::Sarif, &trunc(&tool, 60));
     let mut skipped_kinds = 0usize;
+    let mut skipped_suppressed = 0usize;
     for run in &runs {
         let driver = &run["tool"]["driver"];
         let run_tool = { let n = s(driver, "name"); if n.is_empty() { tool.clone() } else { n } };
@@ -1212,6 +1213,15 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
             let kind = s(res, "kind");
             if kind == "pass" || kind == "notApplicable" {
                 skipped_kinds += 1;
+                continue;
+            }
+            // §3.27.23: a result someone dismissed (a suppression comment in the source, a false
+            // positive or accepted risk in another tool) is not a new problem. A suppression
+            // without a status counts as accepted (ESLint's SARIF formatter writes its in-source
+            // suppressions that way); one under review or rejected leaves the result in
+            let suppressed = res.get("suppressions").and_then(Value::as_array).is_some_and(|list| list.iter().any(|x| matches!(x.get("status").and_then(Value::as_str), None | Some("accepted"))));
+            if suppressed {
+                skipped_suppressed += 1;
                 continue;
             }
             let rule_id = { let r = s(res, "ruleId"); if r.is_empty() { res.get("rule").map(|x| s(x, "id")).unwrap_or_default() } else { r } };
@@ -1272,6 +1282,11 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
     }
     if skipped_kinds > 0 {
         p.warnings.push(format!("{skipped_kinds} results of kind pass or notApplicable were skipped"));
+    }
+    match skipped_suppressed {
+        0 => {}
+        1 => p.warnings.push("1 suppressed result (dismissed in the source or in another tool) was skipped".into()),
+        n => p.warnings.push(format!("{n} suppressed results (dismissed in the source or in another tool) were skipped")),
     }
     Ok(p)
 }
