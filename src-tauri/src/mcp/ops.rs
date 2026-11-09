@@ -201,6 +201,24 @@ struct CreateFinding {
     cvss_vector: Option<String>,
 }
 
+impl CreateFinding {
+    /// The finding as the app saves it (used for the approval's checks and for the write).
+    fn input(&self) -> projects::FindingInput {
+        projects::FindingInput {
+            project_id: self.project_id,
+            title: self.title.clone(),
+            severity: self.severity.clone(),
+            status: self.status.clone().unwrap_or_else(|| "new".into()),
+            description: self.description.clone().unwrap_or_default(),
+            remediation: self.remediation.clone().unwrap_or_default(),
+            affected_target: self.affected_target.clone().unwrap_or_default(),
+            cve: self.cve.clone().unwrap_or_default(),
+            cvss_vector: self.cvss_vector.clone().unwrap_or_default(),
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 struct ExecArgs {
@@ -785,6 +803,9 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
         "cyberhub_create_finding" => {
             let a: CreateFinding = parse(args)?;
             check_project(&db, a.project_id)?;
+            // everything the save checks (lengths, severity, status, control characters, the CVSS
+            // vector): a finding that would be refused never reaches the user
+            projects::validate_finding(&a.input()).map_err(app_err)?;
             let long = |text: String| if text.chars().count() > 600 { format!("{}… ({} characters in total)", text.chars().take(600).collect::<String>(), text.chars().count()) } else { text };
             let mut checks = vec!["Arguments valid".into(), format!("Project #{} exists", a.project_id)];
             let mut details = vec![
@@ -1033,18 +1054,7 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
         "cyberhub_create_finding" => {
             let a: CreateFinding = parse(args)?;
             check_project(&db, a.project_id)?;
-            let input = projects::FindingInput {
-                project_id: a.project_id,
-                title: a.title,
-                severity: a.severity,
-                status: a.status.unwrap_or_else(|| "new".into()),
-                description: a.description.unwrap_or_default(),
-                remediation: a.remediation.unwrap_or_default(),
-                affected_target: a.affected_target.unwrap_or_default(),
-                cve: a.cve.unwrap_or_default(),
-                cvss_vector: a.cvss_vector.unwrap_or_default(),
-                ..Default::default()
-            };
+            let input = a.input();
             let id = app.state::<Db>().with(|c| projects::finding_save(c, &input, "mcp")).map_err(app_err)?;
             Ok(json!({ "findingId": id, "projectId": a.project_id }))
         }

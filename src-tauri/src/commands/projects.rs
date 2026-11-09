@@ -591,6 +591,12 @@ fn clean_finding(input: &FindingInput) -> AppResult<CleanFinding> {
     })
 }
 
+/// The checks a save makes, without saving (an MCP approval is only shown for a finding that
+/// would be saved).
+pub(crate) fn validate_finding(input: &FindingInput) -> AppResult<()> {
+    clean_finding(input).map(|_| ())
+}
+
 /// Creates or updates a finding and records what changed in its history. `source` says who made
 /// the change (`user`, `mcp`, …).
 pub(crate) fn finding_save(c: &Connection, input: &FindingInput, source: &str) -> AppResult<i64> {

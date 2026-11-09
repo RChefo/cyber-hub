@@ -62,7 +62,7 @@ pub fn list_templates(c: &Connection, q: &TemplateQuery) -> AppResult<Value> {
             return Err(validation("severity must be critical, high, medium, low or info"));
         }
     }
-    let needle = q.query.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_lowercase);
+    let needle = q.query.as_deref().map(|s| s.trim().chars().take(200).collect::<String>()).filter(|s| !s.is_empty()).map(|s| s.to_lowercase());
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
     let matching: Vec<templates::FindingTemplate> = templates::list(c)?
         .into_iter()
@@ -194,7 +194,13 @@ pub fn describe_checklist_set(c: &Connection, a: &ChecklistSet) -> AppResult<(St
         .ok_or_else(|| validation(format!("{} is not a test of the bundled checklist", a.test_id.chars().take(40).collect::<String>())))?;
     let mut details = vec![("Test".to_string(), format!("{} {}", test.id, test.name)), ("Status".to_string(), a.status.replace('_', " "))];
     if let Some(note) = &a.note {
-        details.push(("Note".to_string(), excerpt(note, 600)));
+        // the same check as the write: a note it would refuse never reaches the user
+        let note = crate::util::clean("Note", note, 2000, false)?;
+        let existing: Option<String> =
+            c.query_row("SELECT note FROM checklist_items WHERE project_id = ?1 AND test_id = ?2", params![a.project_id, a.test_id], |r| r.get(0)).optional()?;
+        let replaces = existing.filter(|e| !e.is_empty() && *e != note).map(|_| "; replaces the existing note").unwrap_or("");
+        let shown = if note.is_empty() { "(empty: clears the note)".to_string() } else { excerpt(&note, 600) };
+        details.push(("Note".to_string(), format!("{shown} ({} characters{replaces})", note.chars().count())));
     }
     if let Some(fid) = a.finding_id {
         let owner: Option<(i64, String)> = c.query_row("SELECT project_id, title FROM findings WHERE id = ?1", params![fid], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
@@ -295,6 +301,10 @@ mod tests {
             let athz = checklist(c, &ChecklistQuery { project_id: pid, category: Some("WSTG-ATHZ".into()), status: None })?;
             assert!(athz["tests"].as_array().unwrap().iter().all(|t| t["id"].as_str().unwrap().starts_with("WSTG-ATHZ")));
 
+            // the approval says when a note replaces another, and shows its length
+            let (_, d) = describe_checklist_set(c, &ChecklistSet { note: Some("New note".into()), finding_id: None, status: "failed".into(), project_id: pid, test_id: "WSTG-ATHZ-04".into() })?;
+            assert!(d.iter().any(|(k, v)| k == "Note" && v.contains("8 characters; replaces the existing note")), "{d:?}");
+
             // refused before an approval is asked
             let bad = |s: ChecklistSet| describe_checklist_set(c, &s).unwrap_err().to_string();
             let base = || ChecklistSet { project_id: pid, test_id: "WSTG-ATHZ-04".into(), status: "passed".into(), note: None, finding_id: None };
@@ -302,6 +312,8 @@ mod tests {
             assert!(bad(ChecklistSet { status: "done".into(), ..base() }).contains("status must be"));
             assert!(bad(ChecklistSet { finding_id: Some(foreign), ..base() }).contains("another project"));
             assert!(bad(ChecklistSet { project_id: 999, ..base() }).contains("project 999"));
+            assert!(bad(ChecklistSet { note: Some("x".repeat(2001)), ..base() }).contains("Note"), "too long for the write");
+            assert!(bad(ChecklistSet { note: Some("a\u{0}b".into()), ..base() }).contains("Note"), "control characters"); 
             assert!(checklist(c, &ChecklistQuery { project_id: pid, category: Some("WSTG-XXXX".into()), status: None }).is_err());
             assert!(serde_json::from_value::<ChecklistSet>(json!({ "project_id": 1, "test_id": "WSTG-INFO-01", "status": "passed", "verified": true })).is_err());
             Ok(())

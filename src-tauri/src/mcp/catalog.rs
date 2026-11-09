@@ -183,7 +183,7 @@ pub static TOOLS: &[ToolSpec] = &[
         description: "Create a finding in a project. Requires the user's approval in Cyber Hub. To reuse a vetted write-up, read a template with cyberhub_get_finding_template and adapt it; score the vector with cyberhub_score_cvss first.",
         schema: || obj(json!({
             "project_id": project_id(),
-            "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+            "title": { "type": "string", "minLength": 1, "maxLength": 200 },
             "severity": { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] },
             "status": { "type": "string", "enum": ["new", "under_review", "confirmed", "accepted_risk", "in_remediation", "resolved", "reopened", "false_positive"], "description": "Defaults to new. The names open and reported of earlier versions are still accepted (as new and confirmed)." },
             "description": { "type": "string", "maxLength": 20000 },

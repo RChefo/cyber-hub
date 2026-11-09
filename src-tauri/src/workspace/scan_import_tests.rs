@@ -668,3 +668,81 @@ fn csv_parsing_survives_cut_and_multibyte_input() {
     assert!(cut.incomplete && cut.warnings.iter().any(|w| w.contains("quoted")), "{:?}", cut.warnings);
     assert_eq!(cut.findings[0].title, "A");
 }
+
+/// Time spent at the import limits: 10,000 findings on 500 hosts (half of them outside the scope),
+/// as Nessus XML and as CSV, previewed, imported, and imported again.
+/// `cargo test --lib import_at_the_limits -- --ignored --nocapture` (debug timings are an upper
+/// bound; release builds are several times faster).
+#[test]
+#[ignore = "timing"]
+fn import_at_the_limits() {
+    use std::time::Instant;
+    let hosts: Vec<String> = (0..500).map(|i| format!("93.184.{}.{}", 215 + i / 250, i % 250 + 1)).collect();
+    let items: Vec<(String, String, u16, u8)> = hosts.iter().flat_map(|h| (0..20).map(move |j| (h.clone(), format!("{}", 10_000 + j), 443 + j as u16, (j % 5) as u8))).collect();
+    let refs: Vec<(&str, &str, u16, u8)> = items.iter().map(|(h, p, port, s)| (h.as_str(), p.as_str(), *port, *s)).collect();
+    let nessus = nessus_doc(&refs);
+    let mut csv = String::from("Name,Risk,Host,Port,Plugin ID,Description\n");
+    for (h, p, port, s) in &items {
+        csv.push_str(&format!("Plugin {p},{},{h},{port},{p},\"Line one, with a comma\nline two\"\n", ["None", "Low", "Medium", "High", "Critical"][*s as usize]));
+    }
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        for (label, text) in [("Nessus", nessus.as_str()), ("CSV", csv.as_str())] {
+            let p = setup(c);
+            let ev = evidence::add_text(c, p, "stand-in", "x", "", "user")?;
+            let file = FileInfo { file_name: "big", sha256: "ef", evidence_id: Some(ev.id) };
+            let t = Instant::now();
+            let parsed = parse(text).unwrap();
+            let parse_ms = t.elapsed().as_millis();
+            let t = Instant::now();
+            let pv = preview(c, p, &parsed, Options::default())?;
+            let preview_ms = t.elapsed().as_millis();
+            let t = Instant::now();
+            let r = import(c, p, &parsed, Options::default(), &file)?;
+            let import_ms = t.elapsed().as_millis();
+            let t = Instant::now();
+            let again = import(c, p, &parsed, Options::default(), &file)?;
+            let again_ms = t.elapsed().as_millis();
+            eprintln!(
+                "{label}: {} KB, {} findings ({} new, {} outside the scope, {} informational); parse {parse_ms} ms, preview {preview_ms} ms, import {import_ms} ms, import again {again_ms} ms",
+                text.len() / 1024, parsed.findings.len(), r.created, pv.counts.out_of_scope, pv.counts.info
+            );
+            assert_eq!(parsed.findings.len(), 10_000, "{label}");
+            assert_eq!((r.created, again.created, again.seen_again), (4_000, 0, 4_000), "{label}: half the hosts are in scope, a fifth of the items informational");
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn csv_values_are_redacted_and_rows_without_a_target_are_handled() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let p = setup(c);
+        // a header that is really a data row, a column of secrets chosen as the rule ID, a reference
+        // with a key, and a row whose target cell is empty
+        let text = "token=FAKE-header-value,Host,Ref,Notes\nT1,app.example.com,https://x.example/?api_key=FAKE-ref-value,password=FAKE-rule-value\nT2,,https://y.example/,n\n";
+        let m = csv::CsvMapping { title: Some(0), target: Some(1), references: Some(2), rule_id: Some(3), ..Default::default() };
+        let parsed = parse_csv_with(text, &m).unwrap();
+        let info = parsed.csv.as_ref().unwrap();
+        assert!(!info.headers[0].contains("FAKE-header-value"), "{:?}", info.headers);
+        let t1 = &parsed.findings[0];
+        assert!(!t1.rule_id.contains("FAKE-rule-value"), "{}", t1.rule_id);
+        assert!(t1.references.iter().all(|r| !r.contains("FAKE-ref-value")), "{:?}", t1.references);
+        // with a target column, a row without a target counts as outside the scope
+        let with_info = Options { include_info: true, ..Default::default() };
+        let pv = preview(c, p, &parsed, with_info)?;
+        assert_eq!((pv.counts.new, pv.counts.out_of_scope), (1, 1), "{:?}", pv.counts);
+        // without a target column, findings have no target to check, and the preview says so
+        let untargeted = parse_csv_with(text, &csv::CsvMapping { title: Some(0), ..Default::default() }).unwrap();
+        assert!(untargeted.warnings.iter().any(|w| w.contains("No target column")), "{:?}", untargeted.warnings);
+        assert_eq!(preview(c, p, &untargeted, with_info)?.counts.new, 2);
+        Ok(())
+    })
+    .unwrap();
+    // more than 64 KB of multibyte text: detection and parsing never cut a character
+    let wide = format!("Name,Host\nx,{}\n", "é".repeat(40_000));
+    assert!(parse(&wide).is_ok());
+    assert!(parse(&format!("\r\n\r\nName;Host\n{};a\n", "日本".repeat(30_000))).is_ok(), "blank lines before the header");
+}

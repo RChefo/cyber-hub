@@ -188,7 +188,7 @@ A CSV file can come from a spreadsheet or from a scanner's CSV export (Nessus, Q
 **Reading the file.** The file is read as RFC 4180:
 * quoted values may contain delimiters, `""` and line breaks;
 * CRLF or LF line ends; blank lines are skipped; a UTF-8 BOM is ignored;
-* the delimiter is the most frequent of comma, semicolon and tab outside quotes in the first line (a comma wins a tie);
+* the delimiter is whichever of comma, semicolon and tab splits the header row into at least two columns and the next rows into as many, under the same quoting rules (then the most columns; a comma wins a tie);
 * at most 200 columns and 50,000 characters per cell are kept.
 
 A file that ends inside a quoted value keeps the rows before it and is marked as not read completely.
@@ -206,7 +206,7 @@ A file that ends inside a quoted value keeps the rows before it and is marked as
 * **References.** Only http(s) URLs are kept.
 * **CVSS.** A valid CVSS vector is scored. Any other value goes into the technical details.
 
-**Scope and copied text.** As for the other formats: rows whose target is outside the scope are not recorded, and every copied value is redacted and cleaned. The sample values the preview shows are redacted too.
+**Scope and copied text.** As for the other formats, rows whose target is outside the scope are not recorded. When a target column is chosen, a row with an empty or unreadable target also counts as outside the scope. Without a target column, findings are recorded without a target (there is nothing to check), and the preview warns about it. Every copied value is redacted and cleaned, rule IDs and references included, and so are the header names and sample values the preview shows.
 
 **Deduplication and fixes.** The fingerprint is the rule ID (or the title when there is none) and the target, so the same rows are recognized in a later file. **A CSV file never verifies fixes**: exports are often filtered by severity or host, so a finding that a CSV file does not list proves nothing. Library templates do not apply to CSV rows, because a rule ID in a CSV file does not say which scanner it belongs to.
 

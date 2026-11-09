@@ -63,29 +63,25 @@ pub struct CsvInfo {
     pub severity_scale: Option<String>,
 }
 
-/// The delimiter of the header line: the most frequent of `,` `;` and tab outside quotes (a comma
-/// wins a tie).
+/// The start of a text: at most 64 K characters, cut on a character boundary (never on a byte
+/// offset: with `panic = "abort"` a split character would end the app).
+fn head(text: &str) -> &str {
+    let end = text.char_indices().nth(64 * 1024).map_or(text.len(), |(i, _)| i);
+    &text[..end]
+}
+
+/// The delimiter: of comma, semicolon and tab, the one that splits the header row into at least two
+/// columns and the next rows into as many, read with the same quoting rules as the rows. Then the
+/// most columns; a comma wins a tie.
 fn delimiter(text: &str) -> Option<char> {
-    let mut counts = [(',', 0usize), (';', 0), ('\t', 0)];
-    let mut quoted = false;
-    for c in text.chars().take(64 * 1024) {
-        match c {
-            '"' => quoted = !quoted,
-            '\n' | '\r' if !quoted => break,
-            _ if !quoted => {
-                for (d, n) in counts.iter_mut() {
-                    if c == *d {
-                        *n += 1;
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut best: Option<(char, usize)> = None;
-    for (d, n) in counts {
-        if n > 0 && best.map_or(true, |(_, m)| n > m) {
-            best = Some((d, n));
+    let head = head(text);
+    let mut best: Option<(char, (usize, usize))> = None;
+    for d in [',', ';', '\t'] {
+        let (rows, _, _) = split_rows(head, d, 5);
+        let Some(n) = rows.first().map(Vec::len).filter(|n| *n >= 2) else { continue };
+        let score = (rows[1..].iter().filter(|r| r.len() == n).count(), n);
+        if best.map_or(true, |(_, s)| score > s) {
+            best = Some((d, score));
         }
     }
     best.map(|(d, _)| d)
@@ -174,7 +170,7 @@ fn split_rows(text: &str, delim: char, max_rows: usize) -> (Vec<Vec<String>>, us
 /// Whether a text looks like CSV with a header row: a delimiter and at least two named columns.
 pub fn looks_like_csv(text: &str) -> bool {
     let Some(d) = delimiter(text) else { return false };
-    let (rows, _, _) = split_rows(&text[..text.len().min(64 * 1024)], d, 1);
+    let (rows, _, _) = split_rows(head(text), d, 1);
     rows.first().is_some_and(|h| h.iter().filter(|c| !c.trim().is_empty()).count() >= 2 && h.iter().all(|c| c.chars().count() <= 200))
 }
 
@@ -293,15 +289,16 @@ fn csv_severity(raw: &str, scale: Scale) -> Option<&'static str> {
 
 /// Reads CSV findings with `mapping`, or with the mapping suggested by the headers.
 pub fn parse_csv(text: &str, mapping: Option<&CsvMapping>) -> Result<Parsed, String> {
-    let delim = delimiter(text).ok_or("The CSV file has no comma, semicolon or tab in its first line")?;
+    let delim = delimiter(text).ok_or("The CSV file's first row has no comma, semicolon or tab between columns")?;
     let (mut rows, past, broken) = split_rows(text, delim, MAX_FINDINGS + 1);
     if rows.is_empty() {
         return Err("The CSV file is empty".into());
     }
-    let headers: Vec<String> = rows.remove(0).into_iter().map(|h| clean_text(h.trim(), 120)).collect();
+    // a file without a header row would show its first data row here: redacted like any value
+    let headers: Vec<String> = rows.remove(0).into_iter().map(|h| clean_text(&redact_text(h.trim()), 120)).collect();
     let m = mapping.cloned().unwrap_or_else(|| suggest(&headers));
     if let Some(bad) = m.columns().into_iter().flatten().find(|i| *i >= headers.len()) {
-        return Err(format!("Column {} does not exist in this file", bad + 1));
+        return Err(format!("Column {} does not exist in this file", bad.saturating_add(1)));
     }
     let mut p = Parsed::new(Format::Csv, "CSV");
     p.no_absence = true;
@@ -331,6 +328,9 @@ pub fn parse_csv(text: &str, mapping: Option<&CsvMapping>) -> Result<Parsed, Str
     }
     if m.severity.is_none() && m.cvss.is_none() {
         p.warnings.push("No severity or CVSS column is chosen, so every finding is informational".into());
+    }
+    if m.target.is_none() {
+        p.warnings.push("No target column is chosen, so the findings are recorded without a target (there is nothing to check against the scope)".into());
     }
     let mut untitled = 0usize;
     let mut hosts: BTreeSet<(String, bool)> = BTreeSet::new();
@@ -392,7 +392,9 @@ pub fn parse_csv(text: &str, mapping: Option<&CsvMapping>) -> Result<Parsed, Str
             tags: tool_tags("csv", std::iter::empty()),
             fingerprint: fingerprint(&["csv", &key, &target]),
             cvss,
-            network: !target.is_empty(),
+            // with a target column, a row whose target is empty or unreadable counts as outside
+            // the scope, as for the other formats
+            network: m.target.is_some(),
         });
     }
     for (h, is_ip) in hosts {
@@ -418,12 +420,27 @@ mod tests {
         assert_eq!(rows[2], ["XSS", "plain", "app.example.com"]);
         assert_eq!(delimiter("a;b;\"c,d,e\"\n1;2;3"), Some(';'), "commas inside quotes do not count");
         assert_eq!(delimiter("a\tb\n"), Some('\t'));
-        assert_eq!(delimiter("a,b;c\n"), Some(','), "a comma wins a tie");
+        assert_eq!(delimiter("a,b;c,d;e\n"), Some(','), "a comma wins a tie");
         assert_eq!(delimiter("no delimiter here"), None);
         let (rows, _, broken) = split_rows("a,b\n\"open,1\n", ',', 10);
         assert!(broken && rows.len() == 2, "{rows:?}");
         let (rows, past, _) = split_rows("h\n1\n2\n3\n", ',', 2);
         assert_eq!((rows.len(), past), (2, 2));
+    }
+
+    #[test]
+    fn detection_never_cuts_a_character_and_follows_the_row_quoting() {
+        // more than 64 K characters of 2-byte text: byte 65,536 falls inside a character
+        let wide = format!("a,b\nx{}", "é".repeat(40_000));
+        assert!(looks_like_csv(&wide));
+        let cjk = format!("名前,ホスト\n{}", "日本語,".repeat(30_000));
+        assert!(looks_like_csv(&cjk));
+        assert_eq!(head(&"é".repeat(70_000)).chars().count(), 64 * 1024);
+        // a quote inside a header cell is a plain character, as in the rows
+        assert_eq!(delimiter("5\" pipe,name,x\n1,2,3"), Some(','));
+        // blank lines before the header are skipped
+        assert_eq!(delimiter("\r\n\nName;Host\nA;b"), Some(';'));
+        assert_eq!(delimiter("one column only\nvalue"), None);
     }
 
     #[test]

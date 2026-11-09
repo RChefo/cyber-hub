@@ -183,9 +183,11 @@ impl Parsed {
             self.incomplete = true;
             return;
         }
+        // the fingerprint was computed from the raw values before
+        f.rule_id = clean_text(&redact_text(&f.rule_id), 200);
         f.title = clean_text(&redact_text(&f.title), 200);
         if f.title.is_empty() {
-            f.title = if f.rule_id.trim().is_empty() { "Imported finding".into() } else { clean_text(&f.rule_id, 200) };
+            f.title = if f.rule_id.trim().is_empty() { "Imported finding".into() } else { f.rule_id.clone() };
         }
         f.target = clean_text(&redact_text(&f.target), 500);
         f.description = clean_text(&redact_text(&f.description), 50_000);
@@ -193,7 +195,7 @@ impl Parsed {
         f.technical = clean_text(&redact_text(&f.technical), 50_000);
         f.category = clean_text(&f.category, 100);
         f.cve = clean_text(&f.cve, 200);
-        f.references = f.references.iter().map(|r| clean_text(r, 2000)).filter(|r| !r.is_empty()).collect();
+        f.references = f.references.iter().map(|r| clean_text(&redact_text(r), 2000)).filter(|r| !r.is_empty()).collect();
         let mut tags: Vec<String> = Vec::new();
         for t in f.tags.iter().map(|t| clean_text(t, 40)) {
             if !t.is_empty() && !tags.contains(&t) && tags.len() < 20 {
@@ -1689,7 +1691,8 @@ pub fn preview(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options) 
     pv.assets = batch.len();
     pv.assets_out_of_scope = left_out;
     pv.assets_new = count_new_assets(c, project_id, &parsed.assets, &entries)?;
-    pv.out_of_scope_hosts = out_hosts.into_iter().take(20).collect();
+    // hosts read from the file (for CSV, from any cell): shown redacted and cleaned
+    pv.out_of_scope_hosts = out_hosts.into_iter().take(20).map(|h| clean_text(&redact_text(&h), 255)).collect();
     let missing = not_reported(c, project_id, parsed)?;
     pv.not_reported_count = missing.len();
     pv.not_reported = missing
