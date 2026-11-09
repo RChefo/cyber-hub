@@ -12,6 +12,7 @@ import { HtmlTool, JsonTool, RegexTool, XmlTool } from "./tools/TextTools";
 import { IocTool } from "./tools/IocTool";
 import { WorkbenchTool } from "./tools/Workbench";
 import { DnsIntelTool, HttpBuilderTool, PortsTool, SecretsTool, SubdomainMonitorTool, TlsTool } from "./tools/AssessmentTools";
+import { CloudTool } from "./tools/CloudTool";
 import { ContainerTool } from "./tools/ContainerTool";
 import { CaptureTool, LogTool } from "./tools/TriageTools";
 
@@ -40,6 +41,7 @@ const VIEWS: Record<UtilityId, ComponentType> = {
   "subdomain-monitor": SubdomainMonitorTool,
   secrets: SecretsTool,
   containers: ContainerTool,
+  cloud: CloudTool,
   pcap: CaptureTool,
   logs: LogTool,
 };

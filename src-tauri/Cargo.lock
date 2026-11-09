@@ -799,7 +799,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d045de693cb712d0b22c6a64be5b953f67b3ce00ab5ad3dd5d8b441886ab8e1a"
 dependencies = [
  "quote",
- "syn 3.0.9",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -817,6 +817,7 @@ dependencies = [
  "encoding_rs",
  "futures-util",
  "getrandom 0.3.4",
+ "hcl-rs",
  "hickory-resolver",
  "hmac",
  "ipnet",
@@ -1822,6 +1823,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "hcl-edit"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b1b3e90b173143b26dbb7495ac79e25c0206389d012881cea7cda9f0f1fce8a"
+dependencies = [
+ "fnv",
+ "hcl-primitives",
+ "pratt",
+ "vecmap-rs",
+ "winnow 1.0.4",
+]
+
+[[package]]
+name = "hcl-primitives"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c35ea757c1bdfa0bdfe8f65771be944d199a7f379b739c8f6fe2ad2f92d18ecb"
+dependencies = [
+ "itoa",
+ "kstring",
+ "ryu",
+ "serde",
+ "unicode-ident",
+]
+
+[[package]]
+name = "hcl-rs"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9736cfea6e2ed86d991394a6a5106cf768ee97dcb3db9cbea49859a9ecbfd1fb"
+dependencies = [
+ "hcl-edit",
+ "hcl-primitives",
+ "indexmap 2.14.2",
+ "itoa",
+ "serde",
+ "vecmap-rs",
+]
+
+[[package]]
 name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2502,6 +2543,16 @@ dependencies = [
  "secret-service",
  "windows-sys 0.60.2",
  "zeroize",
+]
+
+[[package]]
+name = "kstring"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "558bf9508a558512042d3095138b1f7b8fe90c5467d94f9f1da28b3731c5dbd1"
+dependencies = [
+ "serde",
+ "static_assertions",
 ]
 
 [[package]]
@@ -3436,6 +3487,12 @@ checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
 ]
+
+[[package]]
+name = "pratt"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17e0a4425d076f0718b820673a38fbf3747080c61017eeb0dd79bc7e472b8bb8"
 
 [[package]]
 name = "precomputed-hash"
@@ -5596,6 +5653,15 @@ name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+
+[[package]]
+name = "vecmap-rs"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58c1dc449b873236909c7f325adf395071c209047737d831183e95c692413adf"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "version-compare"

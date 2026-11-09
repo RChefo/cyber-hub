@@ -4,6 +4,8 @@
 pub mod dns_intel;
 pub mod evtx;
 pub mod http;
+pub mod iac;
+pub mod iam;
 pub mod logs;
 pub mod pcap;
 pub mod containers;

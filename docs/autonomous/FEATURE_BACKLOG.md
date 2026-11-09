@@ -104,8 +104,8 @@ Each criterion is rated from 1 to 5, where 5 is best: D demand (×3), U professi
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 27 | Dependency lockfiles into the SBOM analysis (npm, pnpm, yarn, Cargo, Python, Composer, Ruby, Go, NuGet), with the OSV check | 5 | 5 | 4 | 5 | 4 | 5 | 5 | 4 | 61 | **Done** (Mission 2) |
 | 28 | Windows event log (EVTX) triage with ATT&CK-mapped detections | 5 | 5 | 5 | 4 | 4 | 4 | 4 | 4 | 59 | **Done** (Mission 2) |
-| 29 | AWS IAM policy analysis: privilege escalation, wildcards, public and cross-account access | 4 | 5 | 5 | 4 | 5 | 5 | 5 | 4 | 59 | Planned |
-| 30 | Infrastructure-as-code checks: Terraform (HCL and plan JSON) and CloudFormation | 5 | 5 | 5 | 5 | 3 | 4 | 4 | 3 | 59 | Planned |
+| 29 | AWS IAM policy analysis: privilege escalation, wildcards, public and cross-account access | 4 | 5 | 5 | 4 | 5 | 5 | 5 | 4 | 59 | **Done** (Mission 2) |
+| 30 | Infrastructure-as-code checks: Terraform (HCL and plan JSON) and CloudFormation | 5 | 5 | 5 | 5 | 3 | 4 | 4 | 3 | 59 | **Done** (Mission 2) |
 | 31 | Static PE and ELF triage: imports as capabilities, sections and entropy, strings and indicators | 4 | 4 | 5 | 4 | 4 | 4 | 4 | 4 | 54 | Planned |
 | 32 | Prowler results (OCSF JSON) import | 4 | 4 | 4 | 5 | 4 | 5 | 4 | 3 | 54 | Candidate |
 | 33 | OWASP ASVS 5.0 checklist next to WSTG | 4 | 4 | 4 | 5 | 3 | 5 | 4 | 3 | 53 | Candidate |

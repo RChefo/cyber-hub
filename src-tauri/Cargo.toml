@@ -56,6 +56,8 @@ once_cell = "1.21.4"
 quick-xml = "0.42"
 # dependency lockfiles (Cargo, Poetry, uv); the version tauri-build already uses
 toml = "1"
+# Terraform configuration (HCL) for the cloud infrastructure-as-code checks
+hcl-rs = "0.20"
 regex = "1.13.1"
 # developer-only provisioning tool (feature "provisioning"); not part of app builds
 rpassword = { version = "7.5.4", optional = true }

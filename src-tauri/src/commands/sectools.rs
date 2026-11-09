@@ -222,6 +222,46 @@ pub async fn container_scan_pick(app: AppHandle, folder: bool) -> AppResult<Opti
     Ok(Some(ContainerScan { root, result }))
 }
 
+/// Checks pasted text as Terraform, CloudFormation or an IAM policy (`kind`: auto, terraform,
+/// cloudformation, iam). Nothing is contacted.
+#[tauri::command]
+pub async fn iac_scan_text(text: String, kind: String) -> AppResult<containers::FileReport> {
+    if text.len() > crate::sectools::iac::MAX_TEXT {
+        return Err(validation(format!("The text is larger than {} MB", crate::sectools::iac::MAX_TEXT / 1024 / 1024)));
+    }
+    if !["auto", "terraform", "cloudformation", "iam"].contains(&kind.as_str()) {
+        return Err(validation("Unknown file type"));
+    }
+    let name = if kind == "terraform" { "pasted.tf" } else { "pasted text" };
+    tauri::async_runtime::spawn_blocking(move || crate::sectools::iac::analyze(name, &text, &kind))
+        .await
+        .map_err(|e| AppError::Internal(format!("check failed: {e}")))?
+        .ok_or_else(|| validation("This is not Terraform, a CloudFormation template or an IAM policy. Choose the type if it is one."))
+}
+
+/// Choose a file or folder (native dialog) and check the cloud configuration in it locally.
+/// None when cancelled.
+#[tauri::command]
+pub async fn iac_scan_pick(app: AppHandle, folder: bool) -> AppResult<Option<ContainerScan>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut d = app.dialog().file().set_title(if folder { "Check a folder for cloud configuration" } else { "Check a cloud configuration file" });
+    if let Some(w) = app.get_webview_window("main") {
+        d = d.set_parent(&w);
+    }
+    let send = move |p: Option<tauri_plugin_dialog::FilePath>| {
+        let _ = tx.send(p.and_then(|f| f.into_path().ok()));
+    };
+    if folder {
+        d.pick_folder(send);
+    } else {
+        d.pick_file(send);
+    }
+    let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
+    let root = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string_lossy().to_string());
+    let result = tauri::async_runtime::spawn_blocking(move || crate::sectools::iac::scan_path(&path)).await.map_err(|e| AppError::Internal(format!("check failed: {e}")))?;
+    Ok(Some(ContainerScan { root, result }))
+}
+
 /// A native Open dialog for one file; None when cancelled.
 async fn pick_one(app: &AppHandle, title: &str, filter: (&str, &[&str])) -> Option<std::path::PathBuf> {
     let (tx, rx) = tokio::sync::oneshot::channel();

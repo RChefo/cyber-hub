@@ -153,6 +153,8 @@ export const api = {
   // Container and Kubernetes configuration checks (local only)
   containerScanText: (text: string, kind: string) => call<T.ContainerFileReport>("container_scan_text", { text, kind }),
   containerScanPick: (folder: boolean) => call<T.ContainerScan | null>("container_scan_pick", { folder }),
+  iacScanText: (text: string, kind: string) => call<T.ContainerFileReport>("iac_scan_text", { text, kind }),
+  iacScanPick: (folder: boolean) => call<T.ContainerScan | null>("iac_scan_pick", { folder }),
   // Packet capture and log triage (local only)
   pcapAnalyzePick: () => call<{ file: string; report: T.CaptureReport } | null>("pcap_analyze_pick"),
   logAnalyzeText: (text: string) => call<T.LogReport>("log_analyze_text", { text }),
