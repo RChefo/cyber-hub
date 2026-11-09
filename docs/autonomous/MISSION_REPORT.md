@@ -485,3 +485,63 @@ No confirmed release-blocking defect remains in the code: the redirect-rule gaps
 **READY FOR RELEASE CANDIDATE BUILD.** The upgrade keeps every record and refuses nothing more and allows nothing new; restores are whole or not applied on all three platforms; the scope and redirect rules hold in the real app; the automated suites pass on Windows 11, Ubuntu 24.04.5 and Debian 12.
 
 **Not ready for final release authorization** until the three release blockers above are resolved: Authenticode signing (best set up before the release-candidate build, so the candidate exercises the final pipeline), validation of the candidate's installers and updater, and the owner's review.
+
+## Feature expansion round (2026-11-09)
+
+The owner reviewed RC0 and pointed out that the mission's aim was new capabilities; the RC0 segment had implemented none. This round adds seven, in the six areas the owner named, each tested and committed. It came after RC0, so the RC0 validation does not cover it.
+
+### Statistics
+
+| Item | Value |
+|---|---|
+| Time | 2026-11-09T13:31Z–16:30Z |
+| Commits | 9: seven capabilities, the SARIF import fix and the Findings layout fix (plus this report) |
+| Schema | 19 → 21 (`api_specs`, `sbom_docs`); the pre-upgrade backups were checked in the app |
+| Tests | Rust 365 → 405 (3 ignored); frontend 224 → 243 (36 → 41 files) |
+| New dependency | yaml-rust2 0.13, without default features |
+| Real-app checks (Windows 11) | 125 of 125 |
+
+### New capabilities
+
+| Capability | Where | Commit | Verification |
+|---|---|---|---|
+| API security: an endpoint inventory from OpenAPI 3.x, Swagger 2.0, Postman and HAR; checks mapped to the OWASP API Security Top 10 (2023); a test plan; the scope status of each endpoint; the request builder prefilled from an endpoint | Projects → APIs | `e36a9a3` | 12 Rust and 3 frontend tests; app 20/20 |
+| HTTP repeater: raw requests, resend, history, response comparison, cURL | Security Utilities → HTTP request builder | `3b9ad54` | 7 frontend tests; app 13/13 |
+| SBOM analysis: CycloneDX and SPDX, license risk, NTIA minimum elements, VEX, OSV.dev lookups on request | Projects → Components | `9b32276` | 10 Rust and 4 frontend tests; app 18/18 with a live OSV.dev query |
+| Container checks: Dockerfiles, Compose files, Kubernetes manifests (Pod Security Standards, CIS Docker Benchmark) | Security Utilities | `eff1b18` | 6 Rust and 3 frontend tests; app 16/16 |
+| Packet capture and log triage | Security Utilities | `6074b5f` | 6 Rust and 2 frontend tests; app 19/19 |
+| SARIF 2.1.0 export of findings, and an import that skips suppressed results | Projects → Findings | `8a8f588`, `d776c58` | 3 Rust tests; OASIS schema; app 14/14, round trip 12/12 |
+| Kubernetes RBAC escalation paths, with bindings resolved across files | Security Utilities → Container checks | `914f50a` | 3 Rust tests; app 13/13 |
+
+### How the needs were established
+
+FEATURE_BACKLOG.md records the evidence: the OWASP API Security Top 10 and HAR exports from browsers and proxies; the repeater workflows of Burp Suite and ZAP; Executive Order 14028, the NTIA minimum elements, CycloneDX (ECMA-424), SPDX (ISO/IEC 5962) and OSV.dev; the Pod Security Standards, the CIS benchmarks and tools such as hadolint, kube-linter and Checkov; Wireshark and Zeek; SARIF 2.1.0 (OASIS) as ingested by GitHub code scanning. A third round looked for depth in the same areas: the Kubernetes "RBAC Good Practices" page and SARIF suppressions.
+
+### Defects found while testing, all fixed
+
+* Finding titles over 200 characters (absolute paths) stopped the recording of container issues (`eff1b18`).
+* URL decoding in log triage could panic on multi-byte text (fixed before `6074b5f`).
+* The SARIF import turned dismissed results into new findings (`d776c58`).
+* The Findings panel title was squeezed to "Fin" when tags exist (`31615cc`).
+
+### Test-harness incidents (no product impact)
+
+* The container test scanned the Documents folder once, read-only, through the folder picker; the 4 test findings in the disposable database were deleted.
+* The first SARIF export run saved its default file name in Documents; the file was moved out. The Windows dialogs are now driven by typing the path.
+* The real database was never opened (modification time checked in every run).
+
+### Limitations
+
+* Packet capture triage reads each packet on its own: requests or TLS ClientHello messages split over several TCP segments, and IP fragments after the first, are not reassembled.
+* The RBAC check does not expand aggregated ClusterRoles (`aggregationRule`); the built-in admin, edit and view roles are modeled by their documented risks; a folder scan keeps at most 20,000 RBAC objects.
+* SARIF locations are derived from the finding's target text: URLs and file paths become physical locations, anything else a logical one, which code-scanning platforms may not display.
+* OSV.dev lookups need the network and send package URLs (after a confirmation).
+
+### Not verified
+
+* Linux (Ubuntu, Debian): neither the test suites nor the GUI checks were run for this round.
+* Installers, signing, updates: not built or run (not authorized).
+
+### Assessment
+
+The six named areas each have a working, tested capability in the app, and interoperability now goes both ways: findings leave Cyber Hub as SARIF and come back without duplicates or revived false positives. Before a release that includes this round, the RC0 checks need repeating for schema 21 and the new modules (MISSION_STATE.md, "Next action").

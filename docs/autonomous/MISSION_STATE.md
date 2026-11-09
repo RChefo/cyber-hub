@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | **Complete** (RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
+| Current phase | **Complete** (feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -67,6 +67,15 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 31. Guarded rebuild mode for migrations of referenced tables (`223491c`)
 32. HTML and Markdown reports from one model (`ca685c0`)
 33. Release notes and upgrade guidance (`d6a192e`)
+34. API inventory from OpenAPI, Swagger, Postman and HAR, with OWASP API Security Top 10 (2023) checks and a test plan (schema 20) (`e36a9a3`)
+35. Repeater in the HTTP request builder: raw requests, history, resend, response comparison, cURL (`3b9ad54`)
+36. SBOM analysis: CycloneDX and SPDX, license risk, NTIA minimum elements, VEX, OSV.dev lookups on request (schema 21) (`9b32276`)
+37. Container and Kubernetes configuration checks (Pod Security Standards, CIS Docker Benchmark) (`eff1b18`)
+38. Packet capture triage (pcap, pcapng) and log triage (web access, SSH) (`6074b5f`)
+39. SARIF 2.1.0 export of findings (`8a8f588`)
+40. SARIF import skips suppressed results (`d776c58`)
+41. Findings filters in their own row (`31615cc`)
+42. Kubernetes RBAC escalation paths, with bindings resolved across files (`914f50a`)
 
 ## Tests executed
 
@@ -74,7 +83,9 @@ See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md).
 
 ## Known failures
 
-None. The final results at `d6a192e`:
+None. At `914f50a` (feature expansion round, Windows 11): 405 Rust tests (3 ignored) and 243 frontend tests in 41 files; clippy, tsc, cargo audit (0 vulnerabilities, 8 allowed warnings), npm audit (0) and gitleaks over the round's 9 commits are clean; `cargo +1.90.0 check --locked --all-targets` passes with the declared minimum Rust version; every new capability passed its check in the real app (125 of 125). **Not run for this round:** the Linux suites and Linux GUI checks.
+
+The final results at `d6a192e`:
 * **Windows:** 362 Rust tests (366 with provisioning) and 224 frontend tests.
 * **Ubuntu 24.04.5 and Debian 12:** 362 Rust tests and all 36 frontend test files.
 * **Static checks:** clippy, tsc, the build, npm audit, cargo audit (Windows) and gitleaks are clean.
@@ -133,9 +144,24 @@ None. The final results at `d6a192e`:
 | `2ad9a1c` | fix(build): declare Rust 1.90, the minimum the locked Tauri crates need |
 | `ae673e5` | fix(scope): cover browser modes and option files in the redirect rule |
 | `f90ab22` | docs(release): correct the 0.1.0 notes against the code |
-| (RC0 report) | docs(mission): report the RC0 release candidate validation |
+| `164e10f` | docs(mission): report the RC0 release candidate validation |
+| `e36a9a3` | feat(api): add an API inventory with OWASP API Top 10 checks |
+| `3b9ad54` | feat(utilities): turn the HTTP request builder into a repeater |
+| `9b32276` | feat(sbom): analyze SBOMs for vulnerable components and license risks |
+| `eff1b18` | feat(utilities): check Dockerfiles, Compose files and Kubernetes manifests |
+| `6074b5f` | feat(utilities): triage packet captures and server logs |
+| `8a8f588` | feat(findings): export findings as SARIF 2.1.0 |
+| `d776c58` | fix(import): skip suppressed SARIF results |
+| `31615cc` | fix(findings): give the findings filters their own row |
+| `914f50a` | feat(utilities): find Kubernetes RBAC escalation paths |
+| (this report) | docs(mission): report the feature expansion round |
 
 ## Next action
+
+**After the feature expansion round (2026-11-09T16:30Z), the owner decides:**
+1. Review the seven new capabilities (MISSION_REPORT.md, "Feature expansion round"). They add schemas 20 and 21 and one dependency (yaml-rust2 0.13).
+2. RC0 validated `ae673e5` and `f90ab22`, before this round. A release candidate built from `914f50a` or later needs the RC0 checks repeated for the new code: the Linux suites and GUI checks, the upgrade rehearsal to schema 21 and the restore rehearsal. The owner asked not to start that audit in this round.
+3. The RC0 release blockers below still apply.
 
 **After RC0 (2026-11-09T13:30Z), the owner decides:**
 1. Set up Authenticode signing as `docs/SIGNING.md` describes (release blocker), preferably before the release-candidate build.

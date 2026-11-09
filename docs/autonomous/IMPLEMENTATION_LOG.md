@@ -774,3 +774,57 @@ The real app with an isolated data folder, the native Open dialog driven with Wi
 * Windows: 365 Rust tests (3 ignored), clippy and tsc clean, 224 frontend tests, npm audit 0, cargo audit 0 vulnerabilities and 8 warnings, gitleaks over all 77 commits clean; GUI smoke over 16 pages and 14 project tabs on the upgraded data, and 7 of 7 feature checks.
 * Ubuntu 24.04.5 and Debian 12: the same suites (365 Rust tests, 36 frontend files, clippy, tsc, npm audit 0), and the GUI regression with two new option-file checks: 71 of 71 on both.
 * Decision: ready for a release-candidate build; final release authorization waits for Authenticode signing, the candidate's installer and updater validation, and the owner's review.
+
+## 2026-11-09T13:31Z: feature expansion round starts
+
+The owner pointed out that the RC0 segment had implemented no new features and asked for new capabilities in six areas: API security, an HTTP repeater, SBOM analysis, container security, packet capture and log analysis, and interoperability. A code search found none of them (FEATURE_BACKLOG.md, second research round, items 18–24).
+
+## 14:27Z: API inventory (`e36a9a3`)
+
+* OpenAPI 3.0/3.1 and Swagger 2.0 (JSON or YAML), Postman collections and HAR captures become a per-project endpoint inventory (schema 20, `api_specs`). YAML is read with yaml-rust2 0.13 through its event parser, with a node budget and a depth limit.
+* Checks mapped to the OWASP API Security Top 10 (2023), a test plan for what a definition cannot show, the scope status of each endpoint, and the request builder prefilled from an endpoint.
+* 12 Rust and 3 frontend tests; the real app on Windows 20/20, including migration 20 with its backup.
+
+## 14:33Z: repeater (`3b9ad54`)
+
+* Raw requests from a proxy, resend, an in-memory history (50 entries, 256 KB per body), response comparison and cURL export in the HTTP request builder. Raw requests and resends pass the scope gate.
+* 7 frontend tests; the real app against a local server 13/13, including a refused out-of-scope raw request that never reached the server.
+
+## 14:51Z: SBOM analysis (`9b32276`)
+
+* CycloneDX 1.2–1.6 (JSON; XML without DTDs) and SPDX 2.2/2.3 (JSON, tag-value): license risk, the NTIA minimum elements, the SBOM's own vulnerabilities with VEX states (schema 21, `sbom_docs`).
+* OSV.dev lookups by package URL, only after a confirmation.
+* 10 Rust tests (one an XXE attempt, one the real HTTP client against a local OSV stand-in) and 4 frontend tests. The real app 18/18 with a live OSV.dev query for public test packages: lodash, minimist and Log4Shell found, 13 findings recorded.
+
+## 15:15Z: container and Kubernetes checks (`eff1b18`)
+
+* Dockerfiles (multi-stage aware), Compose files and Kubernetes manifests, against the Pod Security Standards and the CIS Docker Benchmark; pasted, a file or a folder.
+* The real-app check found that recording stopped at the first finding title over 200 characters (an absolute path). Titles are now shortened and capped, a single file is shown by its name, recording goes on after an error, and API and SBOM titles are capped as well.
+* While driving the Windows folder picker, the test scanned the Documents folder once (read-only). The 4 test findings this put in the disposable database were deleted.
+* 6 Rust and 3 frontend tests; the real app 16/16.
+
+## 15:30Z: packet capture and log triage (`6074b5f`)
+
+* pcap and pcapng read as a stream (2 GB, five million packets): hosts, conversations, DNS, HTTP, TLS server names, and cleartext logins with the user name and the length of the secret only.
+* Apache/Nginx access logs and OpenSSH logs: injection and traversal payloads, Log4Shell, Shellshock, scanners, sensitive files, password guessing; example lines are redacted.
+* URL decoding sliced text by byte index, which could panic on multi-byte input; rewritten byte-wise before the commit.
+* 6 Rust and 2 frontend tests; the real app 19/19, with no password in the view or in the findings.
+
+## 16:00Z: SARIF export (`8a8f588`), suppressed results (`d776c58`), findings filters (`31615cc`)
+
+* SARIF 2.1.0 in the Findings export menu: one rule per finding with `security-severity` and `security` tags, `level`, physical or logical locations, `partialFingerprints`, and suppressions for false positives and accepted risks.
+* Both exported files pass the OASIS SARIF 2.1.0 JSON schema (jsonschema 4.23, URI and date-time formats checked) and the extra upload rules GitHub documents; the real app 14/14.
+* Reading an export back showed that the SARIF import ignored `suppressions`: dismissed results came back as new findings. They are now skipped (an accepted suppression, or one without a status, as ESLint's SARIF formatter writes them). Round trip in the real app 12/12.
+* The real-app check showed the Findings panel title squeezed to "Fin" when tags exist; the filters moved to the panel's toolbar row.
+* The first export run wrote `Repeater_QA-findings.sarif` to Documents: the Windows save dialog ignores a name set with WM_SETTEXT and saved its default name. The file (test data from the disposable database) was moved out of Documents into the session's scratch folder; the test harness now types the name.
+
+## 16:19Z: Kubernetes RBAC (`914f50a`)
+
+* The escalation paths of the Kubernetes RBAC good practices, matched as the API server does. Bindings are resolved across files, with the built-in roles, and reported when they reach anonymous users, all users, all service accounts or a default service account.
+* 3 Rust tests; the real app 13/13 through the folder picker (typing the path works there too). One run failed before its checks, because a button was looked for before the tool had rendered; the unchanged script then passed.
+
+## 16:20–16:30Z: final checks
+
+* Windows: 405 Rust tests (3 ignored), clippy and tsc clean, 243 frontend tests in 41 files, cargo audit 0 vulnerabilities (8 allowed warnings), npm audit 0, gitleaks over the round's 9 commits clean; `cargo +1.90.0 check --locked --all-targets` passes with the declared minimum Rust version.
+* The real database was never opened: every real-app run checked its modification time (2026-11-05T15:58:24.853Z, unchanged).
+* Not run: the Linux suites and GUI checks. No installers were built and nothing was pushed or published.
