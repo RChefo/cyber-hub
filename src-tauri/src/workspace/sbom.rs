@@ -1342,6 +1342,9 @@ pub fn issue_finding(summary: &SbomSummary, sbom: &Sbom, issue: &Issue) -> crate
     }
 }
 
+#[path = "sbom_compare.rs"]
+pub mod compare;
+
 #[cfg(test)]
 #[path = "sbom_tests.rs"]
 mod tests;

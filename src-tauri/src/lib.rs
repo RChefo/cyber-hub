@@ -274,6 +274,8 @@ pub fn run() {
             sbom_commands::sbom_check,
             sbom_commands::sbom_record,
             sbom_commands::sbom_delete,
+            sbom_commands::sbom_compare,
+            sbom_commands::sbom_compare_record,
             workspace_commands::database_restore_inspect,
             workspace_commands::database_restore_apply,
             workspace_commands::database_restore_outcome,

@@ -10,9 +10,9 @@ import { Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
 import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { Project, SbomIssue, SbomSummary, SbomView, SbomVuln } from "@/lib/types";
+import type { Project, SbomIssue, SbomRecorded, SbomSummary, SbomView, SbomVuln } from "@/lib/types";
 import { cn, formatRelative } from "@/lib/utils";
-import { ISSUE_AREA_LABEL, LICENSE_RISK_META, NOT_APPLICABLE, SBOM_FORMAT_LABEL, checkable, componentFacts, componentLabel, filterComponents, vulnRows, vulnSummary } from "./sbom";
+import { ISSUE_AREA_LABEL, LICENSE_RISK_META, NOT_APPLICABLE, SBOM_FORMAT_LABEL, checkable, componentFacts, componentLabel, filterComponents, sbomCompareSummary, vulnRows, vulnSummary } from "./sbom";
 
 const ROWS_SHOWN = 300;
 
@@ -109,6 +109,7 @@ export function ComponentsTab({ project, onOpenFindings }: { project: Project; o
           </ul>
         )}
       </Panel>
+      {list.length >= 2 && <Compare list={list} onOpenFindings={onOpenFindings} />}
       {current && <SbomDetail key={current.id} id={current.id} onOpenFindings={onOpenFindings} />}
       {confirm.element}
     </div>
@@ -271,56 +272,147 @@ function Vulnerabilities({ view, onOpenFindings }: { view: SbomView; onOpenFindi
   );
 }
 
-function Checks({ view, onOpenFindings }: { view: SbomView; onOpenFindings: () => void }) {
-  const [busy, setBusy] = useState<string | null>(null);
-  if (view.issues.length === 0) return null;
-  const record = async (i: SbomIssue) => {
-    setBusy(i.id);
+/** One check or comparison issue, recordable as a finding. */
+function IssueItem({ issue: i, recorded, recordWith, onOpenFindings }: { issue: SbomIssue; recorded?: number; recordWith: () => Promise<SbomRecorded>; onOpenFindings: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const record = async () => {
+    setBusy(true);
     try {
-      const r = await api.sbomRecord(view.summary.id, [`issue:${i.id}`]);
+      const r = await recordWith();
       invalidate("sboms", "findings", "activity");
       notify.success(r.created ? "Finding recorded" : "Already recorded", i.title);
     } catch (e) {
       notify.error("Could not record the finding", e);
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
   return (
+    <li className="panel-inset flex flex-col gap-1.5 px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Severity v={i} />
+        <span className="text-[13.5px] font-medium">{i.title}</span>
+        <ToneChip tone="default" dot={false} className="text-[11px]">
+          {ISSUE_AREA_LABEL[i.area] ?? i.area}
+        </ToneChip>
+        <span className="flex-1" />
+        {recorded ? (
+          <Button size="sm" variant="ghost" onPress={onOpenFindings}>
+            <Check className="size-3.5" />
+            Finding #{recorded}
+          </Button>
+        ) : (
+          <Button size="sm" variant="tertiary" onPress={() => void record()} isPending={busy}>
+            Record finding
+          </Button>
+        )}
+      </div>
+      <p className="text-[12.5px] text-muted">{i.detail}</p>
+      {i.components.length > 0 && (
+        <p className="font-mono text-[11.5px] break-all">
+          {i.components.slice(0, 12).join(", ")}
+          {i.components.length > 12 ? ` … and ${i.components.length - 12} more` : ""}
+        </p>
+      )}
+      <p className="text-[12.5px]">
+        <span className="text-muted">Recommendation: </span>
+        {i.recommendation}
+      </p>
+    </li>
+  );
+}
+
+function Checks({ view, onOpenFindings }: { view: SbomView; onOpenFindings: () => void }) {
+  if (view.issues.length === 0) return null;
+  return (
     <Panel title="Checks" description="License risks from SPDX identifiers (OR takes the most permissive choice, AND the most restrictive), the NTIA minimum elements of an SBOM, and for lockfiles the supply-chain risks: plain HTTP, missing hashes, Git and URL dependencies, several registries or package indexes.">
       <ul className="flex flex-col gap-2">
-        {view.issues.map((i) => {
-          const fid = view.recorded[`issue:${i.id}`];
-          return (
-            <li key={i.id} className="panel-inset flex flex-col gap-1.5 px-3 py-2.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <Severity v={i} />
-                <span className="text-[13.5px] font-medium">{i.title}</span>
-                <ToneChip tone="default" dot={false} className="text-[11px]">
-                  {ISSUE_AREA_LABEL[i.area] ?? i.area}
-                </ToneChip>
-                <span className="flex-1" />
-                {fid ? (
-                  <Button size="sm" variant="ghost" onPress={onOpenFindings}>
-                    <Check className="size-3.5" />
-                    Finding #{fid}
-                  </Button>
-                ) : (
-                  <Button size="sm" variant="tertiary" onPress={() => void record(i)} isPending={busy === i.id}>
-                    Record finding
-                  </Button>
-                )}
-              </div>
-              <p className="text-[12.5px] text-muted">{i.detail}</p>
-              {i.components.length > 0 && <p className="font-mono text-[11.5px] break-all">{i.components.slice(0, 12).join(", ")}{i.components.length > 12 ? ` … and ${i.components.length - 12} more` : ""}</p>}
-              <p className="text-[12.5px]">
-                <span className="text-muted">Recommendation: </span>
-                {i.recommendation}
-              </p>
-            </li>
-          );
-        })}
+        {view.issues.map((i) => (
+          <IssueItem key={i.id} issue={i} recorded={view.recorded[`issue:${i.id}`]} recordWith={() => api.sbomRecord(view.summary.id, [`issue:${i.id}`])} onOpenFindings={onOpenFindings} />
+        ))}
       </ul>
+    </Panel>
+  );
+}
+
+/** Two SBOMs or lockfiles of the software compared: the older and the newer, by default the last two. */
+function Compare({ list, onOpenFindings }: { list: SbomSummary[]; onOpenFindings: () => void }) {
+  const { runtime } = useApp();
+  const options = list.map((s) => ({ id: String(s.id), label: `${s.subject || s.name} · ${s.name} · ${formatRelative(s.importedAt)}` }));
+  const [older, setOlder] = useState<string | null>(String(list[1].id));
+  const [newer, setNewer] = useState<string | null>(String(list[0].id));
+  const ready = !!older && !!newer && older !== newer;
+  const q = useQuery(["sboms", "findings"], () => api.sbomCompare(Number(older), Number(newer)), [older, newer], runtime && ready);
+  const v = ready ? q.data : undefined;
+  const c = v?.comparison;
+  const section = (title: string, items: string[]) =>
+    items.length > 0 && (
+      <section key={title} className="flex flex-col gap-1">
+        <h3 className="text-[13.5px] font-medium">
+          {title} ({items.length})
+        </h3>
+        <p className="font-mono text-[12px] break-all text-muted">{items.slice(0, 200).join(" · ")}{items.length > 200 ? ` … and ${items.length - 200} more` : ""}</p>
+      </section>
+    );
+  return (
+    <Panel title="Compare versions" description="What changed between two SBOMs or lockfiles of the software: components added, removed, upgraded and downgraded, the vulnerabilities that came or went, and the changes that matter for the supply chain (a package from another source, the same version with other content, a downgrade, stricter licenses).">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <SelectInput label="Older" value={older} onChange={setOlder} options={options} className="w-80" />
+          <SelectInput label="Newer" value={newer} onChange={setNewer} options={options} className="w-80" />
+        </div>
+        {!ready ? (
+          <p className="text-[12.5px] text-muted">Choose two different SBOMs.</p>
+        ) : q.error ? (
+          <ErrorBlock message={q.error} onRetry={q.reload} />
+        ) : !c || !v ? (
+          <LoadingRows rows={2} />
+        ) : (
+          <>
+            <p className="text-[13px]">
+              {sbomCompareSummary(c)}
+              <span className="text-muted">
+                {" "}
+                ·{" "}
+                {!c.vulnsCompared
+                  ? "vulnerabilities not compared: check both on OSV.dev (or neither) first"
+                  : v.old.checkedAt && v.new.checkedAt
+                    ? `known vulnerabilities (OSV.dev): ${c.vulnsNew.length} new, ${c.vulnsFixed.length} gone`
+                    : `vulnerabilities stated in the files: ${c.vulnsNew.length} new, ${c.vulnsFixed.length} gone; check both on OSV.dev for known ones`}
+              </span>
+            </p>
+            {c.issues.length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {c.issues.map((i) => (
+                  <IssueItem key={i.id} issue={i} recorded={v.recorded[i.id]} recordWith={() => api.sbomCompareRecord(v.old.id, v.new.id, i.id)} onOpenFindings={onOpenFindings} />
+                ))}
+              </ul>
+            )}
+            {c.changed.length > 0 && (
+              <section className="flex flex-col gap-1">
+                <h3 className="text-[13.5px] font-medium">Changed versions ({c.changed.length})</h3>
+                <ul className="flex flex-col gap-1">
+                  {c.changed.slice(0, 200).map((ch) => (
+                    <li key={ch.component} className="tile flex flex-wrap items-center gap-2 px-3 py-1.5 text-[12.5px]">
+                      <span className="font-mono">{ch.component}</span>
+                      <span className="text-muted">
+                        {ch.from} → {ch.to}
+                      </span>
+                      <ToneChip tone={ch.direction === "downgraded" ? "warning" : "default"} dot={false} className="text-[11px]">
+                        {ch.direction}
+                      </ToneChip>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {section("Added components", c.added)}
+            {section("Removed components", c.removed)}
+            {section("New vulnerabilities", c.vulnsNew.map((d) => `${d.id} (${d.severity}): ${d.components.join(", ")}`))}
+            {section("Vulnerabilities gone", c.vulnsFixed.map((d) => `${d.id} (${d.severity}): ${d.components.join(", ")}`))}
+          </>
+        )}
+      </div>
     </Panel>
   );
 }

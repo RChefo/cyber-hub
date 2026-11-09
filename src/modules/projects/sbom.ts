@@ -1,5 +1,5 @@
 import type { Tone } from "@/components/ui/Badges";
-import type { SbomComponent, SbomSummary, SbomVuln } from "@/lib/types";
+import type { SbomChange, SbomComparison, SbomComponent, SbomSummary, SbomVuln } from "@/lib/types";
 
 export const SBOM_FORMAT_LABEL: Record<string, string> = {
   "cyclonedx-json": "CycloneDX JSON",
@@ -92,6 +92,20 @@ export function filterComponents(components: SbomComponent[], affected: Set<numb
     out.push(i);
   });
   return out;
+}
+
+/** "2 added · 1 removed · 3 upgraded · 1 downgraded · 40 unchanged" (zero counts of upgrades,
+ * downgrades and other changes left out). */
+export function sbomCompareSummary(c: Pick<SbomComparison, "added" | "removed" | "changed" | "unchanged">): string {
+  const n = (d: SbomChange["direction"]) => c.changed.filter((x) => x.direction === d).length;
+  return [
+    `${c.added.length} added`,
+    `${c.removed.length} removed`,
+    ...(n("upgraded") ? [`${n("upgraded")} upgraded`] : []),
+    ...(n("downgraded") ? [`${n("downgraded")} downgraded`] : []),
+    ...(n("changed") ? [`${n("changed")} changed`] : []),
+    `${c.unchanged} unchanged`,
+  ].join(" · ");
 }
 
 /** "1 critical, 2 high" from a summary's counts; "none known" when empty. */

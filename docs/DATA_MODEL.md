@@ -342,6 +342,18 @@ Projects → *Components* reads software bills of materials and dependency lockf
 * **Checks.** Network-copyleft and restricted licenses (medium), copyleft licenses, unknown licenses, components without a version or without a package URL or CPE (low), and missing suppliers, relationships, author or timestamp, and packages in several versions (info). A lockfile is not an SBOM: the supplier, relationship, author and identifier checks do not apply, and licenses are checked only when the format records them (npm 7 and later, Composer). Lockfiles get supply-chain checks instead: packages downloaded over plain HTTP (high); registry packages without an integrity hash in formats that record one (medium); `--extra-index-url` in requirements files, which lets pip install a same-named public package (dependency confusion, medium); dependencies from Git, URLs or local paths (low); and packages from more than one registry (low; the npm and Yarn registry addresses, and crates.io's Git and sparse indexes, count as one).
 * **Findings.** Each vulnerability of each component, and each check, can be recorded once as a finding: severity (unrated vulnerabilities become medium), CVE, CVSS vector, the package URL as target, the fixed versions as remediation, the tags `sbom` and the ecosystem, and the SBOM file as evidence.
 
+### SBOM comparison
+
+With two or more SBOMs or lockfiles in a project, *Compare versions* compares an older and a newer one, by default the last two imports (`workspace/sbom_compare.rs`); nothing is stored. Components match by ecosystem, group and name; a package that moved to a Git or URL source (which has no ecosystem) matches the one earlier package of its name that is otherwise unmatched. A package may appear in several versions (npm). The result lists components added and removed and the version changes, each upgraded, downgraded or changed (versions that do not compare, such as commit hashes); versions compare numerically, with pre-releases before their release (`1.0.0-rc.1` < `1.0.0`). Vulnerabilities (the files' own and the OSV.dev results) are compared only when both sides have the same kind of data, both checked on OSV.dev or neither, so a missing lookup is never shown as a fix; the panel says which data it compared.
+
+* **SBOM-CMP-NEW-VULNS** (the highest severity among them; unrated is medium): vulnerabilities of the newer version that the older did not have.
+* **SBOM-CMP-SOURCE-CHANGED** (high): a package now comes from another registry, Git host or address (the registry of lockfiles, or the host of the resolved address), as dependency confusion and hijacked packages do.
+* **SBOM-CMP-CONTENT-CHANGED** (high): the same version with hashes that share nothing with the older ones: the published file changed or came from another build.
+* **SBOM-CMP-DOWNGRADE** (medium): components that went back to an earlier version.
+* **SBOM-CMP-LICENSE** (medium for network copyleft or restricted, otherwise low): licenses that moved to a stricter class (copyleft or more).
+
+Each issue can be recorded once as a finding (category *Supply chain*, or *License compliance*), titled with both versions and keyed by both files' SHA-256, linked to the newer file's evidence record.
+
 ## Analysis
 
 Projects → *Analysis* works on stored data only; nothing is contacted (`workspace/analysis.rs`).

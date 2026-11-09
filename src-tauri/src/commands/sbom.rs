@@ -100,6 +100,68 @@ pub(crate) fn record(c: &Connection, id: i64, keys: &[String]) -> AppResult<Sbom
     Ok(SbomRecorded { created, existing })
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SbomCompareView {
+    pub old: SbomSummary,
+    pub new: SbomSummary,
+    pub comparison: sbom::compare::Comparison,
+    /// issue id → finding id
+    pub recorded: BTreeMap<String, i64>,
+}
+
+fn compared(c: &Connection, old_id: i64, new_id: i64) -> AppResult<(SbomSummary, SbomSummary, Sbom, sbom::compare::Comparison)> {
+    if old_id == new_id {
+        return Err(validation("Choose two different SBOMs"));
+    }
+    let (old, old_sbom, old_osv) = sbom::get(c, old_id)?;
+    let (new, new_sbom, new_osv) = sbom::get(c, new_id)?;
+    if old.project_id != new.project_id {
+        return Err(validation("Both SBOMs must belong to the same project"));
+    }
+    let comparison = sbom::compare::compare(&old_sbom, &old_osv, old.checked_at.is_some(), &new_sbom, &new_osv, new.checked_at.is_some());
+    Ok((old, new, new_sbom, comparison))
+}
+
+pub(crate) fn compare_view(c: &Connection, old_id: i64, new_id: i64) -> AppResult<SbomCompareView> {
+    let (old, new, new_sbom, comparison) = compared(c, old_id, new_id)?;
+    let mut recorded = BTreeMap::new();
+    for i in &comparison.issues {
+        if let Some(fid) = recorded_finding(c, &sbom::compare::finding(&old, &new, &new_sbom, i))? {
+            recorded.insert(i.id.clone(), fid);
+        }
+    }
+    Ok(SbomCompareView { old, new, comparison, recorded })
+}
+
+/// Records one issue of a comparison as a finding, once, linked to the newer SBOM's file.
+pub(crate) fn record_compared(c: &Connection, old_id: i64, new_id: i64, issue_id: &str) -> AppResult<SbomRecorded> {
+    let (old, new, new_sbom, comparison) = compared(c, old_id, new_id)?;
+    let issue = comparison.issues.iter().find(|i| i.id == issue_id).ok_or_else(|| AppError::NotFound(format!("comparison issue {issue_id}")))?;
+    let input = sbom::compare::finding(&old, &new, &new_sbom, issue);
+    if recorded_finding(c, &input)?.is_some() {
+        return Ok(SbomRecorded { created: 0, existing: 1 });
+    }
+    let tx = c.unchecked_transaction()?;
+    let fid = crate::commands::projects::finding_write(&tx, &input, "sbom", true)?;
+    if let Some(ev) = new.evidence_id {
+        findings::link(&tx, fid, "evidence", ev, "sbom")?;
+    }
+    tx.commit()?;
+    Ok(SbomRecorded { created: 1, existing: 0 })
+}
+
+/// Compares two SBOMs of a project: an older and a newer one.
+#[tauri::command]
+pub async fn sbom_compare(db: State<'_, Db>, old_id: i64, new_id: i64) -> AppResult<SbomCompareView> {
+    db.with(|c| compare_view(c, old_id, new_id))
+}
+
+#[tauri::command]
+pub async fn sbom_compare_record(db: State<'_, Db>, old_id: i64, new_id: i64, issue_id: String) -> AppResult<SbomRecorded> {
+    db.with(|c| record_compared(c, old_id, new_id, &issue_id))
+}
+
 /// Choose an SBOM (native dialog) and add it to the project. The file is kept in the evidence
 /// vault. None when the dialog is cancelled.
 #[tauri::command]
@@ -237,6 +299,37 @@ mod tests {
             assert!(v.recorded.contains_key("vuln:CVE-2021-23337:0") && v.recorded.contains_key("issue:LIC-NETWORK-COPYLEFT"));
             assert!(record(c, id, &["vuln:nope:0".to_string()]).is_err());
             assert!(record(c, id, &[]).is_err());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn comparisons_record_their_issues_once() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            c.execute("INSERT INTO projects (name, status, created_at, updated_at) VALUES ('Shop', 'active', '2026-11-09T00:00:00Z', '2026-11-09T00:00:00Z')", [])?;
+            let pid = c.last_insert_rowid();
+            let lock = |version: &str, resolved: &str| {
+                let doc = format!(r#"{{"name":"shop","version":"{version}","lockfileVersion":3,"packages":{{"":{{"name":"shop","version":"{version}"}},"node_modules/colors":{{"version":"1.4.0","resolved":"{resolved}","integrity":"sha512-AAA"}}}}}}"#);
+                sbom::parse_file("package-lock.json", &doc).unwrap()
+            };
+            let a = sbom::store(c, pid, "lock-1.json", "a1", None, &lock("1.0.0", "https://registry.npmjs.org/colors/-/colors-1.4.0.tgz"))?;
+            let b = sbom::store(c, pid, "lock-2.json", "b2", None, &lock("2.0.0", "https://evil.example/colors-1.4.0.tgz"))?;
+            assert!(compare_view(c, a, a).is_err(), "an SBOM is not compared with itself");
+            let view = compare_view(c, a, b)?;
+            assert_eq!(view.comparison.issues.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), vec!["SBOM-CMP-SOURCE-CHANGED"]);
+            assert!(view.recorded.is_empty());
+            let first = record_compared(c, a, b, "SBOM-CMP-SOURCE-CHANGED")?;
+            assert_eq!((first.created, first.existing), (1, 0));
+            let again = record_compared(c, a, b, "SBOM-CMP-SOURCE-CHANGED")?;
+            assert_eq!((again.created, again.existing), (0, 1), "recorded once");
+            let fid = *compare_view(c, a, b)?.recorded.get("SBOM-CMP-SOURCE-CHANGED").expect("the view knows it is recorded");
+            let f = crate::commands::projects::finding_get(c, fid)?;
+            assert_eq!(f.title, "Packages now come from another source (shop@1.0.0 → shop@2.0.0)");
+            assert_eq!((f.severity.as_str(), f.category.as_str()), ("high", "Supply chain"));
+            assert!(f.description.contains("npm colors: registry.npmjs.org → evil.example"), "{}", f.description);
+            assert!(record_compared(c, a, b, "SBOM-CMP-NOPE").is_err());
             Ok(())
         })
         .unwrap();

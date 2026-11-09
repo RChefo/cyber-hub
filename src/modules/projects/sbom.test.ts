@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SbomComponent, SbomVuln } from "@/lib/types";
-import { checkable, componentFacts, componentLabel, filterComponents, vulnRows, vulnSummary } from "./sbom";
+import { checkable, componentFacts, componentLabel, filterComponents, sbomCompareSummary, vulnRows, vulnSummary } from "./sbom";
 
 const comp = (name: string, extra: Partial<SbomComponent> = {}): SbomComponent => ({
   name,
@@ -52,6 +52,22 @@ describe("SBOM helpers", () => {
   it("summarizes vulnerability counts", () => {
     expect(vulnSummary({ vulns: [1, 2, 0, 0, 1] })).toBe("1 critical, 2 high, 1 unrated");
     expect(vulnSummary({ vulns: [0, 0, 0, 0, 0] })).toBe("none known");
+  });
+});
+
+describe("SBOM comparison", () => {
+  it("summarizes the changes", () => {
+    const c = {
+      added: ["fresh@0.1.0"],
+      removed: [],
+      changed: [
+        { component: "npm lodash", from: "4.17.20", to: "4.17.21", direction: "upgraded" as const },
+        { component: "npm express", from: "4.18.2", to: "4.17.1", direction: "downgraded" as const },
+      ],
+      unchanged: 40,
+    };
+    expect(sbomCompareSummary(c)).toBe("1 added · 0 removed · 1 upgraded · 1 downgraded · 40 unchanged");
+    expect(sbomCompareSummary({ ...c, changed: [] })).toBe("1 added · 0 removed · 40 unchanged");
   });
 });
 

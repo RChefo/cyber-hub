@@ -1618,6 +1618,41 @@ export interface SbomCheck {
   vulns: number;
 }
 
+export interface SbomChange {
+  /** "npm lodash" */
+  component: string;
+  from: string;
+  to: string;
+  direction: "upgraded" | "downgraded" | "changed";
+}
+
+export interface SbomVulnDelta {
+  id: string;
+  severity: string;
+  /** "name@version" */
+  components: string[];
+}
+
+export interface SbomComparison {
+  added: string[];
+  removed: string[];
+  changed: SbomChange[];
+  unchanged: number;
+  /** both SBOMs have the same kind of vulnerability data (both checked online, or neither) */
+  vulnsCompared: boolean;
+  vulnsNew: SbomVulnDelta[];
+  vulnsFixed: SbomVulnDelta[];
+  issues: SbomIssue[];
+}
+
+export interface SbomCompareView {
+  old: SbomSummary;
+  new: SbomSummary;
+  comparison: SbomComparison;
+  /** issue id → finding id */
+  recorded: Record<string, number>;
+}
+
 export interface SbomRecorded {
   created: number;
   existing: number;
