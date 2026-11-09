@@ -1580,9 +1580,19 @@ fn known(c: &Connection, project_id: i64, fp: &str) -> AppResult<Option<(i64, St
         .optional()?)
 }
 
+/// Whether a finding's location is authorized: a URL as the URL (path-level entries can cover it),
+/// anything else by its host.
+fn finding_in_scope(entries: &[ScopeEntry], f: &ImportedFinding) -> bool {
+    let Some(h) = f.host.as_deref() else { return false };
+    match crate::scope::parse_target(&f.target) {
+        Some(t @ crate::scope::Target::Url(_)) => crate::scope::check_target(entries, &t).is_ok(),
+        _ => in_scope(entries, h),
+    }
+}
+
 fn outcome(c: &Connection, project_id: i64, entries: &[ScopeEntry], f: &ImportedFinding, opts: Options) -> AppResult<(Outcome, Option<i64>)> {
     match f.host.as_deref() {
-        Some(h) if !in_scope(entries, h) => return Ok((Outcome::OutOfScope, None)),
+        Some(_) if !finding_in_scope(entries, f) => return Ok((Outcome::OutOfScope, None)),
         None if f.network => return Ok((Outcome::OutOfScope, None)),
         _ => {}
     }
@@ -1607,7 +1617,9 @@ fn asset_batch(entries: &[ScopeEntry], items: &[AssetItem]) -> (Batch, usize, BT
     let mut left_out = 0;
     let mut hosts = BTreeSet::new();
     for it in items {
-        if !in_scope(entries, &it.host) {
+        // a web service whose origin has authorized URLs is part of the inventory; its host is not
+        let web_origin = it.kind == "http_service" && crate::scope::origin_has_authorized_paths(entries, &it.value);
+        if !web_origin && !in_scope(entries, &it.host) {
             left_out += 1;
             if hosts.len() < 20 {
                 hosts.insert(it.host.clone());

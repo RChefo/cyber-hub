@@ -100,13 +100,16 @@ export function ScopeTab({ project, onChanged }: { project: Project; onChanged: 
   return (
     <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
       <div className="flex flex-col gap-3 xl:col-span-8">
-        <Panel title="Add scope entry" description="Domains, wildcards, IP addresses, CIDR ranges or URLs.">
+        <Panel
+          title="Add scope entry"
+          description="Domains, wildcards, IP addresses and CIDR ranges authorize hosts. A URL authorizes only requests to its path (same scheme, host and port), never the host itself: port, service and TLS scans need the host in the scope."
+        >
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto]">
             <TextInput
               label="Target"
               value={value}
               onChange={setValue}
-              placeholder="*.example.com, 10.0.0.0/24, app.example.com"
+              placeholder="*.example.com, 10.0.0.0/24, https://app.example.com/api/"
               mono
               onEnter={add}
               error={cls.error ?? null}

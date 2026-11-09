@@ -518,6 +518,8 @@ export interface ScopeEvent {
   note: string;
   source: string;
   at: string;
+  /** further identical refusals counted on this entry */
+  repeats: number;
 }
 
 export type Certainty = "confirmed" | "observed" | "possible" | "incomplete";
@@ -805,6 +807,10 @@ export interface HttpResponseOut {
   bodyBytes: number;
   truncated: boolean;
   elapsedMs: number;
+  /** redirects followed before this response */
+  redirects: { status: number; from: string; to: string }[];
+  /** why a redirect of this response was not followed */
+  redirectStopped: string | null;
 }
 
 export interface LeakHit {

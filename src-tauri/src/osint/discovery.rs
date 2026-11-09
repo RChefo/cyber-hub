@@ -87,11 +87,13 @@ fn check_scope(db: &Db, inv: &store::Investigation, t: EntityType, value: &str) 
     if status != "active" {
         return Err(AppError::Scope(format!("The linked project is '{status}'; set it to active to contact targets")));
     }
-    let host = match t {
-        EntityType::Url => url::Url::parse(value).ok().and_then(|u| u.host_str().map(String::from)).unwrap_or_default(),
-        _ => value.to_string(),
-    };
-    let target = crate::scope::parse_target(&host).ok_or_else(|| AppError::Scope(format!("{host} is not a valid target")))?;
+    // a URL is checked as the URL it is (path-level entries can authorize it); a domain is
+    // contacted over HTTPS and HTTP at `/`, so the host itself must be authorized
+    let target = match t {
+        EntityType::Url => crate::scope::parse_target(value).filter(|x| matches!(x, crate::scope::Target::Url(_))),
+        _ => crate::scope::parse_target(value).map(|x| x.host_level().clone()),
+    }
+    .ok_or_else(|| AppError::Scope(format!("{} is not a valid target", value.chars().take(200).collect::<String>())))?;
     crate::scope::check_target(&entries, &target).map_err(AppError::Scope)
 }
 

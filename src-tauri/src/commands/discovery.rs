@@ -199,13 +199,9 @@ fn default_hosts(c: &rusqlite::Connection, project_id: i64) -> AppResult<Vec<Str
     let mut hosts = BTreeSet::new();
     for e in scope_entries(c, project_id)?.into_iter().filter(|e| e.in_scope) {
         match e.kind.as_str() {
+            // URL entries authorize paths, never their host: they are not checked as hosts
             "domain" | "ip" => {
                 hosts.insert(e.value);
-            }
-            "url" => {
-                if let Some(h) = url::Url::parse(&e.value).ok().and_then(|u| u.host_str().map(str::to_string)) {
-                    hosts.insert(h.trim_start_matches('[').trim_end_matches(']').to_string());
-                }
             }
             _ => {}
         }
@@ -230,8 +226,10 @@ pub(crate) fn http_targets(c: &rusqlite::Connection, project_id: i64, hosts: Opt
         // the value checked is the value contacted: URLs and other forms become their host
         let list = list
             .iter()
-            .map(|x| match crate::scope::parse_target(x) {
-                Some(crate::scope::Target::Host(h)) => Ok(h),
+            .map(|x| match crate::scope::parse_target(x).as_ref().map(crate::scope::Target::host_level) {
+                // a URL becomes its host: the check contacts the host (GET / over HTTPS and HTTP),
+                // so the host itself must be authorized, not only a path of it
+                Some(crate::scope::Target::Host(h)) => Ok(h.clone()),
                 Some(crate::scope::Target::Ip(ip)) => Ok(ip.to_string()),
                 _ => Err(validation(format!("'{x}' is not a host name or IP address"))),
             })
@@ -328,6 +326,7 @@ pub(crate) async fn start_scan(app: &AppHandle, project_id: i64, targets: Vec<St
     if targets.is_empty() || targets.len() > 64 {
         return Err(validation("Give 1 to 64 targets (hosts, addresses or networks)"));
     }
+    scope_gate::refuse_urls(&targets, "Service scan")?;
     let args = disc::nmap_args(profile, &targets)?;
     let entries = db.with(|c| {
         scope_gate::enforce(c, Some(project_id), &targets, scope_gate::Mode::Active, "Service scan")?;

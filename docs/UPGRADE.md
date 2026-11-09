@@ -18,8 +18,11 @@ This document states exactly what an upgrade does, what was tested, and how far 
 | development: fix verification by rescan | 15 |
 | development: CVSS on findings | 16 |
 | development: methodology checklist | 17 |
+| development: repeated scope refusals counted | 18 |
 
-The schema version is SQLite's `user_version`. Migrations 9–17 are listed in [DATA_MODEL.md](DATA_MODEL.md). Migrations 13–17 only add tables (`scan_imports`, `finding_fingerprints`; `finding_templates`; `checklist_items`) and columns with defaults (`finding_fingerprints.host`; `findings.cvss_vector`, `findings.cvss_score`), and change nothing that exists. They add tables and columns, rebuild `findings` once to give it the new lifecycle, and map the old finding statuses: `open` becomes `new`, `reported` becomes `confirmed`, and every finding that was `reported` gets a history entry recording the mapping. Ids and all other columns are kept.
+The schema version is SQLite's `user_version`. Migrations 9–18 are listed in [DATA_MODEL.md](DATA_MODEL.md). Migrations 13–18 only add tables (`scan_imports`, `finding_fingerprints`; `finding_templates`; `checklist_items`) and columns with defaults (`finding_fingerprints.host`; `findings.cvss_vector`, `findings.cvss_score`; `scope_events.repeats`), and change nothing that exists.
+
+**Scope semantics after this version.** URL scope entries now authorize only their paths, not their host (see [SECURITY.md](SECURITY.md#path-level-scope)). The stored entries are unchanged. A project that relied on a URL entry for host-level operations, such as an Nmap scan of the URL's host, now needs the host, its domain or its address range added to the scope. The refusal says so. They add tables and columns, rebuild `findings` once to give it the new lifecycle, and map the old finding statuses: `open` becomes `new`, `reported` becomes `confirmed`, and every finding that was `reported` gets a history entry recording the mapping. Ids and all other columns are kept.
 
 ## What happens at startup
 

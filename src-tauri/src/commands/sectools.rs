@@ -86,28 +86,73 @@ pub async fn dns_intel(db: State<'_, Db>, project_id: Option<i64>, domain: Strin
     Ok(out)
 }
 
-/// Sends one request built by the analyst to an in-scope target (URL host and any Host header).
+/// The addresses a request may connect to: its host resolved and vetted (refusals are recorded).
+async fn vetted_pin(db: &Db, project_id: i64, url: &url::Url, operation: &str) -> AppResult<Option<(String, Vec<std::net::SocketAddr>)>> {
+    let entries = db.with(|c| crate::commands::projects::scope_entries(c, project_id))?;
+    let host = url.host_str().unwrap_or("").to_string();
+    let port = url.port_or_known_default().unwrap_or(443);
+    match scope_gate::resolve_vetted(&entries, &host, port).await {
+        Ok(addrs) => Ok((host.parse::<std::net::IpAddr>().is_err() && !host.starts_with('[')).then_some((host, addrs))),
+        Err(reason) => {
+            db.with(|c| scope_gate::record_blocked(c, project_id, &host, &reason, operation))?;
+            Err(AppError::Scope(format!("{operation} was not sent. {reason}")))
+        }
+    }
+}
+
+/// Sends one request built by the analyst to an in-scope target (the URL, and the same path on any
+/// Host header). With `follow_redirects`, each redirect is a new request that is checked the same
+/// way before it is sent; a refused redirect ends the chain with its reason.
 #[tauri::command]
 pub async fn http_send(db: State<'_, Db>, input: http::HttpRequestInput) -> AppResult<http::HttpResponseOut> {
-    let prepared = http::prepare(&input).map_err(validation)?;
-    let entries = db.with(|c| {
-        scope_gate::enforce(c, Some(input.project_id), &prepared.targets, scope_gate::Mode::Active, "HTTP request")?;
-        crate::commands::projects::scope_entries(c, input.project_id)
-    })?;
-    let host = prepared.url.host_str().unwrap_or("").to_string();
-    let port = prepared.url.port_or_known_default().unwrap_or(443);
-    let addrs = match scope_gate::resolve_vetted(&entries, &host, port).await {
-        Ok(a) => a,
-        Err(reason) => {
-            db.with(|c| scope_gate::record_blocked(c, input.project_id, &host, &reason, "HTTP request"))?;
-            return Err(AppError::Scope(format!("HTTP request was not sent. {reason}")));
+    send_checked(&db, input).await
+}
+
+/// [`http_send`] without the app state (tested directly).
+pub(crate) async fn send_checked(db: &Db, input: http::HttpRequestInput) -> AppResult<http::HttpResponseOut> {
+    let mut current = http::prepare(&input).map_err(validation)?;
+    db.with(|c| scope_gate::enforce(c, Some(input.project_id), &current.targets, scope_gate::Mode::Active, "HTTP request").map(|_| ()))?;
+    let mut pin = vetted_pin(db, input.project_id, &current.url, "HTTP request").await?;
+    let first = format!("{} {}", current.method, redact_text(current.url.as_str()));
+    let mut body = input.body.clone();
+    let mut hops: Vec<http::RedirectHop> = Vec::new();
+    loop {
+        let sent = current.clone();
+        let mut out = http::send(current, body.clone(), input.insecure, pin).await.map_err(AppError::Network)?;
+        let location = out.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("location")).map(|(_, v)| v.clone());
+        let next = if input.follow_redirects { http::next_request(&sent, out.status, location.as_deref()) } else { None };
+        let stop = |out: &mut http::HttpResponseOut, why: String| out.redirect_stopped = Some(why);
+        match next {
+            None => {}
+            Some(http::Next::Stop(why)) => stop(&mut out, why),
+            Some(http::Next::Follow { .. }) if hops.len() >= http::MAX_REDIRECTS => stop(&mut out, format!("More than {} redirects; the last one was not followed", http::MAX_REDIRECTS)),
+            Some(http::Next::Follow { request, keep_body }) => {
+                let to = http::label(&request.url);
+                // the redirect target is checked exactly like a request the analyst typed
+                let checked = db.with(|c| scope_gate::enforce(c, Some(input.project_id), &request.targets, scope_gate::Mode::Active, "HTTP redirect").map(|_| ()));
+                let vetted = match checked {
+                    Ok(()) => vetted_pin(db, input.project_id, &request.url, "HTTP redirect").await,
+                    Err(e) => Err(e),
+                };
+                match vetted {
+                    Ok(next_pin) => {
+                        hops.push(http::RedirectHop { status: out.status, from: http::label(&sent.url), to });
+                        current = *request;
+                        pin = next_pin;
+                        if !keep_body {
+                            body.clear();
+                        }
+                        continue;
+                    }
+                    Err(e) => stop(&mut out, format!("The redirect to {to} was not followed: {}", e.to_string().trim_start_matches("HTTP redirect was not started. ").trim_start_matches("HTTP redirect was not sent. "))),
+                }
+            }
         }
-    };
-    let pin = (host.parse::<std::net::IpAddr>().is_err() && !host.starts_with('[')).then(|| (host.clone(), addrs));
-    let summary = format!("{} {}", prepared.method, redact_text(prepared.url.as_str()));
-    let out = http::send(prepared, input.body.clone(), input.insecure, pin).await.map_err(AppError::Network)?;
-    db.with(|c| log(c, "utility", "HTTP request", &format!("{summary} → {}", out.status), Some("project"), Some(&input.project_id.to_string()), Some(input.project_id)))?;
-    Ok(out)
+        out.redirects = hops;
+        let chain = if out.redirects.is_empty() { String::new() } else { format!(" after {}", crate::workspace::discovery::plural(out.redirects.len(), "redirect", "redirects")) };
+        db.with(|c| log(c, "utility", "HTTP request", &format!("{first} → {}{chain}", out.status), Some("project"), Some(&input.project_id.to_string()), Some(input.project_id)))?;
+        return Ok(out);
+    }
 }
 
 #[tauri::command]
@@ -209,11 +254,102 @@ mod tests {
         db.with(|c| {
             c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1,'P','active','t','t')", [])?;
             c.execute("INSERT INTO project_targets (project_id, value, kind, in_scope, created_at) VALUES (1,'example.com','domain',1,'t')", [])?;
-            let input = http::HttpRequestInput { project_id: 1, method: "GET".into(), url: "https://example.com/".into(), headers: vec![("Host".into(), "evil.example.net".into())], body: String::new(), insecure: false };
+            let input = http::HttpRequestInput { project_id: 1, method: "GET".into(), url: "https://example.com/".into(), headers: vec![("Host".into(), "evil.example.net".into())], body: String::new(), insecure: false, follow_redirects: false };
             let p = http::prepare(&input).unwrap();
             assert!(scope_gate::enforce(c, Some(1), &p.targets, scope_gate::Mode::Active, "HTTP request").is_err(), "a Host header outside the scope is refused");
             let ok = http::prepare(&http::HttpRequestInput { headers: vec![], ..input }).unwrap();
             assert!(scope_gate::enforce(c, Some(1), &ok.targets, scope_gate::Mode::Active, "HTTP request").is_ok());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    /// A local server: `/api/start` redirects to `/api/next`, which redirects outside the
+    /// authorized path to `/admin`. Returns the port and the count of requests to `/admin`.
+    async fn redirecting_server() -> (u16, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let admin = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = admin.clone();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut sock, _)) = listener.accept().await else { return };
+                let seen = seen.clone();
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 4096];
+                    let n = sock.read(&mut buf).await.unwrap_or(0);
+                    let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let path = req.split_whitespace().nth(1).unwrap_or("/").to_string();
+                    let resp = match path.as_str() {
+                        "/api/start" => "HTTP/1.1 302 Found
+Location: /api/next
+Content-Length: 0
+Connection: close
+
+".to_string(),
+                        "/api/next" => format!("HTTP/1.1 302 Found
+Location: http://127.0.0.1:{port}/admin
+Content-Length: 0
+Connection: close
+
+"),
+                        _ => {
+                            seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            "HTTP/1.1 200 OK
+Content-Length: 6
+Connection: close
+
+secret".to_string()
+                        }
+                    };
+                    let _ = sock.write_all(resp.as_bytes()).await;
+                    let _ = sock.shutdown().await;
+                });
+            }
+        });
+        (port, admin)
+    }
+
+    #[tokio::test]
+    async fn every_redirect_is_checked_before_it_is_followed() {
+        let (port, admin) = redirecting_server().await;
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1,'P','active','t','t')", [])?;
+            c.execute("INSERT INTO project_targets (project_id, value, kind, in_scope, created_at) VALUES (1, ?1, 'url', 1, 't')", [format!("http://127.0.0.1:{port}/api/")])?;
+            Ok(())
+        })
+        .unwrap();
+        let input = |follow: bool| http::HttpRequestInput { project_id: 1, method: "GET".into(), url: format!("http://127.0.0.1:{port}/api/start"), headers: vec![], body: String::new(), insecure: false, follow_redirects: follow };
+        // not followed unless asked
+        let out = send_checked(&db, input(false)).await.unwrap();
+        assert_eq!((out.status, out.redirects.len(), out.redirect_stopped.is_none()), (302, 0, true));
+        // followed inside the path, stopped at the hop that leaves it
+        let out = send_checked(&db, input(true)).await.unwrap();
+        assert_eq!(out.status, 302, "the response that asked for the refused redirect");
+        assert_eq!(out.redirects, vec![http::RedirectHop { status: 302, from: format!("http://127.0.0.1:{port}/api/start"), to: format!("http://127.0.0.1:{port}/api/next") }]);
+        let why = out.redirect_stopped.unwrap();
+        assert!(why.contains("/admin was not followed") && why.contains("outside the authorized URLs"), "{why}");
+        assert_eq!(admin.load(std::sync::atomic::Ordering::SeqCst), 0, "the refused URL was never requested");
+        let blocked: i64 = db.with(|c| Ok(c.query_row("SELECT COUNT(*) FROM scope_events WHERE action = 'blocked' AND source = 'HTTP redirect'", [], |r| r.get(0))?)).unwrap();
+        assert_eq!(blocked, 1, "the refused redirect is in the scope history");
+    }
+
+    #[test]
+    fn requests_in_path_scoped_projects_stay_inside_the_paths() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1,'P','active','t','t')", [])?;
+            c.execute("INSERT INTO project_targets (project_id, value, kind, in_scope, created_at) VALUES (1,'https://app.example.com/api/','url',1,'t')", [])?;
+            let req = |url: &str, host: Option<&str>| http::HttpRequestInput { project_id: 1, method: "GET".into(), url: url.into(), headers: host.map(|h| vec![("Host".to_string(), h.to_string())]).unwrap_or_default(), body: String::new(), insecure: false, follow_redirects: false };
+            let enforce = |i: &http::HttpRequestInput| scope_gate::enforce(c, Some(1), &http::prepare(i).unwrap().targets, scope_gate::Mode::Active, "HTTP request");
+            assert!(enforce(&req("https://app.example.com/api/v1?x=1", None)).is_ok());
+            assert!(enforce(&req("https://app.example.com/api/v1", Some("app.example.com"))).is_ok(), "the same virtual host");
+            for (url, host) in [("https://app.example.com/login", None), ("https://app.example.com/api/v1", Some("admin.example.com")), ("https://app.example.com/api/v1", Some("app.example.com:8443"))] {
+                let err = enforce(&req(url, host)).unwrap_err().to_string();
+                assert!(err.contains("HTTP request was not sent") || err.contains("was not started"), "{url} {host:?}: {err}");
+            }
             Ok(())
         })
         .unwrap();

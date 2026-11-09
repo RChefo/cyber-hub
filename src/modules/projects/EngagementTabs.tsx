@@ -42,6 +42,7 @@ export function ScopeExtras({ project }: { project: Project }) {
                   {e.inScope === false && e.action !== "blocked" && <span className="text-muted"> (exclusion)</span>}
                   {e.note && <span className="text-muted"> · {e.note}</span>}
                   {e.source !== "user" && <span className="text-muted"> · {e.source}</span>}
+                  {e.repeats > 0 && <span className="text-muted"> · {e.repeats + 1} attempts, the last {formatRelative(e.at)}</span>}
                 </span>
               </li>
             ))}

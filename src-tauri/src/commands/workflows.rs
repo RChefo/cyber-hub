@@ -267,6 +267,7 @@ fn active_summary(db: &Db, workflow: &Workflow) -> AppResult<String> {
             "web_check" => format!("sends {}", discovery::http_description(&db.with(|c| discovery::http_targets(c, workflow.project_id, Some(s.list("hosts"))))?)),
             "service_scan" => {
                 let targets = s.list("targets");
+                crate::workspace::scope_gate::refuse_urls(&targets, "Workflow service scan")?;
                 db.with(|c| crate::workspace::scope_gate::enforce(c, Some(workflow.project_id), &targets, crate::workspace::scope_gate::Mode::Active, "Workflow service scan"))?;
                 format!("runs an Nmap service scan of {} (you will confirm the exact command)", targets.join(", "))
             }

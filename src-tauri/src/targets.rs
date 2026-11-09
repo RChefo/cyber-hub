@@ -185,6 +185,20 @@ pub fn validate_file(path: &Path, entries: &[ScopeEntry]) -> Result<(FileClass, 
     Ok((FileClass::TargetList, out))
 }
 
+/// The URLs a raw request reaches through its `Host` header and request path. The file does not say
+/// whether the tool sends it over HTTPS or HTTP, so both are given (HTTPS first); the request is
+/// authorized when one of them is, and refused when either is excluded.
+fn request_urls(host: &str, uri: &str) -> Vec<Target> {
+    let path = if uri.contains("://") {
+        url::Url::parse(uri).ok().map(|u| u[url::Position::BeforePath..].to_string()).unwrap_or_default()
+    } else if uri.starts_with('/') {
+        uri.to_string()
+    } else {
+        "/".to_string()
+    };
+    ["https", "http"].iter().filter_map(|scheme| scope::parse_target(&format!("{scheme}://{host}{path}"))).filter(|t| matches!(t, Target::Url(_))).collect()
+}
+
 fn validate_request<I>(uri: &str, rest: I, entries: &[ScopeEntry]) -> Result<Vec<Target>, String>
 where
     I: Iterator<Item = std::io::Result<Vec<u8>>>,
@@ -211,10 +225,26 @@ where
         }
     }
     let host = host.ok_or("request has no Host header")?;
-    let t = scope::parse_target(&host).ok_or_else(|| format!("Host header '{}' is not a valid target", truncate(&host, 80)))?;
-    scope::check_target(entries, &t)?;
-    if !out.contains(&t) {
-        out.push(t);
+    let shown = truncate(&host, 80);
+    if host.contains(['/', '@', '?', '#', '\\']) || scope::parse_target(&host).is_none() {
+        return Err(format!("Host header '{shown}' is not a valid target"));
+    }
+    let urls = request_urls(&host, uri);
+    if urls.is_empty() {
+        return Err(format!("Host header '{shown}' is not a valid target"));
+    }
+    // an exclusion of either scheme refuses the request; one authorized scheme accepts it
+    let results: Vec<Result<(), String>> = urls.iter().map(|t| scope::check_target(entries, t)).collect();
+    if let Some(Err(e)) = results.iter().find(|r| r.as_ref().is_err_and(|e| e.contains("excluded"))) {
+        return Err(e.clone());
+    }
+    match urls.iter().zip(&results).find(|(_, r)| r.is_ok()) {
+        Some((t, _)) => {
+            if !out.contains(t) {
+                out.push(t.clone());
+            }
+        }
+        None => return Err(results.into_iter().find_map(Result::err).unwrap_or_default()),
     }
     Ok(out)
 }
@@ -334,6 +364,40 @@ mod tests {
     }
 
     #[test]
+    fn path_scoped_projects_check_urls_exactly_and_never_hosts() {
+        let s = vec![e("https://app.example.com/api/", true), e("https://app.example.com/api/admin/", false)];
+        assert_eq!(resolve(&a(&["-u", "https://app.example.com/api/FUZZ"]), &[], &s, None).unwrap().checked, vec!["https://app.example.com/api/FUZZ".to_string()]);
+        for u in ["https://app.example.com/FUZZ", "http://app.example.com/api/FUZZ", "https://app.example.com:8443/api/", "https://app.example.com/api/admin/users"] {
+            assert!(resolve(&a(&["-u", u]), &[], &s, None).is_err(), "{u}");
+        }
+        // a host name in the arguments (a port scan, for example) is never authorized by a URL
+        for args in [vec!["-sV", "app.example.com"], vec!["-p", "443", "app.example.com:443"]] {
+            let err = resolve(&a(&args), &[], &s, None).unwrap_err();
+            assert!(err.contains("excluded path") || err.contains("specific URLs"), "{args:?}: {err}");
+        }
+        let t = tmpdir("pathlist");
+        let good = write(&t.0, "urls.txt", b"https://app.example.com/api/a\nhttps://app.example.com/api/b?x=1\n");
+        assert_eq!(resolve(&a(&["-l", &good]), &[], &s, None).unwrap().file_targets, 2);
+        let bad = write(&t.0, "urls2.txt", b"https://app.example.com/api/a\nhttps://app.example.com/login\n");
+        assert!(resolve(&a(&["-l", &bad]), &[], &s, None).unwrap_err().contains("line 2"));
+        let hosts = write(&t.0, "hosts.txt", b"app.example.com\n");
+        assert!(resolve(&a(&["-iL", &hosts]), &[], &s, None).is_err(), "a host list needs host-level authorization");
+        // raw requests: the Host header with the request path, under either scheme
+        let inside = write(&t.0, "in.req", b"POST /api/v1/login HTTP/1.1\r\nHost: app.example.com\r\n\r\nuser=a");
+        assert_eq!(resolve(&a(&["-r", &inside]), &[], &s, None).unwrap().checked, vec!["https://app.example.com/api/v1/login".to_string()]);
+        let outside = write(&t.0, "out.req", b"GET /admin HTTP/1.1\r\nHost: app.example.com\r\n\r\n");
+        assert!(resolve(&a(&["-r", &outside]), &[], &s, None).unwrap_err().contains("outside the authorized URLs"));
+        let excluded = write(&t.0, "ex.req", b"GET /api/admin/x HTTP/1.1\r\nHost: app.example.com\r\n\r\n");
+        assert!(resolve(&a(&["-r", &excluded]), &[], &s, None).unwrap_err().contains("excluded"));
+        let port = write(&t.0, "port.req", b"GET /api/x HTTP/1.1\r\nHost: app.example.com:8443\r\n\r\n");
+        assert!(resolve(&a(&["-r", &port]), &[], &s, None).is_err(), "another port is another origin");
+        for host in ["app.example.com/evil", "evil.net@app.example.com", "app.example.com?x"] {
+            let f = write(&t.0, "vh.req", format!("GET /api/x HTTP/1.1\r\nHost: {host}\r\n\r\n").as_bytes());
+            assert!(resolve(&a(&["-r", &f]), &[], &s, None).is_err(), "{host}");
+        }
+    }
+
+    #[test]
     fn target_file_in_scope_is_snapshotted_and_rewritten() {
         let t = tmpdir("ok");
         let list = write(&t.0, "targets.txt", b"# lab\n10.0.0.5\n10.0.0.20-30 api.example.com\n\nhttps://app.example.com/login\n");
@@ -395,7 +459,7 @@ mod tests {
         let wl = write(&t.0, "common.txt", b"admin\nlogin\nbackup.bak\nindex.php\n.git\nconfig.json\n");
         let r = resolve(&a(&["-u", "https://app.example.com/FUZZ", "-w", &wl]), &[], &scope(), None).unwrap();
         assert_eq!(r.file_targets, 0);
-        assert_eq!(r.checked, vec!["app.example.com".to_string()]);
+        assert_eq!(r.checked, vec!["https://app.example.com/FUZZ".to_string()]);
         let bin = write(&t.0, "x.bin", &[0u8, 1, 2, b'8', b'.', b'8', b'.', b'8', b'.', b'8']);
         assert_eq!(resolve(&a(&[&bin, "10.0.0.1"]), &[], &scope(), None).unwrap().file_targets, 0);
     }
@@ -404,7 +468,7 @@ mod tests {
     fn http_request_files_validate_host_and_request_line() {
         let t = tmpdir("req");
         let ok = write(&t.0, "ok.req", b"POST /login HTTP/1.1\r\nHost: app.example.com\r\nReferer: https://elsewhere.net/\r\n\r\nuser=a");
-        assert_eq!(resolve(&a(&["-r", &ok]), &[], &scope(), None).unwrap().checked, vec!["app.example.com".to_string()]);
+        assert_eq!(resolve(&a(&["-r", &ok]), &[], &scope(), None).unwrap().checked, vec!["https://app.example.com/login".to_string()]);
         let bad = write(&t.0, "bad.req", b"GET / HTTP/1.1\r\nHost: evil.net\r\n\r\n");
         assert!(resolve(&a(&["-r", &bad]), &[], &scope(), None).is_err());
         let abs = write(&t.0, "abs.req", b"GET http://evil.net/ HTTP/1.1\r\nHost: app.example.com\r\n\r\n");

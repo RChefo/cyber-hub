@@ -52,6 +52,7 @@ export function HttpBuilderTool() {
   const [headers, setHeaders] = useState<[string, string][]>([["Accept", "*/*"]]);
   const [body, setBody] = useState("");
   const [insecure, setInsecure] = useState(false);
+  const [follow, setFollow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<HttpResponseOut | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +62,7 @@ export function HttpBuilderTool() {
     setBusy(true);
     setError(null);
     try {
-      setRes(await api.httpSend({ projectId, method, url: url.trim(), headers: headers.filter(([k]) => k.trim()), body, insecure }));
+      setRes(await api.httpSend({ projectId, method, url: url.trim(), headers: headers.filter(([k]) => k.trim()), body, insecure, followRedirects: follow }));
       invalidate("activity");
     } catch (e) {
       setRes(null);
@@ -73,7 +74,9 @@ export function HttpBuilderTool() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PrivacyNote network>Sends one request to the URL when you press Send. The host (and any Host header) must be in the selected project&apos;s authorized scope; the project must be active. Redirects are not followed.</PrivacyNote>
+      <PrivacyNote network>
+        Sends one request to the URL when you press Send. The URL (and the same path on any Host header) must be in the selected project&apos;s authorized scope; the project must be active. Redirects are followed only when you turn it on, at most 5, and each one is checked against the scope before it is sent.
+      </PrivacyNote>
       <div className="flex flex-wrap items-end gap-3">
         {picker}
         <SelectInput label="Method" value={method} onChange={setMethod} options={["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"].map((m) => ({ id: m, label: m }))} className="w-32" />
@@ -98,6 +101,7 @@ export function HttpBuilderTool() {
       {method !== "GET" && method !== "HEAD" && <TextAreaInput label="Body" value={body} onChange={setBody} rows={5} mono placeholder='{"example": true}' />}
       <div className="flex flex-wrap items-center gap-4">
         <SwitchInput label="Accept untrusted certificates" isSelected={insecure} onChange={setInsecure} />
+        <SwitchInput label="Follow redirects (each checked against the scope)" isSelected={follow} onChange={setFollow} />
         <span className="flex-1" />
         <Button variant="primary" onPress={send} isPending={busy} isDisabled={!projectId || !url.trim()}>
           <Send className="size-3.5" />
@@ -115,6 +119,18 @@ export function HttpBuilderTool() {
               {res.version} · {res.elapsedMs} ms · {res.bodyBytes.toLocaleString()} bytes{res.truncated ? " (cut at 2 MB)" : ""}
             </span>
           </div>
+          {res.redirects.length > 0 && (
+            <ol className="flex flex-col gap-0.5 text-[12.5px] text-muted">
+              {res.redirects.map((h, i) => (
+                <li key={i} className="font-mono break-all">
+                  {h.status} {h.from} → {h.to}
+                </li>
+              ))}
+            </ol>
+          )}
+          {res.redirectStopped && (
+            <p className="rounded-[10px] bg-warning-soft px-3 py-2 text-[12.5px] text-warning-soft-foreground">{res.redirectStopped}</p>
+          )}
           <CodeBlock code={res.headers.map(([k, v]) => `${k}: ${v}`).join("\n")} maxHeight={220} />
           {res.body && <CodeBlock code={res.body} maxHeight={420} />}
         </div>

@@ -1,4 +1,4 @@
-# Project data model (schema 17)
+# Project data model (schema 18)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -256,6 +256,10 @@ Findings can carry a CVSS vector (`findings.cvss_vector`). The backend computes 
     * The regular test suite checks a 484-vector subset (`src-tauri/src/cvss/testdata/first_reference.tsv`): one 4.0 vector for each of the 263 macrovectors the sample reaches, random 3.1 vectors, and 3.0 vectors whose 3.0 and 3.1 scores differ.
     * The full comparison is an ignored test: `CVSS_REFERENCE_DIR=<out dir> cargo test cvss -- --ignored`.
   * **Published examples.** All eight CVSS 4.0 examples in the table of FIRST's examples page, and CVSS 3.1 vectors from the specification's comparisons. Four captions on that page disagree with its own table (CVE-2023-48228, CVE-2016-5729, CVE-2015-2890, CVE-2018-3652); the table values are the calculator's.
+
+## Scope history (schema 18)
+
+`scope_events.repeats` (default 0) counts further identical refusals: same target, reason and operation within 10 minutes. These are counted on one entry instead of adding rows, so retried requests cannot flood the history. The scope history and the project timeline show "N attempts". The scope semantics, including path-level URL entries, are in [SECURITY.md](SECURITY.md#path-level-scope).
 
 ## Methodology checklist (schema 17)
 

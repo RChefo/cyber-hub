@@ -60,19 +60,14 @@ pub const MAX_BLOCKED_EVENTS: i64 = 2000;
 fn public_problem(t: &Target) -> Option<String> {
     let label = scope::target_label(t);
     match t {
+        // a URL is judged by its host
+        Target::Url(w) => public_problem(&w.host),
         Target::Host(h) if is_internal_domain(h) => Some(format!("{label} is an internal or single-label name; it is not sent to public sources")),
         Target::Ip(ip) if is_non_public(ip) => Some(format!("{label} is a private, loopback, link-local or reserved address; it is not sent to public sources")),
         Target::Net(n) if is_non_public(&n.network()) => Some(format!("{label} is a private or reserved range; it is not sent to public sources")),
         Target::Range(a, b) if is_non_public(a) || is_non_public(b) => Some(format!("{label} contains private or reserved addresses")),
         _ => None,
     }
-}
-
-fn excluded(entries: &[ScopeEntry], t: &Target) -> bool {
-    let only_exclusions: Vec<ScopeEntry> = entries.iter().filter(|e| !e.in_scope).cloned().collect();
-    // with no in-scope entries, check_target fails only for an explicit exclusion when the
-    // exclusion matches; distinguish the two reasons by testing against exclusions alone
-    !only_exclusions.is_empty() && scope::check_target(&only_exclusions, t).err().is_some_and(|r| r.contains("explicitly excluded"))
 }
 
 /// Judges targets without side effects. `project_id` is required for active operations.
@@ -119,8 +114,9 @@ pub fn decide(c: &Connection, project_id: Option<i64>, targets: &[String], mode:
             Mode::Passive => {
                 if let Some(problem) = public_problem(&t) {
                     verdicts.push(v(false, problem));
-                } else if excluded(&entries, &t) {
-                    verdicts.push(v(false, format!("{} is explicitly excluded from the project scope", scope::target_label(&t))));
+                } else if let Some(reason) = scope::exclusion(&entries, &t, false) {
+                    // an excluded URL path does not stop lookups about its host: they do not reach paths
+                    verdicts.push(v(false, reason));
                 } else {
                     verdicts.push(v(true, "Public lookup".into()));
                 }
@@ -156,11 +152,45 @@ pub fn enforce(c: &Connection, project_id: Option<i64>, targets: &[String], mode
     Err(AppError::Scope(format!("{operation} was not started. {list}")))
 }
 
+/// Operations on hosts (service and port scans): URLs are refused before the scope check, because a
+/// URL entry would authorize the URL but never its host, and these tools contact the host.
+pub fn refuse_urls(targets: &[String], operation: &str) -> AppResult<()> {
+    if let Some(t) = targets.iter().find(|t| matches!(scope::parse_target(t), Some(Target::Url(_)))) {
+        return Err(AppError::Scope(format!(
+            "{operation} was not started. {} is a URL; a {} works on host names, addresses and networks. Give the host instead: it must be in the scope as a host, domain or address range, because a URL in the scope authorizes only requests to its paths.",
+            t.chars().take(200).collect::<String>(),
+            operation.to_lowercase()
+        )));
+    }
+    Ok(())
+}
+
+/// A refusal identical to one recorded within this many minutes (same target, reason and
+/// operation) is counted on that entry instead of adding a row.
+pub const REPEAT_WINDOW_MINUTES: i64 = 10;
+
 /// Records a refused active attempt in the project's scope history (bounded, see [`enforce`]).
+/// Repeats of the same refusal are counted, so retried requests cannot flood the history.
 pub fn record_blocked(c: &Connection, project_id: i64, target: &str, reason: &str, operation: &str) -> AppResult<()> {
+    let value: String = target.chars().take(255).collect();
+    let note: String = reason.chars().take(500).collect();
+    let source: String = operation.chars().take(100).collect();
+    let ts = now();
+    let since = (chrono::Utc::now() - chrono::Duration::minutes(REPEAT_WINDOW_MINUTES)).to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let recent: Option<i64> = c
+        .query_row(
+            "SELECT id FROM scope_events WHERE project_id = ?1 AND action = 'blocked' AND value = ?2 AND note = ?3 AND source = ?4 AND at >= ?5 ORDER BY id DESC LIMIT 1",
+            params![project_id, value, note, source, since],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if let Some(id) = recent {
+        c.execute("UPDATE scope_events SET repeats = repeats + 1, at = ?2 WHERE id = ?1", params![id, ts])?;
+        return Ok(());
+    }
     c.execute(
         "INSERT INTO scope_events (project_id, action, value, kind, in_scope, note, source, at) VALUES (?1, 'blocked', ?2, '', NULL, ?3, ?4, ?5)",
-        params![project_id, target.chars().take(255).collect::<String>(), reason.chars().take(500).collect::<String>(), operation.chars().take(100).collect::<String>(), now()],
+        params![project_id, value, note, source, ts],
     )?;
     Ok(())
 }
@@ -333,6 +363,35 @@ mod tests {
     }
 
     #[test]
+    fn path_level_scopes_authorize_urls_never_hosts() {
+        let (db, p) = setup("active", &[("https://app.example.com/api/", true)]);
+        db.with(|c| {
+            assert!(decide(c, Some(p), &s(&["https://app.example.com/api/x?id=1"]), Mode::Active)?.allowed());
+            let d = decide(c, Some(p), &s(&["app.example.com", "https://app.example.com/", "http://app.example.com/api/x"]), Mode::Active)?;
+            assert!(d.verdicts.iter().all(|v| !v.allowed), "{d:?}");
+            assert!(d.verdicts[0].reason.contains("specific URLs"), "{}", d.verdicts[0].reason);
+            assert!(d.verdicts[1].reason.contains("outside the authorized URLs"), "{}", d.verdicts[1].reason);
+            // host operations refuse URLs before the scope check, with a reason
+            let err = refuse_urls(&s(&["10.0.0.5", "https://app.example.com/api/"]), "Service scan").unwrap_err().to_string();
+            assert!(err.contains("works on host names") && err.contains("only requests to its paths"), "{err}");
+            assert!(refuse_urls(&s(&["app.example.com", "10.0.0.0/24", "[2001:db8::1]:443"]), "Service scan").is_ok());
+            Ok(())
+        })
+        .unwrap();
+        // passive lookups judge a URL by its host
+        let (db, p) = setup("planning", &[("*.example.com", true), ("https://app.example.com/admin", false)]);
+        db.with(|c| {
+            for t in ["http://10.0.0.1/", "https://intranet/x", "http://127.0.0.1:8080/", "https://[fd00::1]/"] {
+                assert!(!decide(c, None, &s(&[t]), Mode::Passive)?.allowed(), "{t}");
+            }
+            assert!(decide(c, Some(p), &s(&["app.example.com"]), Mode::Passive)?.allowed(), "an excluded path does not stop lookups about its host");
+            assert!(!decide(c, Some(p), &s(&["https://app.example.com/admin/x"]), Mode::Passive)?.allowed());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
     fn blocked_active_attempts_are_audited() {
         let (db, p) = setup("active", &[("example.com", true)]);
         db.with(|c| {
@@ -346,6 +405,20 @@ mod tests {
             let _ = enforce(c, Some(p), &[huge], Mode::Active, "TLS analysis");
             let stored: i64 = c.query_row("SELECT MAX(length(value)) FROM scope_events WHERE action = 'blocked'", [], |r| r.get(0))?;
             assert!(stored <= 255, "stored values are bounded");
+            // the same refusal retried is counted on one entry, a different one gets its own
+            let rows = |c: &Connection| -> AppResult<(i64, i64)> {
+                Ok(c.query_row("SELECT COUNT(*), COALESCE(MAX(repeats), 0) FROM scope_events WHERE project_id = ?1 AND action = 'blocked' AND value = 'example.org'", params![p], |r| Ok((r.get(0)?, r.get(1)?)))?)
+            };
+            for _ in 0..25 {
+                let _ = enforce(c, Some(p), &s(&["example.org"]), Mode::Active, "TLS analysis");
+            }
+            assert_eq!(rows(c)?, (1, 25), "one entry, 25 repeats");
+            let _ = enforce(c, Some(p), &s(&["example.org"]), Mode::Active, "HTTP request");
+            assert_eq!(c.query_row("SELECT COUNT(*) FROM scope_events WHERE project_id = ?1 AND action = 'blocked' AND value = 'example.org'", params![p], |r| r.get::<_, i64>(0))?, 2, "another operation is another entry");
+            // an old refusal is not reused
+            c.execute("UPDATE scope_events SET at = '2020-01-01T00:00:00Z' WHERE project_id = ?1 AND value = 'example.org'", params![p])?;
+            let _ = enforce(c, Some(p), &s(&["example.org"]), Mode::Active, "TLS analysis");
+            assert_eq!(c.query_row("SELECT COUNT(*) FROM scope_events WHERE project_id = ?1 AND action = 'blocked' AND value = 'example.org'", params![p], |r| r.get::<_, i64>(0))?, 3);
             Ok(())
         })
         .unwrap();

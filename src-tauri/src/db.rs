@@ -853,6 +853,11 @@ pub(crate) const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (project_id, test_id)
     );
     "#,
+    // 18 — the same refusal repeated within minutes is counted on one history entry. New column
+    // with a default only.
+    r#"
+    ALTER TABLE scope_events ADD COLUMN repeats INTEGER NOT NULL DEFAULT 0;
+    "#,
 ];
 
 /// Backups kept in `<data dir>/backups` (the newest ones; older copies are removed).

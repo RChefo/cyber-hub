@@ -746,3 +746,29 @@ fn csv_values_are_redacted_and_rows_without_a_target_are_handled() {
     assert!(parse(&wide).is_ok());
     assert!(parse(&format!("\r\n\r\nName;Host\n{};a\n", "日本".repeat(30_000))).is_ok(), "blank lines before the header");
 }
+
+#[test]
+fn path_scoped_projects_import_findings_on_authorized_urls_only() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        c.execute("INSERT INTO projects (name, status, created_at, updated_at) VALUES ('Web','active','t','t')", [])?;
+        let p = c.last_insert_rowid();
+        crate::commands::projects::target_add(c, p, "https://app.example.com/api/", "url", true, "")?;
+        let nuclei = r#"{"template-id":"a","info":{"name":"In the path","severity":"high"},"host":"https://app.example.com","matched-at":"https://app.example.com/api/v1/x"}
+{"template-id":"b","info":{"name":"Outside the path","severity":"high"},"host":"https://app.example.com","matched-at":"https://app.example.com/admin"}
+{"template-id":"c","info":{"name":"Other scheme","severity":"high"},"host":"http://app.example.com","matched-at":"http://app.example.com/api/v1/x"}"#;
+        let parsed = parse(nuclei).unwrap();
+        let pv = preview(c, p, &parsed, Options::default())?;
+        assert_eq!((pv.counts.new, pv.counts.out_of_scope), (1, 2), "{:?}", pv.counts);
+        assert!(pv.assets >= 1, "the web service of the authorized origin is part of the inventory: {pv:?}");
+        // host-level results need the host itself in the scope
+        let pv = preview(c, p, &parse(&nessus_doc(&[("app.example.com", "1", 443, 3)])).unwrap(), Options::default())?;
+        assert_eq!((pv.counts.new, pv.counts.out_of_scope), (0, 1));
+        // a CSV row is judged by its target: a URL by its path, a host by the host
+        let csv = "Name,Risk,Target\nA,High,https://app.example.com/api/a\nB,High,app.example.com:443\n";
+        let pv = preview(c, p, &parse(csv).unwrap(), Options::default())?;
+        assert_eq!((pv.counts.new, pv.counts.out_of_scope), (1, 1), "{:?}", pv.counts);
+        Ok(())
+    })
+    .unwrap();
+}

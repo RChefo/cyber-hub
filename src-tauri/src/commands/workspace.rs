@@ -104,12 +104,14 @@ pub struct ScopeEvent {
     pub note: String,
     pub source: String,
     pub at: String,
+    /// further identical refusals counted on this entry
+    pub repeats: i64,
 }
 
 #[tauri::command]
 pub async fn scope_history(db: State<'_, Db>, project_id: i64, limit: Option<i64>) -> AppResult<Vec<ScopeEvent>> {
     db.with(|c| {
-        let mut st = c.prepare("SELECT id, action, value, kind, in_scope, note, source, at FROM scope_events WHERE project_id = ?1 ORDER BY id DESC LIMIT ?2")?;
+        let mut st = c.prepare("SELECT id, action, value, kind, in_scope, note, source, at, repeats FROM scope_events WHERE project_id = ?1 ORDER BY id DESC LIMIT ?2")?;
         let rows = st
             .query_map(params![project_id, limit.unwrap_or(500).clamp(1, 5000)], |r| {
                 Ok(ScopeEvent {
@@ -121,6 +123,7 @@ pub async fn scope_history(db: State<'_, Db>, project_id: i64, limit: Option<i64
                     note: r.get(5)?,
                     source: r.get(6)?,
                     at: r.get(7)?,
+                    repeats: r.get(8)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;

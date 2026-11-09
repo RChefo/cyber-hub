@@ -81,7 +81,8 @@ pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], befor
                    CASE action WHEN 'added' THEN 'Scope ' || CASE in_scope WHEN 0 THEN 'exclusion added: ' ELSE 'entry added: ' END
                                WHEN 'updated' THEN 'Scope entry changed: '
                                WHEN 'removed' THEN 'Scope entry removed: '
-                               ELSE 'Blocked (out of scope): ' END || value,
+                               ELSE 'Blocked (out of scope): ' END || value
+                               || CASE WHEN repeats > 0 THEN ' (' || (repeats + 1) || ' attempts)' ELSE '' END,
                    note, 'scope', id, at
             FROM scope_events WHERE project_id = ?1
           UNION ALL

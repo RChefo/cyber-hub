@@ -126,8 +126,46 @@ Scope entries:
 | `*.example.com` | any sub-domain at any depth (not the apex) |
 | `10.0.0.5` | that address (IPv4-mapped IPv6 such as `::ffff:10.0.0.5` is normalized and matches too) |
 | `10.0.0.0/24` | addresses and sub-networks fully inside it |
-| `https://app.example.com` | the URL's host |
+| `https://app.example.com/api/` | **only URLs** with the same scheme, host and port whose path is inside `/api/` (an entry `/api` also covers `/api` itself, never `/apix`). It never authorizes the host itself (see below) |
 | out-of-scope entry | always wins; a network or IPv4 range that **overlaps** an excluded host or network is rejected |
+
+### Path-level scope
+
+A URL entry is a path-level authorization:
+* **It never implies host-level authorization.** The host needs a domain, wildcard, address or range entry before it can be used in a host-level way:
+  * a host name or address in a tool's arguments or target list, such as an Nmap or other port scan;
+  * a service scan, a TLS analysis, or the attack-surface HTTP check;
+  * a host-level result of a scan import (Nessus, Nmap).
+
+  The refusal names the authorized URLs and says what is missing.
+* **URL operations are checked on the exact URL**, after parsing:
+  * dot segments are resolved, and `\` counts as `/`;
+  * scheme and host are lowercased, and the effective port is compared;
+  * the path is compared byte for byte and case-sensitively, so encoded separators such as `%2F` stay inside their segment;
+  * queries and fragments do not matter.
+
+  This applies to URLs in tool arguments and target lists, HTTP request builder requests, OSINT URL entities, and scan-import findings at URLs.
+* **Host headers.** In the HTTP request builder, a `Host` header is checked as the same path on that virtual host. In a raw request file, the `Host` header and the request path are checked under HTTPS and HTTP, because the file does not say which the tool will use: one authorized scheme accepts it, and an exclusion of either refuses it.
+* **Exclusions.** An out-of-scope URL excludes its path on every scheme and port of its host. Because a host-level operation could reach that path, it also refuses host-level operations on that host. Passive lookups about the host (DNS, certificate transparency) do not reach paths and are not affected.
+* **Service scans** (and workflow service-scan steps) refuse URLs before the scope check: they work on hosts, addresses and networks.
+* **Inventory.** A web service whose origin has authorized URLs may be recorded as an asset by a scan import. Every operation on it is checked on its own.
+* **Passive discovery** derives its root domains only from domain and wildcard entries. A URL entry is never a root, and names are recorded only when the scope covers them as hosts.
+* **Internal addresses.** For an internal web application authorized by URL, the name's private addresses must be authorized too, as addresses, or the URL must name the address. Otherwise DNS vetting refuses it, as before.
+* **Redirects.** The HTTP request builder follows redirects only when asked, at most five:
+  * every hop is a new request, checked against the scope and DNS vetting before it is sent;
+  * credentials are dropped when the origin changes;
+  * a refused hop ends the chain with its reason and is recorded.
+
+  All other HTTP clients in Cyber Hub never follow redirects.
+
+Nothing widens a scope automatically.
+
+### Scope history
+
+Refused active operations are recorded in the project's scope history:
+* at most 50 per attempt;
+* the newest 2,000 per project;
+* a refusal identical to one recorded in the last 10 minutes (same target, reason and operation) is counted on that entry ("3 attempts") instead of adding a row (schema 18).
 
 ### Target resolution (tool-independent)
 
@@ -144,7 +182,12 @@ For a scope-required run every argument value (whole positional values and the p
 
 Fuzzing keywords in host names need no special handling: `https://FUZZ.example.com/` is a real host under `*.example.com` and passes only if that wildcard is in scope, while `https://exaFUZZ.com/`, `https://FUZZ/` or `https://10.0.0.FUZZ/` name other hosts and are rejected.
 
-Tests: `src-tauri/src/scope.rs` and `src-tauri/src/targets.rs` (target files, exclusions, malformed lines, request files, `--opt=file` rewriting, smuggling through mixed arguments, TLD look-alikes, fuzz keywords, IPv6/mapped addresses, empty targets).
+Tests: `src-tauri/src/scope.rs` and `src-tauri/src/targets.rs` (target files, exclusions, malformed lines, request files, `--opt=file` rewriting, smuggling through mixed arguments, TLD look-alikes, fuzz keywords, IPv6/mapped addresses, empty targets). Path-level scope:
+* `scope.rs`: path boundaries, dot segments, encoded separators, case, scheme, port, user-info tricks, origin entries, IPv6, host-level refusals with their reasons, excluded paths;
+* `targets.rs`: tool arguments, URL and host lists, raw requests;
+* `scope_gate.rs`: active and passive decisions, service scans refusing URLs, repeated refusals counted;
+* `commands/sectools.rs`: Host headers, and redirects against a local server, where the URL outside the path is never requested;
+* `scan_import_tests.rs`: findings at URLs, host-level results, CSV rows.
 
 ## Accepted risks and limitations
 

@@ -331,10 +331,10 @@ fn diff(c: &Connection, previous: Option<i64>, snap: Snapshot) -> AppResult<Snap
 pub fn passive_roots(entries: &[ScopeEntry]) -> Vec<String> {
     let mut roots = BTreeSet::new();
     for e in entries.iter().filter(|e| e.in_scope) {
+        // URL entries authorize paths, not hosts: they are no roots for name discovery
         let host = match e.kind.as_str() {
             "domain" => Some(e.value.clone()),
             "wildcard" => e.value.strip_prefix("*.").map(str::to_string),
-            "url" => url::Url::parse(&e.value).ok().and_then(|u| u.host_str().map(str::to_string)),
             _ => None,
         };
         if let Some(h) = host.and_then(|h| crate::osint::normalize::domain(&h).ok()) {
@@ -774,7 +774,7 @@ mod tests {
     #[test]
     fn passive_roots_come_from_in_scope_domains_only() {
         let e = entries(&[("example.com", true), ("*.corp.example.net", true), ("https://app.example.org/login", true), ("10.0.0.0/24", true), ("secret.example.com", false)]);
-        assert_eq!(passive_roots(&e), vec!["app.example.org", "corp.example.net", "example.com"]);
+        assert_eq!(passive_roots(&e), vec!["corp.example.net", "example.com"], "a URL entry authorizes paths, never name discovery for its host");
     }
 
     #[test]
