@@ -17,7 +17,9 @@ import { formatDateTime, formatNumber, formatRelative } from "@/lib/utils";
 import { filterFindings, parseTags, sortFindings, tagsOf } from "./report";
 import { BulkEditModal } from "./BulkEditModal";
 import { CvssField } from "./CvssField";
+import { RemediationGroups } from "./RemediationGroups";
 import { ScanImportModal } from "./ScanImportModal";
+import { Segmented } from "@/modules/utilities/tools/shared";
 import { applyTemplate, templateFromFinding } from "@/modules/library/library";
 import { TemplateFormModal } from "@/modules/library/TemplateFormModal";
 import type { FindingTemplateInput } from "@/lib/types";
@@ -320,6 +322,8 @@ export function FindingsTab({ projectId, findings, focusId, onFocused }: { proje
   const [sev, setSev] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
   const [query, setQuery] = useState("");
+  // the list, or the findings grouped by the fix that addresses them
+  const [view, setView] = useState<"list" | "groups">("list");
   const [tag, setTag] = useState("all");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [detail, setDetail] = useState<number | null>(null);
@@ -406,10 +410,23 @@ export function FindingsTab({ projectId, findings, focusId, onFocused }: { proje
       toolbar={
         findings.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
-            <SearchInput value={query} onChange={setQuery} placeholder="Search findings" className="min-w-[220px] flex-1" />
-            {tags.length > 0 && <SelectInput aria-label="Filter by tag" value={tag} onChange={setTag} options={[{ id: "all", label: "All tags" }, ...tags.map((t) => ({ id: t, label: t }))]} className="w-40" />}
-            <SelectInput aria-label="Filter by severity" value={sev} onChange={setSev} options={[{ id: "all", label: "All severities" }, ...SEVERITY_OPTIONS]} className="w-40" />
-            <SelectInput aria-label="Filter by status" value={status} onChange={setStatus} options={[{ id: "all", label: "All statuses" }, ...FINDING_STATUS_OPTIONS]} className="w-40" />
+            <Segmented
+              value={view}
+              onChange={setView}
+              ariaLabel="Findings view"
+              options={[
+                { id: "list", label: "List" },
+                { id: "groups", label: "Remediation groups" },
+              ]}
+            />
+            {view === "list" && (
+              <>
+                <SearchInput value={query} onChange={setQuery} placeholder="Search findings" className="min-w-[220px] flex-1" />
+                {tags.length > 0 && <SelectInput aria-label="Filter by tag" value={tag} onChange={setTag} options={[{ id: "all", label: "All tags" }, ...tags.map((t) => ({ id: t, label: t }))]} className="w-40" />}
+                <SelectInput aria-label="Filter by severity" value={sev} onChange={setSev} options={[{ id: "all", label: "All severities" }, ...SEVERITY_OPTIONS]} className="w-40" />
+                <SelectInput aria-label="Filter by status" value={status} onChange={setStatus} options={[{ id: "all", label: "All statuses" }, ...FINDING_STATUS_OPTIONS]} className="w-40" />
+              </>
+            )}
           </div>
         )
       }
@@ -453,7 +470,18 @@ export function FindingsTab({ projectId, findings, focusId, onFocused }: { proje
     >
       <ScanImportModal isOpen={importing} onOpenChange={setImporting} projectId={projectId} />
       <BulkEditModal ids={visibleSelected.map((f) => f.id)} isOpen={bulkEditing} onOpenChange={setBulkEditing} onDone={() => setSelected(new Set())} />
-      {findings.length === 0 ? (
+      {findings.length > 0 && view === "groups" ? (
+        <RemediationGroups
+          projectId={projectId}
+          onOpen={(id) => {
+            const f = findings.find((x) => x.id === id);
+            if (f) {
+              setEditing(draftOf(f));
+              setOpen(true);
+            }
+          }}
+        />
+      ) : findings.length === 0 ? (
         <EmptyBlock
           icon={ShieldAlert}
           title="No findings recorded"

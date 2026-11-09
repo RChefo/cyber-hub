@@ -55,6 +55,16 @@ pub async fn investigation_graph(app: AppHandle, project_id: i64, filter: Option
     blocking(&app, move |c| relations::graph(c, project_id, &filter.unwrap_or_default())).await
 }
 
+/// Findings that one fix addresses (`workspace/remediation.rs`).
+#[tauri::command]
+pub async fn remediation_groups(app: AppHandle, project_id: i64) -> AppResult<Vec<crate::workspace::remediation::Group>> {
+    blocking(&app, move |c| {
+        relations::project_status(c, project_id)?;
+        crate::workspace::remediation::groups(c, project_id)
+    })
+    .await
+}
+
 /// Records of one project or of every project that match some text (see `workspace/search.rs`).
 #[tauri::command]
 pub async fn records_search(app: AppHandle, query: crate::workspace::search::Query) -> AppResult<Vec<crate::workspace::search::Hit>> {

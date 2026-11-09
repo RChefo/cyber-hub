@@ -2085,3 +2085,28 @@ export interface AttackMatrix {
   layers: AttackLayer[];
   counts: { observed: number; confirmed: number; hypothesis: number; ruledOut: number; findings: number };
 }
+
+/** Findings that one fix addresses (docs/DATA_MODEL.md#remediation-groups). */
+export interface RemediationMember {
+  id: number;
+  title: string;
+  severity: Severity;
+  status: string;
+  target: string;
+  /** resolved by a rescan that no longer reported it */
+  verified: boolean;
+}
+
+export interface RemediationGroup {
+  kind: "cve" | "package" | "check" | "fix";
+  key: string;
+  label: string;
+  reason: string;
+  fix: string;
+  severity: Severity;
+  open: number;
+  resolved: number;
+  verified: number;
+  targets: number;
+  findings: RemediationMember[];
+}

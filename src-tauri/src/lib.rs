@@ -249,6 +249,7 @@ pub fn run() {
             crate::commands::investigation::investigation_graph_export,
             crate::commands::investigation::timeline_query,
             crate::commands::investigation::timeline_export,
+            crate::commands::investigation::remediation_groups,
             crate::commands::utility_record::utility_record,
             crate::commands::attack::attack_catalog,
             crate::commands::attack::attack_matrix,

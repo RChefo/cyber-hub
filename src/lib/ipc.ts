@@ -168,6 +168,7 @@ export const api = {
   logAnalyzeText: (text: string) => call<T.LogReport>("log_analyze_text", { text }),
   logAnalyzePick: () => call<T.LogScan | null>("log_analyze_pick"),
   utilityRecord: (input: T.UtilityRecordInput) => call<T.UtilityRecorded>("utility_record", { input }),
+  remediationGroups: (projectId: number) => call<T.RemediationGroup[]>("remediation_groups", { projectId }),
   attackCatalog: () => call<T.AttackCatalog>("attack_catalog"),
   attackMatrix: (projectId: number) => call<T.AttackMatrix>("attack_matrix", { projectId }),
   attackAssess: (projectId: number, technique: string, status: T.AttackStatus | null, confidence: string, note: string) =>

@@ -15,6 +15,7 @@ pub mod attack_layer;
 pub mod findings_export;
 pub mod lockfiles;
 pub mod relations;
+pub mod remediation;
 pub mod report;
 pub mod sbom;
 pub mod scan_import;
