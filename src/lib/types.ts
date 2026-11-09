@@ -798,6 +798,12 @@ export interface DnsIntelReport {
   errors: string[];
 }
 
+/** What clearing the run history did: runs that other records refer to are kept. */
+export interface HistoryCleared {
+  removed: number;
+  kept: number;
+}
+
 export interface HttpResponseOut {
   status: number;
   reason: string;

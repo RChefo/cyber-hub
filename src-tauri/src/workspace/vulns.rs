@@ -241,6 +241,35 @@ fn factors(v: &Vulnerability) -> Factors {
     Factors { cvss: v.cvss_score, epss: v.epss, epss_percentile: v.epss_percentile, kev: v.kev, exploit_known: v.exploit_known, exposure: v.exposure.clone(), criticality: v.criticality.clone() }
 }
 
+/// Before an asset is removed: each vulnerability tracked on it is kept for the whole project, with
+/// an event. When the same CVE is also tracked for the whole project, nothing changes and the
+/// removal is refused: the two records cannot be merged without losing one history.
+pub fn detach_asset(c: &Connection, asset_id: i64, asset_value: &str) -> AppResult<()> {
+    let ids: Vec<i64> = c.prepare("SELECT id FROM vulnerabilities WHERE asset_id = ?1 ORDER BY id")?.query_map(params![asset_id], |r| r.get(0))?.collect::<Result<_, _>>()?;
+    let mut both: Vec<String> = Vec::new();
+    for id in &ids {
+        let v = get(c, *id)?;
+        let wide: bool = c.query_row("SELECT EXISTS (SELECT 1 FROM vulnerabilities WHERE project_id = ?1 AND cve_id = ?2 AND asset_id IS NULL)", params![v.project_id, v.cve_id], |r| r.get(0))?;
+        if wide {
+            both.push(v.cve_id);
+        }
+    }
+    if !both.is_empty() {
+        return Err(validation(format!(
+            "{asset_value} cannot be removed: {} {} tracked on it and also for the whole project. Delete one of the two records first, or retire the asset instead, which keeps it",
+            both.join(", "),
+            if both.len() == 1 { "is" } else { "are" }
+        )));
+    }
+    for id in ids {
+        let v = get(c, id)?;
+        c.execute("UPDATE vulnerabilities SET asset_id = NULL, updated_at = ?2 WHERE id = ?1", params![id, now()])?;
+        let note = format!("The asset {asset_value} was removed; the vulnerability is now tracked for the whole project (its exposure, {}, was taken from the asset)", v.exposure);
+        record_event(c, &v, "updated", (Some(asset_value), None), &note, "user")?;
+    }
+    Ok(())
+}
+
 pub fn record_event(c: &Connection, v: &Vulnerability, kind: &str, (from, to): (Option<&str>, Option<&str>), note: &str, source: &str) -> AppResult<()> {
     c.execute(
         "INSERT INTO vulnerability_events (vulnerability_id, project_id, kind, from_value, to_value, note, source, at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
@@ -663,6 +692,28 @@ mod tests {
             references: vec![],
             kev,
         }
+    }
+
+    #[test]
+    fn removing_an_asset_keeps_its_vulnerabilities_for_the_project() {
+        let db = Db::open_in_memory().unwrap();
+        let (p, asset) = setup(&db);
+        db.with(|c| {
+            let input = VulnInput { project_id: p, cve_id: "CVE-2024-3094".into(), asset_id: Some(asset), exposure: None, criticality: None, exploit_known: false, notes: String::new() };
+            let v = create(c, &input, None, None, "user")?;
+            detach_asset(c, asset, "10.0.0.5:443/tcp")?;
+            let after = get(c, v.id)?;
+            assert_eq!((after.asset_id, after.exposure.as_str()), (None, v.exposure.as_str()));
+            let note: String = c.query_row("SELECT note FROM vulnerability_events WHERE vulnerability_id = ?1 AND kind = 'updated'", params![v.id], |r| r.get(0))?;
+            assert!(note.contains("10.0.0.5:443/tcp was removed"), "{note}");
+            // the same CVE on the asset and for the whole project: refused, nothing changes
+            let on_asset = create(c, &input, None, None, "user")?;
+            let err = detach_asset(c, asset, "10.0.0.5:443/tcp").unwrap_err().to_string();
+            assert!(err.contains("CVE-2024-3094") && err.contains("retire the asset"), "{err}");
+            assert_eq!(get(c, on_asset.id)?.asset_id, Some(asset));
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]

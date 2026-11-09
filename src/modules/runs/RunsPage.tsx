@@ -11,7 +11,7 @@ import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { ExecutionRecord } from "@/lib/types";
-import { cn, formatDateTime, formatRelative, parseDate, shellQuote } from "@/lib/utils";
+import { cn, describeRunsCleared, formatDateTime, formatRelative, parseDate, shellQuote } from "@/lib/utils";
 import { Console, textToLines } from "./Console";
 import { useLiveRun } from "./liveStore";
 
@@ -93,8 +93,17 @@ export default function RunsPage() {
             variant="tertiary"
             isDisabled={!records.length}
             onPress={async () => {
-              if (await confirm.ask({ title: "Clear run history?", body: "Stored output for finished runs is deleted. Running processes are kept.", confirmLabel: "Clear history" })) {
-                await api.execHistoryClear().catch((e) => notify.error("Could not clear history", e));
+              if (
+                await confirm.ask({
+                  title: "Clear run history?",
+                  body: "Finished runs and their stored output are deleted. Running processes are kept, and so are runs that evidence, findings, OSINT evidence or discovery snapshots refer to.",
+                  confirmLabel: "Clear history",
+                })
+              ) {
+                await api
+                  .execHistoryClear()
+                  .then((r) => notify.success("Run history cleared", describeRunsCleared(r)))
+                  .catch((e) => notify.error("Could not clear history", e));
                 invalidate("executions");
               }
             }}

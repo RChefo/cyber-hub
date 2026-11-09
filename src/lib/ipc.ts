@@ -241,7 +241,7 @@ export const api = {
   execCancel: (executionId: number) => call<boolean>("exec_cancel", { executionId }),
   execList: (limit = 50) => call<T.ExecutionRecord[]>("exec_list", { limit }),
   execOutput: (executionId: number) => call<string>("exec_output", { executionId }),
-  execHistoryClear: () => call<void>("exec_history_clear"),
+  execHistoryClear: () => call<T.HistoryCleared>("exec_history_clear"),
 
   // wordlists
   wordlistsList: () => call<T.Wordlist[]>("wordlists_list"),

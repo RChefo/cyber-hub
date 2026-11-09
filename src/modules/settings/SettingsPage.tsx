@@ -8,7 +8,7 @@ import { PageHeader, Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import { formatBytes, modKey } from "@/lib/utils";
+import { describeRunsCleared, formatBytes, modKey } from "@/lib/utils";
 import { ProvidersPanel } from "./ProvidersPanel";
 import { restoreSummary } from "./restore";
 import { UpdatesPanel } from "./UpdatesPanel";
@@ -16,12 +16,12 @@ import { UpdatesPanel } from "./UpdatesPanel";
 function DataPanel() {
   const { system, runtime } = useApp();
   const confirm = useConfirm();
-  const clear = async (label: string, body: string, fn: () => Promise<void>, tags: Parameters<typeof invalidate>) => {
+  const clear = async (label: string, body: string, fn: () => Promise<string | void>, tags: Parameters<typeof invalidate>) => {
     if (!(await confirm.ask({ title: `Clear ${label}?`, body, confirmLabel: `Clear ${label}` }))) return;
     try {
-      await fn();
+      const detail = await fn();
       invalidate(...tags);
-      notify.success(`${label[0].toUpperCase()}${label.slice(1)} cleared`);
+      notify.success(`${label[0].toUpperCase()}${label.slice(1)} cleared`, detail || undefined);
     } catch (e) {
       notify.error(`Could not clear ${label}`, errorMessage(e));
     }
@@ -66,12 +66,17 @@ function DataPanel() {
       notify.error("Could not restore the backup", e);
     }
   };
-  const rows: { label: string; body: string; fn: () => Promise<void>; tags: Parameters<typeof invalidate> }[] = [
+  const rows: { label: string; body: string; fn: () => Promise<string | void>; tags: Parameters<typeof invalidate> }[] = [
     { label: "activity log", body: "Removes all recorded activity shown on the dashboard.", fn: api.activityClear, tags: ["activity"] },
     { label: "command history", body: "Removes copied and executed command history. Saved commands are kept.", fn: api.commandHistoryClear, tags: ["history"] },
     { label: "dork history", body: "Removes Google search history. Saved dorks are kept.", fn: api.dorkHistoryClear, tags: ["dorks"] },
     { label: "CVE search history", body: "Removes the list of past CVE searches. Cached CVE records are kept.", fn: api.cveHistoryClear, tags: ["cve"] },
-    { label: "run history", body: "Removes finished runs and their stored output.", fn: api.execHistoryClear, tags: ["executions"] },
+    {
+      label: "run history",
+      body: "Removes finished runs and their stored output. Runs that evidence, findings, OSINT evidence or discovery snapshots refer to are kept.",
+      fn: async () => describeRunsCleared(await api.execHistoryClear()),
+      tags: ["executions"],
+    },
   ];
   return (
     <Panel title="Local data" description="Everything Cyber Hub stores lives in one folder on this computer.">

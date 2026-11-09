@@ -581,16 +581,67 @@ pub async fn exec_output(db: State<'_, Db>, execution_id: i64) -> AppResult<Stri
     })
 }
 
+/// What clearing the run history did.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryCleared {
+    pub removed: i64,
+    /// finished runs kept because evidence, a finding, OSINT evidence or a discovery snapshot
+    /// refers to them
+    pub kept: i64,
+}
+
+/// Removes finished runs that nothing refers to. Running processes are kept, and so are runs that
+/// evidence, a finding link, OSINT evidence or an attack-surface snapshot refers to: removing them
+/// would leave those records pointing at nothing.
+pub fn clear_history(c: &Connection, running: &[i64]) -> AppResult<HistoryCleared> {
+    let running = running.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",");
+    let finished = if running.is_empty() { "1".to_string() } else { format!("id NOT IN ({running})") };
+    let removed = c.execute(
+        &format!(
+            "DELETE FROM executions WHERE {finished}
+               AND id NOT IN (SELECT execution_id FROM evidence WHERE execution_id IS NOT NULL)
+               AND id NOT IN (SELECT ref_id FROM finding_links WHERE kind = 'execution')
+               AND id NOT IN (SELECT execution_id FROM osint_evidence WHERE execution_id IS NOT NULL)
+               AND id NOT IN (SELECT execution_id FROM discovery_snapshots WHERE execution_id IS NOT NULL)"
+        ),
+        [],
+    )? as i64;
+    let kept: i64 = c.query_row(&format!("SELECT COUNT(*) FROM executions WHERE {finished}"), [], |r| r.get(0))?;
+    Ok(HistoryCleared { removed, kept })
+}
+
 #[tauri::command]
-pub async fn exec_history_clear(db: State<'_, Db>, pm: State<'_, ProcessManager>) -> AppResult<()> {
+pub async fn exec_history_clear(db: State<'_, Db>, pm: State<'_, ProcessManager>) -> AppResult<HistoryCleared> {
     let running = pm.running_ids();
-    db.with(|c| {
-        if running.is_empty() {
-            c.execute("DELETE FROM executions", [])?;
-        } else {
-            let ids: Vec<String> = running.iter().map(|i| i.to_string()).collect();
-            c.execute(&format!("DELETE FROM executions WHERE id NOT IN ({})", ids.join(",")), [])?;
-        }
-        Ok(())
-    })
+    db.with(|c| clear_history(c, &running))
+}
+
+#[cfg(test)]
+mod history_tests {
+    use super::*;
+
+    #[test]
+    fn clearing_the_history_keeps_runs_that_records_refer_to() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'P', 'active', 't', 't')", [])?;
+            for id in 1..=7 {
+                c.execute("INSERT INTO executions (id, tool_id, kind, program, args, project_id, status, started_at) VALUES (?1, 'nmap', 'run', 'nmap', '[]', 1, 'succeeded', 't')", params![id])?;
+            }
+            c.execute("INSERT INTO evidence (project_id, kind, title, source, execution_id, created_at) VALUES (1, 'execution', 'Run', 'tool run', 1, 't')", [])?;
+            c.execute("INSERT INTO findings (id, project_id, title, severity, status, created_at, updated_at) VALUES (1, 1, 'F', 'low', 'new', 't', 't')", [])?;
+            c.execute("INSERT INTO finding_links (finding_id, kind, ref_id, created_at) VALUES (1, 'execution', 2, 't')", [])?;
+            c.execute("INSERT INTO osint_investigations (id, name, target_type, target_value, created_at, updated_at) VALUES (1, 'I', 'domain', 'example.com', 't', 't')", [])?;
+            c.execute("INSERT INTO osint_evidence (investigation_id, kind, source, observed_at, collected_at, summary, strength, fingerprint, execution_id) VALUES (1, 'tool_run', 'nmap', 't', 't', 's', 'direct', 'fp', 3)", [])?;
+            c.execute("INSERT INTO discovery_snapshots (project_id, mode, source, status, started_at, execution_id) VALUES (1, 'active', 'nmap', 'completed', 't', 4)", [])?;
+            // run 7 is still running
+            let done = clear_history(c, &[7])?;
+            assert_eq!((done.removed, done.kept), (2, 4));
+            let left: Vec<i64> = c.prepare("SELECT id FROM executions ORDER BY id")?.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
+            assert_eq!(left, vec![1, 2, 3, 4, 7]);
+            Ok(())
+        })
+        .unwrap();
+    }
 }

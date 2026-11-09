@@ -45,13 +45,15 @@ pub async fn asset_observations(db: State<'_, Db>, id: i64) -> AppResult<Vec<ass
     db.with(|c| assets::observations(c, id, 200))
 }
 
-/// Removes an asset recorded by mistake, with its observations and finding links. Assets that are
-/// simply no longer seen should be retired instead, which keeps their history.
+/// Removes an asset recorded by mistake, with its observations and finding links; its
+/// vulnerabilities are kept for the whole project. Assets that are simply no longer seen should be
+/// retired instead, which keeps their history.
 #[tauri::command]
 pub async fn asset_delete(db: State<'_, Db>, id: i64) -> AppResult<()> {
     db.with(|c| {
         assets::with_savepoint(c, || {
             let a = assets::get(c, id)?;
+            crate::workspace::vulns::detach_asset(c, id, &a.value)?;
             findings::forget_ref(c, "asset", id)?;
             c.execute("DELETE FROM assets WHERE id = ?1", params![id])?;
             timeline::record(c, a.project_id, "asset", &format!("Asset removed: {}", a.value), &a.kind, None, None)

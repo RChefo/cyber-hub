@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::commands::intel::{cve_search, CveRecord};
-use crate::commands::projects::{finding_get, finding_save, finding_write, FindingInput};
+use crate::commands::projects::{finding_get, finding_write, FindingInput};
 use crate::db::Db;
 use crate::error::{validation, AppResult};
 use crate::workspace::findings as lifecycle;
@@ -194,11 +194,14 @@ pub async fn vuln_create_finding(db: State<'_, Db>, id: i64) -> AppResult<i64> {
             confidence: Some(if v.asset_id.is_some() { "medium" } else { "low" }.into()),
             ..Default::default()
         };
-        let fid = finding_save(c, &input, "vulnerability")?;
-        lifecycle::link(c, fid, "vulnerability", id, "vulnerability")?;
+        // the finding is saved with its links, or not at all (a retry cannot duplicate it)
+        let tx = c.unchecked_transaction()?;
+        let fid = finding_write(&tx, &input, "vulnerability", true)?;
+        lifecycle::link(&tx, fid, "vulnerability", id, "vulnerability")?;
         if let Some(a) = v.asset_id {
-            let _ = lifecycle::link(c, fid, "asset", a, "vulnerability");
+            lifecycle::link(&tx, fid, "asset", a, "vulnerability")?;
         }
+        tx.commit()?;
         Ok(fid)
     })
 }
@@ -341,6 +344,7 @@ pub(crate) fn bulk_edit(c: &rusqlite::Connection, ids: &[i64], edit: &BulkEdit) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::projects::finding_save;
 
     #[test]
     fn bulk_edit_adds_and_removes_tags_and_sets_assignees() {

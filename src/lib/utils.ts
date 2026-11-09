@@ -69,6 +69,12 @@ export function pluralize(n: number, one: string, many = `${one}s`): string {
   return `${formatNumber(n)} ${n === 1 ? one : many}`;
 }
 
+/** The outcome of clearing the run history, for a notification. */
+export function describeRunsCleared(r: { removed: number; kept: number }): string {
+  const removed = `${pluralize(r.removed, "finished run")} removed.`;
+  return r.kept > 0 ? `${removed} ${pluralize(r.kept, "run")} kept because evidence, findings, OSINT evidence or discovery snapshots refer to ${r.kept === 1 ? "it" : "them"}.` : removed;
+}
+
 /** Fills `{name}` (catalog) and `{{name}}` (templates) placeholders. Unfilled ones are kept visible. */
 export function fillPlaceholders(template: string, values: Record<string, string>, style: "single" | "double" = "double"): string {
   const re = style === "double" ? /\{\{(\w+)\}\}/g : /\{(\w+)\}/g;

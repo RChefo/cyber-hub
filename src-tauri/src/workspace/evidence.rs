@@ -106,18 +106,25 @@ pub fn add_text(c: &Connection, project_id: i64, title: &str, content: &str, des
     get(c, c.last_insert_rowid())
 }
 
-/// References a tool run of the same project (no copy of its output).
+/// References a tool run of the same project (no copy of its output). Without a title, the run's
+/// tool and number are the title.
 pub fn link_execution(c: &Connection, project_id: i64, execution_id: i64, title: &str) -> AppResult<EvidenceRecord> {
-    let owner: Option<Option<i64>> = c.query_row("SELECT project_id FROM executions WHERE id = ?1", params![execution_id], |r| r.get(0)).optional()?;
-    match owner {
+    let owner: Option<(Option<i64>, String)> = c.query_row("SELECT project_id, tool_id FROM executions WHERE id = ?1", params![execution_id], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
+    let tool = match owner {
         None => return Err(AppError::NotFound(format!("run {execution_id}"))),
-        Some(p) if p != Some(project_id) => return Err(validation("That run does not belong to this project")),
-        _ => {}
-    }
+        Some((p, _)) if p != Some(project_id) => return Err(validation("That run does not belong to this project")),
+        Some((_, tool)) => tool,
+    };
     if let Some(id) = c.query_row("SELECT id FROM evidence WHERE project_id = ?1 AND kind = 'execution' AND execution_id = ?2", params![project_id, execution_id], |r| r.get(0)).optional()? {
         return get(c, id);
     }
-    let title = clean("Title", title, 200, true)?;
+    let title = if title.trim().is_empty() {
+        let name = crate::catalog::tool(&tool).map_or(tool.as_str(), |t| t.name.as_str());
+        format!("{name} run #{execution_id}")
+    } else {
+        title.to_string()
+    };
+    let title = clean("Title", &title, 200, true)?;
     c.execute(
         "INSERT INTO evidence (project_id, kind, title, source, execution_id, created_at) VALUES (?1, 'execution', ?2, 'tool run', ?3, ?4)",
         params![project_id, title, execution_id, now()],
@@ -418,6 +425,10 @@ mod tests {
             assert_eq!(link_execution(c, p1, run, "Nmap run again")?.id, e.id, "the same run is referenced once");
             assert!(link_execution(c, p2, run, "Other project").is_err());
             assert!(link_execution(c, p1, 4242, "Missing").is_err());
+            // without a title (as the Evidence tab adds a run), the tool and run number name it
+            c.execute("INSERT INTO executions (tool_id, kind, program, args, project_id, status, started_at) VALUES ('nmap','run','nmap','[]',?1,'succeeded','t')", params![p1])?;
+            let untitled = c.last_insert_rowid();
+            assert_eq!(link_execution(c, p1, untitled, "  ")?.title, format!("Nmap run #{untitled}"));
             c.execute("INSERT INTO osint_investigations (name, target_type, target_value, project_id, created_at, updated_at) VALUES ('I','domain','example.com',?1,'t','t')", params![p1])?;
             let inv = c.last_insert_rowid();
             c.execute("INSERT INTO osint_evidence (investigation_id, kind, source, observed_at, collected_at, summary, strength, fingerprint) VALUES (?1,'dns','DNS','t','t','A record','direct','fp')", params![inv])?;

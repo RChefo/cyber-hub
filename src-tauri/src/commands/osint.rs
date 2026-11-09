@@ -166,11 +166,7 @@ pub async fn osint_investigation_delete(app: AppHandle, db: State<'_, Db>, id: i
     for op in running {
         discovery::cancel(&app, op);
     }
-    db.with(|c| {
-        c.execute("DELETE FROM osint_investigations WHERE id = ?1", params![id])?;
-        crate::commands::activity::log(c, "osint", &format!("Investigation deleted: {}", i.name), "", Some("osint"), Some(&id.to_string()), None)?;
-        Ok(())
-    })?;
+    db.with(|c| crate::osint::store::investigation_delete(c, &i))?;
     changed(&app, id);
     Ok(true)
 }
@@ -364,10 +360,12 @@ pub async fn osint_finding_from_entity(app: AppHandle, db: State<'_, Db>, entity
     })?;
     let input = crate::commands::projects::FindingInput { project_id, title, severity, status: "new".into(), description, affected_target: value.chars().take(500).collect(), evidence, ..Default::default() };
     let (id, inv) = db.with(|c| {
-        let id = crate::commands::projects::finding_save(c, &input, "osint")?;
-        crate::workspace::findings::link(c, id, "osint_entity", entity_id, "osint")?;
-        let inv = entity_investigation(c, entity_id)?;
-        ingest::event(c, inv, "annotation", &format!("Finding #{id} created in the linked project"), Some("analyst"), Some(entity_id), None, None, None, json!({ "findingId": id }))?;
+        let tx = c.unchecked_transaction()?;
+        let id = crate::commands::projects::finding_write(&tx, &input, "osint", true)?;
+        crate::workspace::findings::link(&tx, id, "osint_entity", entity_id, "osint")?;
+        let inv = entity_investigation(&tx, entity_id)?;
+        ingest::event(&tx, inv, "annotation", &format!("Finding #{id} created in the linked project"), Some("analyst"), Some(entity_id), None, None, None, json!({ "findingId": id }))?;
+        tx.commit()?;
         Ok((id, inv))
     })?;
     changed(&app, inv);

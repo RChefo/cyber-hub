@@ -11,7 +11,14 @@ projects ─┬─ project_targets ── scope_events          (scope and its a
           └─ timeline_events                         (events with no table of their own)
 ```
 
-Every table has a `project_id` foreign key that cascades when the project is deleted. Links to records in other tables are set to `NULL` when that record is deleted (for example a run, an OSINT entity or a snapshot), so the referring row survives.
+Project records (findings, scope, assets, vulnerabilities, evidence, snapshots, timeline, workflows) have a `project_id` foreign key that cascades when the project is deleted. Tool runs, command history, activity entries and OSINT investigations are not project records: they survive with an empty `project_id`. Columns that refer to a record in another table (a run, an OSINT entity, a snapshot) are set to `NULL` when that record is deleted, so the referring row survives.
+
+What happens to references when a record goes:
+* **Asset deleted:** its finding links are removed. Its vulnerabilities are kept for the whole project, each with a history entry; when the same CVE is also tracked for the whole project, the deletion is refused instead, because the two records cannot be merged.
+* **Run history cleared:** only finished runs that nothing refers to are removed. Runs that evidence, a finding link, OSINT evidence or a discovery snapshot refers to are kept with their output.
+* **OSINT entity deleted:** finding links to it are removed. **Merged:** finding links, the asset it was observed as, and its events move to the kept entity.
+* **Investigation deleted:** finding links to its entities are removed, and the linked project's timeline records the deletion.
+* **Investigation linked elsewhere:** refused while the linked project still refers to it (finding links to its entities, evidence records of its evidence, assets observed from its entities); otherwise both the investigation and the previous project record the change.
 
 ## Findings
 
@@ -31,7 +38,7 @@ Every table has a `project_id` foreign key that cascades when the project is del
 
 **History** (`finding_events`, append-only): `created`, `status` (from → to, with an optional reason), `updated` (the names of the changed fields), `note`, `link`/`unlink`, and `migrated`. Each event records its `source`. Saving a finding without changes records nothing. Deleting a finding deletes its history and adds a "Finding deleted" entry to the project timeline.
 
-**Links** (`finding_links`, unique per finding, kind and record) point to an asset, a tool run, an evidence record or an OSINT entity. The linked record must belong to the finding's own project. For an OSINT entity, that means its investigation is linked to the same project. `vulnerability` is reserved for phase 3 and refused until then. Deleting an asset or an evidence record removes its links. A link whose record was deleted in another way shows as missing (`label: null`) instead of failing.
+**Links** (`finding_links`, unique per finding, kind and record) point to an asset, a vulnerability, a tool run, an evidence record or an OSINT entity. The linked record must belong to the finding's own project. For an OSINT entity, that means its investigation is linked to the same project. Deleting an asset, a vulnerability, an evidence record or an OSINT entity removes its links. A link whose record was deleted in another way shows as missing (`label: null`) instead of failing.
 
 ## Scope history
 

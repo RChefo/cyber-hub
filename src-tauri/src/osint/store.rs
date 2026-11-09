@@ -225,9 +225,47 @@ pub fn investigation_create(c: &Connection, input: &InvestigationInput) -> AppRe
     Ok(id)
 }
 
+/// What a project holds that refers to an investigation: finding links to its entities, evidence
+/// records of its evidence and assets observed from its entities.
+pub fn project_references(c: &Connection, investigation_id: i64, project_id: i64) -> AppResult<(i64, i64, i64)> {
+    let links: i64 = c.query_row(
+        "SELECT COUNT(*) FROM finding_links l JOIN findings f ON f.id = l.finding_id
+          WHERE l.kind = 'osint_entity' AND f.project_id = ?2 AND l.ref_id IN (SELECT id FROM osint_entities WHERE investigation_id = ?1)",
+        params![investigation_id, project_id],
+        |r| r.get(0),
+    )?;
+    let evidence: i64 = c.query_row(
+        "SELECT COUNT(*) FROM evidence WHERE project_id = ?2 AND osint_evidence_id IN (SELECT id FROM osint_evidence WHERE investigation_id = ?1)",
+        params![investigation_id, project_id],
+        |r| r.get(0),
+    )?;
+    let assets: i64 = c.query_row(
+        "SELECT COUNT(*) FROM assets WHERE project_id = ?2 AND osint_entity_id IN (SELECT id FROM osint_entities WHERE investigation_id = ?1)",
+        params![investigation_id, project_id],
+        |r| r.get(0),
+    )?;
+    Ok((links, evidence, assets))
+}
+
 pub fn investigation_update(c: &Connection, id: i64, input: &InvestigationInput) -> AppResult<()> {
     let before = investigation_get(c, id)?;
     let (name, description, target, tags, notes, authorization, t, raw) = validate_input(c, input)?;
+    if let (Some(old), true) = (before.project_id, before.project_id != input.project_id) {
+        // the old project's findings, evidence and assets would point into another engagement
+        let (links, evidence, assets) = project_references(c, id, old)?;
+        if links + evidence + assets > 0 {
+            let mut parts = Vec::new();
+            for (n, one, many) in [(links, "finding link", "finding links"), (evidence, "evidence record", "evidence records"), (assets, "asset", "assets")] {
+                if n > 0 {
+                    parts.push(format!("{n} {}", if n == 1 { one } else { many }));
+                }
+            }
+            return Err(validation(format!(
+                "The linked project refers to this investigation ({}). Remove those references in the project before linking the investigation elsewhere",
+                parts.join(", ")
+            )));
+        }
+    }
     if before.target_type != t.as_str() || before.target_value != target {
         // the previous target stays an entity with its evidence; it is no longer the primary one
         c.execute(
@@ -241,8 +279,34 @@ pub fn investigation_update(c: &Connection, id: i64, input: &InvestigationInput)
         "UPDATE osint_investigations SET name=?2, description=?3, target_type=?4, target_value=?5, tags=?6, notes=?7, authorization=?8, project_id=?9, updated_at=?10 WHERE id=?1",
         params![id, name, description, t.as_str(), target, j(&tags), notes, authorization, input.project_id, now()],
     )?;
+    if before.project_id != input.project_id {
+        let name_of = |p: Option<i64>| -> AppResult<String> {
+            Ok(match p {
+                Some(p) => c.query_row("SELECT name FROM projects WHERE id = ?1", params![p], |r| r.get(0)).optional()?.unwrap_or_else(|| format!("#{p}")),
+                None => "no project".into(),
+            })
+        };
+        let what = format!("Linked project changed from {} to {}", name_of(before.project_id)?, name_of(input.project_id)?);
+        ingest::event(c, id, "investigation", &what, Some("analyst"), None, None, None, None, json!({ "from": before.project_id, "to": input.project_id }))?;
+        if let Some(old) = before.project_id {
+            crate::workspace::timeline::record(c, old, "investigation", &format!("Investigation {} unlinked", before.name), &what, None, None)?;
+        }
+    }
     ingest::event(c, id, "investigation", "Investigation details updated", Some("analyst"), None, None, None, None, json!({}))?;
     Ok(())
+}
+
+/// Deletes an investigation with everything it holds. Finding links to its entities go with it,
+/// and the linked project's timeline says that its events are gone.
+pub fn investigation_delete(c: &Connection, i: &Investigation) -> AppResult<()> {
+    crate::workspace::assets::with_savepoint(c, || {
+        c.execute("DELETE FROM finding_links WHERE kind = 'osint_entity' AND ref_id IN (SELECT id FROM osint_entities WHERE investigation_id = ?1)", params![i.id])?;
+        c.execute("DELETE FROM osint_investigations WHERE id = ?1", params![i.id])?;
+        if let Some(p) = i.project_id {
+            crate::workspace::timeline::record(c, p, "investigation", &format!("Investigation deleted: {}", i.name), "Its events are no longer part of this timeline", None, None)?;
+        }
+        crate::commands::activity::log(c, "osint", &format!("Investigation deleted: {}", i.name), "", Some("osint"), Some(&i.id.to_string()), i.project_id)
+    })
 }
 
 pub fn investigation_set_status(c: &Connection, id: i64, status: &str) -> AppResult<()> {
@@ -650,6 +714,7 @@ pub fn relationship_delete(c: &Connection, id: i64) -> AppResult<()> {
 pub fn entity_delete(c: &Connection, id: i64) -> AppResult<()> {
     let inv = entity_investigation(c, id)?;
     let what = label_entity(c, id)?;
+    crate::workspace::findings::forget_ref(c, "osint_entity", id)?;
     c.execute("DELETE FROM osint_entities WHERE id = ?1", params![id])?;
     ingest::event(c, inv, "entity_removed", &format!("Entity removed: {what}"), Some("analyst"), None, None, None, None, json!({ "entity": id }))?;
     Ok(())
@@ -718,6 +783,11 @@ pub fn entity_merge(c: &Connection, keep: i64, merge: i64) -> AppResult<()> {
         "INSERT INTO osint_entity_merges (investigation_id, kept_id, merged_id, merged_type, merged_value, merged_at) VALUES (?1,?2,?3,?4,?5,?6)",
         params![inv_k, keep, merge, type_m, value_m, now()],
     )?;
+    // what refers to the merged entity refers to the kept one: finding links, assets, events
+    c.execute("UPDATE OR IGNORE finding_links SET ref_id = ?1 WHERE kind = 'osint_entity' AND ref_id = ?2", params![keep, merge])?;
+    crate::workspace::findings::forget_ref(c, "osint_entity", merge)?;
+    c.execute("UPDATE assets SET osint_entity_id = ?1 WHERE osint_entity_id = ?2", params![keep, merge])?;
+    c.execute("UPDATE osint_events SET entity_id = ?1 WHERE entity_id = ?2", params![keep, merge])?;
     c.execute("DELETE FROM osint_entities WHERE id = ?1", params![merge])?;
     ingest::recompute_entity(c, keep)?;
     ingest::event(c, inv_k, "entity_merged", &format!("{value_m} merged into {}", label_entity(c, keep)?), Some("analyst"), Some(keep), None, None, None, json!({ "merged": merge }))?;
@@ -1500,6 +1570,91 @@ mod tests {
 
     fn main_graph(db: &Db, inv: i64) -> i64 {
         db.with(|c| Ok(graph_list(c, Some(inv))?[0].id)).unwrap()
+    }
+
+    /// A project with a finding, and an entity of the investigation linked to that finding.
+    fn linked(c: &Connection, inv: i64, value: &str) -> AppResult<(i64, i64, i64)> {
+        c.execute("INSERT INTO projects (name, status, created_at, updated_at) VALUES ('P', 'active', 't', 't')", [])?;
+        let p = c.last_insert_rowid();
+        c.execute("UPDATE osint_investigations SET project_id = ?2 WHERE id = ?1", params![inv, p])?;
+        c.execute("INSERT INTO osint_entities (investigation_id, type, value, match_key, display_name, first_seen, last_seen) VALUES (?1, 'domain', ?2, ?2, ?2, 't', 't')", params![inv, value])?;
+        let e = c.last_insert_rowid();
+        c.execute("INSERT INTO findings (project_id, title, severity, status, created_at, updated_at) VALUES (?1, 'F', 'low', 'new', 't', 't')", params![p])?;
+        let f = c.last_insert_rowid();
+        crate::workspace::findings::link(c, f, "osint_entity", e, "user")?;
+        Ok((p, e, f))
+    }
+
+    fn links(c: &Connection, f: i64) -> Vec<i64> {
+        c.prepare("SELECT ref_id FROM finding_links WHERE finding_id = ?1 AND kind = 'osint_entity' ORDER BY ref_id").unwrap().query_map(params![f], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
+    }
+
+    #[test]
+    fn finding_links_follow_entities_that_are_merged_or_deleted() {
+        let (db, inv) = setup();
+        db.with(|c| {
+            let (p, a, f) = linked(c, inv, "a.example.com")?;
+            c.execute("INSERT INTO osint_entities (investigation_id, type, value, match_key, display_name, first_seen, last_seen) VALUES (?1, 'domain', 'b.example.com', 'b.example.com', 'b.example.com', 't', 't')", params![inv])?;
+            let b = c.last_insert_rowid();
+            c.execute("INSERT INTO assets (project_id, type, value, key, source, osint_entity_id, first_seen, last_seen, created_at, updated_at) VALUES (?1,'domain','a.example.com','a.example.com','osint',?2,'t','t','t','t')", params![p, a])?;
+            entity_merge(c, b, a)?;
+            assert_eq!(links(c, f), vec![b], "the link moves to the kept entity");
+            let asset: Option<i64> = c.query_row("SELECT osint_entity_id FROM assets WHERE project_id = ?1", params![p], |r| r.get(0))?;
+            assert_eq!(asset, Some(b), "and so does the asset's origin");
+            // a link to both entities becomes one
+            c.execute("INSERT INTO osint_entities (investigation_id, type, value, match_key, display_name, first_seen, last_seen) VALUES (?1, 'domain', 'c.example.com', 'c.example.com', 'c.example.com', 't', 't')", params![inv])?;
+            let cc = c.last_insert_rowid();
+            crate::workspace::findings::link(c, f, "osint_entity", cc, "user")?;
+            entity_merge(c, b, cc)?;
+            assert_eq!(links(c, f), vec![b]);
+            entity_delete(c, b)?;
+            assert!(links(c, f).is_empty(), "no link to a deleted entity");
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn an_investigation_stays_with_the_project_that_refers_to_it() {
+        let (db, inv) = setup();
+        db.with(|c| {
+            let (p, _, f) = linked(c, inv, "a.example.com")?;
+            let input = |project_id: Option<i64>| InvestigationInput { name: "Acme".into(), description: String::new(), target_type: "domain".into(), target_value: "example.com".into(), tags: vec![], notes: String::new(), authorization: "Client engagement #12".into(), project_id };
+            c.execute("INSERT INTO projects (name, status, created_at, updated_at) VALUES ('Q', 'active', 't', 't')", [])?;
+            let q = c.last_insert_rowid();
+            let err = investigation_update(c, inv, &input(Some(q))).unwrap_err().to_string();
+            assert!(err.contains("1 finding link"), "{err}");
+            let err = investigation_update(c, inv, &input(None)).unwrap_err().to_string();
+            assert!(err.contains("refers to this investigation"), "unlinking is refused too: {err}");
+            assert_eq!(investigation_get(c, inv)?.project_id, Some(p));
+            // without references the link can change, and both sides record it
+            c.execute("DELETE FROM finding_links WHERE finding_id = ?1", params![f])?;
+            investigation_update(c, inv, &input(Some(q)))?;
+            assert_eq!(investigation_get(c, inv)?.project_id, Some(q));
+            let noted: i64 = c.query_row("SELECT COUNT(*) FROM timeline_events WHERE project_id = ?1 AND type = 'investigation' AND title LIKE 'Investigation Acme unlinked'", params![p], |r| r.get(0))?;
+            assert_eq!(noted, 1);
+            let event: i64 = c.query_row("SELECT COUNT(*) FROM osint_events WHERE investigation_id = ?1 AND summary LIKE 'Linked project changed from P to Q'", params![inv], |r| r.get(0))?;
+            assert_eq!(event, 1);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn deleting_an_investigation_removes_links_to_its_entities_and_tells_the_project() {
+        let (db, inv) = setup();
+        db.with(|c| {
+            let (p, _, f) = linked(c, inv, "a.example.com")?;
+            let i = investigation_get(c, inv)?;
+            investigation_delete(c, &i)?;
+            assert!(links(c, f).is_empty());
+            let noted: i64 = c.query_row("SELECT COUNT(*) FROM timeline_events WHERE project_id = ?1 AND title = 'Investigation deleted: Acme'", params![p], |r| r.get(0))?;
+            assert_eq!(noted, 1);
+            let logged: Option<i64> = c.query_row("SELECT project_id FROM activity_logs WHERE title = 'Investigation deleted: Acme'", [], |r| r.get(0))?;
+            assert_eq!(logged, Some(p), "the activity entry names the project");
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
