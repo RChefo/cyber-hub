@@ -585,9 +585,20 @@ pub async fn checklist_items(db: State<'_, Db>, project_id: i64) -> AppResult<Ve
     db.with(|c| crate::methodology::items(c, project_id))
 }
 
+/// Sets a checklist test. `unlink` removes the finding link (a finding and `unlink` together are
+/// refused); without either, the current link stays.
 #[tauri::command]
-pub async fn checklist_set(db: State<'_, Db>, project_id: i64, test_id: String, status: String, note: Option<String>, finding_id: Option<i64>) -> AppResult<crate::methodology::ItemState> {
-    db.with(|c| crate::methodology::set(c, project_id, &test_id, &status, note.as_deref().unwrap_or(""), finding_id))
+pub async fn checklist_set(
+    db: State<'_, Db>,
+    project_id: i64,
+    test_id: String,
+    status: String,
+    note: Option<String>,
+    finding_id: Option<i64>,
+    unlink: Option<bool>,
+) -> AppResult<crate::methodology::ItemState> {
+    let link = crate::methodology::Link::from_args(finding_id, unlink.unwrap_or(false))?;
+    db.with(|c| crate::methodology::set(c, project_id, &test_id, &status, note.as_deref().unwrap_or(""), link, "user"))
 }
 
 /* ───────────────────────── database backup ───────────────────────── */

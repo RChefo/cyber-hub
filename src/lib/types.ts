@@ -506,7 +506,8 @@ export type TimelineEventType =
   | "remediation"
   | "report"
   | "note"
-  | "utility";
+  | "utility"
+  | "checklist";
 
 export interface TimelineEvent {
   type: TimelineEventType;

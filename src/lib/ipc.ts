@@ -156,8 +156,8 @@ export const api = {
   databaseRestorePending: () => call<boolean>("database_restore_pending"),
   databaseRestoreCancel: () => call<boolean>("database_restore_cancel"),
   checklistItems: (projectId: number) => call<T.ChecklistItem[]>("checklist_items", { projectId }),
-  checklistSet: (projectId: number, testId: string, status: T.ChecklistStatus, note: string, findingId: number | null) =>
-    call<T.ChecklistItem>("checklist_set", { projectId, testId, status, note, findingId }),
+  checklistSet: (projectId: number, testId: string, status: T.ChecklistStatus, note: string, findingId: number | null, unlink = false) =>
+    call<T.ChecklistItem>("checklist_set", { projectId, testId, status, note, findingId, unlink }),
   tiSavedExportStix: () => call<{ fileName: string; exported: number; skipped: string[] } | null>("ti_saved_export_stix"),
   reportHtml: (projectId: number, options: T.ReportOptions) => call<string>("report_html", { projectId, options }),
   reportExportHtml: (projectId: number, options: T.ReportOptions) => call<string | null>("report_export_html", { projectId, options }),

@@ -165,8 +165,8 @@ fn the_report_states_checklist_coverage() {
         let p = project(c);
         let html = report::render(c, p, &report::ReportOptions::default(), "2026-11-08")?;
         assert!(!html.contains("Testing checklist"), "no checklist line without progress");
-        crate::methodology::set(c, p, "WSTG-INFO-01", "passed", "", None)?;
-        crate::methodology::set(c, p, "WSTG-ATHN-01", "failed", "", None)?;
+        crate::methodology::set(c, p, "WSTG-INFO-01", "passed", "", crate::methodology::Link::Keep, "user")?;
+        crate::methodology::set(c, p, "WSTG-ATHN-01", "failed", "", crate::methodology::Link::Keep, "user")?;
         let html = report::render(c, p, &report::ReportOptions::default(), "2026-11-08")?;
         assert!(html.contains("OWASP Web Security Testing Guide: 2 of 115 tests have a result (1 passed, 1 failed, 0 not applicable); 0 in progress."));
         Ok(())

@@ -1,5 +1,5 @@
 import { Button } from "@heroui/react";
-import { ExternalLink, ListChecks, ShieldAlert, StickyNote } from "lucide-react";
+import { ExternalLink, ListChecks, ShieldAlert, StickyNote, Unlink } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppModal } from "@/components/ui/Dialogs";
 import { EmptyBlock, QueryView } from "@/components/ui/Feedback";
@@ -26,10 +26,10 @@ export function ChecklistTab({ projectId }: { projectId: number }) {
   const categories = useMemo(() => (catalog.data ? filterCatalog(catalog.data.categories, byTest, query, status) : []), [catalog.data, byTest, query, status]);
   const cov = catalog.data ? coverageOf(catalog.data.categories, byTest) : null;
 
-  const save = async (test: WstgTest, next: ChecklistStatus, note?: string, findingId?: number) => {
+  const save = async (test: WstgTest, next: ChecklistStatus, note?: string, findingId?: number, unlink = false) => {
     const current = byTest.get(test.id);
     try {
-      await api.checklistSet(projectId, test.id, next, note ?? current?.note ?? "", findingId ?? null);
+      await api.checklistSet(projectId, test.id, next, note ?? current?.note ?? "", findingId ?? null, unlink);
       invalidate("checklist");
     } catch (e) {
       notify.error("Could not update the checklist", e);
@@ -84,7 +84,14 @@ export function ChecklistTab({ projectId }: { projectId: number }) {
                             <div className="text-[13px] text-foreground">{t.name}</div>
                             {it?.note && <div className="truncate text-[12px] text-muted">{it.note}</div>}
                           </div>
-                          {it?.findingId && <span className="text-[12px] text-muted">Finding #{it.findingId}</span>}
+                          {it?.findingId && (
+                            <span className="flex items-center gap-1 text-[12px] text-muted">
+                              Finding #{it.findingId}
+                              <Button size="sm" variant="ghost" isIconOnly className="size-6 min-w-6" aria-label={`Unlink finding #${it.findingId} from ${t.id}`} onPress={() => void save(t, st, undefined, undefined, true)}>
+                                <Unlink className="size-3" />
+                              </Button>
+                            </span>
+                          )}
                           <SelectInput aria-label={`Status of ${t.id}`} value={st} onChange={(v) => void save(t, v as ChecklistStatus)} options={CHECKLIST_STATUS_OPTIONS} className="w-40" />
                           <Button size="sm" variant="ghost" isIconOnly className="size-7 min-w-7" aria-label={`Note for ${t.id}`} onPress={() => setNoteFor({ test: t, text: it?.note ?? "" })}>
                             <StickyNote className="size-3.5" />

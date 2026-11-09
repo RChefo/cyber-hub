@@ -200,13 +200,14 @@ pub static TOOLS: &[ToolSpec] = &[
             "status": { "type": "string", "enum": ["not_started", "in_progress", "passed", "failed", "not_applicable"] }
         }), &["project_id"]) },
     ToolSpec { name: "cyberhub_set_checklist_item", title: "Update the testing checklist", group: "projects", category: Category::LocalWrite,
-        description: "Set the status of one WSTG test in a project's checklist, with an optional note and a finding of the same project that the test led to. A note that is not given keeps the existing note. Requires the user's approval in Cyber Hub.",
+        description: "Set the status of one WSTG test in a project's checklist, with an optional note and a finding of the same project that the test led to, or unlink_finding to remove the test's finding link. A note or link that is not given stays as it is. Archived projects are refused. Requires the user's approval in Cyber Hub.",
         schema: || obj(json!({
             "project_id": project_id(),
             "test_id": { "type": "string", "pattern": "^WSTG-[A-Z]{4}-[0-9]{2}$", "description": "Test ID from cyberhub_get_checklist, for example WSTG-ATHZ-04" },
             "status": { "type": "string", "enum": ["not_started", "in_progress", "passed", "failed", "not_applicable"] },
             "note": { "type": "string", "maxLength": 2000 },
-            "finding_id": { "type": "integer", "minimum": 1, "description": "A finding of the same project (from cyberhub_list_findings)" }
+            "finding_id": { "type": "integer", "minimum": 1, "description": "A finding of the same project (from cyberhub_list_findings)" },
+            "unlink_finding": { "type": "boolean", "description": "Remove the test's finding link (the finding itself stays). Not together with finding_id." }
         }), &["project_id", "test_id", "status"]) },
     // ── execution
     ToolSpec { name: "cyberhub_preview_run", title: "Preview a tool run", group: "execution", category: Category::Read,

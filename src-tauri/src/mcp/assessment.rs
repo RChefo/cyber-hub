@@ -106,7 +106,7 @@ pub struct ChecklistQuery {
     pub status: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChecklistSet {
     pub project_id: i64,
@@ -114,6 +114,9 @@ pub struct ChecklistSet {
     pub status: String,
     pub note: Option<String>,
     pub finding_id: Option<i64>,
+    /// remove the test's finding link
+    #[serde(default)]
+    pub unlink_finding: bool,
 }
 
 fn require_project(c: &Connection, id: i64) -> AppResult<String> {
@@ -203,12 +206,24 @@ pub fn describe_checklist_set(c: &Connection, a: &ChecklistSet) -> AppResult<(St
         let shown = if note.is_empty() { "(empty: clears the note)".to_string() } else { excerpt(&note, 600) };
         details.push(("Note".to_string(), format!("{shown} ({} characters{replaces})", note.chars().count())));
     }
-    if let Some(fid) = a.finding_id {
+    let link = methodology::Link::from_args(a.finding_id, a.unlink_finding)?;
+    if let methodology::Link::To(fid) = link {
         let owner: Option<(i64, String)> = c.query_row("SELECT project_id, title FROM findings WHERE id = ?1", params![fid], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
         match owner {
             Some((pid, title)) if pid == a.project_id => details.push(("Linked finding".to_string(), format!("#{fid} {}", excerpt(&title, 200)))),
             _ => return Err(validation("The finding belongs to another project")),
         }
+    }
+    if link == methodology::Link::Clear {
+        let linked: Option<Option<i64>> =
+            c.query_row("SELECT finding_id FROM checklist_items WHERE project_id = ?1 AND test_id = ?2", params![a.project_id, a.test_id], |r| r.get(0)).optional()?;
+        details.push((
+            "Linked finding".to_string(),
+            match linked.flatten() {
+                Some(f) => format!("Removes the link to finding #{f} (the finding itself stays)"),
+                None => "No finding is linked; nothing to remove".to_string(),
+            },
+        ));
     }
     Ok((project, details))
 }
@@ -223,7 +238,8 @@ pub fn set_checklist(c: &Connection, a: &ChecklistSet) -> AppResult<Value> {
             .optional()?
             .unwrap_or_default(),
     };
-    let state = methodology::set(c, a.project_id, &a.test_id, &a.status, &note, a.finding_id)?;
+    let link = methodology::Link::from_args(a.finding_id, a.unlink_finding)?;
+    let state = methodology::set(c, a.project_id, &a.test_id, &a.status, &note, link, "mcp")?;
     serde_json::to_value(state).map_err(|e| AppError::Internal(e.to_string()))
 }
 
@@ -279,10 +295,13 @@ mod tests {
         db.with(|c| {
             let pid = project(c);
             c.execute("UPDATE projects SET status = 'archived' WHERE id = ?1", [pid])?;
-            let set = ChecklistSet { project_id: pid, test_id: "WSTG-ATHZ-04".into(), status: "failed".into(), note: None, finding_id: None };
+            let set = ChecklistSet { project_id: pid, test_id: "WSTG-ATHZ-04".into(), status: "failed".into(), note: None, finding_id: None, unlink_finding: false };
             let err = describe_checklist_set(c, &set).unwrap_err().to_string();
             assert!(err.contains("archived"), "{err}");
             assert!(set_checklist(c, &set).is_err(), "also when the project was archived after the approval");
+            let unlink = ChecklistSet { unlink_finding: true, ..set.clone() };
+            assert!(describe_checklist_set(c, &unlink).unwrap_err().to_string().contains("archived"), "unlinking is refused too");
+            assert!(set_checklist(c, &unlink).is_err());
             assert!(crate::commands::projects::refuse_archived_for_clients(c, pid + 100).is_err());
             c.execute("UPDATE projects SET status = 'completed' WHERE id = ?1", [pid])?;
             assert!(describe_checklist_set(c, &set).is_ok() && set_checklist(c, &set).is_ok());
@@ -306,7 +325,7 @@ mod tests {
             assert_eq!(all["coverage"]["total"], all["returned"]);
             assert!(all["tests"].as_array().unwrap().iter().all(|t| t["status"] == "not_started"));
 
-            let set = ChecklistSet { project_id: pid, test_id: "WSTG-ATHZ-04".into(), status: "failed".into(), note: Some("IDOR on /api/orders".into()), finding_id: Some(fid) };
+            let set = ChecklistSet { project_id: pid, test_id: "WSTG-ATHZ-04".into(), status: "failed".into(), note: Some("IDOR on /api/orders".into()), finding_id: Some(fid), unlink_finding: false };
             let (project_name, details) = describe_checklist_set(c, &set)?;
             assert_eq!(project_name, "Acme");
             assert!(details.iter().any(|(k, v)| k == "Linked finding" && v.contains("IDOR")), "{details:?}");
@@ -322,12 +341,19 @@ mod tests {
             assert!(athz["tests"].as_array().unwrap().iter().all(|t| t["id"].as_str().unwrap().starts_with("WSTG-ATHZ")));
 
             // the approval says when a note replaces another, and shows its length
-            let (_, d) = describe_checklist_set(c, &ChecklistSet { note: Some("New note".into()), finding_id: None, status: "failed".into(), project_id: pid, test_id: "WSTG-ATHZ-04".into() })?;
+            let (_, d) = describe_checklist_set(c, &ChecklistSet { note: Some("New note".into()), finding_id: None, status: "failed".into(), project_id: pid, test_id: "WSTG-ATHZ-04".into(), unlink_finding: false })?;
             assert!(d.iter().any(|(k, v)| k == "Note" && v.contains("8 characters; replaces the existing note")), "{d:?}");
 
             // refused before an approval is asked
             let bad = |s: ChecklistSet| describe_checklist_set(c, &s).unwrap_err().to_string();
-            let base = || ChecklistSet { project_id: pid, test_id: "WSTG-ATHZ-04".into(), status: "passed".into(), note: None, finding_id: None };
+            let base = || ChecklistSet { project_id: pid, test_id: "WSTG-ATHZ-04".into(), status: "passed".into(), note: None, finding_id: None, unlink_finding: false };
+            assert!(bad(ChecklistSet { finding_id: Some(fid), unlink_finding: true, ..base() }).contains("not both"));
+            // unlinking through MCP: the approval says what goes, the write removes only the link
+            let (_, d) = describe_checklist_set(c, &ChecklistSet { unlink_finding: true, status: "failed".into(), ..base() })?;
+            assert!(d.iter().any(|(k, v)| k == "Linked finding" && v.contains(&format!("Removes the link to finding #{fid}"))), "{d:?}");
+            let after = set_checklist(c, &ChecklistSet { unlink_finding: true, status: "failed".into(), ..base() })?;
+            assert!(after["findingId"].is_null() && after["note"] == "IDOR on /api/orders", "{after}");
+            set_checklist(c, &ChecklistSet { finding_id: Some(fid), status: "failed".into(), ..base() })?;
             assert!(bad(ChecklistSet { test_id: "WSTG-NOPE-99".into(), ..base() }).contains("not a test"));
             assert!(bad(ChecklistSet { status: "done".into(), ..base() }).contains("status must be"));
             assert!(bad(ChecklistSet { finding_id: Some(foreign), ..base() }).contains("another project"));

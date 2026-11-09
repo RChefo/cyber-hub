@@ -67,8 +67,37 @@ pub fn items(c: &Connection, project_id: i64) -> AppResult<Vec<ItemState>> {
     Ok(rows)
 }
 
-/// Sets a test's status and note, and optionally links the finding it led to (same project only).
-pub fn set(c: &Connection, project_id: i64, test_id: &str, status: &str, note: &str, finding_id: Option<i64>) -> AppResult<ItemState> {
+/// What to do with the finding a test is linked to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Link {
+    /// keep the current link (none, or the finding already linked)
+    Keep,
+    /// link this finding of the same project
+    To(i64),
+    /// remove the link
+    Clear,
+}
+
+impl Link {
+    /// From the API's optional finding and unlink flag; both at once is a contradiction.
+    pub fn from_args(finding_id: Option<i64>, unlink: bool) -> AppResult<Link> {
+        match (finding_id, unlink) {
+            (Some(_), true) => Err(validation("Give a finding to link or ask to unlink, not both")),
+            (Some(id), false) if id < 1 => Err(validation("A finding id is a positive number")),
+            (Some(id), false) => Ok(Link::To(id)),
+            (None, true) => Ok(Link::Clear),
+            (None, false) => Ok(Link::Keep),
+        }
+    }
+}
+
+/// Sets a test's status and note, and links the finding it led to (same project only), keeps the
+/// link or removes it. Every change is recorded on the project timeline with who made it.
+pub fn set(c: &Connection, project_id: i64, test_id: &str, status: &str, note: &str, link: Link, source: &str) -> AppResult<ItemState> {
+    let finding_id = match link {
+        Link::To(id) => Some(id),
+        _ => None,
+    };
     if !test_exists(test_id) {
         return Err(validation(format!("{test_id} is not a test of the bundled checklist")));
     }
@@ -87,17 +116,44 @@ pub fn set(c: &Connection, project_id: i64, test_id: &str, status: &str, note: &
         }
     }
     let ts = now();
-    c.execute(
+    let read = |c: &Connection| -> AppResult<Option<ItemState>> {
+        Ok(c.query_row(
+            "SELECT test_id, status, note, finding_id, updated_at FROM checklist_items WHERE project_id = ?1 AND test_id = ?2",
+            params![project_id, test_id],
+            |r| Ok(ItemState { test_id: r.get(0)?, status: r.get(1)?, note: r.get(2)?, finding_id: r.get(3)?, updated_at: r.get(4)? }),
+        )
+        .optional()?)
+    };
+    let tx = c.unchecked_transaction()?;
+    let before = read(&tx)?;
+    tx.execute(
         "INSERT INTO checklist_items (project_id, test_id, status, note, finding_id, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
          ON CONFLICT (project_id, test_id) DO UPDATE SET status = excluded.status, note = excluded.note,
-             finding_id = COALESCE(excluded.finding_id, checklist_items.finding_id), updated_at = excluded.updated_at",
-        params![project_id, test_id, status, note, finding_id, ts],
+             finding_id = CASE WHEN ?7 THEN NULL ELSE COALESCE(excluded.finding_id, checklist_items.finding_id) END, updated_at = excluded.updated_at",
+        params![project_id, test_id, status, note, finding_id, ts, link == Link::Clear],
     )?;
-    Ok(c.query_row(
-        "SELECT test_id, status, note, finding_id, updated_at FROM checklist_items WHERE project_id = ?1 AND test_id = ?2",
-        params![project_id, test_id],
-        |r| Ok(ItemState { test_id: r.get(0)?, status: r.get(1)?, note: r.get(2)?, finding_id: r.get(3)?, updated_at: r.get(4)? }),
-    )?)
+    let after = read(&tx)?.ok_or_else(|| AppError::Internal("the checklist item was not stored".into()))?;
+    // the history: what changed, and who changed it
+    let (old_status, old_note, old_finding) = before.as_ref().map_or(("not_started", "", None), |b| (b.status.as_str(), b.note.as_str(), b.finding_id));
+    let mut changes: Vec<String> = Vec::new();
+    if old_status != after.status {
+        changes.push(format!("{} → {}", old_status.replace('_', " "), after.status.replace('_', " ")));
+    }
+    if old_note != after.note {
+        changes.push(if after.note.is_empty() { "note removed".into() } else { "note changed".into() });
+    }
+    match (old_finding, after.finding_id) {
+        (a, b) if a == b => {}
+        (_, Some(f)) => changes.push(format!("linked to finding #{f}")),
+        (Some(f), None) => changes.push(format!("link to finding #{f} removed")),
+        (None, None) => {}
+    }
+    if !changes.is_empty() {
+        let by = if source == "mcp" { "by an MCP client" } else { "by the analyst" };
+        crate::workspace::timeline::record(&tx, project_id, "checklist", &format!("Checklist {test_id}: {}", changes.join(", ")), by, Some("checklist"), None)?;
+    }
+    tx.commit()?;
+    Ok(after)
 }
 
 #[derive(Debug, Default, Clone, Serialize, PartialEq)]
@@ -157,22 +213,58 @@ mod tests {
         db.with(|c| {
             c.execute("INSERT INTO projects (name, status, created_at, updated_at) VALUES ('A','active','t','t'), ('B','active','t','t')", [])?;
             c.execute("INSERT INTO findings (project_id, title, severity, status, created_at, updated_at) VALUES (1, 'XSS', 'medium', 'new', 't', 't')", [])?;
-            set(c, 1, "WSTG-INFO-01", "passed", "", None)?;
-            set(c, 1, "WSTG-CONF-01", "in_progress", "halfway", None)?;
-            let failed = set(c, 1, "WSTG-CLNT-01", "failed", "Reflected XSS", Some(1))?;
+            set(c, 1, "WSTG-INFO-01", "passed", "", Link::Keep, "user")?;
+            set(c, 1, "WSTG-CONF-01", "in_progress", "halfway", Link::Keep, "user")?;
+            let failed = set(c, 1, "WSTG-CLNT-01", "failed", "Reflected XSS", Link::To(1), "user")?;
             assert_eq!(failed.finding_id, Some(1));
             // changing the status keeps the finding link
-            assert_eq!(set(c, 1, "WSTG-CLNT-01", "failed", "confirmed", None)?.finding_id, Some(1));
-            set(c, 1, "WSTG-ATHN-01", "not_applicable", "no login", None)?;
+            assert_eq!(set(c, 1, "WSTG-CLNT-01", "failed", "confirmed", Link::Keep, "user")?.finding_id, Some(1));
+            set(c, 1, "WSTG-ATHN-01", "not_applicable", "no login", Link::Keep, "user")?;
             let cov = coverage(c, 1)?;
             assert_eq!((cov.total, cov.passed, cov.failed, cov.not_applicable, cov.in_progress, cov.done()), (115, 1, 1, 1, 1, 3));
             assert_eq!(coverage(c, 2)?.done(), 0, "another project has its own progress");
-            assert!(set(c, 1, "WSTG-XXXX-01", "passed", "", None).is_err());
-            assert!(set(c, 1, "WSTG-INFO-01", "done", "", None).is_err());
-            assert!(set(c, 2, "WSTG-INFO-01", "failed", "", Some(1)).is_err(), "a finding of another project cannot be linked");
+            assert!(set(c, 1, "WSTG-XXXX-01", "passed", "", Link::Keep, "user").is_err());
+            assert!(set(c, 1, "WSTG-INFO-01", "done", "", Link::Keep, "user").is_err());
+            assert!(set(c, 2, "WSTG-INFO-01", "failed", "", Link::To(1), "user").is_err(), "a finding of another project cannot be linked");
             // deleting the finding keeps the checklist item
             c.execute("DELETE FROM findings WHERE id = 1", [])?;
             assert_eq!(items(c, 1)?.iter().find(|i| i.test_id == "WSTG-CLNT-01").unwrap().finding_id, None);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_finding_link_can_be_removed_and_every_change_is_in_the_history() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            c.execute("INSERT INTO projects (name, status, created_at, updated_at) VALUES ('A','active','t','t')", [])?;
+            c.execute("INSERT INTO findings (project_id, title, severity, status, created_at, updated_at) VALUES (1, 'IDOR', 'high', 'new', 't', 't')", [])?;
+            set(c, 1, "WSTG-ATHZ-04", "failed", "IDOR on /api/orders", Link::To(1), "user")?;
+            let cleared = set(c, 1, "WSTG-ATHZ-04", "failed", "IDOR on /api/orders", Link::Clear, "mcp")?;
+            assert_eq!((cleared.finding_id, cleared.status.as_str(), cleared.note.as_str()), (None, "failed", "IDOR on /api/orders"), "only the link goes");
+            let finding: i64 = c.query_row("SELECT COUNT(*) FROM findings WHERE id = 1", [], |r| r.get(0))?;
+            assert_eq!(finding, 1, "the finding itself stays");
+            // clearing again, or keeping, changes nothing and records nothing
+            set(c, 1, "WSTG-ATHZ-04", "failed", "IDOR on /api/orders", Link::Clear, "user")?;
+            let history: Vec<(String, String)> = c
+                .prepare("SELECT title, detail FROM timeline_events WHERE project_id = 1 AND type = 'checklist' ORDER BY id")?
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<Result<_, _>>()?;
+            assert_eq!(
+                history,
+                vec![
+                    ("Checklist WSTG-ATHZ-04: not started → failed, note changed, linked to finding #1".to_string(), "by the analyst".to_string()),
+                    ("Checklist WSTG-ATHZ-04: link to finding #1 removed".to_string(), "by an MCP client".to_string()),
+                ]
+            );
+            // identifiers are checked
+            assert!(Link::from_args(Some(1), true).is_err(), "a finding and unlink together");
+            assert!(Link::from_args(Some(0), false).is_err() && Link::from_args(Some(-4), false).is_err());
+            assert_eq!(Link::from_args(None, true)?, Link::Clear);
+            assert!(set(c, 1, "WSTG-ATHZ-99", "failed", "", Link::Clear, "user").is_err(), "unknown test");
+            assert!(set(c, 7, "WSTG-ATHZ-04", "failed", "", Link::Clear, "user").is_err(), "unknown project");
+            assert!(set(c, 1, "WSTG-ATHZ-04", "failed", "", Link::To(99), "user").is_err(), "unknown finding");
             Ok(())
         })
         .unwrap();
