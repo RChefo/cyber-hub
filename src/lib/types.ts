@@ -1513,6 +1513,10 @@ export interface SbomComponent {
   hashes: string[];
   direct: boolean;
   reference: string;
+  /** a development dependency (lockfiles) */
+  dev: boolean;
+  /** where a lockfile resolves the package from: a registry, a Git repository, a URL */
+  resolved: string;
 }
 
 export interface SbomVuln {
@@ -1543,11 +1547,13 @@ export interface Sbom {
   relationships: boolean;
   vulns: SbomVuln[];
   warnings: string[];
+  /** package indexes a lockfile names */
+  sources: string[];
 }
 
 export interface SbomIssue {
   id: string;
-  area: "license" | "completeness";
+  area: "license" | "completeness" | "supply-chain";
   severity: "critical" | "high" | "medium" | "low" | "info";
   title: string;
   detail: string;

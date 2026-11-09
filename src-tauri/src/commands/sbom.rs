@@ -105,8 +105,8 @@ pub(crate) fn record(c: &Connection, id: i64, keys: &[String]) -> AppResult<Sbom
 #[tauri::command]
 pub async fn sbom_import(app: AppHandle, project_id: i64) -> AppResult<Option<SbomSummary>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
-    crate::commands::workspace::main_window_dialog(&app, "Import an SBOM")
-        .add_filter("SBOM (CycloneDX, SPDX)", &["json", "xml", "spdx", "txt", "cdx"])
+    crate::commands::workspace::main_window_dialog(&app, "Import an SBOM or a lockfile")
+        .add_filter("SBOM or lockfile", &["json", "xml", "spdx", "txt", "cdx", "lock", "yaml", "yml", "mod", "lockfile", "locked"])
         .add_filter("All files", &["*"])
         .pick_file(move |f| {
             let _ = tx.send(f.and_then(|f| f.into_path().ok()));
@@ -126,31 +126,32 @@ pub async fn sbom_import(app: AppHandle, project_id: i64) -> AppResult<Option<Sb
             return Err(validation("The file grew while it was read"));
         }
         let (text, _) = scan_import::decode_text(&bytes);
-        let parsed = sbom::parse(&text).map_err(AppError::Validation)?;
+        let file_name: String = evidence::display_name(&path.to_string_lossy()).chars().take(200).collect();
+        let parsed = sbom::parse_file(&file_name, &text).map_err(AppError::Validation)?;
         if parsed.components.is_empty() {
-            return Err(validation("The SBOM lists no components"));
+            return Err(validation("The file lists no components"));
         }
+        let what_file = if parsed.format.starts_with("lockfile-") { "Lockfile" } else { "SBOM" };
         let sha256: String = {
             use sha2::Digest;
             sha2::Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect()
         };
-        let file_name: String = evidence::display_name(&path.to_string_lossy()).chars().take(200).collect();
         let db = handle.state::<Db>();
         let dup: Option<i64> = db.with(|c| Ok(c.query_row("SELECT id FROM sbom_docs WHERE project_id = ?1 AND sha256 = ?2", params![project_id, sha256], |r| r.get(0)).optional()?))?;
         if dup.is_some() {
-            return Err(validation("This SBOM is already in the project"));
+            return Err(validation("This file is already in the project"));
         }
         let store = handle.state::<Arc<EvidenceStore>>();
         let existed: Option<i64> = db.with(|c| {
             Ok(c.query_row("SELECT id FROM evidence WHERE project_id = ?1 AND kind = 'file' AND sha256 = ?2", params![project_id, sha256], |r| r.get(0)).optional()?)
         })?;
-        let rec = store.add_bytes(&db, project_id, &file_name, &bytes, (&format!("SBOM: {file_name}"), &format!("Imported SBOM ({}). SHA-256 {sha256}", parsed.format)), "import")?;
+        let rec = store.add_bytes(&db, project_id, &file_name, &bytes, (&format!("{what_file}: {file_name}"), &format!("Imported {} ({}). SHA-256 {sha256}", what_file.to_lowercase(), parsed.format)), "import")?;
         let stored = db.with(|c| {
             let tx = c.unchecked_transaction()?;
             let id = sbom::store(&tx, project_id, &file_name, &sha256, Some(rec.id), &parsed)?;
             let what = format!("{} components from {file_name}", parsed.components.len());
-            timeline::record(&tx, project_id, "asset", &format!("SBOM: {}", if parsed.subject.is_empty() { &file_name } else { &parsed.subject }), &what, Some("sbom"), Some(id))?;
-            activity::log(&tx, "import", "SBOM imported", &what, Some("project"), Some(&project_id.to_string()), Some(project_id))?;
+            timeline::record(&tx, project_id, "asset", &format!("{what_file}: {}", if parsed.subject.is_empty() { &file_name } else { &parsed.subject }), &what, Some("sbom"), Some(id))?;
+            activity::log(&tx, "import", &format!("{what_file} imported"), &what, Some("project"), Some(&project_id.to_string()), Some(project_id))?;
             tx.commit()?;
             Ok(id)
         });

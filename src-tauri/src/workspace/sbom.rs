@@ -64,6 +64,12 @@ pub struct Component {
     /// bom-ref or SPDX id
     #[serde(default)]
     pub reference: String,
+    /// a development dependency (lockfiles)
+    #[serde(default)]
+    pub dev: bool,
+    /// where a lockfile resolves the package from: a registry, a Git repository, a URL (lockfiles)
+    #[serde(default)]
+    pub resolved: String,
 }
 
 impl Component {
@@ -117,7 +123,8 @@ impl Vuln {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Sbom {
-    /// cyclonedx-json, cyclonedx-xml, spdx-json or spdx-tag
+    /// cyclonedx-json, cyclonedx-xml, spdx-json, spdx-tag, or lockfile-<kind> for a dependency
+    /// lockfile (`lockfiles.rs`)
     pub format: String,
     pub spec_version: String,
     /// the software the SBOM describes ("name version")
@@ -132,6 +139,9 @@ pub struct Sbom {
     /// vulnerabilities stated in the file
     pub vulns: Vec<Vuln>,
     pub warnings: Vec<String>,
+    /// package indexes the file names (requirements.txt index options, Pipfile and Gemfile sources)
+    #[serde(default)]
+    pub sources: Vec<String>,
 }
 
 /* ───────────────────────────── helpers ───────────────────────────── */
@@ -296,6 +306,16 @@ pub fn parse(text_in: &str) -> Result<Sbom, String> {
         sbom.warnings.push(format!("Only the first {MAX_COMPONENTS} of {} components were kept", sbom.components.len()));
         sbom.components.truncate(MAX_COMPONENTS);
     }
+    for c in &mut sbom.components {
+        finish(c);
+    }
+    Ok(sbom)
+}
+
+/// An SBOM, or a dependency lockfile recognised by its file name (`lockfiles.rs`).
+pub fn parse_file(file_name: &str, text_in: &str) -> Result<Sbom, String> {
+    let Some(parsed) = super::lockfiles::parse(file_name, text_in) else { return parse(text_in) };
+    let mut sbom = parsed?;
     for c in &mut sbom.components {
         finish(c);
     }
@@ -975,7 +995,7 @@ pub async fn osv_lookup(base: &str, components: &[Component]) -> AppResult<Looku
 #[serde(rename_all = "camelCase")]
 pub struct Issue {
     pub id: String,
-    /// license or completeness
+    /// license, completeness or supply-chain
     pub area: String,
     pub severity: String,
     pub title: String,
@@ -1004,25 +1024,32 @@ pub fn audit(s: &Sbom) -> Vec<Issue> {
     let mut push = |id: &str, area: &str, severity: &str, title: String, detail: String, components: Vec<String>, recommendation: &str| {
         out.push(Issue { id: id.into(), area: area.into(), severity: severity.into(), title, detail, components, recommendation: recommendation.into() });
     };
-    let network = by(&|c| c.license_risk == "network-copyleft");
+    // a lockfile is not an SBOM: no supplier, author or timestamp to expect, and most record no licenses
+    let lockfile = s.format.starts_with("lockfile-");
+    let licensed = !lockfile || s.components.iter().any(|c| !c.licenses.is_empty());
+    if lockfile {
+        lockfile_issues(s, &mut push);
+    }
+    let licenses = |risk: &str| if licensed { by(&|c| c.license_risk == risk) } else { Vec::new() };
+    let network = licenses("network-copyleft");
     if !network.is_empty() {
         push("LIC-NETWORK-COPYLEFT", "license", "medium", format!("Network copyleft licenses ({})", network.len()),
             format!("{} use AGPL-style licenses: offering the software over a network can oblige you to publish your source code.", plural(network.len(), "component")),
             network, "Check with your legal or open-source office whether these components are allowed, and how they are used.");
     }
-    let restricted = by(&|c| c.license_risk == "restricted");
+    let restricted = licenses("restricted");
     if !restricted.is_empty() {
         push("LIC-RESTRICTED", "license", "medium", format!("Licenses that restrict use ({})", restricted.len()),
             format!("{} use licenses that are not open source, such as non-commercial, no-derivatives or source-available terms.", plural(restricted.len(), "component")),
             restricted, "Confirm that your use is allowed, or replace these components.");
     }
-    let copyleft = by(&|c| c.license_risk == "copyleft");
+    let copyleft = licenses("copyleft");
     if !copyleft.is_empty() {
         push("LIC-COPYLEFT", "license", "low", format!("Copyleft licenses ({})", copyleft.len()),
             format!("{} use GPL-style licenses: distributing the software can oblige you to provide its source under the same license.", plural(copyleft.len(), "component")),
             copyleft, "Check that the way the software is distributed complies with these licenses.");
     }
-    let unknown = by(&|c| c.license_risk == "unknown");
+    let unknown = licenses("unknown");
     if !unknown.is_empty() {
         push("LIC-UNKNOWN", "license", "low", format!("Components without a recognised license ({})", unknown.len()),
             format!("{} have no license in the SBOM, or one that is not a known SPDX identifier.", plural(unknown.len(), "component")),
@@ -1035,22 +1062,22 @@ pub fn audit(s: &Sbom) -> Vec<Issue> {
             no_version, "Generate the SBOM from the build or lock files, so every component carries its exact version.");
     }
     let no_id = by(&|c| c.purl.is_empty() && c.cpe.is_empty());
-    if !no_id.is_empty() {
+    if !no_id.is_empty() && !lockfile {
         push("SBOM-NO-IDENTIFIER", "completeness", "low", format!("Components without a package URL or CPE ({})", no_id.len()),
             format!("{} have neither a package URL nor a CPE, so vulnerability databases cannot match them reliably.", plural(no_id.len(), "component")),
             no_id, "Use an SBOM generator that records package URLs (purl).");
     }
     let no_supplier = by(&|c| c.supplier.is_empty());
-    if !no_supplier.is_empty() && no_supplier.len() * 2 > s.components.len() {
+    if !no_supplier.is_empty() && no_supplier.len() * 2 > s.components.len() && !lockfile {
         push("SBOM-NO-SUPPLIER", "completeness", "info", format!("Most components have no supplier ({} of {})", no_supplier.len(), s.components.len()),
             "The NTIA minimum elements include the supplier of each component.".into(), Vec::new(), "Record suppliers where the generator can find them.");
     }
-    if !s.relationships && !s.components.is_empty() {
+    if !s.relationships && !s.components.is_empty() && !lockfile {
         push("SBOM-NO-RELATIONSHIPS", "completeness", "info", "No dependency relationships".into(),
             "The SBOM lists components but not which depends on which, so direct and transitive dependencies cannot be told apart.".into(),
             Vec::new(), "Generate the SBOM with dependency relationships (CycloneDX dependencies, SPDX DEPENDS_ON).");
     }
-    if s.created.is_empty() || s.tools.is_empty() {
+    if (s.created.is_empty() || s.tools.is_empty()) && !lockfile {
         push("SBOM-NO-AUTHOR", "completeness", "info", "No author or timestamp".into(),
             "The NTIA minimum elements include who made the SBOM data and when; without them its age and origin are unknown.".into(),
             Vec::new(), "Make sure the generator records the tool or author and the creation time.");
@@ -1068,6 +1095,67 @@ pub fn audit(s: &Sbom) -> Vec<Issue> {
             multi, "Deduplicate dependency versions where the package manager allows it.");
     }
     out
+}
+
+/// The registry a lockfile resolved a registry package from, for `LOCK-MIXED-REGISTRIES`.
+fn registry_of(format: &str, c: &Component) -> Option<String> {
+    if c.purl.is_empty() {
+        return None;
+    }
+    let r = c.resolved.trim();
+    if r.is_empty() {
+        // pnpm writes no tarball address for packages of the default registry
+        return (format == "lockfile-pnpm").then(|| "registry.npmjs.org".to_string());
+    }
+    let url = r.trim_start_matches("registry+").trim_start_matches("sparse+");
+    let host = url::Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_ascii_lowercase)).unwrap_or_else(|| r.to_ascii_lowercase());
+    Some(match host.as_str() {
+        "registry.yarnpkg.com" => "registry.npmjs.org".into(),
+        "files.pythonhosted.org" => "pypi.org".into(),
+        "index.crates.io" => "crates.io".into(),
+        _ => host,
+    })
+}
+
+/// Supply-chain indicators of a dependency lockfile.
+fn lockfile_issues(s: &Sbom, push: &mut impl FnMut(&str, &str, &str, String, String, Vec<String>, &str)) {
+    let by = |pred: &dyn Fn(&Component) -> bool| -> Vec<String> { s.components.iter().filter(|c| pred(c)).map(Component::label).collect() };
+    let http = by(&|c| {
+        let r = c.resolved.to_ascii_lowercase();
+        r.starts_with("http://") || r.contains("+http://")
+    });
+    if !http.is_empty() {
+        push("LOCK-HTTP", "supply-chain", "high", format!("Packages downloaded over plain HTTP ({})", http.len()),
+            format!("{} from http:// addresses: anyone on the network path can replace {} with other code.", if http.len() == 1 { "1 package comes".to_string() } else { format!("{} packages come", http.len()) }, if http.len() == 1 { "it" } else { "them" }),
+            http, "Use the registry's https:// address and regenerate the lockfile.");
+    }
+    if super::lockfiles::HASHED.contains(&s.format.as_str()) {
+        let unhashed = by(&|c| !c.purl.is_empty() && c.hashes.is_empty());
+        if !unhashed.is_empty() {
+            push("LOCK-NO-INTEGRITY", "supply-chain", "medium", format!("Packages without an integrity hash ({})", unhashed.len()),
+                format!("The lockfile records no hash for {}, so the package manager cannot tell when a download has changed.", plural(unhashed.len(), "package")),
+                unhashed, "Regenerate the lockfile with a current version of the package manager, which records hashes.");
+        }
+    }
+    let elsewhere = by(&|c| c.purl.is_empty() && !c.resolved.is_empty());
+    if !elsewhere.is_empty() {
+        push("LOCK-NON-REGISTRY", "supply-chain", "low", format!("Dependencies from Git, URLs or local paths ({})", elsewhere.len()),
+            format!("{} from a registry: no vulnerability database matches {}, and a branch or an address can change what gets installed.", if elsewhere.len() == 1 { "1 dependency does not come".to_string() } else { format!("{} dependencies do not come", elsewhere.len()) }, if elsewhere.len() == 1 { "it" } else { "them" }),
+            elsewhere, "Pin Git dependencies to a commit, prefer released versions from the registry, and review these dependencies yourself.");
+    }
+    if s.sources.iter().any(|x| x.starts_with("extra-index-url")) {
+        push("LOCK-EXTRA-INDEX", "supply-chain", "medium", "Several package indexes (--extra-index-url)".into(),
+            "pip gives every index the same priority and installs the highest version it finds in any of them, so a package published on PyPI under the name of an internal package can be installed instead (dependency confusion; the PyTorch-nightly compromise of December 2022 worked this way).".into(),
+            s.sources.clone(), "Use one index that mirrors PyPI and serves the internal packages, or install with --require-hashes.");
+    }
+    if s.format != "lockfile-composer" {
+        let registries: BTreeSet<String> = s.components.iter().filter_map(|c| registry_of(&s.format, c)).collect();
+        if registries.len() > 1 {
+            push("LOCK-MIXED-REGISTRIES", "supply-chain", "low", format!("Packages from {} registries", registries.len()),
+                "Private packages whose names are not taken on the public registry are exposed to dependency confusion when the lockfile is regenerated: someone can publish the same name there with a higher version.".into(),
+                registries.into_iter().collect(), "Publish private packages under a scope or namespace you own on the public registry, and send each scope to one registry.");
+        }
+    }
 }
 
 /* ───────────────────────────── storage ───────────────────────────── */

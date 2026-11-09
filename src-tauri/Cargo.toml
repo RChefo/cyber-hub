@@ -54,6 +54,8 @@ md-5 = "0.10.6"
 once_cell = "1.21.4"
 # GraphML import for the OSINT workspace (no DTD or external entity processing)
 quick-xml = "0.42"
+# dependency lockfiles (Cargo, Poetry, uv); the version tauri-build already uses
+toml = "1"
 regex = "1.13.1"
 # developer-only provisioning tool (feature "provisioning"); not part of app builds
 rpassword = { version = "7.5.4", optional = true }

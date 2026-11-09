@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SbomComponent, SbomVuln } from "@/lib/types";
-import { checkable, componentLabel, filterComponents, vulnRows, vulnSummary } from "./sbom";
+import { checkable, componentFacts, componentLabel, filterComponents, vulnRows, vulnSummary } from "./sbom";
 
 const comp = (name: string, extra: Partial<SbomComponent> = {}): SbomComponent => ({
   name,
@@ -16,6 +16,8 @@ const comp = (name: string, extra: Partial<SbomComponent> = {}): SbomComponent =
   hashes: [],
   direct: false,
   reference: name,
+  dev: false,
+  resolved: "",
   ...extra,
 });
 
@@ -50,5 +52,17 @@ describe("SBOM helpers", () => {
   it("summarizes vulnerability counts", () => {
     expect(vulnSummary({ vulns: [1, 2, 0, 0, 1] })).toBe("1 critical, 2 high, 1 unrated");
     expect(vulnSummary({ vulns: [0, 0, 0, 0, 0] })).toBe("none known");
+  });
+});
+
+describe("component facts", () => {
+  it("names the origin of dependencies that do not come from a registry", () => {
+    const git = comp("forked", { purl: "", ecosystem: "", resolved: "git+ssh://git@github.com/me/forked.git#0123", licenses: [] });
+    expect(componentFacts(git, true)).toBe("no package URL · from git+ssh://git@github.com/me/forked.git#0123");
+  });
+  it("marks development dependencies and leaves out missing licenses for lockfiles", () => {
+    const dev = comp("minimist", { dev: true, direct: true, licenses: [], resolved: "https://registry.npmjs.org/minimist/-/minimist-1.2.5.tgz" });
+    expect(componentFacts(dev, true)).toBe("npm · direct · development");
+    expect(componentFacts(dev, false)).toBe("npm · direct · development · no license stated");
   });
 });

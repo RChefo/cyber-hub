@@ -9,6 +9,7 @@ pub mod discovery;
 pub mod evidence;
 pub mod findings;
 pub mod findings_export;
+pub mod lockfiles;
 pub mod report;
 pub mod sbom;
 pub mod scan_import;

@@ -12,7 +12,7 @@ import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { Project, SbomIssue, SbomSummary, SbomView, SbomVuln } from "@/lib/types";
 import { cn, formatRelative } from "@/lib/utils";
-import { LICENSE_RISK_META, NOT_APPLICABLE, SBOM_FORMAT_LABEL, checkable, componentLabel, filterComponents, vulnRows, vulnSummary } from "./sbom";
+import { ISSUE_AREA_LABEL, LICENSE_RISK_META, NOT_APPLICABLE, SBOM_FORMAT_LABEL, checkable, componentFacts, componentLabel, filterComponents, vulnRows, vulnSummary } from "./sbom";
 
 const ROWS_SHOWN = 300;
 
@@ -43,10 +43,10 @@ export function ComponentsTab({ project, onOpenFindings }: { project: Project; o
       if (s) {
         invalidate("sboms", "findings", "assets", "activity");
         setSelected(s.id);
-        notify.success("SBOM imported", `${s.components} components from ${s.name}`);
+        notify.success(s.format.startsWith("lockfile-") ? "Lockfile imported" : "SBOM imported", `${s.components} components from ${s.name}`);
       }
     } catch (e) {
-      notify.error("Could not import the SBOM", e);
+      notify.error("Could not import the file", e);
     } finally {
       setBusy(false);
     }
@@ -66,8 +66,8 @@ export function ComponentsTab({ project, onOpenFindings }: { project: Project; o
   return (
     <div className="flex flex-col gap-4">
       <Panel
-        title="Software components (SBOM)"
-        description="CycloneDX (JSON or XML) and SPDX 2.x (JSON or tag-value) SBOMs: components, licenses, completeness and known vulnerabilities. Reading a file contacts nothing; OSV.dev is asked only when you check, with package URLs only."
+        title="Software components (SBOMs and lockfiles)"
+        description="CycloneDX (JSON or XML) and SPDX 2.x (JSON or tag-value) SBOMs, or dependency lockfiles (npm, Yarn, pnpm, Cargo, Poetry, uv, Pipfile, requirements.txt, Composer, Bundler, go.mod, NuGet, Gradle): components, licenses, supply-chain risks and known vulnerabilities. Reading a file contacts nothing; OSV.dev is asked only when you check, with package URLs only."
         actions={
           <Button size="sm" variant="primary" onPress={() => void importFile()} isPending={busy} isDisabled={!runtime}>
             <Upload className="size-3.5" />
@@ -80,7 +80,7 @@ export function ComponentsTab({ project, onOpenFindings }: { project: Project; o
         ) : !docs.data ? (
           <LoadingRows rows={2} />
         ) : list.length === 0 ? (
-          <EmptyBlock compact icon={Boxes} title="No SBOM yet" description="Import an SBOM from your build (for example from Syft, Trivy, cdxgen, the CycloneDX plugins or GitHub's dependency graph export)." />
+          <EmptyBlock compact icon={Boxes} title="No SBOM or lockfile yet" description="Import an SBOM from your build (for example from Syft, Trivy, cdxgen, the CycloneDX plugins or GitHub's dependency graph export), or the project's lockfile, such as package-lock.json, Cargo.lock or poetry.lock." />
         ) : (
           <ul className="flex flex-col gap-1.5">
             {list.map((s) => (
@@ -146,6 +146,7 @@ function Vulnerabilities({ view, onOpenFindings }: { view: SbomView; onOpenFindi
   const rows = useMemo(() => vulnRows(view.vulns, hide), [view.vulns, hide]);
   const open = rows.filter((r) => !view.recorded[r.key]);
   const comps = view.sbom.components;
+  const lockfile = view.sbom.format.startsWith("lockfile-");
   const n = checkable(comps);
 
   const check = async () => {
@@ -187,8 +188,10 @@ function Vulnerabilities({ view, onOpenFindings }: { view: SbomView; onOpenFindi
       title={`Known vulnerabilities (${rows.length})`}
       description={
         view.summary.checkedAt
-          ? `From the SBOM and OSV.dev, checked ${formatRelative(view.summary.checkedAt)}. One row per vulnerability and affected component.`
-          : "From the SBOM itself. Check on OSV.dev to look the components up."
+          ? `From ${lockfile ? "" : "the SBOM and "}OSV.dev, checked ${formatRelative(view.summary.checkedAt)}. One row per vulnerability and affected component.`
+          : lockfile
+            ? "A lockfile states no vulnerabilities. Check on OSV.dev to look the components up."
+            : "From the SBOM itself. Check on OSV.dev to look the components up."
       }
       actions={
         <div className="flex flex-wrap gap-2">
@@ -205,7 +208,7 @@ function Vulnerabilities({ view, onOpenFindings }: { view: SbomView; onOpenFindi
       }
       toolbar={
         <div className="flex flex-wrap items-center gap-4">
-          <SwitchInput label="Hide vulnerabilities the SBOM marks as not affecting it (VEX)" isSelected={hide} onChange={setHide} />
+          {!lockfile && <SwitchInput label="Hide vulnerabilities the SBOM marks as not affecting it (VEX)" isSelected={hide} onChange={setHide} />}
           {open.length > 0 && picked.size === 0 && (
             <Button size="sm" variant="ghost" onPress={() => setPicked(new Set(open.map((r) => r.key)))}>
               Select all {open.length} not yet recorded
@@ -215,7 +218,7 @@ function Vulnerabilities({ view, onOpenFindings }: { view: SbomView; onOpenFindi
       }
     >
       {rows.length === 0 ? (
-        <EmptyBlock compact icon={ShieldCheck} title={view.summary.checkedAt ? "No known vulnerabilities" : "No vulnerabilities stated in the SBOM"} description={view.summary.checkedAt ? "OSV.dev knows no vulnerability for the checked components. Components without a version cannot be checked." : undefined} />
+        <EmptyBlock compact icon={ShieldCheck} title={view.summary.checkedAt ? "No known vulnerabilities" : lockfile ? "Not checked yet" : "No vulnerabilities stated in the SBOM"} description={view.summary.checkedAt ? "OSV.dev knows no vulnerability for the checked components. Components without a version cannot be checked." : undefined} />
       ) : (
         <ul className="flex flex-col gap-1">
           {rows.slice(0, ROWS_SHOWN).map((r) => {
@@ -284,7 +287,7 @@ function Checks({ view, onOpenFindings }: { view: SbomView; onOpenFindings: () =
     }
   };
   return (
-    <Panel title="License and completeness checks" description="License risks from SPDX identifiers (OR takes the most permissive choice, AND the most restrictive), and the NTIA minimum elements of an SBOM.">
+    <Panel title="Checks" description="License risks from SPDX identifiers (OR takes the most permissive choice, AND the most restrictive), the NTIA minimum elements of an SBOM, and for lockfiles the supply-chain risks: plain HTTP, missing hashes, Git and URL dependencies, several registries or package indexes.">
       <ul className="flex flex-col gap-2">
         {view.issues.map((i) => {
           const fid = view.recorded[`issue:${i.id}`];
@@ -294,7 +297,7 @@ function Checks({ view, onOpenFindings }: { view: SbomView; onOpenFindings: () =
                 <Severity v={i} />
                 <span className="text-[13.5px] font-medium">{i.title}</span>
                 <ToneChip tone="default" dot={false} className="text-[11px]">
-                  {i.area === "license" ? "License" : "Completeness"}
+                  {ISSUE_AREA_LABEL[i.area] ?? i.area}
                 </ToneChip>
                 <span className="flex-1" />
                 {fid ? (
@@ -328,6 +331,7 @@ function Components({ view }: { view: SbomView }) {
   const [risk, setRisk] = useState("all");
   const [vulnerableOnly, setVulnerableOnly] = useState(false);
   const comps = view.sbom.components;
+  const lockfile = view.sbom.format.startsWith("lockfile-");
   const affected = useMemo(() => {
     const s = new Map<number, number>();
     for (const v of view.vulns) if (!NOT_APPLICABLE.includes(v.analysis)) for (const c of v.components) s.set(c, (s.get(c) ?? 0) + 1);
@@ -368,7 +372,7 @@ function Components({ view }: { view: SbomView }) {
                   <div className="truncate font-mono text-[12.5px]" title={c.purl || undefined}>
                     {componentLabel(c)}
                   </div>
-                  <div className="truncate text-[12px] text-muted">{[c.ecosystem || "no package URL", c.direct ? "direct" : "", c.supplier, c.licenses.join(" · ") || "no license stated"].filter(Boolean).join(" · ")}</div>
+                  <div className="truncate text-[12px] text-muted">{componentFacts(c, lockfile)}</div>
                 </div>
                 <ToneChip tone={meta.tone}>{meta.label}</ToneChip>
                 {n > 0 && <ToneChip tone="danger">{n === 1 ? "1 vulnerability" : `${n} vulnerabilities`}</ToneChip>}

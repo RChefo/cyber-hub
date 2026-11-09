@@ -6,7 +6,33 @@ export const SBOM_FORMAT_LABEL: Record<string, string> = {
   "cyclonedx-xml": "CycloneDX XML",
   "spdx-json": "SPDX JSON",
   "spdx-tag": "SPDX tag-value",
+  "lockfile-npm": "npm lockfile",
+  "lockfile-yarn": "Yarn lockfile",
+  "lockfile-pnpm": "pnpm lockfile",
+  "lockfile-cargo": "Cargo.lock",
+  "lockfile-poetry": "poetry.lock",
+  "lockfile-uv": "uv.lock",
+  "lockfile-pipfile": "Pipfile.lock",
+  "lockfile-requirements": "requirements.txt",
+  "lockfile-composer": "composer.lock",
+  "lockfile-gemfile": "Gemfile.lock",
+  "lockfile-gomod": "go.mod",
+  "lockfile-nuget": "NuGet lockfile",
+  "lockfile-gradle": "Gradle lockfile",
 };
+
+export const ISSUE_AREA_LABEL: Record<string, string> = {
+  license: "License",
+  completeness: "Completeness",
+  "supply-chain": "Supply chain",
+};
+
+/** The second line of a component row: ecosystem, relationship, origin and licenses. */
+export function componentFacts(c: SbomComponent, lockfile: boolean): string {
+  const origin = !c.purl && c.resolved ? `from ${c.resolved}` : "";
+  const licenses = c.licenses.join(" · ") || (lockfile ? "" : "no license stated");
+  return [c.ecosystem || "no package URL", c.direct ? "direct" : "", c.dev ? "development" : "", origin, c.supplier, licenses].filter(Boolean).join(" · ");
+}
 
 export const LICENSE_RISK_META: Record<SbomComponent["licenseRisk"], { label: string; tone: Tone }> = {
   permissive: { label: "Permissive", tone: "success" },
