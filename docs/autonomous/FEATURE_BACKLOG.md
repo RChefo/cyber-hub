@@ -75,3 +75,45 @@ With items 18 to 24 done, the next gaps were looked for inside the same six area
 |---|---|---|---|---|---|---|---|---|---|
 | 25 | Kubernetes RBAC escalation paths, with bindings resolved across files and the built-in roles | 4 | 3 | 5 | 5 | 4 | 5 | 42 | **Done** (this round) |
 | 26 | SARIF import skips suppressed results | 3 | 3 | 5 | 5 | 5 | 5 | 40 | **Done** (`d776c58`) |
+
+## Mission 2 (2026-11-09T16:31Z): research and ranking
+
+### What exists, checked in the code
+
+Security Utilities has 26 tools (including the JWT inspector with `alg: none` and lifetime checks, the HTTP header analyzer, container and RBAC checks, packet capture and log triage for web and SSH logs). Projects have 16 tabs (scope, attack surface, APIs, components, vulnerabilities, findings, the WSTG checklist, analysis, assistant, automation, timeline, evidence, report, notes, commands). A code search found **none** of the following: Windows event logs (EVTX), cloud infrastructure as code (Terraform, CloudFormation), IAM policy analysis, dependency lockfiles, PE or ELF analysis, OWASP ASVS, OAuth or OIDC configuration review, ATT&CK technique mapping, persistence artifacts. `imphash` and `yara` appear only as fields of abuse.ch lookups.
+
+### Sources and findings
+
+Numbers are GitHub stars and crates.io downloads read through their APIs on 2026-11-09.
+
+* **Windows event logs.** Chainsaw (WithSecure, Rust, 3,714 stars), Hayabusa (Yamato Security, 3,447) and DeepBlueCLI (SANS, 2,444) exist because responders need a fast first pass over EVTX files before a SIEM is available ([Chainsaw](https://labs.withsecure.com/tools/chainsaw), [SANS ISC diary 2022-09-19](https://isc.sans.edu/diary.html?date=2022-09-19), [Black Hills: Hayabusa and SOF-ELK](https://www.blackhillsinfosec.com/wrangling-windows-event-logs-with-hayabusa-sof-elk-part-2/)). Chainsaw is built on the `evtx` crate (Apache-2.0, 345,872 downloads). Cyber Hub's log triage reads web and SSH logs only.
+* **Infrastructure as code.** Checkov (9,146 stars), tfsec (7,061) and KICS (2,731) check Terraform and CloudFormation before deployment; practitioner guides name public S3 buckets, open security groups and missing encryption as the core findings ([HackerOne: AWS security configuration review](https://www.hackerone.com/blog/aws-security-configuration-review-and-best-practices)). Cyber Hub checks containers and Kubernetes, not cloud resources. The `hcl-rs` crate (MIT/Apache-2.0, 3.4 million downloads) parses HCL.
+* **IAM policies.** Rhino Security Labs catalogued the IAM privilege-escalation methods (iam:CreatePolicyVersion, iam:PassRole with ec2:RunInstances or lambda:CreateFunction, and others) ([research](https://rhinosecuritylabs.com/aws/aws-privilege-escalation-methods-mitigation/), [catalog](https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation)); Cloudsplaining (2,260 stars), PMapper (1,591), Parliament (1,127) and Pacu's `iam__privesc_scan` show the need to find them in policies.
+* **Dependency lockfiles.** OSV-Scanner (Google, 11,470 stars) reads lockfiles (package-lock.json, pnpm-lock.yaml, yarn.lock, Cargo.lock, poetry.lock, uv.lock, composer.lock, Gemfile.lock, go.mod and others) and checks them against OSV ([supported lockfiles](https://google.github.io/osv-scanner/supported-languages-and-lockfiles)). Cyber Hub's SBOM analysis already queries OSV, but only for SBOM files, which many projects do not produce.
+* **Static binary triage.** Detect It Easy (11,924 stars) and capa (Mandiant, 6,313) answer "what is this file and what can it do" without running it; the `goblin` crate (MIT, 87 million downloads) parses PE, ELF and Mach-O. Cyber Hub can hash a file and look it up (VirusTotal, abuse.ch) but cannot look inside it.
+* **Verification standards.** OWASP ASVS 5.0.0 (May 2025; 3,773 stars; CC BY-SA 4.0) is published with CSV and JSON requirement lists ([OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/)). Cyber Hub has the WSTG checklist only.
+* **OAuth.** RFC 9700 (BCP 240, January 2025) says the implicit and the resource owner password grants must not be used and recommends the authorization code grant with PKCE ([RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html)).
+* **Linux artifacts.** The Unix-like Artifacts Collector (UAC, 1,509 stars) collects the files a responder reads for persistence (cron, systemd units, authorized_keys, shell profiles); reading them is manual.
+* A Reddit search for practitioner threads on cloud reviews returned mostly vendor blogs; it is not counted as evidence.
+
+### Scoring model for this mission
+
+Each criterion is rated from 1 to 5, where 5 is best: D demand (×3), U professional usefulness (×2), N novelty compared with Cyber Hub (×2), I integration with projects, findings, evidence and reports (×2), F feasibility (×1), R security risk, 5 = low (×1), T testability (×1), M maintenance cost, 5 = cheap (×1). **Score = 3D + 2U + 2N + 2I + F + R + T + M**, at most 65.
+
+| # | Candidate | D | U | N | I | F | R | T | M | Score | Status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 27 | Dependency lockfiles into the SBOM analysis (npm, pnpm, yarn, Cargo, Python, Composer, Ruby, Go, NuGet), with the OSV check | 5 | 5 | 4 | 5 | 4 | 5 | 5 | 4 | 61 | Planned |
+| 28 | Windows event log (EVTX) triage with ATT&CK-mapped detections | 5 | 5 | 5 | 4 | 4 | 4 | 4 | 4 | 59 | Planned |
+| 29 | AWS IAM policy analysis: privilege escalation, wildcards, public and cross-account access | 4 | 5 | 5 | 4 | 5 | 5 | 5 | 4 | 59 | Planned |
+| 30 | Infrastructure-as-code checks: Terraform (HCL and plan JSON) and CloudFormation | 5 | 5 | 5 | 5 | 3 | 4 | 4 | 3 | 59 | Planned |
+| 31 | Static PE and ELF triage: imports as capabilities, sections and entropy, strings and indicators | 4 | 4 | 5 | 4 | 4 | 4 | 4 | 4 | 54 | Planned |
+| 32 | Prowler results (OCSF JSON) import | 4 | 4 | 4 | 5 | 4 | 5 | 4 | 3 | 54 | Candidate |
+| 33 | OWASP ASVS 5.0 checklist next to WSTG | 4 | 4 | 4 | 5 | 3 | 5 | 4 | 3 | 53 | Candidate |
+| 34 | API definition comparison: new, removed and changed endpoints, lost authentication | 3 | 4 | 4 | 4 | 5 | 5 | 5 | 5 | 53 | Candidate |
+| 35 | Linux persistence triage from collected files | 3 | 4 | 5 | 4 | 4 | 5 | 5 | 4 | 53 | Candidate |
+| 36 | OAuth 2.0 and OpenID Connect configuration review (RFC 9700) | 3 | 4 | 5 | 3 | 5 | 5 | 5 | 4 | 52 | Candidate |
+| 37 | SBOM comparison between versions | 3 | 3 | 4 | 4 | 5 | 5 | 5 | 5 | 51 | Candidate |
+| 38 | ATT&CK technique view and Navigator layer per project | 3 | 4 | 4 | 5 | 3 | 5 | 4 | 3 | 50 | Candidate |
+| 39 | Request collections, variables and authentication profiles in the repeater | 4 | 4 | 4 | 4 | 2 | 4 | 3 | 3 | 48 | Deferred: large interface work for the gain |
+| 40 | YARA matching | 4 | 4 | 5 | 4 | 1 | 3 | 4 | 2 | 48 | Deferred: the Rust engine (yara-x) brings a WebAssembly runtime; libyara needs a C toolchain |
+
