@@ -59,7 +59,7 @@ The owner named six areas; none existed in Cyber Hub (code search: no API defini
 | 18 | API inventory from OpenAPI, Swagger, Postman and HAR, with OWASP API Top 10 (2023) checks, a test plan and scope per endpoint | 5 | 4 | 5 | 5 | 3 | 5 | 46 | **Done** (this round) |
 | 19 | Repeater: raw requests, history, resend and response comparison in the HTTP request builder | 4 | 4 | 5 | 4 | 4 | 4 | 42 | **Done** (this round) |
 | 20 | SBOM analysis: CycloneDX and SPDX components, known vulnerabilities from OSV, license risks | 5 | 4 | 4 | 4 | 3 | 5 | 43 | **Done** (this round) |
-| 21 | Container and Kubernetes configuration checks (Dockerfile, Compose, manifests) | 4 | 3 | 4 | 5 | 3 | 5 | 39 | Planned |
+| 21 | Container and Kubernetes configuration checks (Dockerfile, Compose, manifests) | 4 | 3 | 4 | 5 | 3 | 5 | 39 | **Done** (this round) |
 | 22 | Packet capture triage (pcap, pcapng): hosts, DNS, HTTP, TLS server names, cleartext credentials | 3 | 3 | 4 | 4 | 2 | 4 | 33 | Planned |
 | 23 | Log triage: web access and SSH authentication logs (attack patterns, brute force) | 3 | 3 | 4 | 5 | 3 | 5 | 36 | Planned |
 | 24 | SARIF 2.1.0 export of findings | 3 | 3 | 5 | 5 | 5 | 5 | 40 | Planned |

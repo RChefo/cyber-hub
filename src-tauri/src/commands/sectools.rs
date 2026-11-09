@@ -11,7 +11,7 @@ use crate::commands::activity::log;
 use crate::db::Db;
 use crate::error::{validation, AppError, AppResult};
 use crate::redact::redact_text;
-use crate::sectools::{dns_intel, http, secrets, tls};
+use crate::sectools::{containers, dns_intel, http, secrets, tls};
 use crate::workspace::{assets, scope_gate};
 
 /// Host and port of a TLS target ("host", "host:port", "[v6]:port" or a URL).
@@ -177,6 +177,49 @@ pub async fn leak_scan_text(text: String) -> AppResult<secrets::ScanResult> {
 pub struct PathScan {
     pub root: String,
     pub result: secrets::ScanResult,
+}
+
+/// Checks pasted text as a Dockerfile, Compose file or Kubernetes manifest (`kind`: auto,
+/// dockerfile, compose, kubernetes). Nothing is contacted.
+#[tauri::command]
+pub async fn container_scan_text(text: String, kind: String) -> AppResult<containers::FileReport> {
+    if text.len() > containers::MAX_TEXT {
+        return Err(validation(format!("The text is larger than {} MB", containers::MAX_TEXT / 1024 / 1024)));
+    }
+    if !["auto", "dockerfile", "compose", "kubernetes"].contains(&kind.as_str()) {
+        return Err(validation("Unknown file type"));
+    }
+    containers::analyze("pasted text", &text, &kind).ok_or_else(|| validation("This is not a Dockerfile, Compose file or Kubernetes manifest. Choose the type if it is one."))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContainerScan {
+    pub root: String,
+    pub result: containers::ScanResult,
+}
+
+/// Choose a file or folder (native dialog) and check the container configurations in it locally.
+/// None when cancelled.
+#[tauri::command]
+pub async fn container_scan_pick(app: AppHandle, folder: bool) -> AppResult<Option<ContainerScan>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut d = app.dialog().file().set_title(if folder { "Check a folder for container configurations" } else { "Check a container configuration" });
+    if let Some(w) = app.get_webview_window("main") {
+        d = d.set_parent(&w);
+    }
+    let send = move |p: Option<tauri_plugin_dialog::FilePath>| {
+        let _ = tx.send(p.and_then(|f| f.into_path().ok()));
+    };
+    if folder {
+        d.pick_folder(send);
+    } else {
+        d.pick_file(send);
+    }
+    let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
+    let root = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string_lossy().to_string());
+    let result = tauri::async_runtime::spawn_blocking(move || containers::scan_path(&path)).await.map_err(|e| AppError::Internal(format!("check failed: {e}")))?;
+    Ok(Some(ContainerScan { root, result }))
 }
 
 /// Choose a file or folder (native dialog) and scan it locally. None when cancelled.

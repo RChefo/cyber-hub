@@ -1203,7 +1203,7 @@ pub fn vuln_finding(summary: &SbomSummary, sbom: &Sbom, v: &Vuln, component: usi
     Some(crate::commands::projects::FindingInput {
         id: None,
         project_id: summary.project_id,
-        title: format!("{} in {}", v.id, c.label()),
+        title: format!("{} in {}", v.id, c.label()).chars().take(200).collect(),
         severity,
         status: "new".into(),
         category: "Vulnerable component".into(),
@@ -1235,7 +1235,7 @@ pub fn issue_finding(summary: &SbomSummary, sbom: &Sbom, issue: &Issue) -> crate
     crate::commands::projects::FindingInput {
         id: None,
         project_id: summary.project_id,
-        title: format!("{} ({})", issue.title, if sbom.subject.is_empty() { &summary.name } else { &sbom.subject }),
+        title: format!("{} ({})", issue.title, if sbom.subject.is_empty() { &summary.name } else { &sbom.subject }).chars().take(200).collect(),
         severity: if issue.severity == "info" { "info".into() } else { issue.severity.clone() },
         status: "new".into(),
         category: if issue.area == "license" { "License compliance".into() } else { "SBOM quality".into() },

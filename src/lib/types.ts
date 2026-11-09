@@ -1590,3 +1590,34 @@ export interface SbomRecorded {
   created: number;
   existing: number;
 }
+
+/* ───────── Container and Kubernetes checks (sectools/containers.rs) ───────── */
+
+export interface ContainerIssue {
+  rule: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  title: string;
+  location: string;
+  detail: string;
+  remediation: string;
+  reference: string;
+}
+
+export interface ContainerFileReport {
+  file: string;
+  /** dockerfile, compose, kubernetes (or unknown when it could not be read) */
+  kind: string;
+  issues: ContainerIssue[];
+  error: string;
+}
+
+export interface ContainerScanResult {
+  files: ContainerFileReport[];
+  filesSeen: number;
+  truncated: boolean;
+}
+
+export interface ContainerScan {
+  root: string;
+  result: ContainerScanResult;
+}

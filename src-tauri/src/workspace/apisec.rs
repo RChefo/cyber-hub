@@ -1302,7 +1302,7 @@ pub fn finding_for(summary: &SpecSummary, spec: &ApiSpec, issue: &Issue) -> crat
     crate::commands::projects::FindingInput {
         id: None,
         project_id: summary.project_id,
-        title: issue.title.clone(),
+        title: issue.title.chars().take(200).collect(),
         severity: issue.severity.clone(),
         status: "new".into(),
         category: format!("{} {}", issue.owasp, issue.category),

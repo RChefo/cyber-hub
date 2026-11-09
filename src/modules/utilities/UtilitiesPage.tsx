@@ -12,6 +12,7 @@ import { HtmlTool, JsonTool, RegexTool, XmlTool } from "./tools/TextTools";
 import { IocTool } from "./tools/IocTool";
 import { WorkbenchTool } from "./tools/Workbench";
 import { DnsIntelTool, HttpBuilderTool, PortsTool, SecretsTool, SubdomainMonitorTool, TlsTool } from "./tools/AssessmentTools";
+import { ContainerTool } from "./tools/ContainerTool";
 
 const VIEWS: Record<UtilityId, ComponentType> = {
   workbench: WorkbenchTool,
@@ -37,6 +38,7 @@ const VIEWS: Record<UtilityId, ComponentType> = {
   ports: PortsTool,
   "subdomain-monitor": SubdomainMonitorTool,
   secrets: SecretsTool,
+  containers: ContainerTool,
 };
 
 const GROUP_ORDER: UtilityDef["group"][] = ["Encoding", "Analysis", "Formatting", "Network", "Assessment"];

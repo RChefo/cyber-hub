@@ -150,6 +150,9 @@ export const api = {
   sbomCheck: (id: number) => call<T.SbomCheck>("sbom_check", { id }),
   sbomRecord: (id: number, keys: string[]) => call<T.SbomRecorded>("sbom_record", { id, keys }),
   sbomDelete: (id: number) => call<void>("sbom_delete", { id }),
+  // Container and Kubernetes configuration checks (local only)
+  containerScanText: (text: string, kind: string) => call<T.ContainerFileReport>("container_scan_text", { text, kind }),
+  containerScanPick: (folder: boolean) => call<T.ContainerScan | null>("container_scan_pick", { folder }),
   findingTemplatesList: () => call<T.FindingTemplate[]>("finding_templates_list"),
   findingTemplateSave: (input: T.FindingTemplateInput) => call<T.FindingTemplate>("finding_template_save", { input }),
   findingTemplateDelete: (id: number) => call<void>("finding_template_delete", { id }),
