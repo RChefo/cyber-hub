@@ -14,6 +14,7 @@ import { WorkbenchTool } from "./tools/Workbench";
 import { DnsIntelTool, HttpBuilderTool, PortsTool, SecretsTool, SubdomainMonitorTool, TlsTool } from "./tools/AssessmentTools";
 import { CloudTool } from "./tools/CloudTool";
 import { FileTriageTool } from "./tools/FileTriageTool";
+import { OAuthTool } from "./tools/OAuthTool";
 import { ContainerTool } from "./tools/ContainerTool";
 import { CaptureTool, LogTool } from "./tools/TriageTools";
 
@@ -37,6 +38,7 @@ const VIEWS: Record<UtilityId, ComponentType> = {
   "user-agent": UserAgentTool,
   "http-builder": HttpBuilderTool,
   tls: TlsTool,
+  oauth: OAuthTool,
   "dns-intel": DnsIntelTool,
   ports: PortsTool,
   "subdomain-monitor": SubdomainMonitorTool,
@@ -87,7 +89,7 @@ export default function UtilitiesPage() {
     <div>
       <PageHeader
         title="Security Utilities"
-        description="Encoders, decoders, parsers and analyzers. Everything runs on this device except DNS lookup and URL header fetching, which send a request only when you press their run button."
+        description="Encoders, decoders, parsers and analyzers. Everything runs on this device except the tools marked as making network requests, which send them only when you press their run button."
       />
       <div className="grid gap-3 lg:grid-cols-[240px_minmax(0,1fr)]">
         <nav className="panel h-fit p-2 lg:sticky lg:top-0" aria-label="Utilities">

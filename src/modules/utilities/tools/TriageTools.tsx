@@ -14,11 +14,12 @@ import { cn } from "@/lib/utils";
 import { captureFinding, captureSpan, formatBytes, logFinding } from "../lib/triage";
 import { PrivacyNote } from "./shared";
 
-/** Project choice and "Record as findings" for the selected entries (each title once). */
-export function RecordBar({ build, picked, onDone }: { build: (projectId: number) => FindingInput[]; picked: number; onDone: () => void }) {
+/** Project choice and "Record as findings" for the selected entries (each title once). `project`
+ * preselects a project, such as the one a request was sent for. */
+export function RecordBar({ build, picked, onDone, project }: { build: (projectId: number) => FindingInput[]; picked: number; onDone: () => void; project?: number | null }) {
   const { runtime } = useApp();
   const projects = useQuery(["projects"], () => api.projectsList(), [], runtime);
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(project != null ? String(project) : null);
   const [busy, setBusy] = useState(false);
   const record = async () => {
     if (!projectId) return;

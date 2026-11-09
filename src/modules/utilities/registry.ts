@@ -22,6 +22,7 @@ import {
   Network,
   Cable,
   ScrollText,
+  ShieldUser,
   Radar,
   Regex,
   ScanSearch,
@@ -50,6 +51,7 @@ export type UtilityId =
   | "user-agent"
   | "http-builder"
   | "tls"
+  | "oauth"
   | "dns-intel"
   | "ports"
   | "subdomain-monitor"
@@ -98,5 +100,6 @@ export const UTILITIES: UtilityDef[] = [
   { id: "logs", name: "Log triage", description: "Attacks, scans and password guessing in web access and SSH logs; ATT&CK-mapped detections in Windows event logs (EVTX).", icon: ScrollText, group: "Analysis" },
   { id: "http-builder", name: "HTTP request builder", description: "Send one crafted request to an in-scope target and inspect the response.", icon: ArrowLeftRight, group: "Assessment", network: true },
   { id: "tls", name: "TLS analyzer", description: "Protocols, cipher, certificate chain and trust of an in-scope service.", icon: Lock, group: "Assessment", network: true },
+  { id: "oauth", name: "OAuth & OpenID Connect review", description: "Review an authorization server's published metadata against RFC 9700 and the OpenID Connect specifications: grants, PKCE, signing algorithms, transport and the endpoints worth testing.", icon: ShieldUser, group: "Assessment", network: true },
   { id: "subdomain-monitor", name: "Subdomain monitor", description: "New and missing names across passive discovery runs, on a schedule.", icon: Telescope, group: "Assessment", network: true },
 ];
