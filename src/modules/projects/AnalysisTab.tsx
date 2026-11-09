@@ -24,7 +24,7 @@ const NODE_TONE: Record<ExposurePathNode["kind"], string> = {
   finding: "bg-warning-soft text-warning-soft-foreground",
 };
 
-const SOURCE_NAME: Record<string, string> = { asset: "Asset", scope: "Scope", finding: "Finding", osint: "OSINT", saved: "Saved indicator" };
+const SOURCE_NAME: Record<string, string> = { asset: "Asset", scope: "Scope", finding: "Finding", osint: "OSINT", saved: "Saved indicator", evidence: "Evidence" };
 
 function ExposurePaths({ projectId }: { projectId: number }) {
   const { runtime } = useApp();

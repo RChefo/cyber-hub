@@ -134,6 +134,7 @@ pub fn run() {
             app.manage(std::sync::Arc::new(osint::discovery::OsintState::default()));
             app.manage(osint_commands::ImportState::default());
             app.manage(workspace_commands::ScanImports::default());
+            app.manage(crate::commands::utility_record::PickedFiles::default());
             app.manage(std::sync::Arc::new(updates::Updates::load(&app.state::<db::Db>())));
             // evidence files (content-addressed, private folder); leftovers of an interrupted copy
             // and files no record refers to any more are removed
@@ -248,7 +249,9 @@ pub fn run() {
             crate::commands::investigation::investigation_graph_export,
             crate::commands::investigation::timeline_query,
             crate::commands::investigation::timeline_export,
+            crate::commands::utility_record::utility_record,
             workspace_commands::evidence_list,
+            workspace_commands::evidence_text,
             workspace_commands::evidence_add_text,
             workspace_commands::evidence_add_file,
             workspace_commands::evidence_link_execution,

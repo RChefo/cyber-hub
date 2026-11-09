@@ -321,6 +321,8 @@ pub async fn linux_persist_scan_pick(app: AppHandle, folder: bool) -> AppResult<
 pub struct BinaryScan {
     pub file: String,
     pub report: crate::sectools::binary::Report,
+    /// names the file when the results are recorded in a project (the path stays here)
+    pub token: Option<String>,
 }
 
 /// Choose a file (native dialog) and triage it statically: it is read, never run or uploaded.
@@ -330,14 +332,16 @@ pub async fn binary_analyze_pick(app: AppHandle) -> AppResult<Option<BinaryScan>
     let filter = ("Programs and libraries", &["exe", "dll", "sys", "scr", "cpl", "ocx", "drv", "so", "elf", "bin", "ko", "o"][..]);
     let Some(path) = pick_one(&app, "Choose a file to triage", filter).await else { return Ok(None) };
     let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let read = path.clone();
     let report = tauri::async_runtime::spawn_blocking(move || -> AppResult<crate::sectools::binary::Report> {
         let mut data = Vec::new();
-        std::io::Read::read_to_end(&mut open_limited(&path, crate::sectools::binary::MAX_FILE_BYTES)?, &mut data)?;
+        std::io::Read::read_to_end(&mut open_limited(&read, crate::sectools::binary::MAX_FILE_BYTES)?, &mut data)?;
         crate::sectools::binary::analyze(&data).map_err(AppError::Validation)
     })
     .await
     .map_err(|e| AppError::Internal(format!("the triage failed: {e}")))??;
-    Ok(Some(BinaryScan { file, report }))
+    let token = crate::commands::utility_record::remember(&app, &path, Some(report.sha256.clone()));
+    Ok(Some(BinaryScan { file, report, token }))
 }
 
 /// A native Open dialog for one file; None when cancelled.
@@ -369,6 +373,7 @@ fn open_limited(path: &std::path::Path, max: u64) -> AppResult<std::io::BufReade
 pub struct CaptureScan {
     pub file: String,
     pub report: pcap::Report,
+    pub token: Option<String>,
 }
 
 /// Choose a pcap or pcapng file (native dialog) and summarize it locally. None when cancelled.
@@ -376,10 +381,15 @@ pub struct CaptureScan {
 pub async fn pcap_analyze_pick(app: AppHandle) -> AppResult<Option<CaptureScan>> {
     let Some(path) = pick_one(&app, "Analyze a packet capture", ("Packet captures", &["pcap", "pcapng", "cap", "dmp"])).await else { return Ok(None) };
     let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    let report = tauri::async_runtime::spawn_blocking(move || -> AppResult<pcap::Report> { pcap::analyze(open_limited(&path, pcap::MAX_FILE_BYTES)?).map_err(AppError::Validation) })
-        .await
-        .map_err(|e| AppError::Internal(format!("the analysis failed: {e}")))??;
-    Ok(Some(CaptureScan { file, report }))
+    let read = path.clone();
+    let (report, sha) = tauri::async_runtime::spawn_blocking(move || -> AppResult<(pcap::Report, Option<String>)> {
+        let report = pcap::analyze(open_limited(&read, pcap::MAX_FILE_BYTES)?).map_err(AppError::Validation)?;
+        Ok((report, crate::commands::utility_record::file_sha256(&read)?))
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("the analysis failed: {e}")))??;
+    let token = crate::commands::utility_record::remember(&app, &path, sha);
+    Ok(Some(CaptureScan { file, report, token }))
 }
 
 /// Triage of pasted log lines.
@@ -396,6 +406,7 @@ pub async fn log_analyze_text(text: String) -> AppResult<logs::Report> {
 pub struct LogScan {
     pub file: String,
     pub report: logs::Report,
+    pub token: Option<String>,
 }
 
 /// Choose a log file (native dialog) and triage it locally. None when cancelled.
@@ -406,18 +417,22 @@ pub async fn log_analyze_pick(app: AppHandle) -> AppResult<Option<LogScan>> {
         return Err(validation("Decompress the log first (compressed logs are not read)"));
     }
     let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    let report = tauri::async_runtime::spawn_blocking(move || -> AppResult<logs::Report> {
+    let read = path.clone();
+    let (report, sha) = tauri::async_runtime::spawn_blocking(move || -> AppResult<(logs::Report, Option<String>)> {
         // a Windows event log is recognised by its signature, whatever its name
         let mut magic = [0u8; 8];
-        let evtx = std::io::Read::read_exact(&mut std::fs::File::open(&path)?, &mut magic).is_ok() && &magic == b"ElfFile\0";
-        if evtx {
-            return crate::sectools::winevents::analyze(open_limited(&path, logs::MAX_FILE_BYTES)?).map_err(AppError::Validation);
-        }
-        logs::analyze(open_limited(&path, logs::MAX_FILE_BYTES)?).map_err(AppError::Validation)
+        let evtx = std::io::Read::read_exact(&mut std::fs::File::open(&read)?, &mut magic).is_ok() && &magic == b"ElfFile\0";
+        let report = if evtx {
+            crate::sectools::winevents::analyze(open_limited(&read, logs::MAX_FILE_BYTES)?).map_err(AppError::Validation)?
+        } else {
+            logs::analyze(open_limited(&read, logs::MAX_FILE_BYTES)?).map_err(AppError::Validation)?
+        };
+        Ok((report, crate::commands::utility_record::file_sha256(&read)?))
     })
-        .await
-        .map_err(|e| AppError::Internal(format!("the analysis failed: {e}")))??;
-    Ok(Some(LogScan { file, report }))
+    .await
+    .map_err(|e| AppError::Internal(format!("the analysis failed: {e}")))??;
+    let token = crate::commands::utility_record::remember(&app, &path, sha);
+    Ok(Some(LogScan { file, report, token }))
 }
 
 /// Choose a file or folder (native dialog) and scan it locally. None when cancelled.

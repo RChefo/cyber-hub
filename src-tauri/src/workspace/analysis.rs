@@ -22,7 +22,7 @@ use crate::scope::{self, Target};
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Sighting {
-    /// asset, scope, finding, osint, saved
+    /// asset, scope, finding, osint, saved, evidence
     pub source: &'static str,
     pub detail: String,
     pub ref_kind: Option<&'static str>,
@@ -116,6 +116,13 @@ pub fn correlate(c: &Connection, project_id: i64) -> AppResult<Vec<Indicator>> {
     for row in st.query_map(params![project_id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)))? {
         let (id, title, target) = row?;
         col.add_raw(&target, sighting("finding", title, Some("finding"), Some(id)));
+    }
+    // files analysed by the file triage and kept as evidence (suspicious samples, not every
+    // stored file: an imported scan report's hash is no indicator)
+    let mut st = c.prepare("SELECT id, file_name, sha256 FROM evidence WHERE project_id = ?1 AND kind = 'file' AND source_module = 'file_triage' AND sha256 IS NOT NULL")?;
+    for row in st.query_map(params![project_id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, String>(2)?)))? {
+        let (id, name, sha) = row?;
+        col.add(("file_hash", sha.to_ascii_lowercase()), sighting("evidence", format!("Analysed file {}", name.unwrap_or_default()), Some("evidence"), Some(id)));
     }
     // entities of OSINT investigations linked to the project
     let mut st = c.prepare(
@@ -433,6 +440,19 @@ mod tests {
             assert_eq!(list[0].value, "203.0.113.7", "flagged and most-seen first");
             assert!(list.iter().any(|i| i.value == "evil.example.net" && i.flagged), "flagged OSINT entities are flagged");
             assert!(!list.iter().any(|i| i.value == "198.51.100.1"), "other projects stay separate");
+
+            // a file the file triage analysed is an indicator with its cached verdict; other stored files are not
+            let sha = "ab".repeat(32);
+            c.execute("INSERT INTO evidence (project_id, kind, title, source, sha256, size, file_name, created_at, source_module) VALUES (1,'file','File triage: drop.exe','utility',?1,10,'drop.exe','t','file_triage')", params![sha])?;
+            c.execute("INSERT INTO evidence (project_id, kind, title, source, sha256, size, file_name, created_at, source_module) VALUES (1,'file','Nessus results','import',?1,10,'scan.nessus','t','scan_import')", params!["cd".repeat(32)])?;
+            c.execute(
+                "INSERT INTO ti_cache (provider, indicator_key, kind, indicator, found, data, fetched_at) VALUES ('virustotal',?1,'file',?2,1,'{\"verdict\":{\"level\":\"malicious\",\"label\":\"41/70\"}}','t')",
+                params![format!("file:{sha}"), sha],
+            )?;
+            let list = correlate(c, 1)?;
+            let file = list.iter().find(|i| i.value == sha).expect("analysed file");
+            assert_eq!((file.kind, file.flagged, file.sightings[0].source, file.sightings[0].ref_kind), ("file_hash", true, "evidence", Some("evidence")));
+            assert!(!list.iter().any(|i| i.value == "cd".repeat(32)), "an imported report's hash is not an indicator");
             Ok(())
         })
         .unwrap();

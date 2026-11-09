@@ -122,7 +122,12 @@ export function FileTriageTool() {
               <section className="flex flex-col gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="flex-1 text-[13.5px] font-medium">Capabilities ({r.capabilities.length})</h3>
-                  <RecordBar picked={picked.size} build={(pid) => r.capabilities.filter((c) => picked.has(c.id)).map((c) => capabilityFinding(pid, scan.file, r, c))} onDone={() => setPicked(new Set())} />
+                  <RecordBar
+                    picked={picked.size}
+                    build={(pid) => r.capabilities.filter((c) => picked.has(c.id)).map((c) => capabilityFinding(pid, scan.file, r, c))}
+                    onDone={() => setPicked(new Set())}
+                    source={{ module: "file_triage", subject: scan.file, token: scan.token, report: () => ({ ...r, strings: r.strings.slice(0, 2000) }) }}
+                  />
                 </div>
                 {r.capabilities.map((c) => (
                   <div key={c.id} className={cn("flex items-start gap-2.5 rounded-[8px] px-2.5 py-2", picked.has(c.id) ? "bg-accent-soft/40" : "bg-white/[0.02]")}>

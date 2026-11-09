@@ -121,6 +121,7 @@ export const api = {
   projectTimeline: (projectId: number, opts: { types?: T.TimelineEventType[]; before?: string; limit?: number } = {}) =>
     call<T.TimelineEvent[]>("project_timeline", { projectId, types: opts.types ?? null, before: opts.before ?? null, limit: opts.limit ?? null }),
   evidenceList: (projectId: number) => call<T.EvidenceRecord[]>("evidence_list", { projectId }),
+  evidenceText: (id: number) => call<string>("evidence_text", { id }),
   evidenceAddText: (projectId: number, title: string, content: string, description?: string) =>
     call<T.EvidenceRecord>("evidence_add_text", { projectId, title, content, description: description ?? null }),
   evidenceAddFile: (projectId: number, title?: string, description?: string) =>
@@ -163,9 +164,10 @@ export const api = {
   linuxPersistScanPick: (folder: boolean) => call<T.ContainerScan | null>("linux_persist_scan_pick", { folder }),
   binaryAnalyzePick: () => call<T.BinaryScan | null>("binary_analyze_pick"),
   // Packet capture and log triage (local only)
-  pcapAnalyzePick: () => call<{ file: string; report: T.CaptureReport } | null>("pcap_analyze_pick"),
+  pcapAnalyzePick: () => call<T.CaptureScan | null>("pcap_analyze_pick"),
   logAnalyzeText: (text: string) => call<T.LogReport>("log_analyze_text", { text }),
-  logAnalyzePick: () => call<{ file: string; report: T.LogReport } | null>("log_analyze_pick"),
+  logAnalyzePick: () => call<T.LogScan | null>("log_analyze_pick"),
+  utilityRecord: (input: T.UtilityRecordInput) => call<T.UtilityRecorded>("utility_record", { input }),
   findingTemplatesList: () => call<T.FindingTemplate[]>("finding_templates_list"),
   findingTemplateSave: (input: T.FindingTemplateInput) => call<T.FindingTemplate>("finding_template_save", { input }),
   findingTemplateDelete: (id: number) => call<void>("finding_template_delete", { id }),

@@ -172,6 +172,12 @@ pub async fn evidence_list(db: State<'_, Db>, project_id: i64) -> AppResult<Vec<
     db.with(|c| evidence::list(c, project_id))
 }
 
+/// The text of a text evidence record.
+#[tauri::command]
+pub async fn evidence_text(db: State<'_, Db>, id: i64) -> AppResult<String> {
+    db.with(|c| evidence::text_content(c, id))
+}
+
 #[tauri::command]
 pub async fn evidence_add_text(db: State<'_, Db>, project_id: i64, title: String, content: String, description: Option<String>) -> AppResult<EvidenceRecord> {
     db.with(|c| evidence::add_text(c, project_id, &title, &content, description.as_deref().unwrap_or(""), "user"))

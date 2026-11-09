@@ -95,6 +95,8 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
   const runs = useQuery(["executions"], () => api.projectToolHistory(project.id), [project.id], runtime);
   const [note, setNote] = useState<{ title: string; content: string } | null>(null);
   const [view, setView] = useState<EvidenceRecord | null>(null);
+  // the text of the record being viewed is loaded when it opens (lists leave it out)
+  const viewText = useQuery(["findings"], () => (view ? api.evidenceText(view.id) : Promise.resolve("")), [view?.id], runtime);
   const [busy, setBusy] = useState<string | null>(null);
   const refs = useMemo(() => findings.flatMap((f) => f.evidence.map((e, i) => ({ key: `${f.id}-${i}`, finding: f, ...e }))), [findings]);
   // thousands of records would block the window; they are rendered in steps
@@ -298,9 +300,15 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
         )}
       </AppModal>
       <AppModal isOpen={!!view} onOpenChange={(o) => !o && setView(null)} title={view?.title ?? ""} description={view ? formatDateTime(view.createdAt) : undefined} size="lg">
-        <pre data-selectable className="panel-inset max-h-[520px] overflow-auto px-3 py-2 font-mono text-[12px] whitespace-pre-wrap">
-          {view?.content}
-        </pre>
+        {viewText.error ? (
+          <ErrorBlock message={viewText.error} />
+        ) : viewText.loading ? (
+          <LoadingRows rows={4} />
+        ) : (
+          <pre data-selectable className="panel-inset max-h-[520px] overflow-auto px-3 py-2 font-mono text-[12px] whitespace-pre-wrap">
+            {viewText.data}
+          </pre>
+        )}
       </AppModal>
       {confirm.element}
     </div>

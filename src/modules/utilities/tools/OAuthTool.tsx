@@ -205,7 +205,13 @@ function ReviewView({ result }: { result: Result }) {
         <section className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="flex-1 text-[13.5px] font-medium">Issues ({issues.length})</h3>
-            <RecordBar picked={picked.size} project={result.projectId} build={(pid) => issues.filter((c) => picked.has(c.id)).map((c) => oauthFinding(pid, r, c))} onDone={() => setPicked(new Set())} />
+            <RecordBar
+              picked={picked.size}
+              project={result.projectId}
+              build={(pid) => issues.filter((c) => picked.has(c.id)).map((c) => oauthFinding(pid, r, c))}
+              onDone={() => setPicked(new Set())}
+              source={{ module: "oauth_review", subject: r.issuer || "authorization server metadata", report: () => r }}
+            />
           </div>
           {issues.map((c) => (
             <CheckRow key={c.id} check={c} selected={picked.has(c.id)} onToggle={() => toggle(c.id)} />

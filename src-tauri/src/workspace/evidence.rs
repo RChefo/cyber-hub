@@ -137,6 +137,12 @@ fn require_project(c: &Connection, project_id: i64) -> AppResult<()> {
     ok.map(|_| ()).ok_or_else(|| AppError::NotFound(format!("project {project_id}")))
 }
 
+/// The content of a text record (lists leave it out: a record can hold 1 MB).
+pub fn text_content(c: &Connection, id: i64) -> AppResult<String> {
+    let content: Option<Option<String>> = c.query_row("SELECT content FROM evidence WHERE id = ?1 AND kind = 'text'", params![id], |r| r.get(0)).optional()?;
+    content.map(Option::unwrap_or_default).ok_or_else(|| AppError::NotFound(format!("text evidence {id}")))
+}
+
 pub fn add_text(c: &Connection, project_id: i64, title: &str, content: &str, description: &str, source: &str) -> AppResult<EvidenceRecord> {
     require_project(c, project_id)?;
     let title = clean("Title", title, 200, true)?;
@@ -747,6 +753,14 @@ mod tests {
         fs::write(&src, b"<NessusClientData_v2/>").unwrap();
         let rec = store.add_file(&db, p, &src, "Scan", "", "import").unwrap();
         assert_eq!((rec.source_module.as_str(), rec.verification.as_str(), rec.collected_at.as_deref()), ("", "unverified", None));
+        db.with(|c| {
+            // the text of a text record is read on its own; a file record has none
+            let note = add_text(c, p, "Request", "GET / HTTP/1.1", "", "user")?;
+            assert_eq!(text_content(c, note.id)?, "GET / HTTP/1.1");
+            assert!(matches!(text_content(c, rec.id), Err(AppError::NotFound(_))));
+            Ok(())
+        })
+        .unwrap();
         db.with(|c| {
             let first = Provenance { source_module: "scan_import".into(), source_ref: "scan_import:1".into(), tool: "Nessus".into(), collected_at: Some("2026-11-01T08:00:00Z".into()), derived_from: Some(rec.id), ..Default::default() };
             set_provenance(c, rec.id, &first)?;

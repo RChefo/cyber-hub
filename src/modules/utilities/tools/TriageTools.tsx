@@ -1,4 +1,4 @@
-import { Button, Checkbox } from "@heroui/react";
+import { Button, Checkbox, Label } from "@heroui/react";
 import { FileSearch, Network, ScrollText, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/app/store";
@@ -9,23 +9,49 @@ import { SelectInput, TextAreaInput } from "@/components/ui/Fields";
 import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { CaptureReport, FindingInput, LogReport } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import type { CaptureScan, FindingInput, LogScan, UtilityModule } from "@/lib/types";
+import { cn, pluralize } from "@/lib/utils";
 import { captureFinding, captureSpan, formatBytes, logFinding } from "../lib/triage";
 import { PrivacyNote } from "./shared";
 
+/** Where recorded findings come from: the utility, what it analysed, the file's token from the
+ * analysis (the file goes into the evidence vault) and the analysis itself (kept as text evidence). */
+export interface RecordSource {
+  module: UtilityModule;
+  subject: string;
+  token?: string | null;
+  report?: () => unknown;
+}
+
 /** Project choice and "Record as findings" for the selected entries (each title once). `project`
- * preselects a project, such as the one a request was sent for. */
-export function RecordBar({ build, picked, onDone, project }: { build: (projectId: number) => FindingInput[]; picked: number; onDone: () => void; project?: number | null }) {
+ * preselects a project, such as the one a request was sent for. With a `source`, the backend
+ * records the findings together with their evidence and a timeline event, in one step. */
+export function RecordBar({ build, picked, onDone, project, source }: { build: (projectId: number) => FindingInput[]; picked: number; onDone: () => void; project?: number | null; source?: RecordSource }) {
   const { runtime } = useApp();
   const projects = useQuery(["projects"], () => api.projectsList(), [], runtime);
   const [projectId, setProjectId] = useState<string | null>(project != null ? String(project) : null);
   const [busy, setBusy] = useState(false);
+  const [keep, setKeep] = useState(true);
   const record = async () => {
     if (!projectId) return;
     setBusy(true);
     try {
       const pid = Number(projectId);
+      if (source) {
+        const r = await api.utilityRecord({
+          projectId: pid,
+          module: source.module,
+          token: keep ? (source.token ?? null) : null,
+          subject: source.subject,
+          report: keep && source.report ? JSON.stringify(source.report(), null, 2) : null,
+          findings: build(pid),
+        });
+        invalidate("findings", "projects", "activity", "relations");
+        onDone();
+        const kept = r.evidenceId != null ? "The file and the analysis are in the evidence vault" : r.reportId != null ? "The analysis is in the evidence vault" : null;
+        notify.success(`${pluralize(r.created, "finding")} recorded`, [r.existing ? `${r.existing} recorded before` : null, kept, r.reportTooLarge ? "the analysis was too large to keep" : null].filter(Boolean).join("; ") || "In the project's Findings tab");
+        return;
+      }
       const existing = new Set((await api.findingsList(pid)).map((f) => f.title));
       let created = 0;
       let skipped = 0;
@@ -55,7 +81,17 @@ export function RecordBar({ build, picked, onDone, project }: { build: (projectI
   };
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <SelectInput aria-label="Project for findings" value={projectId} onChange={setProjectId} options={(projects.data ?? []).map((p) => ({ id: String(p.id), label: p.name }))} placeholder="Project for findings" className="w-56" />
+      <SelectInput aria-label="Project for findings" value={projectId} onChange={setProjectId} options={(projects.data ?? []).filter((p) => p.status !== "archived").map((p) => ({ id: String(p.id), label: p.name }))} placeholder="Project for findings" className="w-56" />
+      {source && (source.token || source.report) && (
+        <Checkbox isSelected={keep} onChange={setKeep}>
+          <Checkbox.Content className="flex items-center gap-1.5">
+            <Checkbox.Control>
+              <Checkbox.Indicator />
+            </Checkbox.Control>
+            <Label className="text-[12.5px] font-normal text-muted">{source.token ? "Keep the file as evidence" : "Keep the analysis as evidence"}</Label>
+          </Checkbox.Content>
+        </Checkbox>
+      )}
       <Button size="sm" variant="primary" onPress={() => void record()} isPending={busy} isDisabled={!projectId || picked === 0}>
         Record {picked || ""} as findings
       </Button>
@@ -110,7 +146,7 @@ export function Table({ head, rows }: { head: string[]; rows: (string | number)[
 export function CaptureTool() {
   const { runtime } = useApp();
   const [busy, setBusy] = useState(false);
-  const [scan, setScan] = useState<{ file: string; report: CaptureReport } | null>(null);
+  const [scan, setScan] = useState<CaptureScan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const open = async () => {
@@ -159,7 +195,12 @@ export function CaptureTool() {
             <section className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="flex-1 text-[13.5px] font-medium">Issues</h3>
-                <RecordBar picked={picked.size} build={(pid) => r.issues.filter((_, i) => picked.has(i)).map((i) => captureFinding(pid, scan.file, i))} onDone={() => setPicked(new Set())} />
+                <RecordBar
+                  picked={picked.size}
+                  build={(pid) => r.issues.filter((_, i) => picked.has(i)).map((i) => captureFinding(pid, scan.file, i))}
+                  onDone={() => setPicked(new Set())}
+                  source={{ module: "pcap_triage", subject: scan.file, token: scan.token, report: () => r }}
+                />
               </div>
               {r.issues.map((i, idx) => (
                 <div key={i.rule} className={cn("flex items-start gap-2.5 rounded-[8px] px-2.5 py-2", picked.has(idx) ? "bg-accent-soft/40" : "bg-white/[0.02]")}>
@@ -220,14 +261,14 @@ export function LogTool() {
   const { runtime } = useApp();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<null | "text" | "file">(null);
-  const [scan, setScan] = useState<{ file: string; report: LogReport } | null>(null);
+  const [scan, setScan] = useState<LogScan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const run = async (what: "text" | "file") => {
     setBusy(what);
     setError(null);
     try {
-      const r = what === "text" ? { file: "pasted log", report: await api.logAnalyzeText(text) } : await api.logAnalyzePick();
+      const r = what === "text" ? { file: "pasted log", report: await api.logAnalyzeText(text), token: null } : await api.logAnalyzePick();
       if (r) {
         setScan(r);
         setPicked(new Set(r.report.detections.filter((d) => d.severity === "high" || d.severity === "medium").map((d) => d.rule)));
@@ -279,7 +320,12 @@ export function LogTool() {
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="flex-1 text-[13.5px] font-medium">Detections ({r.detections.length})</h3>
                 {sources.length > 0 && <CopyButton text={sources.join("\n")} label={r.kind === "windows" ? "Copy sources" : "Copy source addresses"} />}
-                <RecordBar picked={picked.size} build={(pid) => r.detections.filter((d) => picked.has(d.rule)).map((d) => logFinding(pid, scan.file, d))} onDone={() => setPicked(new Set())} />
+                <RecordBar
+                  picked={picked.size}
+                  build={(pid) => r.detections.filter((d) => picked.has(d.rule)).map((d) => logFinding(pid, scan.file, d))}
+                  onDone={() => setPicked(new Set())}
+                  source={{ module: r.kind === "windows" ? "evtx_triage" : "log_triage", subject: scan.file, token: scan.token, report: () => r }}
+                />
               </div>
               {r.detections.map((d) => (
                 <div key={d.rule} className={cn("flex items-start gap-2.5 rounded-[8px] px-2.5 py-2", picked.has(d.rule) ? "bg-accent-soft/40" : "bg-white/[0.02]")}>

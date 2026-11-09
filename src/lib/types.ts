@@ -359,7 +359,6 @@ export interface EvidenceRecord {
   sha256: string | null;
   size: number | null;
   fileName: string | null;
-  content: string | null;
   executionId: number | null;
   osintEvidenceId: number | null;
   createdAt: string;
@@ -870,7 +869,7 @@ export interface WorkflowRunDetail {
 }
 
 export interface IocSighting {
-  source: "asset" | "scope" | "finding" | "osint" | "saved";
+  source: "asset" | "scope" | "finding" | "osint" | "saved" | "evidence";
   detail: string;
   refKind: string | null;
   refId: number | null;
@@ -1930,6 +1929,43 @@ export interface BinaryReport {
 export interface BinaryScan {
   file: string;
   report: BinaryReport;
+  /** names the analysed file when its results are recorded in a project (the path stays in the backend) */
+  token: string | null;
+}
+
+export interface CaptureScan {
+  file: string;
+  report: CaptureReport;
+  token: string | null;
+}
+
+export interface LogScan {
+  file: string;
+  report: LogReport;
+  token: string | null;
+}
+
+/** A utility's result recorded in a project (docs/DATA_MODEL.md#utility-results). */
+export type UtilityModule = "file_triage" | "pcap_triage" | "log_triage" | "evtx_triage" | "linux_persistence" | "oauth_review";
+
+export interface UtilityRecordInput {
+  projectId: number;
+  module: UtilityModule;
+  /** the analysed file; null for pasted text or fetched metadata */
+  token: string | null;
+  /** what was analysed when there is no file */
+  subject: string;
+  /** the analysis as JSON, kept as text evidence */
+  report: string | null;
+  findings: FindingInput[];
+}
+
+export interface UtilityRecorded {
+  created: number;
+  existing: number;
+  evidenceId: number | null;
+  reportId: number | null;
+  reportTooLarge: boolean;
 }
 
 export interface LogReport {
