@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Cyber Hub — local-first cybersecurity workstation"
 authors = ["Cyber Hub contributors"]
 edition = "2021"
-rust-version = "1.89"
+rust-version = "1.90"
 default-run = "cyber-hub"
 
 [lib]

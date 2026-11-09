@@ -41,7 +41,7 @@ Development databases already at schema 18 are treated the same way, because the
 * **Report confidentiality.** The HTML and Markdown reports have the same sections. Both list open findings only and count the closed ones, and neither includes the project's internal notes or contacts. The Markdown report used to export the notes.
 * **Project deletion.** A project cannot be deleted while one of its tool runs, workflow runs or discovery operations is still running. Runs and activity entries are kept, unlinked.
 * **Checklist.** Finding links can be removed, and every checklist change is recorded on the project timeline.
-* **Building from source** needs Rust 1.89 or later (the bundled SQLite 3.54.1 requires it).
+* **Building from source** needs Rust 1.90 or later. The Tauri 2 crates in `Cargo.lock` require it (Cargo refuses 1.89), and the bundled SQLite 3.54.1 needs at least 1.89. Checked by building and testing with Rust 1.90.0.
 
 ## What happens at startup
 

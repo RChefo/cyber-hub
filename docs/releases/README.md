@@ -19,6 +19,6 @@ The owner decides each step; none is automated by this repository.
    cd src-tauri && cargo audit
    ```
 
-   Rust 1.89 or later is required.
+   Rust 1.90 or later is required (`rust-version` in `src-tauri/Cargo.toml`; CI checks it).
 4. **Upgrade test.** Upgrade a copy of a real database from the previous release, never the original. Check the pre-upgrade backup in `backups/`, the schema-19 notes in each project's scope history, and a restore of that backup.
 5. **Signing and publishing.** These need the signing keys and the owner's authorization, as described in [UPDATER.md](../UPDATER.md) and [SIGNING.md](../SIGNING.md).
