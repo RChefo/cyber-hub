@@ -21,7 +21,7 @@ const catalog: AttackCatalog = {
   ],
 };
 
-const entry = (id: string, over: Partial<AttackEntry> = {}): AttackEntry => ({ id, name: id, tactics: [], parent: null, state: { state: "current" }, observed: [], linked: [], assessment: null, layers: [], ...over });
+const entry = (id: string, over: Partial<AttackEntry> = {}): AttackEntry => ({ id, name: id, tactics: [], parent: null, state: { state: "current" }, observed: [], linked: [], assessment: null, layers: [], rules: [], hits: 0, ...over });
 const observed = [{ findingId: 1, title: "x", severity: "high" as const, status: "new", confidence: "medium", evidence: 0 }];
 
 const matrix: AttackMatrix = {
@@ -29,7 +29,7 @@ const matrix: AttackMatrix = {
   attackModified: "",
   attackRetrieved: "",
   layers: [],
-  counts: { observed: 1, confirmed: 1, hypothesis: 0, ruledOut: 0, findings: 1 },
+  counts: { observed: 1, confirmed: 1, hypothesis: 0, ruledOut: 0, findings: 1, covered: 0, uncovered: 0 },
   entries: [
     entry("T1059.001", { observed, layers: [{ layerId: 7, score: 2, color: "", comment: "", enabled: true }] }),
     entry("T1055", { assessment: { status: "confirmed", confidence: "high", note: "", attackVersion: "20.1", createdBy: "user", updatedAt: "" } }),
@@ -58,7 +58,8 @@ describe("ATT&CK matrix", () => {
   });
 
   it("gaps are what the project names or confirms that the layer does not cover", () => {
-    expect(gaps(matrix, 7).map((e) => e.id)).toEqual(["T1055", "T1143"]);
+    expect(gaps(matrix, 7).map((e) => e.id)).toEqual(["T1055"]);
+    expect(gaps(matrix, "rules").map((e) => e.id)).toEqual(["T1059.001", "T1055"]);
     expect(outside(matrix).map((e) => e.id)).toEqual(["T1143"]);
     expect(mitreUrl("T1059.001")).toBe("https://attack.mitre.org/techniques/T1059/001/");
   });

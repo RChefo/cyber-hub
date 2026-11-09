@@ -15,6 +15,7 @@ import { cn, formatRelative } from "@/lib/utils";
 import { computeLayoutAsync, exportPng, exportSvg, fitViewport, GraphCanvas, GRAPH_THEME, type Highlight, type Point, type Positions, type Selection, type Viewport } from "@/modules/osint/graph";
 import { Segmented } from "@/modules/utilities/tools/shared";
 import { AttackMatrixView } from "./AttackMatrixView";
+import { DetectionHitsView } from "./DetectionHitsView";
 import { KIND_LABEL, RELATION_TYPES, parseKey, provenance, refKey, tabFor, toCanvas } from "./investigation";
 
 const KEYS: Tag[] = ["relations", "findings", "assets", "vulns", "projects"];
@@ -57,7 +58,7 @@ export function InvestigationTab({
   onTimeline: (r: RecordRef, label: string) => void;
 }) {
   const { runtime } = useApp();
-  const [view, setView] = useState<"queue" | "relations" | "graph" | "attack">("queue");
+  const [view, setView] = useState<"queue" | "relations" | "graph" | "attack" | "detections">("queue");
   const [linking, setLinking] = useState<RecordRef | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -136,12 +137,14 @@ export function InvestigationTab({
           { id: "relations", label: "Relationships" },
           { id: "graph", label: "Graph" },
           { id: "attack", label: "ATT&CK" },
+          { id: "detections", label: "Detections" },
         ]}
       />
       {view === "queue" && <RelationList projectId={project.id} review="pending" archived={archived} onOpen={setRecord} />}
       {view === "relations" && <RelationList projectId={project.id} review="done" archived={archived} onOpen={setRecord} />}
       {view === "graph" && <GraphView project={project} focus={focus} onFocus={setFocus} onOpen={setRecord} />}
       {view === "attack" && <AttackMatrixView project={project} archived={archived} onOpen={setRecord} />}
+      {view === "detections" && <DetectionHitsView project={project} archived={archived} onOpen={onOpenRecord} />}
       {record && (
         <RecordPanel
           projectId={project.id}

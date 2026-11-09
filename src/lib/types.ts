@@ -519,7 +519,8 @@ export type TimelineEventType =
   | "note"
   | "utility"
   | "checklist"
-  | "correlation";
+  | "correlation"
+  | "detection";
 
 export interface TimelineEvent {
   type: TimelineEventType;
@@ -2059,6 +2060,10 @@ export interface AttackEntry {
   linked: AttackLinked[];
   assessment: AttackAssessment | null;
   layers: AttackLayerMark[];
+  /** detection rules of the library mapped to the technique: coverage, not observation */
+  rules: AttackRuleCoverage[];
+  /** open detection matches in the project (leads) */
+  hits: number;
 }
 
 export interface AttackLayer {
@@ -2083,7 +2088,7 @@ export interface AttackMatrix {
   attackRetrieved: string;
   entries: AttackEntry[];
   layers: AttackLayer[];
-  counts: { observed: number; confirmed: number; hypothesis: number; ruledOut: number; findings: number };
+  counts: { observed: number; confirmed: number; hypothesis: number; ruledOut: number; findings: number; covered: number; uncovered: number };
 }
 
 /** Findings that one fix addresses (docs/DATA_MODEL.md#remediation-groups). */
@@ -2109,4 +2114,186 @@ export interface RemediationGroup {
   verified: number;
   targets: number;
   findings: RemediationMember[];
+}
+
+
+/* ───────────── detection engineering (docs/DATA_MODEL.md#detection-engineering-schema-24) ───────────── */
+
+export interface DetectionIssue {
+  level: "error" | "unsupported" | "warning";
+  message: string;
+}
+
+export interface DetectionRuleSummary {
+  id: number;
+  kind: "sigma" | "yara";
+  title: string;
+  status: string;
+  level: string;
+  logsource: string;
+  techniques: string[];
+  tags: string[];
+  enabled: boolean;
+  runnable: boolean;
+  version: number;
+  source: string;
+  updatedAt: string;
+  errors: number;
+  warnings: number;
+  collections: number[];
+  testsPassed: number;
+  testsFailed: number;
+  falsePositives: number;
+  hits: number;
+}
+
+export interface DetectionRulePage {
+  items: DetectionRuleSummary[];
+  total: number;
+}
+
+export interface DetectionRuleFilter {
+  kind?: string | null;
+  text?: string | null;
+  enabled?: boolean | null;
+  technique?: string | null;
+  collection?: number | null;
+  level?: string | null;
+  limit?: number;
+  offset?: number;
+}
+
+export interface DetectionTestRow {
+  id: number;
+  version: number;
+  sampleId: number;
+  expect: "none" | "match" | "no_match";
+  events: number;
+  matched: number;
+  passed: boolean | null;
+  ranAt: string;
+}
+
+export interface DetectionRuleSample {
+  sampleId: number;
+  fileName: string;
+  kind: string;
+  events: number;
+  sha256: string;
+  expect: "none" | "match" | "no_match";
+  last: DetectionTestRow | null;
+}
+
+export interface DetectionRuleDetail {
+  summary: DetectionRuleSummary;
+  content: string;
+  meta: Record<string, unknown>;
+  issues: DetectionIssue[];
+  versions: { version: number; sha256: string; note: string; createdAt: string }[];
+  samples: DetectionRuleSample[];
+  feedback: { id: number; projectId: number | null; project: string; verdict: "false_positive" | "true_positive" | "note"; note: string; event: string; createdAt: string }[];
+  projects: { projectId: number; project: string; hits: number; findings: number }[];
+}
+
+export interface DetectionCollection {
+  id: number;
+  name: string;
+  description: string;
+  rules: number;
+}
+
+export interface DetectionSample {
+  id: number;
+  sha256: string;
+  fileName: string;
+  kind: string;
+  size: number;
+  events: number;
+  addedAt: string;
+}
+
+export interface DetectionHitDetail {
+  field: string;
+  condition: string;
+  value: string;
+}
+
+export interface DetectionExplanation {
+  condition: string;
+  selections: { name: string; matched: boolean; hits: DetectionHitDetail[] }[];
+}
+
+export interface DetectionMatch {
+  position: string;
+  time: string;
+  label: string;
+  fields: [string, string][];
+  explanation: DetectionExplanation;
+}
+
+export interface DetectionRunResult {
+  events: number;
+  inSource: number;
+  matched: number;
+  matches: DetectionMatch[];
+  notes: string[];
+}
+
+export interface DetectionTestOutcome {
+  sample: DetectionSample;
+  previous: DetectionTestRow | null;
+  test: DetectionTestRow;
+  result: DetectionRunResult;
+}
+
+export interface DetectionImportReport {
+  imported: { id: number; title: string; outcome: "added" | "updated" | "unchanged"; version: number; errors: number }[];
+  failed: [string, string][];
+}
+
+export interface DetectionProjectRun {
+  files: { evidenceId: number; title: string; kind: string; events: number; error: string | null }[];
+  rules: number;
+  results: { ruleId: number; title: string; matched: number; new: number; notes: string[] }[];
+  newHits: number;
+}
+
+export interface DetectionHit {
+  id: number;
+  ruleId: number | null;
+  ruleTitle: string;
+  ruleVersion: number;
+  ruleLevel: string;
+  techniques: string[];
+  evidenceId: number | null;
+  evidence: string;
+  position: string;
+  eventTime: string;
+  event: { label?: string; fields?: [string, string][] };
+  explanation: DetectionExplanation;
+  status: "new" | "false_positive" | "dismissed" | "promoted";
+  findingId: number | null;
+  createdAt: string;
+}
+
+export interface DetectionHitPage {
+  items: DetectionHit[];
+  total: number;
+  counts: Record<string, number>;
+}
+
+export interface DetectionEngine {
+  spec: string;
+  modifiers: string[];
+  unsupported: string[];
+  categories: string[];
+  services: string[];
+}
+
+export interface AttackRuleCoverage {
+  ruleId: number;
+  title: string;
+  enabled: boolean;
+  runnable: boolean;
+  tested: boolean;
 }

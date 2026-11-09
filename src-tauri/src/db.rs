@@ -1020,6 +1020,120 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_attack_layers_evidence ON attack_layers(evidence_id);
     "#,
+    // 24 — detection engineering (docs/DATA_MODEL.md#detection-engineering-schema-24): a library
+    // of detection rules (Sigma rules, YARA rule files) with versions, collections, test samples
+    // kept by content hash, test runs with expectations, analyst feedback, and per project the
+    // matches of rules run on the project's evidence, kept apart from findings.
+    r#"
+    CREATE TABLE detection_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL CHECK (kind IN ('sigma','yara')),
+        rule_key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT '',
+        level TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        author TEXT NOT NULL DEFAULT '',
+        logsource TEXT NOT NULL DEFAULT '',
+        techniques TEXT NOT NULL DEFAULT '[]',
+        tags TEXT NOT NULL DEFAULT '[]',
+        meta TEXT NOT NULL DEFAULT '{}',
+        issues TEXT NOT NULL DEFAULT '[]',
+        runnable INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        content TEXT NOT NULL,
+        sha256 TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (kind, rule_key)
+    );
+    CREATE TABLE detection_rule_versions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rule_id INTEGER NOT NULL REFERENCES detection_rules(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        sha256 TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        UNIQUE (rule_id, version)
+    );
+    CREATE TABLE detection_collections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+    );
+    CREATE TABLE detection_collection_rules (
+        collection_id INTEGER NOT NULL REFERENCES detection_collections(id) ON DELETE CASCADE,
+        rule_id INTEGER NOT NULL REFERENCES detection_rules(id) ON DELETE CASCADE,
+        PRIMARY KEY (collection_id, rule_id)
+    );
+    CREATE INDEX idx_detection_collection_rules_rule ON detection_collection_rules(rule_id);
+    CREATE TABLE detection_samples (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sha256 TEXT NOT NULL UNIQUE,
+        file_name TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        events INTEGER NOT NULL DEFAULT 0,
+        added_at TEXT NOT NULL
+    );
+    CREATE TABLE detection_rule_samples (
+        rule_id INTEGER NOT NULL REFERENCES detection_rules(id) ON DELETE CASCADE,
+        sample_id INTEGER NOT NULL REFERENCES detection_samples(id) ON DELETE CASCADE,
+        expect TEXT NOT NULL DEFAULT 'none' CHECK (expect IN ('none','match','no_match')),
+        PRIMARY KEY (rule_id, sample_id)
+    );
+    CREATE INDEX idx_detection_rule_samples_sample ON detection_rule_samples(sample_id);
+    CREATE TABLE detection_tests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rule_id INTEGER NOT NULL REFERENCES detection_rules(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        sample_id INTEGER NOT NULL REFERENCES detection_samples(id) ON DELETE CASCADE,
+        expect TEXT NOT NULL DEFAULT 'none',
+        events INTEGER NOT NULL,
+        matched INTEGER NOT NULL,
+        passed INTEGER,
+        result TEXT NOT NULL DEFAULT '{}',
+        ran_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_detection_tests_rule ON detection_tests(rule_id, id DESC);
+    CREATE INDEX idx_detection_tests_sample ON detection_tests(sample_id);
+    CREATE TABLE detection_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rule_id INTEGER NOT NULL REFERENCES detection_rules(id) ON DELETE CASCADE,
+        project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+        verdict TEXT NOT NULL CHECK (verdict IN ('false_positive','true_positive','note')),
+        note TEXT NOT NULL DEFAULT '',
+        event TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_detection_feedback_rule ON detection_feedback(rule_id);
+    CREATE INDEX idx_detection_feedback_project ON detection_feedback(project_id);
+    CREATE TABLE detection_hits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        rule_id INTEGER REFERENCES detection_rules(id) ON DELETE SET NULL,
+        rule_title TEXT NOT NULL,
+        rule_version INTEGER NOT NULL,
+        rule_level TEXT NOT NULL DEFAULT '',
+        techniques TEXT NOT NULL DEFAULT '[]',
+        evidence_id INTEGER REFERENCES evidence(id) ON DELETE SET NULL,
+        position TEXT NOT NULL,
+        event_time TEXT NOT NULL DEFAULT '',
+        event TEXT NOT NULL DEFAULT '{}',
+        explanation TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','false_positive','dismissed','promoted')),
+        finding_id INTEGER REFERENCES findings(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX idx_detection_hits_unique ON detection_hits(project_id, rule_id, rule_version, evidence_id, position);
+    CREATE INDEX idx_detection_hits_rule ON detection_hits(rule_id);
+    CREATE INDEX idx_detection_hits_evidence ON detection_hits(evidence_id);
+    CREATE INDEX idx_detection_hits_finding ON detection_hits(finding_id);
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a

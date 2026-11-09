@@ -10,6 +10,7 @@ export type Tag =
   | "activity"
   | "apis"
   | "attack"
+  | "detections"
   | "sboms"
   | "prefs"
   | "favorites"

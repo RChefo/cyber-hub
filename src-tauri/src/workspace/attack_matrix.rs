@@ -106,6 +106,10 @@ pub struct Entry {
     pub linked: Vec<Linked>,
     pub assessment: Option<Assessment>,
     pub layers: Vec<LayerMark>,
+    /// detection rules of the library mapped to the technique (coverage, not observation)
+    pub rules: Vec<crate::workspace::detections::Coverage>,
+    /// open detection matches in the project for rules mapped to the technique (leads)
+    pub hits: i64,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -137,6 +141,10 @@ pub struct Counts {
     pub ruled_out: usize,
     /// findings that name a technique (false positives left out)
     pub findings: usize,
+    /// techniques with at least one enabled rule that can run
+    pub covered: usize,
+    /// techniques named by findings or assessed as confirmed or hypothesis without such a rule
+    pub uncovered: usize,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -174,6 +182,8 @@ fn entry<'a>(map: &'a mut BTreeMap<String, Entry>, id: &str) -> &'a mut Entry {
             linked: Vec::new(),
             assessment: None,
             layers: Vec::new(),
+            rules: Vec::new(),
+            hits: 0,
         }
     })
 }
@@ -234,7 +244,19 @@ pub fn matrix(c: &Connection, project_id: i64) -> AppResult<Matrix> {
             entry(&mut map, &id).layers.push(LayerMark { layer_id: l.id, mark });
         }
     }
+    // detection coverage of the library, and this project's detection matches
+    for (t, rules) in crate::workspace::detections::coverage(c)? {
+        entry(&mut map, &t).rules = rules;
+    }
+    for (t, n) in crate::workspace::detections::hits_by_technique(c, project_id)? {
+        entry(&mut map, &t).hits = n;
+    }
     counts.observed = map.values().filter(|e| !e.observed.is_empty()).count();
+    counts.covered = map.values().filter(|e| e.rules.iter().any(|r| r.enabled && r.runnable)).count();
+    counts.uncovered = map
+        .values()
+        .filter(|e| matches!(e.state, IdState::Current) && (!e.observed.is_empty() || e.assessment.as_ref().is_some_and(|a| a.status != "ruled_out")) && !e.rules.iter().any(|r| r.enabled && r.runnable))
+        .count();
     let cat = attack::catalog();
     Ok(Matrix { attack_version: cat.version.clone(), attack_modified: cat.modified.clone(), attack_retrieved: cat.retrieved.clone(), entries: map.into_values().collect(), layers, counts })
 }
@@ -476,6 +498,52 @@ const STATE_COLORS: &[(&str, &str, &str)] = &[
 
 /// The project's techniques as an ATT&CK Navigator layer (format 4.5): what findings name and the
 /// analyst's assessments, each technique colored by its state. Imported layers are not included.
+/// The library's detection coverage as an ATT&CK Navigator layer (format 4.5): techniques with
+/// enabled rules, scored with their number, green when every one of them passed its tests.
+/// Coverage says what could be detected, not what happened.
+pub fn export_coverage_layer(generated: &str, m: &Matrix) -> Result<String, String> {
+    let mut techniques = Vec::new();
+    let mut most = 1usize;
+    for e in m.entries.iter().filter(|e| matches!(e.state, IdState::Current)) {
+        let rules: Vec<&crate::workspace::detections::Coverage> = e.rules.iter().filter(|r| r.enabled && r.runnable).collect();
+        if rules.is_empty() {
+            continue;
+        }
+        most = most.max(rules.len());
+        let tested = rules.iter().all(|r| r.tested);
+        techniques.push(json!({
+            "techniqueID": e.id,
+            "score": rules.len(),
+            "color": if tested { "#31a354" } else { "#c7e9c0" },
+            "comment": format!("{} detection rule{}{}", rules.len(), if rules.len() == 1 { "" } else { "s" }, if tested { ", all tested" } else { ", not all tested" }),
+            "enabled": true,
+            "metadata": rules.iter().take(25).map(|r| json!({ "name": format!("Rule #{}", r.rule_id), "value": format!("{}{}", r.title, if r.tested { " (tested)" } else { "" }) })).collect::<Vec<_>>(),
+            "showSubtechniques": false,
+        }));
+    }
+    if techniques.is_empty() {
+        return Err("No enabled detection rule maps to an ATT&CK technique".into());
+    }
+    let doc = json!({
+        "name": "Cyber Hub detection coverage",
+        "versions": { "attack": attack_major(), "layer": "4.5", "navigator": NAVIGATOR },
+        "domain": "enterprise-attack",
+        "description": format!("Techniques with enabled Sigma rules in Cyber Hub's detection library, exported on {generated} with ATT&CK Enterprise v{}. Score: number of rules; dark green: every rule passed its tests. Coverage says what could be detected, not what was observed.", m.attack_version),
+        "sorting": 3,
+        "layout": { "layout": "side", "showID": true, "showName": true, "expandedSubtechniques": "annotated" },
+        "hideDisabled": false,
+        "techniques": techniques,
+        "gradient": { "colors": ["#ffffff", "#31a354"], "minValue": 0, "maxValue": most },
+        "legendItems": [{ "label": "All rules tested", "color": "#31a354" }, { "label": "Not all rules tested", "color": "#c7e9c0" }],
+        "metadata": [{ "name": "Source", "value": "Cyber Hub detection library" }, { "name": "Exported", "value": generated }],
+        "showTacticRowBackground": false,
+        "selectTechniquesAcrossTactics": true,
+        "selectSubtechniquesWithParent": false,
+        "selectVisibleTechniques": false,
+    });
+    serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())
+}
+
 pub fn export_layer(project: &str, generated: &str, m: &Matrix) -> Result<String, String> {
     let mut used: BTreeSet<usize> = BTreeSet::new();
     let mut most = 1usize;

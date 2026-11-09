@@ -39,12 +39,27 @@ export interface MatrixColumn {
   rows: MatrixRow[];
 }
 
+/** An overlay: an imported layer, or the detection library's rules. */
+export type Overlay = number | "rules" | null;
+
+/** Enabled rules that can run, for a technique. */
+export function activeRules(e: AttackEntry | undefined) {
+  return (e?.rules ?? []).filter((r) => r.enabled && r.runnable);
+}
+
+/** Whether the overlay lists the technique. */
+export function inOverlay(e: AttackEntry | undefined, overlay: Overlay): boolean {
+  if (overlay == null || !e) return false;
+  if (overlay === "rules") return activeRules(e).length > 0;
+  return e.layers.some((l) => l.layerId === overlay);
+}
+
 /** The matrix as columns of tactics (in ATT&CK's order) with their techniques. With `onlyData`,
  * only techniques the project says something about (or whose sub-techniques it does), or that the
- * overlay layer lists; sub-techniques are listed under their parent when they have data. */
-export function buildColumns(catalog: AttackCatalog, matrix: AttackMatrix, opts: { onlyData: boolean; filter: string; layerId: number | null }): MatrixColumn[] {
+ * overlay lists; sub-techniques are listed under their parent when they have data. */
+export function buildColumns(catalog: AttackCatalog, matrix: AttackMatrix, opts: { onlyData: boolean; filter: string; layerId: Overlay }): MatrixColumn[] {
   const entries = new Map(matrix.entries.map((e) => [e.id, e]));
-  const inLayer = (id: string) => opts.layerId != null && !!entries.get(id)?.layers.some((l) => l.layerId === opts.layerId);
+  const inLayer = (id: string) => inOverlay(entries.get(id), opts.layerId);
   const q = opts.filter.trim().toLowerCase();
   const matches = (t: AttackTechnique) => !q || t.id.toLowerCase().includes(q) || t.name.toLowerCase().includes(q);
   const subsOf = new Map<string, AttackTechnique[]>();
@@ -66,13 +81,14 @@ export function buildColumns(catalog: AttackCatalog, matrix: AttackMatrix, opts:
   });
 }
 
-/** Techniques the project names, confirms or suspects that the layer does not list (or lists as
- * disabled): with a detection coverage layer, the gaps. */
-export function gaps(matrix: AttackMatrix, layerId: number): AttackEntry[] {
+/** Techniques the project names, confirms or suspects that the overlay does not cover (a layer
+ * that does not list them or lists them disabled, or no enabled detection rule): the gaps. */
+export function gaps(matrix: AttackMatrix, overlay: number | "rules"): AttackEntry[] {
   return matrix.entries.filter((e) => {
     const s = stateOf(e);
-    if (s === "none" || s === "ruled_out" || s === "linked") return false;
-    return !e.layers.some((l) => l.layerId === layerId && l.enabled);
+    if (s === "none" || s === "ruled_out" || s === "linked" || e.state.state !== "current") return false;
+    if (overlay === "rules") return activeRules(e).length === 0;
+    return !e.layers.some((l) => l.layerId === overlay && l.enabled);
   });
 }
 

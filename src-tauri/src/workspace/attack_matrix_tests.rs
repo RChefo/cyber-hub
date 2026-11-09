@@ -149,3 +149,29 @@ fn an_empty_project_exports_nothing() {
     let m = Matrix { attack_version: "20.1".into(), attack_modified: String::new(), attack_retrieved: String::new(), entries: Vec::new(), layers: Vec::new(), counts: Counts::default() };
     assert!(export_layer("Empty", "now", &m).unwrap_err().contains("No technique"));
 }
+
+#[test]
+fn detection_rules_are_coverage_and_their_matches_are_leads() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'IR', 'active', 't', 't')", [])?;
+        c.execute("INSERT INTO findings (project_id, title, severity, status, tags, created_at, updated_at) VALUES (1, 'Injects code', 'high', 'new', '[\"T1055\"]', 't', 't')", [])?;
+        let rule = "title: Password spraying\nid: 11111111-2222-4333-8444-555555555555\ntags: [attack.t1110.003]\nlogsource: {product: windows, service: security}\ndetection: {s: {EventID: 4625}, condition: s}\n";
+        let checked = crate::detection::sigma::read(rule).unwrap().remove(0);
+        let r = crate::workspace::detections::upsert_sigma(c, rule, &checked, "r.yml", "")?;
+        c.execute("INSERT INTO detection_hits (project_id, rule_id, rule_title, rule_version, techniques, position, created_at) VALUES (1, ?1, 'Password spraying', 1, '[\"T1110.003\"]', 'record 9', 't')", params![r.id])?;
+        let m = matrix(c, 1)?;
+        let spray = m.entries.iter().find(|e| e.id == "T1110.003").expect("covered technique");
+        assert_eq!((spray.rules.len(), spray.hits, spray.observed.len()), (1, 1, 0), "a rule and its match are not an observation");
+        assert_eq!((m.counts.covered, m.counts.uncovered, m.counts.observed), (1, 1, 1), "T1055 is named by a finding without a rule");
+        let layer: Value = serde_json::from_str(&export_coverage_layer("now", &m).unwrap()).unwrap();
+        assert_eq!(layer["techniques"][0]["techniqueID"], "T1110.003");
+        assert_eq!(layer["techniques"][0]["color"], "#c7e9c0", "untested coverage is light");
+        crate::workspace::detections::set_enabled(c, r.id, false)?;
+        let m = matrix(c, 1)?;
+        assert_eq!(m.counts.covered, 0, "a disabled rule covers nothing");
+        assert!(export_coverage_layer("now", &m).is_err());
+        Ok(())
+    })
+    .unwrap();
+}

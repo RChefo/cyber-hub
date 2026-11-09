@@ -10,6 +10,7 @@ mod cvss;
 mod db;
 mod methodology;
 mod detect;
+mod detection;
 pub mod osint;
 mod error;
 pub mod mcp;
@@ -257,6 +258,31 @@ pub fn run() {
             crate::commands::attack::attack_layer_import,
             crate::commands::attack::attack_layer_delete,
             crate::commands::attack::attack_layer_export,
+            crate::commands::detections::detection_engine,
+            crate::commands::detections::attack_coverage_export,
+            crate::commands::detections::detection_rules_list,
+            crate::commands::detections::detection_rule_get,
+            crate::commands::detections::detection_rule_version,
+            crate::commands::detections::detection_rules_import,
+            crate::commands::detections::detection_rule_save,
+            crate::commands::detections::detection_rule_set_enabled,
+            crate::commands::detections::detection_rule_delete,
+            crate::commands::detections::detection_collections,
+            crate::commands::detections::detection_collection_create,
+            crate::commands::detections::detection_collection_delete,
+            crate::commands::detections::detection_collection_member,
+            crate::commands::detections::detection_samples,
+            crate::commands::detections::detection_sample_add,
+            crate::commands::detections::detection_rule_expect,
+            crate::commands::detections::detection_rule_test,
+            crate::commands::detections::detection_rule_retest,
+            crate::commands::detections::detection_feedback_add,
+            crate::commands::detections::detection_project_run,
+            crate::commands::detections::detection_hits,
+            crate::commands::detections::detection_hit_set,
+            crate::commands::detections::detection_hit_promote,
+            crate::commands::detections::detection_rule_export,
+            crate::commands::detections::detection_collection_export,
             workspace_commands::evidence_list,
             workspace_commands::evidence_text,
             workspace_commands::evidence_add_text,

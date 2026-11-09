@@ -13,7 +13,7 @@ import { invalidate, useQuery } from "@/lib/query";
 import type { AttackCatalog, AttackEntry, AttackMatrix, AttackStatus, AttackTechnique, Project, RecordRef } from "@/lib/types";
 import { cn, formatRelative, pluralize } from "@/lib/utils";
 import { Segmented } from "@/modules/utilities/tools/shared";
-import { buildColumns, gaps, mitreUrl, outside, STATE_STYLE, stateOf, type TechniqueState } from "./attackMatrix";
+import { activeRules, buildColumns, gaps, mitreUrl, outside, STATE_STYLE, stateOf, type Overlay, type TechniqueState } from "./attackMatrix";
 import { provenance } from "./investigation";
 
 function cellStyle(state: TechniqueState) {
@@ -21,9 +21,17 @@ function cellStyle(state: TechniqueState) {
 }
 
 /** One technique in the matrix: its state as a fill, findings and layer score as small marks. */
-function Cell({ tech, entry, layerId, sub, onOpen }: { tech: AttackTechnique; entry?: AttackEntry; layerId: number | null; sub?: boolean; onOpen: (id: string) => void }) {
+function Cell({ tech, entry, layerId, sub, onOpen }: { tech: AttackTechnique; entry?: AttackEntry; layerId: Overlay; sub?: boolean; onOpen: (id: string) => void }) {
   const state = stateOf(entry);
-  const mark = layerId != null ? entry?.layers.find((l) => l.layerId === layerId) : undefined;
+  const rules = activeRules(entry);
+  const mark =
+    layerId === "rules"
+      ? rules.length
+        ? { score: rules.length, enabled: true, comment: `${rules.length} detection rule${rules.length === 1 ? "" : "s"}${rules.every((r) => r.tested) ? ", all tested" : ""}` }
+        : undefined
+      : layerId != null
+        ? entry?.layers.find((l) => l.layerId === layerId)
+        : undefined;
   const gap = layerId != null && (state === "observed" || state === "confirmed" || state === "hypothesis") && !(mark && mark.enabled);
   return (
     <button
@@ -39,6 +47,11 @@ function Cell({ tech, entry, layerId, sub, onOpen }: { tech: AttackTechnique; en
         <span className="flex-1" />
         {mark && (
           <span className={cn("rounded px-1 font-mono text-[10px]", mark.enabled ? "bg-success/25 text-success" : "bg-white/10 text-muted")}>{mark.score != null ? mark.score : "✓"}</span>
+        )}
+        {entry && entry.hits > 0 && (
+          <span className="rounded bg-warning/20 px-1 text-[10px] text-warning" title="Detection hits in this project (leads)">
+            hits {entry.hits}
+          </span>
         )}
         {gap && <span className="rounded bg-danger/20 px-1 text-[10px] text-danger">gap</span>}
       </span>
@@ -56,14 +69,23 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
   const matrix = useQuery(["attack", "findings", "relations"], () => api.attackMatrix(project.id), [project.id], runtime);
   const [onlyData, setOnlyData] = useState(true);
   const [filter, setFilter] = useState("");
-  const [layerId, setLayerId] = useState<number | null>(null);
+  const [layerId, setLayerId] = useState<Overlay>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const m = matrix.data;
   const cat = catalog.data;
   const columns = useMemo(() => (cat && m ? buildColumns(cat, m, { onlyData, filter, layerId }) : []), [cat, m, onlyData, filter, layerId]);
-  const layer = m?.layers.find((l) => l.id === layerId) ?? null;
+  const layer = typeof layerId === "number" ? (m?.layers.find((l) => l.id === layerId) ?? null) : null;
   const missing = useMemo(() => (m && layerId != null ? gaps(m, layerId) : []), [m, layerId]);
+  const exportCoverage = () =>
+    act("coverage", async () => {
+      try {
+        const f = await api.attackCoverageExport(project.id);
+        if (f) notify.success("Coverage layer saved", f);
+      } catch (e) {
+        notify.error("The coverage was not exported", e);
+      }
+    });
   const odd = useMemo(() => (m ? outside(m) : []), [m]);
 
   const act = async (key: string, fn: () => Promise<unknown>) => {
@@ -110,6 +132,10 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
               <Upload className="size-3.5" />
               Import layer…
             </Button>
+            <Button size="sm" variant="tertiary" onPress={() => void exportCoverage()} isPending={busy === "coverage"} isDisabled={!runtime || m.counts.covered === 0}>
+              <Download className="size-3.5" />
+              Export coverage
+            </Button>
             <Button size="sm" variant="tertiary" onPress={() => void exportLayer()} isPending={busy === "export"} isDisabled={!runtime || (m.counts.observed === 0 && m.counts.confirmed + m.counts.hypothesis + m.counts.ruledOut === 0)}>
               <Download className="size-3.5" />
               Export layer
@@ -129,20 +155,31 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
               );
             })}
             <span className="text-muted">{pluralize(m.counts.findings, "finding")} name a technique</span>
+            <span className="text-muted">· {pluralize(m.counts.covered, "technique")} covered by detection rules</span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <SearchInput value={filter} onChange={setFilter} placeholder="Find a technique" className="w-56" />
             <SwitchInput label="Only techniques with data" isSelected={onlyData} onChange={setOnlyData} />
-            {m.layers.length > 0 && (
-              <SelectInput
-                aria-label="Layer shown"
-                value={layerId == null ? "none" : String(layerId)}
-                onChange={(v) => setLayerId(v === "none" ? null : Number(v))}
-                options={[{ id: "none", label: "No layer" }, ...m.layers.map((l) => ({ id: String(l.id), label: `Layer: ${l.name}` }))]}
-                className="w-60"
-              />
-            )}
+            <SelectInput
+              aria-label="Layer shown"
+              value={layerId == null ? "none" : String(layerId)}
+              onChange={(v) => setLayerId(v === "none" ? null : v === "rules" ? "rules" : Number(v))}
+              options={[{ id: "none", label: "No overlay" }, { id: "rules", label: "Detection rules (library)" }, ...m.layers.map((l) => ({ id: String(l.id), label: `Layer: ${l.name}` }))]}
+              className="w-64"
+            />
           </div>
+          {layerId === "rules" && (
+            <div className="flex flex-col gap-1 rounded-[8px] bg-white/[0.03] px-3 py-2 text-[12.5px]">
+              <span>
+                {pluralize(m.counts.covered, "technique")} covered by enabled Sigma rules of the detection library. Coverage says what could be detected, not what happened; a rule counts as tested when every sample with an expectation passed.
+              </span>
+              <span className={cn(missing.length ? "text-danger" : "text-success")}>
+                {missing.length
+                  ? `${pluralize(missing.length, "technique")} that findings name or you confirmed or suspect ${missing.length === 1 ? "has" : "have"} no detection rule (marked “gap”): ${missing.map((e) => e.id).join(", ")}. Hunt for them in the evidence, then write or import a rule.`
+                  : "Every technique that findings name or you confirmed or suspect has a detection rule."}
+              </span>
+            </div>
+          )}
           {layer && (
             <div className="flex flex-col gap-1 rounded-[8px] bg-white/[0.03] px-3 py-2 text-[12.5px]">
               <div className="flex flex-wrap items-center gap-2">
@@ -385,6 +422,30 @@ function TechniqueModal({ id, project, archived, catalog, matrix, onClose, onOpe
             </span>
           )}
           {archived && <span className="text-muted">The project is archived: assessments can be read, not changed.</span>}
+        </section>
+        <section className="flex flex-col gap-1.5">
+          <h3 className="text-[13px] font-medium">Detection rules ({entry?.rules.length ?? 0})</h3>
+          <p className="text-muted">Rules of the detection library mapped to this technique: what could be detected, not what happened.</p>
+          {entry && entry.rules.length > 0 ? (
+            <ul className="flex flex-col gap-1">
+              {entry.rules.map((r) => (
+                <li key={r.ruleId} className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                  <ToneChip tone={r.enabled && r.runnable ? "success" : "default"} dot={false} className="text-[11px]">
+                    {!r.runnable ? "cannot run" : r.enabled ? "enabled" : "disabled"}
+                  </ToneChip>
+                  {r.tested && (
+                    <ToneChip tone="success" dot={false} className="text-[11px]">
+                      tested
+                    </ToneChip>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <span className="text-muted">No rule: a gap in detection coverage. Write or import a Sigma rule tagged with this technique.</span>
+          )}
+          {entry && entry.hits > 0 && <span className="text-warning">{pluralize(entry.hits, "detection hit")} in this project to review (Investigation → Detections).</span>}
         </section>
         {entry && entry.layers.length > 0 && (
           <section className="flex flex-col gap-1.5">

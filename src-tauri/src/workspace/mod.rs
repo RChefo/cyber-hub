@@ -8,6 +8,7 @@ pub mod attack;
 pub mod attack_matrix;
 pub mod assets;
 pub mod correlate;
+pub mod detections;
 pub mod discovery;
 pub mod evidence;
 pub mod findings;

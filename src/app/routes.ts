@@ -8,6 +8,7 @@ import {
   LibraryBig,
   LayoutDashboard,
   Network,
+  ScanSearch,
   Radar,
   Search,
   Settings,
@@ -22,6 +23,7 @@ export type PageId =
   | "dashboard"
   | "projects"
   | "library"
+  | "detections"
   | "runs"
   | "tools"
   | "commands"
@@ -50,6 +52,7 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, description: "Workstation overview" },
       { id: "projects", label: "Projects", icon: FolderKanban, description: "Assessments, scope and findings" },
       { id: "library", label: "Finding Library", icon: LibraryBig, description: "Reusable finding write-ups and import rules" },
+      { id: "detections", label: "Detections", icon: ScanSearch, description: "Sigma rules, tests on log samples and ATT&CK coverage" },
       { id: "runs", label: "Runs", icon: Activity, description: "Tool executions and installs" },
     ],
   },
