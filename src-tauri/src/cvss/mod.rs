@@ -1,9 +1,12 @@
 //! CVSS v3.1 and v4.0 vectors: validation, canonical form and scores (docs/DATA_MODEL.md#cvss).
 //!
 //! * **v3.1** follows the FIRST specification (section 7 and Appendix A, including its `Roundup`).
-//!   `CVSS:3.0/` vectors are accepted and scored with the same equations. The base equations of 3.0
-//!   and 3.1 are the same; 3.1 changed `Roundup` (floating-point edge cases) and the environmental
-//!   modified impact.
+//! * **v3.0** vectors are scored with the 3.0 equations, as FIRST's 3.0 calculator does: `Roundup`
+//!   is `ceil(x × 10) / 10`, and the modified impact of a changed scope is
+//!   `7.52 × (MISS − 0.029) − 3.25 × (MISS − 0.02)^15`. 3.1 changed both, so about one in twenty
+//!   3.0 vectors with environmental metrics would score differently under the 3.1 equations.
+//! * Both are computed in the order of FIRST's calculators (`cvsscalc31.js`, `cvsscalc30.js`), so
+//!   results round the same way.
 //! * **v4.0** follows FIRST's reference calculator (`cvss_score.js`): macrovector equivalence
 //!   classes, the macrovector lookup table (`v4_lookup.rs`, BSD-2-Clause), and interpolation by
 //!   severity distance. The arithmetic is done in the same order as the reference so the results
@@ -151,6 +154,11 @@ pub fn roundup(x: f64) -> f64 {
     }
 }
 
+/// `Roundup` of CVSS v3.0 as FIRST's 3.0 calculator computes it: `ceil(x × 10) / 10`.
+fn roundup30(x: f64) -> f64 {
+    (x * 10.0).ceil() / 10.0
+}
+
 fn w_av(v: &str) -> f64 {
     match v {
         "N" => 0.85,
@@ -229,6 +237,9 @@ fn v3(rest: &str, version: &'static str) -> Result<Cvss, String> {
         _ => g(k),
     };
 
+    let v30 = version == "3.0";
+    let up: fn(f64) -> f64 = if v30 { roundup30 } else { roundup };
+
     let changed = g("S") == "C";
     let iss = 1.0 - ((1.0 - w_cia(g("C"))) * (1.0 - w_cia(g("I"))) * (1.0 - w_cia(g("A"))));
     let impact = if changed { 7.52 * (iss - 0.029) - 3.25 * (iss - 0.02).powi(15) } else { 6.42 * iss };
@@ -236,30 +247,35 @@ fn v3(rest: &str, version: &'static str) -> Result<Cvss, String> {
     let base = if impact <= 0.0 {
         0.0
     } else if changed {
-        roundup((1.08 * (impact + exploitability)).min(10.0))
+        up((1.08 * (impact + exploitability)).min(10.0))
     } else {
-        roundup((impact + exploitability).min(10.0))
+        up((impact + exploitability).min(10.0))
     };
 
-    let temporal_factor = w_e(g("E")) * w_rl(g("RL")) * w_rc(g("RC"));
+    // multiplied one weight at a time, in the calculators' order (floating point is not associative)
+    let (e, rl, rc) = (w_e(g("E")), w_rl(g("RL")), w_rc(g("RC")));
     let has_temporal = ["E", "RL", "RC"].iter().any(|k| g(k) != "X");
     let has_env = ["CR", "IR", "AR", "MAV", "MAC", "MPR", "MUI", "MS", "MC", "MI", "MA"].iter().any(|k| g(k) != "X");
 
     let (score, label) = if has_env {
         let mchanged = eff("S") == "C";
         let miss = (1.0 - ((1.0 - w_req(g("CR")) * w_cia(eff("C"))) * (1.0 - w_req(g("IR")) * w_cia(eff("I"))) * (1.0 - w_req(g("AR")) * w_cia(eff("A"))))).min(0.915);
-        let mimpact = if mchanged { 7.52 * (miss - 0.029) - 3.25 * (miss * 0.9731 - 0.02).powi(13) } else { 6.42 * miss };
+        let mimpact = match (mchanged, v30) {
+            (false, _) => 6.42 * miss,
+            (true, true) => 7.52 * (miss - 0.029) - 3.25 * (miss - 0.02).powi(15),
+            (true, false) => 7.52 * (miss - 0.029) - 3.25 * (miss * 0.9731 - 0.02).powi(13),
+        };
         let mexpl = 8.22 * w_av(eff("AV")) * w_ac(eff("AC")) * w_pr(eff("PR"), mchanged) * w_ui(eff("UI"));
         let env = if mimpact <= 0.0 {
             0.0
         } else if mchanged {
-            roundup(roundup((1.08 * (mimpact + mexpl)).min(10.0)) * temporal_factor)
+            up(up((1.08 * (mimpact + mexpl)).min(10.0)) * e * rl * rc)
         } else {
-            roundup(roundup((mimpact + mexpl).min(10.0)) * temporal_factor)
+            up(up((mimpact + mexpl).min(10.0)) * e * rl * rc)
         };
         (env, "Environmental")
     } else if has_temporal {
-        (roundup(base * temporal_factor), "Temporal")
+        (up(base * e * rl * rc), "Temporal")
     } else {
         (base, "Base")
     };
@@ -609,6 +625,13 @@ mod tests {
         // the 3.0 vector of the same base metrics scores the same
         assert_eq!(score("CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"), 9.8);
         assert_eq!(parse("CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H").unwrap().version, "3.0");
+        // 3.0 keeps its own environmental equations (FIRST's 3.0 calculator: 9.0; 3.1: 9.1)
+        let m = "AV:N/AC:L/PR:L/UI:R/S:C/C:H/I:H/A:H/RC:C/AR:M/MPR:L/MUI:R/MC:H";
+        assert_eq!(score(&format!("CVSS:3.0/{m}")), 9.0);
+        assert_eq!(score(&format!("CVSS:3.1/{m}")), 9.1);
+        // and its own Roundup: ceil(x × 10) / 10
+        assert_eq!(roundup30(4.000_000_000_000_001), 4.1);
+        assert_eq!(roundup(4.000_000_000_000_001), 4.0);
     }
 
     #[test]
@@ -650,5 +673,53 @@ mod tests {
         assert_eq!(rating(0.1), "low");
         assert_eq!(rating(9.0), "critical");
         assert_eq!(rating(0.0), "none");
+    }
+
+    /// Lines of `vector<TAB>base score<TAB>score` (scripts/cvss-reference.mjs) that this scorer
+    /// does not reproduce.
+    fn reference_mismatches(tsv: &str) -> (usize, Vec<String>) {
+        let mut checked = 0;
+        let mut bad = Vec::new();
+        for line in tsv.lines().filter(|l| !l.is_empty()) {
+            let mut cols = line.split('\t');
+            let (Some(vector), Some(base), Some(expected)) = (cols.next(), cols.next(), cols.next()) else {
+                panic!("malformed reference line: {line}");
+            };
+            checked += 1;
+            match parse(vector) {
+                Ok(c) if format!("{:.1}", c.base_score) == base && format!("{:.1}", c.score) == expected => {}
+                Ok(c) => bad.push(format!("{vector}: FIRST {base}/{expected}, here {:.1}/{:.1}", c.base_score, c.score)),
+                Err(e) => bad.push(format!("{vector}: refused ({e})")),
+            }
+        }
+        (checked, bad)
+    }
+
+    /// FIRST's calculators' scores for 484 vectors: one v4.0 vector per reachable macrovector,
+    /// v3.1 vectors with temporal and environmental metrics, and v3.0 vectors whose 3.0 and 3.1
+    /// scores differ. Generated by scripts/cvss-reference.mjs.
+    #[test]
+    fn matches_firsts_reference_calculators() {
+        let (checked, bad) = reference_mismatches(include_str!("testdata/first_reference.tsv"));
+        assert!(checked > 400, "{checked}");
+        assert!(bad.is_empty(), "{} of {checked} differ:\n{}", bad.len(), bad.join("\n"));
+    }
+
+    /// The full comparison: every base vector of each version and 200,000 random vectors each.
+    /// `CVSS_REFERENCE_DIR=<out dir of scripts/cvss-reference.mjs> cargo test cvss -- --ignored`
+    #[test]
+    #[ignore = "needs the output of scripts/cvss-reference.mjs"]
+    fn matches_firsts_reference_calculators_exhaustively() {
+        let dir = std::env::var("CVSS_REFERENCE_DIR").expect("set CVSS_REFERENCE_DIR");
+        let mut report = Vec::new();
+        for file in ["v40.tsv", "v31.tsv", "v30.tsv"] {
+            let tsv = std::fs::read_to_string(std::path::Path::new(&dir).join(file)).expect(file);
+            let (checked, bad) = reference_mismatches(&tsv);
+            eprintln!("{file}: {checked} vectors, {} differ", bad.len());
+            if !bad.is_empty() {
+                report.push(format!("{file}: {} of {checked} differ, e.g.\n{}", bad.len(), bad[..bad.len().min(15)].join("\n")));
+            }
+        }
+        assert!(report.is_empty(), "{}", report.join("\n"));
     }
 }

@@ -207,7 +207,8 @@ Findings can carry a CVSS vector (`findings.cvss_vector`). The backend computes 
 * **Versions.**
   * **CVSS 4.0** follows FIRST's reference calculator: macrovector equivalence classes, the lookup table (BSD-2-Clause, see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)), and interpolation by severity distance. The arithmetic runs in the reference's order and is rounded like `Math.round`.
   * **CVSS 3.1** follows the specification, including Appendix A's `Roundup`.
-  * **CVSS 3.0** vectors are scored with the 3.1 equations. Base scores are the same; 3.1 changed rounding edge cases and the environmental modified impact.
+  * **CVSS 3.0** vectors are scored with the 3.0 equations, as FIRST's 3.0 calculator does: `Roundup` is `ceil(x × 10) / 10`, and a changed scope's modified impact is `7.52 × (MISS − 0.029) − 3.25 × (MISS − 0.02)^15`. 3.1 changed both; under the 3.1 equations about one in twenty 3.0 vectors with environmental metrics would score differently.
+  * Both 3.x versions multiply in the order of FIRST's calculators, so results round the same way.
 * **Validation.**
   * Every base metric must be present once, and only known metrics and values are accepted.
   * Any order is accepted on input, because FIRST's own examples are not always in order.
@@ -215,10 +216,16 @@ Findings can carry a CVSS vector (`findings.cvss_vector`). The backend computes 
   * An invalid vector is refused with the reason, and the finding is not saved.
 * **Score.** The score covers everything in the vector. For 4.0 the label is `CVSS-B`, `-BT`, `-BE` or `-BTE`; for 3.x it is base, temporal or environmental. The base score is also shown. The qualitative rating uses the standard bands: none 0.0, low 0.1–3.9, medium 4.0–6.9, high 7.0–8.9, critical 9.0–10.0.
 * **Severity.** A finding's severity stays the analyst's choice. The form offers *Set severity to …* when it differs from the rating.
-* **Calculator.** The finding form has a calculator for the base metrics (and Exploit Maturity for 4.0). It keeps environmental and supplemental metrics that were typed into the vector.
+* **Calculator.** The finding form has a calculator for the base metrics (and Exploit Maturity for 4.0). It keeps environmental and supplemental metrics that were typed into the vector. A 3.0 vector changed in the calculator is written as a 3.1 vector, the current 3.x version.
 * **Imports.** Nuclei's `classification.cvss-metrics` and Nessus' `cvss4_vector` (else `cvss3_vector`) become the finding's vector when they are valid. Invalid vectors are ignored, but the reported text stays in the description or technical details.
 * **Reports.** The HTML and Markdown reports show the score together with its vector, as FIRST asks.
-* **Tests.** Tests cover all eight CVSS 4.0 examples in the table of FIRST's examples page, and CVSS 3.1 vectors from the specification's comparisons. Four captions on that page disagree with its own table (CVE-2023-48228, CVE-2016-5729, CVE-2015-2890, CVE-2018-3652); the table values are the calculator's.
+* **Tests.**
+  * **Reference comparison.** [`scripts/cvss-reference.mjs`](../scripts/cvss-reference.mjs) scores vectors with FIRST's own calculators: the v4.0 reference calculator (`cvss_score.js`, commit `c5b0d40`) and the scripts of FIRST's 3.1 and 3.0 calculator pages.
+    * It covers every base vector of each version (104,976 for 4.0, 2,592 each for 3.1 and 3.0) and 200,000 seeded random vectors per version with threat or temporal, environmental and supplemental metrics.
+    * All 709,160 vectors score the same here, in both the base score and the score.
+    * The regular test suite checks a 484-vector subset (`src-tauri/src/cvss/testdata/first_reference.tsv`): one 4.0 vector for each of the 263 macrovectors the sample reaches, random 3.1 vectors, and 3.0 vectors whose 3.0 and 3.1 scores differ.
+    * The full comparison is an ignored test: `CVSS_REFERENCE_DIR=<out dir> cargo test cvss -- --ignored`.
+  * **Published examples.** All eight CVSS 4.0 examples in the table of FIRST's examples page, and CVSS 3.1 vectors from the specification's comparisons. Four captions on that page disagree with its own table (CVE-2023-48228, CVE-2016-5729, CVE-2015-2890, CVE-2018-3652); the table values are the calculator's.
 
 ## Methodology checklist (schema 17)
 
