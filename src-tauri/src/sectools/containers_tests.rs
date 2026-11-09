@@ -220,3 +220,166 @@ fn folders_are_scanned_without_vendored_trees() {
     assert_eq!(single.files.len(), 1);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+const ESCALATOR: &str = r#"apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: escalator}
+rules:
+- {apiGroups: [rbac.authorization.k8s.io], resources: [clusterroles], verbs: [escalate, bind]}
+- {apiGroups: [""], resources: [users, groups], verbs: [impersonate]}
+- {apiGroups: [""], resources: [nodes/proxy], verbs: [get]}
+- {apiGroups: [certificates.k8s.io], resources: [certificatesigningrequests/approval], verbs: [update]}
+- {apiGroups: [""], resources: [serviceaccounts/token], verbs: [create]}
+- {apiGroups: [admissionregistration.k8s.io], resources: [mutatingwebhookconfigurations], verbs: [patch]}
+- {apiGroups: [""], resources: [persistentvolumes], verbs: [create]}
+- {apiGroups: [apps], resources: [deployments], verbs: [create]}
+- {apiGroups: [""], resources: ["*/exec"], verbs: [create]}
+- {apiGroups: [""], resources: [namespaces], verbs: [patch]}
+- {apiGroups: [""], resources: [secrets], verbs: [list]}
+- {apiGroups: [""], resources: [secrets], verbs: [watch]}
+"#;
+
+#[test]
+fn rbac_rules_that_lead_to_more_privileges_are_named() {
+    let docs = crate::yaml::parse_documents(ESCALATOR).unwrap();
+    let issues = kubernetes(&docs);
+    let mut found: Vec<&str> = rules(&issues);
+    found.sort_unstable();
+    let mut want = vec![
+        "K8S-RBAC-BIND",
+        "K8S-RBAC-CSR-APPROVE",
+        "K8S-RBAC-ESCALATE",
+        "K8S-RBAC-EXEC",
+        "K8S-RBAC-IMPERSONATE",
+        "K8S-RBAC-NAMESPACE",
+        "K8S-RBAC-NODES-PROXY",
+        "K8S-RBAC-PV-CREATE",
+        "K8S-RBAC-SECRETS",
+        "K8S-RBAC-TOKEN",
+        "K8S-RBAC-WEBHOOKS",
+        "K8S-RBAC-WORKLOADS",
+    ];
+    want.sort_unstable();
+    assert_eq!(found, want, "one issue per kind of danger, */exec included");
+    assert!(issues.iter().all(|i| i.location == "ClusterRole escalator"));
+    assert_eq!(issues[0].severity, "high", "sorted, most severe first");
+
+    let narrow = r#"apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: reader, namespace: shop}
+rules:
+- {apiGroups: [""], resources: [configmaps, pods, pods/log], verbs: [get, list, watch]}
+- {apiGroups: [""], resources: [secrets], resourceNames: [app-tls], verbs: [get]}
+- {apiGroups: [example.com], resources: [pods], verbs: [create]}
+- {nonResourceURLs: ["/healthz"], verbs: [get]}
+"#;
+    let none = kubernetes(&crate::yaml::parse_documents(narrow).unwrap());
+    assert!(none.is_empty(), "read-only rules, one named Secret and another API group's pods: {none:?}");
+
+    let wild = r#"apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: wild}
+rules: [{apiGroups: ["*"], resources: ["*"], verbs: ["*"]}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: pods-all, namespace: shop}
+rules: [{apiGroups: [""], resources: [pods], verbs: ["*"]}]
+"#;
+    let w = kubernetes(&crate::yaml::parse_documents(wild).unwrap());
+    let got: Vec<(&str, &str, &str)> = w.iter().map(|i| (i.location.as_str(), i.rule.as_str(), i.severity.as_str())).collect();
+    assert_eq!(got, vec![("ClusterRole wild", "K8S-RBAC-WILDCARD", "critical"), ("Role shop/pods-all", "K8S-RBAC-WILDCARD", "high")]);
+}
+
+const BINDINGS: &str = r#"apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: all-service-accounts}
+roleRef: {kind: ClusterRole, name: escalator, apiGroup: rbac.authorization.k8s.io}
+subjects: [{kind: Group, name: "system:serviceaccounts", apiGroup: rbac.authorization.k8s.io}, {kind: User, name: alice}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: ci-edit, namespace: shop}
+roleRef: {kind: ClusterRole, name: edit, apiGroup: rbac.authorization.k8s.io}
+subjects: [{kind: ServiceAccount, name: default, namespace: shop}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: anon-read}
+roleRef: {kind: ClusterRole, name: reader-cluster, apiGroup: rbac.authorization.k8s.io}
+subjects: [{kind: Group, name: "system:unauthenticated", apiGroup: rbac.authorization.k8s.io}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: "system:public-info-viewer"}
+roleRef: {kind: ClusterRole, name: "system:public-info-viewer", apiGroup: rbac.authorization.k8s.io}
+subjects: [{kind: Group, name: "system:unauthenticated", apiGroup: rbac.authorization.k8s.io}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: everyone-views, namespace: shop}
+roleRef: {kind: ClusterRole, name: view, apiGroup: rbac.authorization.k8s.io}
+subjects: [{kind: Group, name: "system:authenticated", apiGroup: rbac.authorization.k8s.io}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: deployer, namespace: shop}
+rules: [{apiGroups: [apps], resources: [deployments], verbs: [create, update]}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: shop-accounts-deploy, namespace: shop}
+roleRef: {kind: Role, name: deployer, apiGroup: rbac.authorization.k8s.io}
+subjects: [{kind: Group, name: "system:serviceaccounts:shop", apiGroup: rbac.authorization.k8s.io}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: admins}
+roleRef: {kind: ClusterRole, name: cluster-admin, apiGroup: rbac.authorization.k8s.io}
+subjects: [{kind: Group, name: "system:authenticated", apiGroup: rbac.authorization.k8s.io}]
+"#;
+
+#[test]
+fn bindings_that_reach_many_identities_are_reported() {
+    let text = format!("{ESCALATOR}---\n{BINDINGS}");
+    let issues = kubernetes(&crate::yaml::parse_documents(&text).unwrap());
+    let binding = |loc: &str| issues.iter().filter(|i| i.location == loc && i.rule != "K8S-CLUSTER-ADMIN").map(|i| (i.rule.as_str(), i.severity.as_str())).collect::<Vec<_>>();
+    let detail = |loc: &str| issues.iter().find(|i| i.location == loc).map(|i| i.detail.clone()).unwrap_or_default();
+    assert_eq!(binding("ClusterRoleBinding all-service-accounts"), vec![("K8S-RBAC-BROAD", "critical")], "alice alone would not be reported");
+    let d = detail("ClusterRoleBinding all-service-accounts");
+    assert!(d.contains("across the cluster") && d.contains("grant permissions they do not hold (escalate)") && !d.contains("alice"), "{d}");
+    assert_eq!(binding("RoleBinding shop/ci-edit"), vec![("K8S-RBAC-DEFAULT-SA", "high")], "the built-in edit role reads Secrets and impersonates service accounts");
+    let edit = detail("RoleBinding shop/ci-edit");
+    assert!(edit.contains("service account shop/default in namespace shop") && edit.contains("impersonate service accounts;"), "{edit}");
+    assert_eq!(binding("ClusterRoleBinding anon-read"), vec![("K8S-RBAC-ANONYMOUS", "high")]);
+    assert!(detail("ClusterRoleBinding anon-read").contains("not in the scanned files"));
+    assert!(binding("ClusterRoleBinding system:public-info-viewer").is_empty(), "the API server's own bindings are left alone");
+    assert!(binding("RoleBinding shop/everyone-views").is_empty(), "view grants nothing dangerous");
+    assert_eq!(binding("RoleBinding shop/shop-accounts-deploy"), vec![("K8S-RBAC-BROAD", "high")], "a namespaced Role is found in the binding's namespace");
+    assert!(binding("ClusterRoleBinding admins").is_empty(), "cluster-admin is reported once, by K8S-CLUSTER-ADMIN");
+    assert_eq!(issues.iter().filter(|i| i.rule == "K8S-CLUSTER-ADMIN").count(), 1);
+}
+
+#[test]
+fn folder_scans_match_bindings_to_roles_in_other_files() {
+    let dir = std::env::temp_dir().join(format!("cyberhub-rbac-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("rbac")).unwrap();
+    std::fs::write(dir.join("rbac/role.yaml"), ESCALATOR).unwrap();
+    let binding = r#"apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: all-service-accounts}
+roleRef: {kind: ClusterRole, name: escalator, apiGroup: rbac.authorization.k8s.io}
+subjects: [{kind: Group, name: "system:serviceaccounts", apiGroup: rbac.authorization.k8s.io}]
+"#;
+    std::fs::write(dir.join("rbac/binding.yaml"), binding).unwrap();
+    let res = scan_path(&dir);
+    let of = |name: &str| res.files.iter().find(|f| f.file == name).unwrap();
+    assert_eq!(rules(&of("rbac/binding.yaml").issues), vec!["K8S-RBAC-BROAD"], "found through the role in role.yaml, reported once");
+    assert_eq!(of("rbac/binding.yaml").issues[0].severity, "critical");
+    assert!(!rules(&of("rbac/role.yaml").issues).contains(&"K8S-RBAC-BROAD"));
+    assert_eq!(of("rbac/role.yaml").issues.len(), 12);
+    // the binding file alone: the role is unknown, and only anonymous access would be reported
+    assert!(analyze("binding.yaml", binding, "auto").unwrap().issues.is_empty());
+    std::fs::remove_dir_all(&dir).unwrap();
+}

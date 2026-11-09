@@ -2,12 +2,16 @@
 //! and Kubernetes manifests are read locally and checked against the Kubernetes Pod Security
 //! Standards (baseline and restricted) and the recommendations of the CIS Docker Benchmark.
 //! Nothing is contacted, built or run. References name the recommendation, not a section number,
-//! because the numbering changes between benchmark versions.
+//! because the numbering changes between benchmark versions. RBAC objects are checked for the
+//! ways to more privileges the Kubernetes RBAC good practices list (`containers_rbac.rs`).
 
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde_json::Value;
+
+#[path = "containers_rbac.rs"]
+mod rbac;
 
 pub const MAX_FILES: usize = 2_000;
 pub const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024;
@@ -445,20 +449,8 @@ fn workload(out: &mut Vec<Issue>, label: &str, spec: &Value) {
     }
 }
 
-fn rbac(out: &mut Vec<Issue>, label: &str, doc: &Value) {
-    for r in doc.get("rules").and_then(Value::as_array).into_iter().flatten() {
-        let verbs = strings(r.get("verbs"));
-        let resources = strings(r.get("resources"));
-        if verbs.iter().any(|v| v == "*") || resources.iter().any(|v| v == "*") {
-            issue(out, "K8S-RBAC-WILDCARD", "high", "Wildcard RBAC permissions", label.to_string(), format!("A rule grants {} on {}: everything, including resources added later.", verbs.join(", "), resources.join(", ")), "List the exact verbs and resources the subject needs.", "Kubernetes documentation: RBAC good practices");
-        } else if resources.iter().any(|r| r == "secrets") && verbs.iter().any(|v| ["get", "list", "watch"].contains(&v.as_str())) {
-            issue(out, "K8S-RBAC-SECRETS", "medium", "Read access to Secrets", label.to_string(), "The role can read Secrets, which often hold credentials for other systems.".into(), "Limit it to named Secrets (resourceNames), or remove list and watch.", "Kubernetes documentation: RBAC good practices");
-        }
-    }
-}
-
-pub fn kubernetes(docs: &[Value]) -> Vec<Issue> {
-    let mut out = Vec::new();
+/// The documents, with the items of a `List` (from `kubectl get -o yaml`) in place of the list.
+fn flatten(docs: &[Value]) -> Vec<&Value> {
     let mut all: Vec<&Value> = Vec::new();
     for d in docs {
         if d.get("kind").and_then(Value::as_str) == Some("List") {
@@ -466,6 +458,24 @@ pub fn kubernetes(docs: &[Value]) -> Vec<Issue> {
         } else {
             all.push(d);
         }
+    }
+    all
+}
+
+/// Kubernetes manifests, with the bindings checked against the roles of the same documents (the
+/// app goes through [`analyze`] and [`scan_path`]).
+#[cfg(test)]
+pub fn kubernetes(docs: &[Value]) -> Vec<Issue> {
+    kubernetes_with(docs, true)
+}
+
+/// `bindings`: whether to check RoleBindings here (a folder scan checks them across files).
+fn kubernetes_with(docs: &[Value], bindings: bool) -> Vec<Issue> {
+    let mut out = Vec::new();
+    let all = flatten(docs);
+    if bindings {
+        let objects: Vec<(usize, &Value)> = all.iter().filter(|d| rbac::is_rbac(d)).map(|d| (0, *d)).collect();
+        out.extend(rbac::binding_issues(&objects).into_iter().map(|(_, i)| i));
     }
     for d in all {
         let kind = d.get("kind").and_then(Value::as_str).unwrap_or("");
@@ -478,7 +488,7 @@ pub fn kubernetes(docs: &[Value]) -> Vec<Issue> {
             workload(&mut out, &label, spec);
         }
         match kind {
-            "Role" | "ClusterRole" => rbac(&mut out, &label, d),
+            "Role" | "ClusterRole" => rbac::role_issues(&mut out, &label, d),
             "ClusterRoleBinding" | "RoleBinding" if d.pointer("/roleRef/name").and_then(Value::as_str) == Some("cluster-admin") => {
                 let subjects: Vec<String> = d.get("subjects").and_then(Value::as_array).into_iter().flatten().map(|s| format!("{} {}", s.get("kind").and_then(Value::as_str).unwrap_or(""), s.get("name").and_then(Value::as_str).unwrap_or(""))).collect();
                 let broad = subjects.iter().any(|s| s.contains("system:authenticated") || s.contains("system:unauthenticated") || s.starts_with("ServiceAccount"));
@@ -513,6 +523,12 @@ fn rank(s: &str) -> usize {
 /// Checks one file's text. `hint` is dockerfile, compose, kubernetes or auto. None when the file
 /// is not a container configuration (only for auto).
 pub fn analyze(file: &str, text: &str, hint: &str) -> Option<FileReport> {
+    analyze_with(file, text, hint, true).map(|(report, _)| report)
+}
+
+/// [`analyze`], also returning a Kubernetes file's RBAC objects. `bindings`: whether to check the
+/// bindings against the roles of this file alone.
+fn analyze_with(file: &str, text: &str, hint: &str, bindings: bool) -> Option<(FileReport, Vec<Value>)> {
     let name = file_name(file);
     let body = text.trim_start_matches('\u{feff}');
     let looks_docker = body.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with('#')).is_some_and(|l| {
@@ -520,6 +536,7 @@ pub fn analyze(file: &str, text: &str, hint: &str) -> Option<FileReport> {
         w == "FROM" || w == "ARG"
     });
     let mut report = FileReport { file: file.to_string(), ..Default::default() };
+    let mut rbac_objects = Vec::new();
     if hint == "dockerfile" || (hint == "auto" && (dockerfile_name(&name) || (looks_docker && !name.ends_with(".yml") && !name.ends_with(".yaml") && !name.ends_with(".json")))) {
         report.kind = "dockerfile".into();
         report.issues = dockerfile(body);
@@ -537,14 +554,15 @@ pub fn analyze(file: &str, text: &str, hint: &str) -> Option<FileReport> {
                 }
                 report.kind = if hint == "auto" { "unknown".into() } else { hint.into() };
                 report.error = if body.contains("{{") { format!("{e} (a Helm chart or other template must be rendered first, for example with helm template)") } else { e };
-                return Some(report);
+                return Some((report, Vec::new()));
             }
         };
         let k8s = docs.iter().any(|d| d.get("apiVersion").is_some() && d.get("kind").is_some());
         let compose_doc = docs.iter().find(|d| d.get("services").is_some_and(Value::is_object));
         if hint == "kubernetes" || (hint == "auto" && k8s) {
             report.kind = "kubernetes".into();
-            report.issues = kubernetes(&docs);
+            report.issues = kubernetes_with(&docs, bindings);
+            rbac_objects = flatten(&docs).into_iter().filter(|d| rbac::is_rbac(d)).cloned().collect();
         } else if hint == "compose" || (hint == "auto" && compose_doc.is_some()) {
             report.kind = "compose".into();
             report.issues = compose_doc.map(compose).unwrap_or_default();
@@ -553,12 +571,15 @@ pub fn analyze(file: &str, text: &str, hint: &str) -> Option<FileReport> {
         }
     }
     report.issues.sort_by_key(|i| rank(&i.severity));
-    Some(report)
+    Some((report, rbac_objects))
 }
 
 /// Scans a file or a folder tree for container configurations (symbolic links are not followed).
+/// RoleBindings are checked against the roles of every file, since a role and its binding are
+/// often kept apart; their issues go to the binding's file.
 pub fn scan_path(root: &Path) -> ScanResult {
     let mut res = ScanResult::default();
+    let mut rbac_objects: Vec<(usize, Value)> = Vec::new();
     let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
     let mut visited = 0usize;
     while let Some(p) = stack.pop() {
@@ -598,9 +619,18 @@ pub fn scan_path(root: &Path) -> ScanResult {
             // a single file: its name
             None => p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| p.to_string_lossy().to_string()),
         };
-        if let Some(r) = analyze(&shown, &text, "auto") {
+        if let Some((r, objects)) = analyze_with(&shown, &text, "auto", false) {
+            let room = rbac::MAX_OBJECTS.saturating_sub(rbac_objects.len());
+            rbac_objects.extend(objects.into_iter().take(room).map(|o| (res.files.len(), o)));
             res.files.push(r);
         }
+    }
+    let objects: Vec<(usize, &Value)> = rbac_objects.iter().map(|(i, o)| (*i, o)).collect();
+    for (i, found) in rbac::binding_issues(&objects) {
+        res.files[i].issues.push(found);
+    }
+    for f in &mut res.files {
+        f.issues.sort_by_key(|i| rank(&i.severity));
     }
     res
 }

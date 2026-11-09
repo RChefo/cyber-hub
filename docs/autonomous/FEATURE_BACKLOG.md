@@ -63,3 +63,15 @@ The owner named six areas; none existed in Cyber Hub (code search: no API defini
 | 22 | Packet capture triage (pcap, pcapng): hosts, DNS, HTTP, TLS server names, cleartext credentials | 3 | 3 | 4 | 4 | 2 | 4 | 33 | **Done** (this round) |
 | 23 | Log triage: web access and SSH authentication logs (attack patterns, brute force) | 3 | 3 | 4 | 5 | 3 | 5 | 36 | **Done** (this round) |
 | 24 | SARIF 2.1.0 export of findings | 3 | 3 | 5 | 5 | 5 | 5 | 40 | **Done** (this round) |
+
+## Third research round (2026-11-09): depth in the named areas
+
+With items 18 to 24 done, the next gaps were looked for inside the same six areas rather than in new ones.
+
+* **Kubernetes RBAC.** The container checks covered wildcards, Secrets and cluster-admin only. The Kubernetes documentation ("Role Based Access Control Good Practices") lists further privilege-escalation paths: escalate, bind, impersonate, nodes/proxy, CSR approval, token requests, admission webhooks, PersistentVolume and workload creation, namespace changes. Dedicated tools (rbac-tool, KubiScan) show that people need to know who receives such rights; a role and its binding are usually kept in separate files.
+* **SARIF round trip.** Cyber Hub's SARIF import ignored `suppressions`, so results dismissed in another tool (or exported from Cyber Hub as false positives) came back as new findings.
+
+| # | Feature | D | W | F | R | C | T | Score | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| 25 | Kubernetes RBAC escalation paths, with bindings resolved across files and the built-in roles | 4 | 3 | 5 | 5 | 4 | 5 | 42 | **Done** (this round) |
+| 26 | SARIF import skips suppressed results | 3 | 3 | 5 | 5 | 5 | 5 | 40 | **Done** (`d776c58`) |

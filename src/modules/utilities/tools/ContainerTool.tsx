@@ -97,7 +97,7 @@ export function ContainerTool() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PrivacyNote>Reads the text, file or folder on this device; nothing is contacted, built or run. Checks follow the Kubernetes Pod Security Standards (baseline and restricted) and the CIS Docker Benchmark.</PrivacyNote>
+      <PrivacyNote>Reads the text, file or folder on this device; nothing is contacted, built or run. Checks follow the Kubernetes Pod Security Standards (baseline and restricted), the CIS Docker Benchmark and the Kubernetes RBAC good practices.</PrivacyNote>
       <div className="flex gap-1 self-start rounded-[10px] bg-white/[0.04] p-1" role="group" aria-label="Input">
         {(["paste", "files"] as const).map((m) => (
           <Button key={m} size="sm" variant={mode === m ? "secondary" : "ghost"} onPress={() => setMode(m)} aria-pressed={mode === m}>
