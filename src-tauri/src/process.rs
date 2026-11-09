@@ -373,28 +373,9 @@ pub fn start(app: &AppHandle, spec: SpawnSpec, channel: Channel<ExecEvent>, on_f
 
         let (text, truncated) = buf.lock().map(|b| (redact::redact_text(&b.text), b.truncated)).unwrap_or_default();
         let db = app.state::<Db>();
-        let recorded = db.with(|c| {
-            c.execute(
-                "UPDATE executions SET status = ?2, exit_code = ?3, output = ?4, truncated = ?5, finished_at = ?6 WHERE id = ?1",
-                rusqlite::params![id, status, code, text, truncated as i64, now()],
-            )?;
-            let title = match kind {
-                "install" => format!("Install {tool_id}: {status}"),
-                _ => format!("Ran {tool_id}: {status}"),
-            };
-            crate::commands::activity::log(
-                c,
-                if kind == "install" { "tool_install" } else { "tool_run" },
-                &title,
-                &code.map(|c| format!("exit code {c}")).unwrap_or_default(),
-                Some("tool"),
-                Some(&tool_id),
-                project_id,
-            )?;
-            Ok(())
-        });
+        let recorded = db.with(|c| record_end(c, &RunEnd { id, kind, tool_id: &tool_id, status, code, output: &text, truncated, started_for: project_id }));
         if let Err(e) = recorded {
-            // the row stays 'running' and is marked as an error at the next start
+            // nothing was written: the row stays 'running' and is marked as interrupted at the next start
             eprintln!("Cyber Hub: could not record the end of run {id}: {e}");
         }
         let _ = channel.send(ExecEvent::Exit { status: status.to_string(), code });
@@ -404,6 +385,43 @@ pub fn start(app: &AppHandle, spec: SpawnSpec, channel: Channel<ExecEvent>, on_f
     });
 
     Ok(id)
+}
+
+/// The end of a run, as it is recorded.
+pub(crate) struct RunEnd<'a> {
+    pub id: i64,
+    pub kind: &'a str,
+    pub tool_id: &'a str,
+    pub status: &'a str,
+    pub code: Option<i32>,
+    pub output: &'a str,
+    pub truncated: bool,
+    /// the project the run was started for
+    pub started_for: Option<i64>,
+}
+
+/// Records the end of a run in one transaction: status, exit code and output, and the activity
+/// entry. The entry goes to the project the run belongs to now: none when the project was deleted
+/// while the run went on (the run and the entry stay, saying so).
+pub(crate) fn record_end(c: &rusqlite::Connection, end: &RunEnd) -> crate::error::AppResult<()> {
+    let tx = c.unchecked_transaction()?;
+    tx.execute(
+        "UPDATE executions SET status = ?2, exit_code = ?3, output = ?4, truncated = ?5, finished_at = ?6 WHERE id = ?1",
+        rusqlite::params![end.id, end.status, end.code, end.output, end.truncated as i64, now()],
+    )?;
+    use rusqlite::OptionalExtension;
+    let project: Option<i64> = tx.query_row("SELECT project_id FROM executions WHERE id = ?1", rusqlite::params![end.id], |r| r.get(0)).optional()?.flatten();
+    let title = match end.kind {
+        "install" => format!("Install {}: {}", end.tool_id, end.status),
+        _ => format!("Ran {}: {}", end.tool_id, end.status),
+    };
+    let mut detail = end.code.map(|c| format!("exit code {c}")).unwrap_or_default();
+    if end.started_for.is_some() && project.is_none() {
+        detail = format!("{}its project was deleted while it ran", if detail.is_empty() { String::new() } else { format!("{detail}; ") });
+    }
+    crate::commands::activity::log(&tx, if end.kind == "install" { "tool_install" } else { "tool_run" }, &title, &detail, Some("tool"), Some(end.tool_id), project)?;
+    tx.commit()?;
+    Ok(())
 }
 
 #[cfg(test)]

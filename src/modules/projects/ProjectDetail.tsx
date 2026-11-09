@@ -288,7 +288,7 @@ export function ProjectDetail({ id }: { id: number }) {
   const remove = async () => {
     const ok = await confirm.ask({
       title: `Delete “${p.name}”?`,
-      body: `This permanently deletes the project, its ${pluralize(p.targets.length, "scope entry", "scope entries")} and ${pluralize(f.length, "finding")}. Tool run history is kept but unlinked.`,
+      body: `This permanently deletes the project, its ${pluralize(p.targets.length, "scope entry", "scope entries")}, ${pluralize(f.length, "finding")}, evidence and other records. Tool runs and the activity log are kept but unlinked. A project with a run, workflow or discovery still in progress cannot be deleted.`,
       confirmLabel: "Delete project",
     });
     if (!ok) return;

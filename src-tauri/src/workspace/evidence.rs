@@ -468,6 +468,18 @@ impl EvidenceStore {
         })
     }
 
+    /// Removes a stored file when no evidence record refers to it (after its project was deleted).
+    /// Called with the database lock held, like [`Self::delete`].
+    pub fn remove_unreferenced(&self, c: &Connection, sha: &str) {
+        if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return;
+        }
+        let used: i64 = c.query_row("SELECT COUNT(*) FROM evidence WHERE kind = 'file' AND sha256 = ?1", params![sha], |r| r.get(0)).unwrap_or(1);
+        if used == 0 {
+            let _ = fs::remove_file(self.blob(sha));
+        }
+    }
+
     /// Removes files in the store that no record refers to (after a crash between copy and insert).
     pub fn sweep(&self, db: &Db) -> AppResult<usize> {
         let _ = fs::remove_dir_all(self.root.join("incoming"));

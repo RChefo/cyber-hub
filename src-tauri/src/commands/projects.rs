@@ -255,15 +255,72 @@ pub async fn project_upsert(db: State<'_, Db>, input: ProjectInput) -> AppResult
 }
 
 #[tauri::command]
-pub async fn project_delete(db: State<'_, Db>, id: i64) -> AppResult<()> {
+pub async fn project_delete(app: tauri::AppHandle, db: State<'_, Db>, id: i64) -> AppResult<()> {
+    use tauri::Manager;
+    let dir = crate::util::data_dir(&app)?;
+    let store = app.state::<std::sync::Arc<crate::workspace::evidence::EvidenceStore>>();
     db.with(|c| {
-        let name: Option<String> = c.query_row("SELECT name FROM projects WHERE id=?1", params![id], |r| r.get(0)).optional()?;
-        c.execute("DELETE FROM projects WHERE id=?1", params![id])?;
-        if let Some(n) = name {
-            log(c, "project", &format!("Deleted project “{n}”"), "", None, None, None)?;
+        let orphaned = delete_project(c, id)?;
+        // still under the database lock; not while a restore is sorted, when some files belong to
+        // the previous database (the start-up sweep handles them later)
+        if !crate::restore::sorting_evidence(&dir) {
+            for sha in orphaned {
+                store.remove_unreferenced(c, &sha);
+            }
         }
         Ok(())
     })
+}
+
+/// What still runs for a project: tool runs, workflow runs and discovery.
+pub(crate) fn running_work(c: &Connection, project_id: i64) -> AppResult<Vec<String>> {
+    let mut out: Vec<String> = Vec::new();
+    let queries = [
+        "SELECT tool_id || ' run #' || id FROM executions WHERE project_id = ?1 AND status = 'running' ORDER BY id",
+        "SELECT 'workflow ' || w.name || ' (run #' || r.id || ')' FROM workflow_runs r JOIN workflows w ON w.id = r.workflow_id WHERE r.project_id = ?1 AND r.status = 'running' ORDER BY r.id",
+        "SELECT source || ' discovery #' || id FROM discovery_snapshots WHERE project_id = ?1 AND status = 'running' ORDER BY id",
+    ];
+    for sql in queries {
+        let mut st = c.prepare(sql)?;
+        for row in st.query_map(params![project_id], |r| r.get::<_, String>(0))? {
+            out.push(row?);
+        }
+    }
+    Ok(out)
+}
+
+/// Deletes a project and everything it owns, in one transaction, unless work still runs for it
+/// (its results would have nowhere to go). Tool runs, command history, activity entries and OSINT
+/// investigations are not project records: they stay, with no project. Returns the SHA-256 of
+/// evidence files that no record refers to any more.
+pub(crate) fn delete_project(c: &Connection, id: i64) -> AppResult<Vec<String>> {
+    let tx = c.unchecked_transaction()?;
+    let Some(name) = tx.query_row("SELECT name FROM projects WHERE id = ?1", params![id], |r| r.get::<_, String>(0)).optional()? else {
+        return Ok(Vec::new());
+    };
+    let running = running_work(&tx, id)?;
+    if !running.is_empty() {
+        let more = if running.len() > 5 { format!(" and {} more", running.len() - 5) } else { String::new() };
+        return Err(validation(format!(
+            "Project “{name}” still has work running: {}{more}. Stop it or wait for it to finish, then delete the project.",
+            running.iter().take(5).cloned().collect::<Vec<_>>().join(", ")
+        )));
+    }
+    let files: Vec<String> = tx
+        .prepare("SELECT DISTINCT sha256 FROM evidence WHERE project_id = ?1 AND kind = 'file' AND sha256 IS NOT NULL")?
+        .query_map(params![id], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    tx.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
+    log(&tx, "project", &format!("Deleted project “{name}”"), "", None, None, None)?;
+    let mut orphaned = Vec::new();
+    for sha in files {
+        let used: i64 = tx.query_row("SELECT COUNT(*) FROM evidence WHERE kind = 'file' AND sha256 = ?1", params![sha], |r| r.get(0))?;
+        if used == 0 {
+            orphaned.push(sha);
+        }
+    }
+    tx.commit()?;
+    Ok(orphaned)
 }
 
 #[derive(Debug, Deserialize)]
@@ -1124,6 +1181,134 @@ mod lifecycle_tests {
                 rows,
                 vec![("added".into(), Some(1), String::new()), ("updated".into(), Some(0), "Out of scope since the call".into()), ("removed".into(), Some(0), String::new())]
             );
+            Ok(())
+        })
+        .unwrap();
+    }
+}
+
+#[cfg(test)]
+mod deletion_tests {
+    use super::*;
+    use crate::process::{record_end, RunEnd};
+    use std::sync::Arc;
+
+    /// Project 1 with a running tool run (#10) that a finding links to, and two evidence files: one
+    /// only project 1 uses, one project 2 uses too.
+    fn setup(db: &Db) {
+        db.with(|c| {
+            c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'Acme', 'active', 't', 't'), (2, 'Other', 'active', 't', 't')", [])?;
+            c.execute("INSERT INTO executions (id, tool_id, kind, program, args, project_id, status, started_at) VALUES (10, 'nmap', 'run', 'nmap', '[]', 1, 'running', 't')", [])?;
+            c.execute("INSERT INTO findings (id, project_id, title, severity, status, created_at, updated_at) VALUES (5, 1, 'F', 'low', 'new', 't', 't')", [])?;
+            c.execute("INSERT INTO finding_links (finding_id, kind, ref_id, created_at) VALUES (5, 'execution', 10, 't')", [])?;
+            c.execute(
+                "INSERT INTO evidence (project_id, kind, title, source, sha256, size, file_name, created_at) VALUES (1, 'file', 'own', 'user', ?1, 1, 'a', 't'), (1, 'file', 'shared', 'user', ?2, 1, 'b', 't'), (2, 'file', 'shared', 'user', ?2, 1, 'b', 't')",
+                params!["a".repeat(64), "b".repeat(64)],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    fn end(started_for: Option<i64>) -> RunEnd<'static> {
+        RunEnd { id: 10, kind: "run", tool_id: "nmap", status: "succeeded", code: Some(0), output: "done", truncated: false, started_for }
+    }
+
+    fn count(c: &Connection, sql: &str) -> i64 {
+        c.query_row(sql, [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn a_project_is_not_deleted_while_work_runs_for_it() {
+        let db = Db::open_in_memory().unwrap();
+        setup(&db);
+        db.with(|c| {
+            let err = delete_project(c, 1).unwrap_err().to_string();
+            assert!(err.contains("still has work running") && err.contains("nmap run #10"), "{err}");
+            assert_eq!(count(c, "SELECT COUNT(*) FROM projects WHERE id = 1"), 1, "nothing was deleted");
+            // running workflows and discovery hold it back too
+            c.execute("INSERT INTO workflows (id, project_id, name, definition, created_at, updated_at) VALUES (3, 2, 'Nightly', '[]', 't', 't')", [])?;
+            c.execute("INSERT INTO workflow_runs (workflow_id, project_id, trigger, status, definition, started_at) VALUES (3, 2, 'manual', 'running', '[]', 't')", [])?;
+            c.execute("INSERT INTO discovery_snapshots (project_id, mode, source, status, started_at) VALUES (2, 'passive', 'passive', 'running', 't')", [])?;
+            let err = delete_project(c, 2).unwrap_err().to_string();
+            assert!(err.contains("workflow Nightly") && err.contains("passive discovery"), "{err}");
+            // the run ends and is recorded with its project; then the project can go
+            record_end(c, &end(Some(1)))?;
+            let orphaned = delete_project(c, 1)?;
+            assert_eq!(orphaned, vec!["a".repeat(64)], "only the file no other project uses");
+            // the run and its activity entry stay, without a project; the records of the project go
+            let (project, status): (Option<i64>, String) = c.query_row("SELECT project_id, status FROM executions WHERE id = 10", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            assert_eq!((project, status.as_str()), (None, "succeeded"));
+            assert_eq!(count(c, "SELECT COUNT(*) FROM activity_logs WHERE title = 'Ran nmap: succeeded' AND project_id IS NULL"), 1);
+            assert_eq!(count(c, "SELECT COUNT(*) FROM activity_logs WHERE title = 'Deleted project “Acme”'"), 1);
+            assert_eq!(count(c, "SELECT COUNT(*) FROM finding_links"), 0, "no link points at a deleted finding");
+            assert_eq!(count(c, "SELECT COUNT(*) FROM evidence WHERE project_id = 2"), 1, "the other project keeps its evidence");
+            assert_eq!(count(c, "SELECT COUNT(*) FROM pragma_foreign_key_check"), 0);
+            assert!(delete_project(c, 1)?.is_empty(), "deleting again changes nothing");
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn the_end_of_a_run_is_recorded_when_its_project_is_gone() {
+        let db = Db::open_in_memory().unwrap();
+        setup(&db);
+        db.with(|c| {
+            // a project removed without the check (an older version, a direct database change)
+            c.execute("DELETE FROM projects WHERE id = 1", [])?;
+            record_end(c, &end(Some(1)))?;
+            let (project, detail): (Option<i64>, String) = c.query_row("SELECT project_id, detail FROM activity_logs WHERE title = 'Ran nmap: succeeded'", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            assert_eq!(project, None);
+            assert!(detail.contains("its project was deleted while it ran"), "{detail}");
+            assert_eq!(count(c, "SELECT COUNT(*) FROM executions WHERE id = 10 AND status = 'succeeded' AND output = 'done'"), 1);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn an_interrupted_end_of_run_leaves_nothing_half_written() {
+        let db = Db::open_in_memory().unwrap();
+        setup(&db);
+        db.with(|c| {
+            // the activity entry cannot be written (a full disk, for example)
+            c.execute_batch("CREATE TEMP TRIGGER fail BEFORE INSERT ON activity_logs BEGIN SELECT RAISE(ABORT, 'disk full'); END;")?;
+            assert!(record_end(c, &end(Some(1))).is_err());
+            assert_eq!(count(c, "SELECT COUNT(*) FROM executions WHERE id = 10 AND status = 'running' AND output = ''"), 1, "the run is untouched, marked as interrupted at the next start");
+            c.execute_batch("DROP TRIGGER fail;")?;
+            record_end(c, &end(Some(1)))?;
+            assert_eq!(count(c, "SELECT COUNT(*) FROM executions WHERE id = 10 AND status = 'succeeded'"), 1);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn deleting_a_project_while_its_run_ends_is_safe() {
+        let db = Arc::new(Db::open_in_memory().unwrap());
+        setup(&db);
+        let d = db.clone();
+        // the analyst keeps trying to delete the project while the run goes on
+        let deleter = std::thread::spawn(move || {
+            for _ in 0..500 {
+                if d.with(|c| delete_project(c, 1)).is_ok() {
+                    return true;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            false
+        });
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        db.with(|c| record_end(c, &end(Some(1)))).unwrap();
+        assert!(deleter.join().unwrap(), "deleted once the run had ended");
+        db.with(|c| {
+            assert_eq!(count(c, "SELECT COUNT(*) FROM projects WHERE id = 1"), 0);
+            assert_eq!(count(c, "SELECT COUNT(*) FROM executions WHERE id = 10 AND status = 'succeeded' AND project_id IS NULL"), 1);
+            assert_eq!(count(c, "SELECT COUNT(*) FROM activity_logs WHERE title = 'Ran nmap: succeeded'"), 1);
+            assert_eq!(count(c, "SELECT COUNT(*) FROM pragma_foreign_key_check"), 0);
+            let ok: String = c.query_row("PRAGMA integrity_check", [], |r| r.get(0))?;
+            assert_eq!(ok, "ok");
             Ok(())
         })
         .unwrap();
