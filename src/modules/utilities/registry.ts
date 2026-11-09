@@ -10,6 +10,7 @@ import {
   Braces,
   Code2,
   Cloud,
+  FileScan,
   Container,
   Crosshair,
   FileCode2,
@@ -55,6 +56,7 @@ export type UtilityId =
   | "secrets"
   | "containers"
   | "cloud"
+  | "file-triage"
   | "pcap"
   | "logs";
 
@@ -91,6 +93,7 @@ export const UTILITIES: UtilityDef[] = [
   { id: "secrets", name: "Secrets scanner", description: "Find API keys, tokens, private keys and passwords in text, files or folders.", icon: FileKey, group: "Analysis" },
   { id: "containers", name: "Container & Kubernetes checks", description: "Check Dockerfiles, Compose files and Kubernetes manifests against the Pod Security Standards and the CIS Docker Benchmark, and RBAC for ways to more privileges.", icon: Container, group: "Analysis" },
   { id: "cloud", name: "Cloud & IaC checks", description: "Check Terraform, CloudFormation and AWS IAM policies for public resources, open security groups, missing encryption and privilege escalation.", icon: Cloud, group: "Analysis" },
+  { id: "file-triage", name: "File triage (PE, ELF)", description: "What a Windows or Linux program is and what it can do, without running it: hashes, sections, imports, hardening, capabilities and strings.", icon: FileScan, group: "Analysis" },
   { id: "pcap", name: "Packet capture triage", description: "Hosts, DNS, HTTP, TLS server names and cleartext credentials in a pcap or pcapng file.", icon: Cable, group: "Analysis" },
   { id: "logs", name: "Log triage", description: "Attacks, scans and password guessing in web access and SSH logs; ATT&CK-mapped detections in Windows event logs (EVTX).", icon: ScrollText, group: "Analysis" },
   { id: "http-builder", name: "HTTP request builder", description: "Send one crafted request to an in-scope target and inspect the response.", icon: ArrowLeftRight, group: "Assessment", network: true },

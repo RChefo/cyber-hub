@@ -13,6 +13,7 @@ import { IocTool } from "./tools/IocTool";
 import { WorkbenchTool } from "./tools/Workbench";
 import { DnsIntelTool, HttpBuilderTool, PortsTool, SecretsTool, SubdomainMonitorTool, TlsTool } from "./tools/AssessmentTools";
 import { CloudTool } from "./tools/CloudTool";
+import { FileTriageTool } from "./tools/FileTriageTool";
 import { ContainerTool } from "./tools/ContainerTool";
 import { CaptureTool, LogTool } from "./tools/TriageTools";
 
@@ -42,6 +43,7 @@ const VIEWS: Record<UtilityId, ComponentType> = {
   secrets: SecretsTool,
   containers: ContainerTool,
   cloud: CloudTool,
+  "file-triage": FileTriageTool,
   pcap: CaptureTool,
   logs: LogTool,
 };

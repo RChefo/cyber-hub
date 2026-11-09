@@ -1,6 +1,7 @@
 //! Security utilities that run in the backend (Security Utilities page): DNS intelligence, TLS
 //! analysis, an HTTP request builder and a secrets scanner. Commands are in `commands::sectools`.
 
+pub mod binary;
 pub mod dns_intel;
 pub mod evtx;
 pub mod http;

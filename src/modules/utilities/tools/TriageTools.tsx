@@ -15,7 +15,7 @@ import { captureFinding, captureSpan, formatBytes, logFinding } from "../lib/tri
 import { PrivacyNote } from "./shared";
 
 /** Project choice and "Record as findings" for the selected entries (each title once). */
-function RecordBar({ build, picked, onDone }: { build: (projectId: number) => FindingInput[]; picked: number; onDone: () => void }) {
+export function RecordBar({ build, picked, onDone }: { build: (projectId: number) => FindingInput[]; picked: number; onDone: () => void }) {
   const { runtime } = useApp();
   const projects = useQuery(["projects"], () => api.projectsList(), [], runtime);
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -62,7 +62,7 @@ function RecordBar({ build, picked, onDone }: { build: (projectId: number) => Fi
   );
 }
 
-function Pick({ label, selected, onToggle }: { label: string; selected: boolean; onToggle: () => void }) {
+export function Pick({ label, selected, onToggle }: { label: string; selected: boolean; onToggle: () => void }) {
   return (
     <Checkbox aria-label={label} isSelected={selected} onChange={onToggle} className="mt-0.5">
       <Checkbox.Content>
@@ -74,7 +74,7 @@ function Pick({ label, selected, onToggle }: { label: string; selected: boolean;
   );
 }
 
-function Table({ head, rows }: { head: string[]; rows: (string | number)[][] }) {
+export function Table({ head, rows }: { head: string[]; rows: (string | number)[][] }) {
   if (rows.length === 0) return <p className="text-[12.5px] text-muted">None.</p>;
   return (
     <div className="max-h-[320px] overflow-auto rounded-[8px] bg-white/[0.02]">

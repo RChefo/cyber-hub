@@ -262,6 +262,30 @@ pub async fn iac_scan_pick(app: AppHandle, folder: bool) -> AppResult<Option<Con
     Ok(Some(ContainerScan { root, result }))
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BinaryScan {
+    pub file: String,
+    pub report: crate::sectools::binary::Report,
+}
+
+/// Choose a file (native dialog) and triage it statically: it is read, never run or uploaded.
+/// None when cancelled.
+#[tauri::command]
+pub async fn binary_analyze_pick(app: AppHandle) -> AppResult<Option<BinaryScan>> {
+    let filter = ("Programs and libraries", &["exe", "dll", "sys", "scr", "cpl", "ocx", "drv", "so", "elf", "bin", "ko", "o"][..]);
+    let Some(path) = pick_one(&app, "Choose a file to triage", filter).await else { return Ok(None) };
+    let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let report = tauri::async_runtime::spawn_blocking(move || -> AppResult<crate::sectools::binary::Report> {
+        let mut data = Vec::new();
+        std::io::Read::read_to_end(&mut open_limited(&path, crate::sectools::binary::MAX_FILE_BYTES)?, &mut data)?;
+        crate::sectools::binary::analyze(&data).map_err(AppError::Validation)
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("the triage failed: {e}")))??;
+    Ok(Some(BinaryScan { file, report }))
+}
+
 /// A native Open dialog for one file; None when cancelled.
 async fn pick_one(app: &AppHandle, title: &str, filter: (&str, &[&str])) -> Option<std::path::PathBuf> {
     let (tx, rx) = tokio::sync::oneshot::channel();

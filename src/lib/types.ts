@@ -1669,6 +1669,45 @@ export interface LogDetection {
   technique?: string;
 }
 
+export interface BinaryCapability {
+  id: string;
+  severity: "high" | "medium" | "low" | "info";
+  title: string;
+  detail: string;
+  /** "T1055 Process Injection", or "" */
+  technique: string;
+  evidence: string[];
+}
+
+export interface BinaryReport {
+  format: "PE32" | "PE32+" | "ELF32" | "ELF64" | "unknown";
+  machine: string;
+  kind: string;
+  size: number;
+  md5: string;
+  sha1: string;
+  sha256: string;
+  imphash: string;
+  compiled: string;
+  interpreter: string;
+  entropy: number;
+  dotnet: boolean;
+  sections: { name: string; size: number; virtualSize: number; entropy: number; flags: string; note: string }[];
+  libraries: { name: string; functions: string[] }[];
+  exports: string[];
+  hardening: { name: string; present: boolean; detail: string }[];
+  capabilities: BinaryCapability[];
+  strings: string[];
+  stringsTotal: number;
+  overlay: number;
+  warnings: string[];
+}
+
+export interface BinaryScan {
+  file: string;
+  report: BinaryReport;
+}
+
 export interface LogReport {
   kind: "web" | "ssh" | "mixed" | "windows" | "unknown";
   lines: number;
