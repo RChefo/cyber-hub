@@ -1496,3 +1496,97 @@ export interface ApiRecordedIssue {
   findingId: number;
   created: boolean;
 }
+
+/* ───────── SBOM analysis (workspace/sbom.rs) ───────── */
+
+export interface SbomComponent {
+  name: string;
+  group: string;
+  version: string;
+  purl: string;
+  cpe: string;
+  kind: string;
+  ecosystem: string;
+  licenses: string[];
+  licenseRisk: "permissive" | "weak-copyleft" | "copyleft" | "network-copyleft" | "restricted" | "unknown";
+  supplier: string;
+  hashes: string[];
+  direct: boolean;
+  reference: string;
+}
+
+export interface SbomVuln {
+  id: string;
+  aliases: string[];
+  summary: string;
+  severity: "critical" | "high" | "medium" | "low" | "unknown";
+  score: number | null;
+  vector: string;
+  fixed: string[];
+  references: string[];
+  published: string;
+  /** indices of the affected components */
+  components: number[];
+  /** osv (looked up) or sbom (stated in the file) */
+  source: "osv" | "sbom";
+  /** VEX analysis state from the file, or "" */
+  analysis: string;
+}
+
+export interface Sbom {
+  format: string;
+  specVersion: string;
+  subject: string;
+  created: string;
+  tools: string[];
+  components: SbomComponent[];
+  relationships: boolean;
+  vulns: SbomVuln[];
+  warnings: string[];
+}
+
+export interface SbomIssue {
+  id: string;
+  area: "license" | "completeness";
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  title: string;
+  detail: string;
+  components: string[];
+  recommendation: string;
+}
+
+export interface SbomSummary {
+  id: number;
+  projectId: number;
+  name: string;
+  format: string;
+  subject: string;
+  components: number;
+  sha256: string;
+  evidenceId: number | null;
+  importedAt: string;
+  checkedAt: string | null;
+  /** critical, high, medium, low, unknown */
+  vulns: [number, number, number, number, number];
+  vulnerable: number;
+}
+
+export interface SbomView {
+  summary: SbomSummary;
+  sbom: Sbom;
+  vulns: SbomVuln[];
+  issues: SbomIssue[];
+  /** "vuln:<id>:<component>" or "issue:<id>" → finding id */
+  recorded: Record<string, number>;
+}
+
+export interface SbomCheck {
+  checked: number;
+  skipped: number;
+  vulns: number;
+}
+
+export interface SbomRecorded {
+  created: number;
+  existing: number;
+}

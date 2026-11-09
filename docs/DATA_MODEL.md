@@ -1,4 +1,4 @@
-# Project data model (schema 20)
+# Project data model (schema 21)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -318,6 +318,18 @@ Projects → *APIs* keeps an inventory of the endpoints that API definitions des
 * **Scope.** Every endpoint's URL (the first absolute server and the path, parameters as their names) is checked against the project's scope, with the same rules as the HTTP request builder. Only in-scope endpoints open in the builder, which checks the request again when it is sent.
 * **Issues** are properties of the definition: anonymous write operations of an API that otherwise requires authentication, a definition without authentication or with schemes that no operation uses, HTTP Basic, API keys in the query string, the OAuth implicit and password flows, cleartext servers, secrets in query strings, page sizes without a maximum, deprecated operations and non-production servers. *Record finding* creates the finding once (title, severity, OWASP category and tag, the endpoints, the recommendation, and the definition's file as evidence).
 * **Tests** list endpoints to test for what no definition can show: object identifiers in paths (BOLA), administrative paths (function-level authorization), privileged body properties (mass assignment), URL and callback inputs (SSRF), sensitive flows without a documented 429 (rate limits), and several API versions. They are not findings.
+
+## SBOM analysis (schema 21)
+
+Projects → *Components* reads software bills of materials and reports the known vulnerabilities, licenses and completeness of the components they list. The code is `workspace/sbom.rs` and `commands/sbom.rs`.
+
+* **Files.** CycloneDX 1.2–1.6 as JSON or XML, SPDX 2.2 and 2.3 as JSON or tag-value; at most 50 MB and 20,000 components (nested CycloneDX components included). SPDX 3.0 (JSON-LD) and SPDX RDF are refused with a message. XML is read without DTD processing: only the predefined and numeric entities are expanded, so an external entity stays literal text.
+* **Records.** `sbom_docs` keeps one row per imported file: name, format, the described software, the component count, the file's SHA-256 and evidence record, `doc` (the components and the vulnerabilities the file states, as JSON), `vulns` (the last OSV.dev result) and `checked_at`. The same file twice in a project is refused; deleting an SBOM keeps its file in the evidence vault and its findings.
+* **Components** keep name, group, version, package URL, CPE, type, ecosystem (the package URL type), licenses, supplier, up to four hashes, and whether they are direct dependencies of the described software (CycloneDX `dependencies`, SPDX `DEPENDS_ON`/`CONTAINS` relationships).
+* **Licenses** are classified from SPDX identifiers and expressions as permissive, weak copyleft, copyleft, network copyleft, restricted (non-commercial, no-derivatives and source-available terms) or unknown. In an expression, OR takes the most permissive choice and AND (or several license entries) the most restrictive.
+* **Known vulnerabilities.** The file's own `vulnerabilities` (CycloneDX) are shown with their VEX analysis; `not_affected` and `false_positive` are hidden unless asked. *Check on OSV.dev* sends one batch query per 1,000 package URLs (only components with a package URL and a version; the others are counted as not checked), then fetches each vulnerability record. Severity comes from the GitHub advisory rating, else from the highest CVSS vector, scored with Cyber Hub's own CVSS code; fixed versions come from the ranges of the affected package. A vulnerability the file states and OSV.dev knows under the same id or alias is shown once.
+* **Checks.** Network-copyleft and restricted licenses (medium), copyleft licenses, unknown licenses, components without a version or without a package URL or CPE (low), and missing suppliers, relationships, author or timestamp, and packages in several versions (info).
+* **Findings.** Each vulnerability of each component, and each check, can be recorded once as a finding: severity (unrated vulnerabilities become medium), CVE, CVSS vector, the package URL as target, the fixed versions as remediation, the tags `sbom` and the ecosystem, and the SBOM file as evidence.
 
 ## Analysis
 

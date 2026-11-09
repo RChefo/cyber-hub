@@ -882,6 +882,26 @@ pub(crate) const MIGRATIONS: &[&str] = &[
         UNIQUE (project_id, sha256)
     );
     "#,
+    // 21 — SBOM analysis (docs/DATA_MODEL.md#sbom-analysis-schema-21): one row per imported SBOM.
+    // `doc` holds the components and the vulnerabilities stated in the file, `vulns` the result of
+    // the last OSV.dev lookup (`checked_at`).
+    r#"
+    CREATE TABLE sbom_docs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        format TEXT NOT NULL,
+        subject TEXT NOT NULL DEFAULT '',
+        components INTEGER NOT NULL DEFAULT 0,
+        sha256 TEXT NOT NULL,
+        evidence_id INTEGER REFERENCES evidence(id) ON DELETE SET NULL,
+        doc TEXT NOT NULL,
+        vulns TEXT NOT NULL DEFAULT '[]',
+        checked_at TEXT,
+        imported_at TEXT NOT NULL,
+        UNIQUE (project_id, sha256)
+    );
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a

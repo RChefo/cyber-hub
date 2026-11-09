@@ -40,6 +40,7 @@ export const ACTIVITY_META: Record<string, { icon: LucideIcon; color: FeaturedIc
   vt_lookup: { icon: ShieldCheck, color: "brand", label: "VirusTotal" },
   vt_upload: { icon: Upload, color: "warning", label: "VirusTotal uploads" },
   ti_lookup: { icon: Radar, color: "brand", label: "Threat intel" },
+  vuln_lookup: { icon: ShieldAlert, color: "brand", label: "Vulnerability lookups" },
   update: { icon: DownloadCloud, color: "brand", label: "Updates" },
 };
 

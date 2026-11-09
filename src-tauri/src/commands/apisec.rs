@@ -68,7 +68,7 @@ fn endpoint_scope(entries: &[ScopeEntry], spec: &ApiSpec, e: &Endpoint) -> Endpo
 }
 
 /// The finding an issue was recorded as, if any (same title and rule line in the same project).
-fn recorded_finding(c: &Connection, input: &crate::commands::projects::FindingInput) -> AppResult<Option<i64>> {
+pub(crate) fn recorded_finding(c: &Connection, input: &crate::commands::projects::FindingInput) -> AppResult<Option<i64>> {
     Ok(c.query_row(
         "SELECT id FROM findings WHERE project_id = ?1 AND title = ?2 AND technical_details = ?3 ORDER BY id LIMIT 1",
         params![input.project_id, input.title, input.technical_details],

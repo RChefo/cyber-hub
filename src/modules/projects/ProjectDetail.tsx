@@ -17,6 +17,7 @@ import type { Finding, Project, ProjectStatus } from "@/lib/types";
 import { formatDate, formatDateTime, formatRelative, pluralize, shellQuote } from "@/lib/utils";
 import { AnalysisTab } from "./AnalysisTab";
 import { ApiTab } from "./ApiTab";
+import { ComponentsTab } from "./ComponentsTab";
 import { AssistantTab } from "./AssistantTab";
 import { AttackSurfaceTab } from "./AttackSurfaceTab";
 import { AutomationTab } from "./AutomationTab";
@@ -29,7 +30,7 @@ import { countBySeverity } from "./report";
 import { ScopeTab } from "./ScopeTab";
 import { VulnerabilitiesTab } from "./VulnerabilitiesTab";
 
-type TabId = "overview" | "scope" | "surface" | "apis" | "vulns" | "findings" | "checklist" | "analysis" | "assistant" | "automation" | "timeline" | "evidence" | "report" | "notes" | "commands";
+type TabId = "overview" | "scope" | "surface" | "apis" | "components" | "vulns" | "findings" | "checklist" | "analysis" | "assistant" | "automation" | "timeline" | "evidence" | "report" | "notes" | "commands";
 
 function NotesTab({ project }: { project: Project }) {
   const [notes, setNotes] = useState(project.notes);
@@ -328,6 +329,7 @@ export function ProjectDetail({ id }: { id: number }) {
     { id: "scope", label: `Scope (${p.targets.length})` },
     { id: "surface", label: "Attack surface" },
     { id: "apis", label: "APIs" },
+    { id: "components", label: "Components" },
     { id: "vulns", label: "Vulnerabilities" },
     { id: "findings", label: `Findings (${f.length})` },
     { id: "checklist", label: "Checklist" },
@@ -417,6 +419,9 @@ export function ProjectDetail({ id }: { id: number }) {
         </Tabs.Panel>
         <Tabs.Panel id="apis">
           <ApiTab project={p} onOpenFindings={() => setTab("findings")} />
+        </Tabs.Panel>
+        <Tabs.Panel id="components">
+          <ComponentsTab project={p} onOpenFindings={() => setTab("findings")} />
         </Tabs.Panel>
         <Tabs.Panel id="vulns">
           <VulnerabilitiesTab project={p} />

@@ -10,6 +10,7 @@ pub mod evidence;
 pub mod findings;
 pub mod findings_export;
 pub mod report;
+pub mod sbom;
 pub mod scan_import;
 pub mod scope_gate;
 pub mod templates;

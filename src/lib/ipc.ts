@@ -143,6 +143,13 @@ export const api = {
   apiSpecGet: (id: number) => call<T.ApiSpecView>("api_spec_get", { id }),
   apiSpecDelete: (id: number) => call<void>("api_spec_delete", { id }),
   apiIssueRecord: (specId: number, issueId: string) => call<T.ApiRecordedIssue>("api_issue_record", { specId, issueId }),
+  // SBOM analysis: reading contacts nothing; sbomCheck asks OSV.dev with package URLs only
+  sbomImport: (projectId: number) => call<T.SbomSummary | null>("sbom_import", { projectId }),
+  sbomsList: (projectId: number) => call<T.SbomSummary[]>("sboms_list", { projectId }),
+  sbomGet: (id: number) => call<T.SbomView>("sbom_get", { id }),
+  sbomCheck: (id: number) => call<T.SbomCheck>("sbom_check", { id }),
+  sbomRecord: (id: number, keys: string[]) => call<T.SbomRecorded>("sbom_record", { id, keys }),
+  sbomDelete: (id: number) => call<void>("sbom_delete", { id }),
   findingTemplatesList: () => call<T.FindingTemplate[]>("finding_templates_list"),
   findingTemplateSave: (input: T.FindingTemplateInput) => call<T.FindingTemplate>("finding_template_save", { input }),
   findingTemplateDelete: (id: number) => call<void>("finding_template_delete", { id }),
