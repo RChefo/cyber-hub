@@ -2,11 +2,18 @@ import { Modal } from "@heroui/react";
 import {
   BookMarked,
   Boxes,
+  Bug,
   CornerDownLeft,
+  FileArchive,
   FileText,
   FolderKanban,
   LayoutGrid,
+  Network,
+  Package,
+  Route,
   Search,
+  Server,
+  ShieldAlert,
   SquareTerminal,
   Syringe,
   Wrench,
@@ -21,7 +28,9 @@ import { RESOURCES } from "@/data/resources";
 import { openResource } from "@/lib/actions";
 import { api } from "@/lib/ipc";
 import { useQuery } from "@/lib/query";
+import type { RecordKind, SearchHit } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { KIND_LABEL, refKey } from "@/modules/projects/investigation";
 import { UTILITIES } from "@/modules/utilities/registry";
 import { ALL_NAV, type PageId } from "./routes";
 import { useApp } from "./store";
@@ -39,7 +48,11 @@ interface ResultItem {
 /** Groups whose subtitles are literal data (commands, queries, URLs, paths). */
 const MONO_GROUPS = new Set(["Commands", "Dorks", "Resources", "Wordlists"]);
 
-const GROUP_ORDER =["Pages", "Tools", "Projects", "Commands", "Resources", "Dorks", "Payloads", "Wordlists", "Utilities"];
+const GROUP_ORDER = ["Pages", "Tools", "Projects", "Records", "Commands", "Resources", "Dorks", "Payloads", "Wordlists", "Utilities"];
+
+/** Project records found by the backend (techniques have no project and are left out here). */
+const RECORD_KINDS: RecordKind[] = ["finding", "asset", "vulnerability", "evidence", "osint_entity", "execution", "api_endpoint", "sbom_component"];
+const RECORD_ICON: Partial<Record<RecordKind, LucideIcon>> = { finding: Bug, asset: Server, vulnerability: ShieldAlert, evidence: FileArchive, osint_entity: Network, execution: SquareTerminal, api_endpoint: Route, sbom_component: Package };
 
 function score(item: ResultItem, terms: string[]): number {
   let s = 0;
@@ -66,6 +79,27 @@ export function CommandPalette() {
   const customPayloads = useQuery(["payloads"], api.customPayloadsList, [], enabled);
   const wordlists = useQuery(["wordlists"], api.wordlistsList, [], enabled);
   const customResources = useQuery(["resources"], api.customResourcesList, [], enabled);
+
+  // records of open projects, searched in the backend as the query is typed
+  const [records, setRecords] = useState<SearchHit[]>([]);
+  useEffect(() => {
+    const q = query.trim();
+    if (!enabled || q.length < 2) {
+      setRecords([]);
+      return;
+    }
+    let stale = false;
+    const t = setTimeout(() => {
+      api.recordsSearch({ text: q, kinds: RECORD_KINDS, includeArchived: false, limit: 24 }).then(
+        (hits) => !stale && setRecords(hits),
+        () => !stale && setRecords([]),
+      );
+    }, 180);
+    return () => {
+      stale = true;
+      clearTimeout(t);
+    };
+  }, [query, enabled]);
 
   const close = () => setPaletteOpen(false);
   const go = (page: PageId, params?: Record<string, string>) => () => {
@@ -117,8 +151,29 @@ export function CommandPalette() {
       if (g.length < 6) g.push(i);
       perGroup.set(i.group, g);
     }
+    perGroup.set(
+      "Records",
+      records.filter((h) => h.projectId != null).slice(0, 8).map((h) => {
+        const pid = String(h.projectId);
+        const params: Record<string, string> = h.node.ref.kind === "finding" ? { project: pid, tab: "findings", finding: String(h.node.ref.id) } : { project: pid, tab: "investigation", record: refKey(h.node.ref) };
+        return {
+          key: `rec:${h.node.key}`,
+          group: "Records",
+          icon: RECORD_ICON[h.node.ref.kind] ?? Search,
+          title: h.node.label,
+          subtitle: [`${KIND_LABEL[h.node.ref.kind]} in ${h.project}`, h.node.detail].filter(Boolean).join(" · "),
+          haystack: "",
+          run: () => {
+            // the time makes a second jump to the same record apply again
+            navigate("projects", { ...params, at: String(Date.now()) });
+            close();
+          },
+        };
+      }),
+    );
     return GROUP_ORDER.flatMap((g) => perGroup.get(g) ?? []);
-  }, [items, query]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, query, records]);
 
   useEffect(() => setActive(0), [query]);
   useEffect(() => {
@@ -153,7 +208,7 @@ export function CommandPalette() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder="Search tools, commands, resources, projects, dorks, payloads, wordlists, utilities"
+                placeholder="Search tools, commands, projects and their records (findings, assets, evidence…), resources, dorks, payloads"
                 className="h-12 flex-1 bg-transparent text-[14.5px] text-foreground outline-none placeholder:text-field-placeholder"
                 aria-label="Search query"
                 role="combobox"

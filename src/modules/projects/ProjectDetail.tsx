@@ -25,7 +25,7 @@ import { ChecklistTab } from "./ChecklistTab";
 import { EvidenceVault, ReportTab, ScopeExtras, TimelineTab, type TimelineRecord } from "./EngagementTabs";
 import { FindingsTab } from "./FindingsTab";
 import { InvestigationTab } from "./InvestigationTab";
-import { tabFor } from "./investigation";
+import { parseKey, tabFor } from "./investigation";
 import { ENGAGEMENT_TYPES, engagementOf, ProjectFormModal, STATUS_OPTIONS } from "./ProjectFormModal";
 import { isOpenFinding } from "@/lib/findings";
 import { countBySeverity } from "./report";
@@ -264,8 +264,22 @@ export function ProjectDetail({ id }: { id: number }) {
   const [tab, setTab] = useState<TabId>(() => (TAB_IDS as string[]).includes(route.params?.tab ?? "") ? (route.params!.tab as TabId) : "overview");
   // the record whose related records are shown in the investigation view, the finding to open,
   // and the record the timeline is limited to
-  const [panelRecord, setPanelRecord] = useState<RecordRef | null>(null);
+  const [panelRecord, setPanelRecord] = useState<RecordRef | null>(() => (route.params?.record ? parseKey(route.params.record) : null));
   const [focusFinding, setFocusFinding] = useState<number | null>(() => (route.params?.finding && /^\d+$/.test(route.params.finding) ? Number(route.params.finding) : null));
+  // a deep link to this same project (the global search) applies without remounting the page
+  const deepLink = [route.params?.tab, route.params?.finding, route.params?.record, route.params?.at].join("|");
+  useEffect(() => {
+    const t = route.params?.tab;
+    if (t && (TAB_IDS as string[]).includes(t)) setTab(t as TabId);
+    const fid = route.params?.finding;
+    if (fid && /^\d+$/.test(fid)) setFocusFinding(Number(fid));
+    const rec = route.params?.record ? parseKey(route.params.record) : null;
+    if (rec) {
+      setTab("investigation");
+      setPanelRecord(rec);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLink]);
   const [timelineRecord, setTimelineRecord] = useState<TimelineRecord | null>(null);
   const openRecordTab = (r: RecordRef) => {
     const t = tabFor(r);
