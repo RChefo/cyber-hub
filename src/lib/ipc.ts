@@ -137,6 +137,12 @@ export const api = {
   scanImportCommit: (token: string, options: T.ScanImportOptions) => call<T.ScanImportResult>("scan_import_commit", { token, options }),
   scanImportDiscard: (token: string) => call<void>("scan_import_discard", { token }),
   scanImportsList: (projectId: number) => call<T.ScanImportRecord[]>("scan_imports_list", { projectId }),
+  // API security: definitions, collections and captures read into an endpoint inventory (nothing is contacted)
+  apiSpecImport: (projectId: number) => call<T.ApiSpecSummary | null>("api_spec_import", { projectId }),
+  apiSpecsList: (projectId: number) => call<T.ApiSpecSummary[]>("api_specs_list", { projectId }),
+  apiSpecGet: (id: number) => call<T.ApiSpecView>("api_spec_get", { id }),
+  apiSpecDelete: (id: number) => call<void>("api_spec_delete", { id }),
+  apiIssueRecord: (specId: number, issueId: string) => call<T.ApiRecordedIssue>("api_issue_record", { specId, issueId }),
   findingTemplatesList: () => call<T.FindingTemplate[]>("finding_templates_list"),
   findingTemplateSave: (input: T.FindingTemplateInput) => call<T.FindingTemplate>("finding_template_save", { input }),
   findingTemplateDelete: (id: number) => call<void>("finding_template_delete", { id }),

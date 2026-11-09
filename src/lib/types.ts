@@ -1396,3 +1396,103 @@ export interface UpdateStatus {
   frequencyHours: number;
   blockers: string[];
 }
+
+/* ───────── API security (workspace/apisec.rs) ───────── */
+
+export interface ApiParam {
+  name: string;
+  /** path, query, header, cookie or form */
+  location: string;
+  required: boolean;
+  kind: string;
+  bounded: boolean;
+}
+
+export interface ApiEndpoint {
+  method: string;
+  path: string;
+  operationId: string;
+  summary: string;
+  tags: string[];
+  params: ApiParam[];
+  bodyTypes: string[];
+  bodyFields: string[];
+  /** alternatives that authorize a call, each a list of schemes that must all be met */
+  auth: string[][];
+  anonymous: boolean;
+  deprecated: boolean;
+  servers: string[];
+  responses: string[];
+  /** requests seen in a capture (HAR) */
+  seen: number;
+}
+
+export interface ApiScheme {
+  name: string;
+  kind: string;
+  detail: string;
+  param: string;
+  flows: string[];
+}
+
+export interface ApiSpec {
+  /** openapi-3.0, openapi-3.1, swagger-2.0, postman or har */
+  format: string;
+  title: string;
+  version: string;
+  servers: string[];
+  schemes: ApiScheme[];
+  authApplied: boolean;
+  endpoints: ApiEndpoint[];
+  warnings: string[];
+}
+
+export interface ApiIssue {
+  id: string;
+  rule: string;
+  /** "API2:2023" */
+  owasp: string;
+  category: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  /** issue: a property of the definition; test: endpoints to test */
+  kind: "issue" | "test";
+  title: string;
+  detail: string;
+  endpoints: string[];
+  recommendation: string;
+}
+
+export interface ApiSpecSummary {
+  id: number;
+  projectId: number;
+  name: string;
+  format: string;
+  title: string;
+  version: string;
+  endpoints: number;
+  sha256: string;
+  evidenceId: number | null;
+  importedAt: string;
+  /** issues per severity: critical, high, medium, low, info */
+  issues: [number, number, number, number, number];
+  tests: number;
+}
+
+export interface ApiEndpointScope {
+  url: string;
+  inScope: boolean;
+  reason: string;
+}
+
+export interface ApiSpecView {
+  summary: ApiSpecSummary;
+  spec: ApiSpec;
+  issues: ApiIssue[];
+  scope: ApiEndpointScope[];
+  recorded: Record<string, number>;
+}
+
+export interface ApiRecordedIssue {
+  findingId: number;
+  created: boolean;
+}

@@ -1,5 +1,6 @@
 pub mod activity;
 pub mod analysis;
+pub mod apisec;
 pub mod assistant;
 pub mod discovery;
 pub mod intel;

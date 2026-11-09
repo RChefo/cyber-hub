@@ -29,10 +29,11 @@ mod util;
 mod vt;
 mod vtfile;
 mod workspace;
+mod yaml;
 
 use tauri::{AppHandle, Manager};
 
-use commands::{activity, analysis as analysis_commands, assistant as assistant_commands, intel, library, mcp as mcp_commands, osint as osint_commands, projects, sectools as sectool_commands, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, vulns as vuln_commands, wordlists, workflows as workflow_commands, workspace as workspace_commands};
+use commands::{activity, analysis as analysis_commands, apisec as apisec_commands, assistant as assistant_commands, intel, library, mcp as mcp_commands, osint as osint_commands, projects, sectools as sectool_commands, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, vulns as vuln_commands, wordlists, workflows as workflow_commands, workspace as workspace_commands};
 
 /// Leaves no work behind when Cyber Hub exits: normal exit, restart after an update, and right
 /// before an update installer takes over on Windows. Safe to call more than once.
@@ -260,6 +261,11 @@ pub fn run() {
             workspace_commands::checklist_items,
             workspace_commands::checklist_set,
             workspace_commands::database_backup,
+            apisec_commands::api_spec_import,
+            apisec_commands::api_specs_list,
+            apisec_commands::api_spec_get,
+            apisec_commands::api_spec_delete,
+            apisec_commands::api_issue_record,
             workspace_commands::database_restore_inspect,
             workspace_commands::database_restore_apply,
             workspace_commands::database_restore_outcome,

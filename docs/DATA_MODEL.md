@@ -1,4 +1,4 @@
-# Project data model (schema 19)
+# Project data model (schema 20)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -306,6 +306,18 @@ Projects → *Checklist* tracks the engagement's coverage of the **OWASP Web Sec
 * **Findings.** *Record finding* on a failed test opens the finding form with the test's name, category, the note and the test objectives, a reference to the WSTG page, and the tags `wstg` and the test ID. Saving links the finding to the test.
 * **Report.** The HTML report states the coverage under the engagement details (tests with a result, per status), once at least one test has a status.
 * **Versions.** WSTG test IDs can change between guide versions. The bundled version is recorded in the data file, so a later update can map the IDs.
+
+## API security (schema 20)
+
+Projects → *APIs* keeps an inventory of the endpoints that API definitions describe, and checks each definition against the OWASP API Security Top 10 (2023). The code is `workspace/apisec.rs` and `commands/apisec.rs`; nothing here contacts a network.
+
+* **Files.** OpenAPI 3.0 and 3.1 and Swagger 2.0 (JSON or YAML), Postman collections (v2.0 and v2.1) and HAR captures, at most 25 MB. YAML is read with limits (128 levels, one million values with aliases expanded) so a file built to expand itself is refused. Local `$ref`s are followed; external ones are not fetched and are named in a warning. A capture keeps API calls only: images, scripts, styles, fonts and media are left out, and path segments that are values (numbers, UUIDs, long hex or tokens, e-mail addresses) become `{id}`, `{token}` or `{email}`.
+* **Records.** `api_specs` keeps one row per imported file: name, format, title, version, endpoint count, the file's SHA-256, the evidence record of the file, and `doc`, the normalized inventory as JSON. The same file twice in a project is refused. Deleting a definition keeps its file in the evidence vault and the findings recorded from it.
+* **Names, never values.** The inventory keeps methods, paths, parameter and body field names, tags, response codes and the names of authentication schemes. Tokens, cookies, passwords and example values stay in the file only.
+* **Authentication.** Each endpoint lists the alternatives that authorize it (each a set of schemes) and whether anonymous calls are allowed: no requirement, or an empty alternative `{}`. Postman auth is inherited through folders; in a capture, credentials are recognised by header (`Authorization`, cookies, API-key headers) without keeping their values.
+* **Scope.** Every endpoint's URL (the first absolute server and the path, parameters as their names) is checked against the project's scope, with the same rules as the HTTP request builder. Only in-scope endpoints open in the builder, which checks the request again when it is sent.
+* **Issues** are properties of the definition: anonymous write operations of an API that otherwise requires authentication, a definition without authentication or with schemes that no operation uses, HTTP Basic, API keys in the query string, the OAuth implicit and password flows, cleartext servers, secrets in query strings, page sizes without a maximum, deprecated operations and non-production servers. *Record finding* creates the finding once (title, severity, OWASP category and tag, the endpoints, the recommendation, and the definition's file as evidence).
+* **Tests** list endpoints to test for what no definition can show: object identifiers in paths (BOLA), administrative paths (function-level authorization), privileged body properties (mass assignment), URL and callback inputs (SSRF), sensitive flows without a documented 429 (rate limits), and several API versions. They are not findings.
 
 ## Analysis
 

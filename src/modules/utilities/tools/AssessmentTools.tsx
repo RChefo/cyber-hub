@@ -31,10 +31,10 @@ function Issues({ issues }: { issues: ToolIssue[] }) {
 }
 
 /** Project selection for tools that contact targets (their scope is checked against it). */
-function useProjectPicker(optional = false) {
+function useProjectPicker(optional = false, initial: string | null = null) {
   const { runtime } = useApp();
   const projects = useQuery(["projects"], () => api.projectsList(), [], runtime);
-  const [projectId, setProjectId] = useState<string | null>(optional ? "none" : null);
+  const [projectId, setProjectId] = useState<string | null>(initial ?? (optional ? "none" : null));
   const options = [
     ...(optional ? [{ id: "none", label: "No project" }] : []),
     ...(projects.data ?? []).map((p) => ({ id: String(p.id), label: `${p.name} (${p.status})` })),
@@ -45,10 +45,15 @@ function useProjectPicker(optional = false) {
 
 /* ───────────────────────── HTTP request builder ───────────────────────── */
 
+const HTTP_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+
 export function HttpBuilderTool() {
-  const { projectId, picker } = useProjectPicker();
-  const [method, setMethod] = useState("GET");
-  const [url, setUrl] = useState("");
+  // opened from a project's API inventory: project, method and URL come with the route
+  const { route } = useApp();
+  const pre = route.params ?? {};
+  const { projectId, picker } = useProjectPicker(false, pre.project && /^\d+$/.test(pre.project) ? pre.project : null);
+  const [method, setMethod] = useState(pre.method && HTTP_METHODS.includes(pre.method) ? pre.method : "GET");
+  const [url, setUrl] = useState(pre.url ?? "");
   const [headers, setHeaders] = useState<[string, string][]>([["Accept", "*/*"]]);
   const [body, setBody] = useState("");
   const [insecure, setInsecure] = useState(false);
@@ -79,7 +84,7 @@ export function HttpBuilderTool() {
       </PrivacyNote>
       <div className="flex flex-wrap items-end gap-3">
         {picker}
-        <SelectInput label="Method" value={method} onChange={setMethod} options={["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"].map((m) => ({ id: m, label: m }))} className="w-32" />
+        <SelectInput label="Method" value={method} onChange={setMethod} options={HTTP_METHODS.map((m) => ({ id: m, label: m }))} className="w-32" />
         <TextInput label="URL" value={url} onChange={setUrl} onEnter={send} placeholder="https://app.example.com/api/health" mono className="min-w-[280px] flex-1" />
       </div>
       <div className="flex flex-col gap-2">

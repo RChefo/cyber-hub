@@ -187,7 +187,7 @@ pub async fn evidence_link_osint(db: State<'_, Db>, project_id: i64, osint_evide
     db.with(|c| evidence::link_osint(c, project_id, osint_evidence_id))
 }
 
-fn main_window_dialog(app: &AppHandle, title: &str) -> tauri_plugin_dialog::FileDialogBuilder<tauri::Wry> {
+pub(crate) fn main_window_dialog(app: &AppHandle, title: &str) -> tauri_plugin_dialog::FileDialogBuilder<tauri::Wry> {
     let mut d = app.dialog().file().set_title(title);
     if let Some(w) = app.get_webview_window("main") {
         d = d.set_parent(&w);

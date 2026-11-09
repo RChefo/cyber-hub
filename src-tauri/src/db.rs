@@ -863,6 +863,25 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     r#"
     UPDATE project_targets SET note = note WHERE 0;
     "#,
+    // 20 — API security (docs/DATA_MODEL.md#api-security-schema-20): API definitions, Postman
+    // collections and HAR captures read into an endpoint inventory, one row per imported file.
+    // `doc` holds the normalized inventory (names only, never values) as JSON.
+    r#"
+    CREATE TABLE api_specs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        format TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        version TEXT NOT NULL DEFAULT '',
+        endpoints INTEGER NOT NULL DEFAULT 0,
+        sha256 TEXT NOT NULL,
+        evidence_id INTEGER REFERENCES evidence(id) ON DELETE SET NULL,
+        doc TEXT NOT NULL,
+        imported_at TEXT NOT NULL,
+        UNIQUE (project_id, sha256)
+    );
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a

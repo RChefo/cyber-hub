@@ -42,3 +42,24 @@ Deferred or rejected items say why.
 | 17 | Vulnerability records from imported CVEs | 3 | 3 | 4 | 4 | 3 | 4 | 35 | **Done**: optional at import, linked to the finding and its asset, no network during the import |
 | — | Jira or ticketing integration | 2 | 2 | 1 | 3 | 2 | 2 | — | Rejected: needs external accounts and credentials, and does not fit local-first |
 | — | Collaborative or multi-user editing | 2 | 2 | 1 | 2 | 1 | 2 | — | Rejected: needs server infrastructure |
+
+## Second research round (2026-11-09): new capability areas
+
+The owner named six areas; none existed in Cyber Hub (code search: no API definition import, request history, SBOM, container configuration, packet capture or log parsing, and no SARIF export). Evidence, without invented figures:
+
+* **API security.** The OWASP API Security Top 10 (2023) is the reference list of API risks. OpenAPI is the standard description format, and browsers' developer tools and proxies (Burp Suite, OWASP ZAP) export HAR, the usual starting point when no definition exists.
+* **Repeater.** Burp Suite's Repeater and ZAP's request editor are core manual-testing workflows: edit a raw request, resend it, compare responses. Cyber Hub's request builder sends one request and keeps nothing.
+* **SBOM.** US Executive Order 14028 and the NTIA minimum elements made SBOMs a delivery requirement; CycloneDX (ECMA-424) and SPDX (ISO/IEC 5962) are the formats, and OSV.dev offers an open vulnerability database queried by package URL.
+* **Container and Kubernetes configuration.** The Kubernetes Pod Security Standards and the CIS Docker and Kubernetes benchmarks define the checks; tools such as hadolint, kube-linter and Checkov show the demand.
+* **Packet captures and logs.** Wireshark and Zeek are the standard tools; an engagement workstation needs a quick offline triage tied to the project (hosts, names, cleartext credentials, attack patterns), not a replacement for them.
+* **Interoperability.** SARIF 2.1.0 is an OASIS standard that code-scanning platforms such as GitHub ingest.
+
+| # | Feature | D | W | F | R | C | T | Score | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| 18 | API inventory from OpenAPI, Swagger, Postman and HAR, with OWASP API Top 10 (2023) checks, a test plan and scope per endpoint | 5 | 4 | 5 | 5 | 3 | 5 | 46 | **Done** (this round) |
+| 19 | Repeater: raw requests, history, resend and response comparison in the HTTP request builder | 4 | 4 | 5 | 4 | 4 | 4 | 42 | Planned |
+| 20 | SBOM analysis: CycloneDX and SPDX components, known vulnerabilities from OSV, license risks | 5 | 4 | 4 | 4 | 3 | 5 | 43 | Planned |
+| 21 | Container and Kubernetes configuration checks (Dockerfile, Compose, manifests) | 4 | 3 | 4 | 5 | 3 | 5 | 39 | Planned |
+| 22 | Packet capture triage (pcap, pcapng): hosts, DNS, HTTP, TLS server names, cleartext credentials | 3 | 3 | 4 | 4 | 2 | 4 | 33 | Planned |
+| 23 | Log triage: web access and SSH authentication logs (attack patterns, brute force) | 3 | 3 | 4 | 5 | 3 | 5 | 36 | Planned |
+| 24 | SARIF 2.1.0 export of findings | 3 | 3 | 5 | 5 | 5 | 5 | 40 | Planned |
