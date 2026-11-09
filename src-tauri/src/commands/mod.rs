@@ -4,6 +4,7 @@ pub mod apisec;
 pub mod assistant;
 pub mod discovery;
 pub mod intel;
+pub mod investigation;
 pub mod library;
 pub mod mcp;
 pub mod osint;

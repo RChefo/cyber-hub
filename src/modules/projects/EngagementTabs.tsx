@@ -1,17 +1,17 @@
 import { Button, Dropdown } from "@heroui/react";
-import { ChevronDown, Download, FilePlus2, FileText, History, Link2, NotebookPen, Printer, Save, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { ChevronDown, Download, FileDown, FilePlus2, FileText, History, Link2, NotebookPen, Printer, Save, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/app/store";
 import { ToneChip } from "@/components/ui/Badges";
 import { CopyButton } from "@/components/ui/Code";
 import { AppModal, useConfirm } from "@/components/ui/Dialogs";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/ui/Feedback";
-import { SelectInput, SwitchInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
+import { SearchInput, SelectInput, SwitchInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
 import { Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { EvidenceRecord, Finding, Project, ReportOptions, Severity, TimelineEventType } from "@/lib/types";
+import type { EvidenceRecord, Finding, Project, ReportOptions, Severity, TimelineEvent, TimelineEventType, TimelineQuery } from "@/lib/types";
 import { useShowMore } from "@/lib/showMore";
 import { cn, formatDateTime, formatNumber, formatRelative, pluralize } from "@/lib/utils";
 
@@ -60,6 +60,18 @@ const KIND_LABEL: Record<EvidenceRecord["kind"], string> = { file: "File", text:
 function formatSize(n: number | null) {
   if (n == null) return "";
   return n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** Where a record came from: the module and record, the tool, when the source collected it. */
+function provenanceLine(e: EvidenceRecord): string {
+  return [
+    e.sourceModule && `From ${e.sourceModule.replace(/_/g, " ")}${e.sourceRef ? ` (${e.sourceRef})` : ""}`,
+    e.tool && `tool ${e.tool}${e.toolVersion ? ` ${e.toolVersion}` : ""}`,
+    e.collectedAt && `collected ${formatDateTime(e.collectedAt)}`,
+    e.derivedFrom ? `derived from evidence #${e.derivedFrom}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function ShowMoreRow({ hidden, shown, step, noun, onMore }: { hidden: number; shown: number; step: number; noun: string; onMore: () => void }) {
@@ -180,7 +192,15 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
                   <div className="truncate text-muted">
                     {[e.fileName, formatSize(e.size), e.sha256 ? `SHA-256 ${e.sha256.slice(0, 16)}…` : null, formatRelative(e.createdAt)].filter(Boolean).join(" · ")}
                   </div>
+                  {provenanceLine(e) && <div className="truncate text-[11.5px] text-muted">{provenanceLine(e)}</div>}
                 </div>
+                {e.verification !== "unverified" && (
+                  <span title={e.verifiedAt ? `Checked ${formatDateTime(e.verifiedAt)}` : undefined}>
+                    <ToneChip tone={e.verification === "intact" ? "success" : "danger"} dot={false} className="text-[11px]">
+                      {e.verification}
+                    </ToneChip>
+                  </span>
+                )}
                 <Dropdown>
                   <Button size="sm" variant="ghost" className="h-7 gap-1 px-1.5" aria-label={`Link ${e.title} to a finding`} isDisabled={findings.length === 0}>
                     <Link2 className="size-3.5" />
@@ -304,33 +324,64 @@ const TYPE_LABEL: Record<TimelineEventType, string> = {
   note: "Notes",
   utility: "Utilities",
   checklist: "Checklist",
+  correlation: "Correlation",
 };
 
-export function TimelineTab({ project }: { project: Project }) {
+/** A record the timeline is limited to (from the investigation view or a deep link). */
+export interface TimelineRecord {
+  kind: string;
+  id: number;
+  label: string;
+}
+
+export function TimelineTab({ project, record, onClearRecord, onOpenRecord }: { project: Project; record?: TimelineRecord | null; onClearRecord?: () => void; onOpenRecord?: (kind: string, id: number) => void }) {
   const { runtime } = useApp();
   const [type, setType] = useState<string>("all");
+  const [text, setText] = useState("");
+  const [search, setSearch] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [pages, setPages] = useState<string[]>([]);
-  const types = type === "all" ? [] : [type as TimelineEventType];
-  const first = useQuery(["projects", "findings", "assets", "vulns", "workflows", "executions"], () => api.projectTimeline(project.id, { types, limit: 100 }), [project.id, type], runtime);
-  const [more, setMore] = useState<Awaited<ReturnType<typeof api.projectTimeline>>>([]);
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(text.trim()), 300);
+    return () => clearTimeout(t);
+  }, [text]);
+  const query: TimelineQuery = {
+    ...(type === "all" ? {} : { types: [type as TimelineEventType] }),
+    ...(search ? { search } : {}),
+    ...(from ? { from } : {}),
+    // the "to" date is included: events before the next day
+    ...(to ? { to: nextDay(to) } : {}),
+    ...(record ? { refKind: record.kind, refId: record.id } : {}),
+  };
+  const first = useQuery(["projects", "findings", "assets", "vulns", "workflows", "executions", "relations"], () => api.timelineQuery(project.id, { ...query, limit: 100 }), [project.id, type, search, from, to, record?.kind, record?.id], runtime);
+  const [more, setMore] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(false);
   useEffect(() => {
     setMore([]);
     setPages([]);
-  }, [type, project.id, first.data]);
+  }, [type, search, from, to, record?.kind, record?.id, project.id, first.data]);
   const events = [...(first.data ?? []), ...more];
   const loadMore = async () => {
     const last = events[events.length - 1];
     if (!last || pages.includes(last.cursor)) return;
     setLoading(true);
     try {
-      const next = await api.projectTimeline(project.id, { types, before: last.cursor, limit: 100 });
+      const next = await api.timelineQuery(project.id, { ...query, before: last.cursor, limit: 100 });
       setMore((m) => [...m, ...next]);
       setPages((p) => [...p, last.cursor]);
     } catch (e) {
       notify.error("Could not load more", e);
     } finally {
       setLoading(false);
+    }
+  };
+  const exportAs = async (format: "csv" | "json") => {
+    try {
+      const file = await api.timelineExport(project.id, query, format);
+      if (file) notify.success("Timeline exported", file);
+    } catch (e) {
+      notify.error("Could not export the timeline", e);
     }
   };
   // group by day
@@ -343,31 +394,78 @@ export function TimelineTab({ project }: { project: Project }) {
     }
     return out;
   }, [events]);
+  const filtered = type !== "all" || !!search || !!from || !!to || !!record;
   return (
     <Panel
       title="Timeline"
-      description="Everything recorded in this project, newest first: runs, findings, vulnerabilities, scope, evidence, discovery, workflows and reports."
-      actions={<SelectInput aria-label="Event type" value={type} onChange={setType} options={[{ id: "all", label: "All events" }, ...Object.entries(TYPE_LABEL).map(([id, label]) => ({ id, label }))]} className="w-44" />}
+      description="Everything recorded in this project, newest first: runs, findings, vulnerabilities, scope, evidence, OSINT, discovery, imports, utilities, correlation decisions, workflows and reports. Times are when Cyber Hub recorded the event; evidence collected earlier also shows when it was collected."
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="ghost" onPress={() => void exportAs("csv")}>
+            <FileDown className="size-3.5" />
+            CSV
+          </Button>
+          <Button size="sm" variant="ghost" onPress={() => void exportAs("json")}>
+            <FileDown className="size-3.5" />
+            JSON
+          </Button>
+        </div>
+      }
+      toolbar={
+        <div className="flex flex-wrap items-end gap-2 px-4 pb-3">
+          <SelectInput aria-label="Event type" value={type} onChange={setType} options={[{ id: "all", label: "All events" }, ...Object.entries(TYPE_LABEL).map(([id, label]) => ({ id, label }))]} className="w-44" />
+          <SearchInput value={text} onChange={setText} placeholder="Search titles and details" className="w-64" />
+          <TextInput aria-label="From date" value={from} onChange={setFrom} placeholder="From (YYYY-MM-DD)" className="w-40" />
+          <TextInput aria-label="To date" value={to} onChange={setTo} placeholder="To (YYYY-MM-DD)" className="w-40" />
+          {record && (
+            <ToneChip tone="accent" dot={false}>
+              Only: {record.label}
+            </ToneChip>
+          )}
+          {filtered && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onPress={() => {
+                setType("all");
+                setText("");
+                setFrom("");
+                setTo("");
+                onClearRecord?.();
+              }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
+      }
     >
       {first.error ? (
         <ErrorBlock message={first.error} onRetry={first.reload} />
       ) : !first.data ? (
         <LoadingRows rows={5} />
       ) : events.length === 0 ? (
-        <EmptyBlock compact icon={History} title="Nothing recorded yet" />
+        <EmptyBlock compact icon={History} title={filtered ? "No event matches" : "Nothing recorded yet"} />
       ) : (
         <div className="flex flex-col gap-4">
           {days.map((d) => (
             <section key={d.day}>
               <h3 className="mb-1.5 text-[12.5px] font-medium text-muted">{d.day}</h3>
               <ol className="flex flex-col gap-1">
-                {d.items.map((e, i) => (
-                  <li key={`${e.at}-${i}`} className="flex items-start gap-3 text-[12.5px]">
+                {d.items.map((e) => (
+                  <li key={e.cursor} className="flex items-start gap-3 text-[12.5px]">
                     <span className="w-12 shrink-0 tabular text-muted">{e.at.slice(11, 16)}</span>
                     <span className="w-28 shrink-0 text-muted">{TYPE_LABEL[e.type] ?? e.type}</span>
                     <span className="min-w-0">
-                      <span className="text-foreground">{e.title}</span>
+                      {onOpenRecord && e.refKind && e.refId != null && OPENABLE.includes(e.refKind) ? (
+                        <button type="button" className="text-left text-foreground hover:underline" onClick={() => onOpenRecord(e.refKind!, e.refId!)}>
+                          {e.title}
+                        </button>
+                      ) : (
+                        <span className="text-foreground">{e.title}</span>
+                      )}
                       {e.detail && <span className="text-muted"> · {e.detail}</span>}
+                      {e.observedAt && <span className="text-muted"> · collected {e.observedAt.slice(0, 16).replace("T", " ")}</span>}
                     </span>
                   </li>
                 ))}
@@ -383,6 +481,17 @@ export function TimelineTab({ project }: { project: Project }) {
       )}
     </Panel>
   );
+}
+
+/** Records a timeline event can open in the investigation view. */
+const OPENABLE = ["finding", "asset", "evidence", "vulnerability", "execution"];
+
+/** The day after a YYYY-MM-DD date (an inclusive "to" date), or the text unchanged. */
+export function nextDay(date: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim());
+  if (!m) return date.trim();
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 1));
+  return d.toISOString().slice(0, 10);
 }
 
 /* ───────────────────────── report builder ───────────────────────── */

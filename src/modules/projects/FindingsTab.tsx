@@ -313,7 +313,7 @@ function LoadingRowsInline() {
   return <p className="text-[12.5px] text-muted">Loading…</p>;
 }
 
-export function FindingsTab({ projectId, findings }: { projectId: number; findings: Finding[] }) {
+export function FindingsTab({ projectId, findings, focusId, onFocused }: { projectId: number; findings: Finding[]; /** a finding to open (from the investigation view or a link) */ focusId?: number | null; onFocused?: () => void }) {
   const confirm = useConfirm();
   const [editing, setEditing] = useState<FindingDraft | null>(null);
   const [open, setOpen] = useState(false);
@@ -364,6 +364,19 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
     setEditing(draftOf(f));
     setOpen(true);
   };
+  // a finding opened from elsewhere (investigation view, search)
+  useEffect(() => {
+    if (focusId == null) return;
+    // wait until the list has loaded; a finding of another project is never opened
+    if (findings.length === 0) return;
+    const f = findings.find((x) => x.id === focusId);
+    if (f) {
+      setEditing(draftOf(f));
+      setOpen(true);
+    }
+    onFocused?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId, findings]);
 
   const changeStatus = async (f: Finding, next: FindingStatus) => {
     try {

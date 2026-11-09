@@ -4,12 +4,12 @@
 //! the view is a query, so history stays in the records it belongs to.
 
 use rusqlite::{params, Connection};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{validation, AppResult};
 use crate::util::now;
 
-pub const TYPES: &[&str] = &["execution", "finding", "vulnerability", "scope", "evidence", "investigation", "discovery", "asset", "workflow", "remediation", "report", "note", "utility", "checklist"];
+pub const TYPES: &[&str] = &["execution", "finding", "vulnerability", "scope", "evidence", "investigation", "discovery", "asset", "workflow", "remediation", "report", "note", "utility", "checklist", "correlation"];
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -21,8 +21,38 @@ pub struct TimelineEvent {
     pub ref_kind: Option<String>,
     pub ref_id: Option<i64>,
     pub at: String,
+    /// when the source observed or collected what the event is about, when that is known and
+    /// differs from when Cyber Hub recorded it (evidence collected earlier)
+    pub observed_at: Option<String>,
     /// where the next page starts (`before`): unique, so events of the same second are not skipped
     pub cursor: String,
+}
+
+/// Which events to return: types, a record, text, a time range, a page.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Query {
+    #[serde(default)]
+    pub types: Vec<String>,
+    /// the `cursor` of the last event of the previous page, or a time
+    #[serde(default)]
+    pub before: Option<String>,
+    #[serde(default)]
+    pub limit: Option<i64>,
+    /// events about one record (`finding`, `asset`, `evidence`, `vulnerability`, `execution`…)
+    #[serde(default)]
+    pub ref_kind: Option<String>,
+    #[serde(default)]
+    pub ref_id: Option<i64>,
+    /// words in the title or the detail
+    #[serde(default)]
+    pub search: Option<String>,
+    /// events at or after this time (or date)
+    #[serde(default)]
+    pub from: Option<String>,
+    /// events before this time (or date)
+    #[serde(default)]
+    pub to: Option<String>,
 }
 
 /// Records an event that has no table of its own (asset discoveries, workflow runs, reports…).
@@ -43,25 +73,40 @@ pub fn record(c: &Connection, project_id: i64, kind: &str, title: &str, detail: 
 /// last event of the previous page (or a time: events before it). Events are ordered by time, then
 /// by source and row, so a page boundary inside one second skips nothing.
 pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], before: Option<&str>, limit: i64) -> AppResult<Vec<TimelineEvent>> {
+    query(c, project_id, &Query { types: types.to_vec(), before: before.map(str::to_string), limit: Some(limit), ..Default::default() })
+}
+
+/// Events about one record of the investigation layer (`relations::Ref`), newest first.
+pub fn events_about(c: &Connection, project_id: i64, r: &crate::workspace::relations::Ref, limit: i64) -> AppResult<Vec<TimelineEvent>> {
+    let kind = match r.kind.as_str() {
+        "finding" | "asset" | "evidence" | "vulnerability" | "execution" => r.kind.clone(),
+        _ => return Ok(Vec::new()),
+    };
+    query(c, project_id, &Query { ref_kind: Some(kind), ref_id: Some(r.id), limit: Some(limit), ..Default::default() })
+}
+
+pub fn query(c: &Connection, project_id: i64, q: &Query) -> AppResult<Vec<TimelineEvent>> {
+    let types = &q.types;
     for t in types {
         if !TYPES.contains(&t.as_str()) {
             return Err(validation(format!("Unknown timeline event type '{t}'")));
         }
     }
-    let limit = limit.clamp(1, 1000);
-    let (before_at, before_src, before_rid): (Option<&str>, Option<&str>, Option<i64>) = match before.map(|b| b.splitn(3, '|').collect::<Vec<_>>()) {
+    let limit = q.limit.unwrap_or(200).clamp(1, 1000);
+    let search = q.search.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(|s| s.chars().take(200).collect::<String>());
+    let (before_at, before_src, before_rid): (Option<&str>, Option<&str>, Option<i64>) = match q.before.as_deref().map(|b| b.splitn(3, '|').collect::<Vec<_>>()) {
         None => (None, None, None),
         Some(parts) if parts.len() == 3 => (Some(parts[0]), Some(parts[1]), Some(parts[2].parse().map_err(|_| validation("Invalid timeline cursor"))?)),
-        Some(_) => (before, None, None),
+        Some(_) => (q.before.as_deref(), None, None),
     };
     let types_json = (!types.is_empty()).then(|| serde_json::to_string(types).unwrap_or_default());
     let sql = "
-        SELECT type, title, detail, ref_kind, ref_id, at, src, rid FROM (
-            SELECT type, title, detail, ref_kind, ref_id, at, 'a' AS src, id AS rid FROM timeline_events WHERE project_id = ?1
+        SELECT type, title, detail, ref_kind, ref_id, at, src, rid, observed FROM (
+            SELECT type, title, detail, ref_kind, ref_id, at, 'a' AS src, id AS rid, NULL AS observed FROM timeline_events WHERE project_id = ?1
           UNION ALL
             SELECT 'execution',
                    CASE kind WHEN 'install' THEN 'Installed ' ELSE 'Ran ' END || tool_id || ' (' || status || ')',
-                   program, 'execution', id, started_at, 'b', id
+                   program, 'execution', id, started_at, 'b', id, NULL
             FROM executions WHERE project_id = ?1
           UNION ALL
             SELECT 'finding',
@@ -73,7 +118,7 @@ pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], befor
                      WHEN 'link' THEN 'Finding linked: ' || f.title
                      WHEN 'unlink' THEN 'Finding unlinked: ' || f.title
                      ELSE 'Finding updated: ' || f.title END,
-                   e.note, 'finding', f.id, e.at, 'c', e.id
+                   e.note, 'finding', f.id, e.at, 'c', e.id, NULL
             FROM finding_events e JOIN findings f ON f.id = e.finding_id WHERE e.project_id = ?1
           UNION ALL
             SELECT CASE WHEN e.kind IN ('remediation','verification') THEN 'remediation' ELSE 'vulnerability' END,
@@ -84,7 +129,7 @@ pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], befor
                      WHEN 'remediation' THEN 'Remediation plan for ' || v.cve_id
                      WHEN 'verification' THEN 'Fix verified: ' || v.cve_id
                      ELSE v.cve_id || ' updated' END,
-                   e.note, 'vulnerability', v.id, e.at, 'd', e.id
+                   e.note, 'vulnerability', v.id, e.at, 'd', e.id, NULL
             FROM vulnerability_events e JOIN vulnerabilities v ON v.id = e.vulnerability_id WHERE e.project_id = ?1
           UNION ALL
             SELECT 'scope',
@@ -93,31 +138,38 @@ pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], befor
                                WHEN 'removed' THEN 'Scope entry removed: '
                                ELSE 'Blocked (out of scope): ' END || value
                                || CASE WHEN repeats > 0 THEN ' (' || (repeats + 1) || ' attempts)' ELSE '' END,
-                   note, 'scope', id, at, 'e', id
+                   note, 'scope', id, at, 'e', id, NULL
             FROM scope_events WHERE project_id = ?1
           UNION ALL
-            SELECT 'evidence', 'Evidence added: ' || title, kind, 'evidence', id, created_at, 'f', id FROM evidence WHERE project_id = ?1
+            SELECT 'evidence', 'Evidence added: ' || title, kind || CASE WHEN source_module <> '' THEN ' · ' || source_module ELSE '' END, 'evidence', id, created_at, 'f', id,
+                   CASE WHEN collected_at IS NOT NULL AND collected_at <> created_at THEN collected_at END FROM evidence WHERE project_id = ?1
           UNION ALL
-            SELECT 'investigation', i.name || ': ' || ev.summary, ev.kind, 'investigation', i.id, ev.at, 'g', ev.id
+            SELECT 'investigation', i.name || ': ' || ev.summary, ev.kind, 'investigation', i.id, ev.at, 'g', ev.id, NULL
             FROM osint_events ev JOIN osint_investigations i ON i.id = ev.investigation_id WHERE i.project_id = ?1
           UNION ALL
-            SELECT 'workflow', 'Workflow ' || w.name || ' (' || r.trigger || '): ' || r.status, r.summary, 'workflow_run', r.id, r.started_at, 'h', r.id
+            SELECT 'workflow', 'Workflow ' || w.name || ' (' || r.trigger || '): ' || r.status, r.summary, 'workflow_run', r.id, r.started_at, 'h', r.id, NULL
             FROM workflow_runs r JOIN workflows w ON w.id = r.workflow_id WHERE r.project_id = ?1
           UNION ALL
             SELECT 'discovery',
                    CASE source WHEN 'passive' THEN 'Passive discovery' WHEN 'http' THEN 'Web services check' WHEN 'nmap' THEN 'Service scan' ELSE 'Discovery' END || ': ' || status,
-                   note, 'discovery', id, started_at, 'i', id
+                   note, 'discovery', id, started_at, 'i', id, NULL
             FROM discovery_snapshots WHERE project_id = ?1
+          UNION ALL
+            SELECT 'correlation', summary, note, 'relation', relation_id, at, 'j', id, NULL FROM relation_events WHERE project_id = ?1
         )
         WHERE (?2 IS NULL OR at < ?2 OR (at = ?2 AND ?3 IS NOT NULL AND (src < ?3 OR (src = ?3 AND rid < ?4))))
           AND (?5 IS NULL OR type IN (SELECT value FROM json_each(?5)))
+          AND (?7 IS NULL OR (ref_kind = ?7 AND ref_id = ?8))
+          AND (?9 IS NULL OR instr(lower(title), lower(?9)) > 0 OR instr(lower(detail), lower(?9)) > 0)
+          AND (?10 IS NULL OR at >= ?10)
+          AND (?11 IS NULL OR at < ?11)
         ORDER BY at DESC, src DESC, rid DESC
         LIMIT ?6";
     let mut st = c.prepare(sql)?;
     let rows = st
-        .query_map(params![project_id, before_at, before_src, before_rid, types_json, limit], |r| {
+        .query_map(params![project_id, before_at, before_src, before_rid, types_json, limit, q.ref_kind, q.ref_id, search, q.from, q.to], |r| {
             let (at, src, rid): (String, String, i64) = (r.get(5)?, r.get(6)?, r.get(7)?);
-            Ok(TimelineEvent { kind: r.get(0)?, title: r.get(1)?, detail: r.get(2)?, ref_kind: r.get(3)?, ref_id: r.get(4)?, cursor: format!("{at}|{src}|{rid}"), at })
+            Ok(TimelineEvent { kind: r.get(0)?, title: r.get(1)?, detail: r.get(2)?, ref_kind: r.get(3)?, ref_id: r.get(4)?, observed_at: r.get(8)?, cursor: format!("{at}|{src}|{rid}"), at })
         })?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)

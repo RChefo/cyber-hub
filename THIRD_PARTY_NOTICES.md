@@ -35,3 +35,11 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 * **Original work:** © OWASP Foundation and the WSTG contributors, licensed under the Creative Commons Attribution-ShareAlike 4.0 International License (<https://creativecommons.org/licenses/by-sa/4.0/>).
 * **This adaptation:** the data file is distributed under the same license, CC BY-SA 4.0.
 * **Shown in the app:** the Checklist tab names the source, commit and license.
+
+## MITRE ATT&CK
+
+`src-tauri/catalog/attack-enterprise.json` is a compact catalog of the Enterprise ATT&CK tactics and techniques (IDs, names, tactics, platforms, parents, revoked and deprecated IDs), built by `scripts/attack-catalog.mjs` from MITRE's STIX 2.1 bundle (<https://github.com/mitre-attack/attack-stix-data>, `enterprise-attack-20.1.json`, retrieved 2026-11-09; the file's SHA-256 is recorded in the catalog).
+
+* **Notice:** © 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.
+* **License:** MITRE hereby grants you a non-exclusive, royalty-free license to use ATT&CK® for research, development, and commercial purposes. Any copy you make for such purposes is authorized provided that you reproduce MITRE's copyright designation and this license in any such copy.
+* **Shown in the app:** the ATT&CK view names the ATT&CK version and this notice.

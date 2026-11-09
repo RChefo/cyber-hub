@@ -363,6 +363,16 @@ export interface EvidenceRecord {
   executionId: number | null;
   osintEvidenceId: number | null;
   createdAt: string;
+  /** provenance: the module and record it came from, the tool, when the source collected it */
+  sourceModule: string;
+  sourceRef: string;
+  tool: string;
+  toolVersion: string;
+  collectedAt: string | null;
+  derivedFrom: number | null;
+  /** the result of the last integrity check */
+  verification: "unverified" | "intact" | "damaged" | "missing";
+  verifiedAt: string | null;
 }
 
 /** What importing one finding of a scan file would do (docs/DATA_MODEL.md#scan-import). */
@@ -509,7 +519,8 @@ export type TimelineEventType =
   | "report"
   | "note"
   | "utility"
-  | "checklist";
+  | "checklist"
+  | "correlation";
 
 export interface TimelineEvent {
   type: TimelineEventType;
@@ -518,8 +529,158 @@ export interface TimelineEvent {
   refKind: string | null;
   refId: number | null;
   at: string;
+  /** when the source observed or collected it, when that differs from `at` (evidence) */
+  observedAt: string | null;
   /** where the next page starts (`before`) */
   cursor: string;
+}
+
+/** Filters of the project timeline (`timeline_query`). */
+export interface TimelineQuery {
+  types?: TimelineEventType[];
+  before?: string;
+  limit?: number;
+  refKind?: string;
+  refId?: number;
+  search?: string;
+  from?: string;
+  to?: string;
+}
+
+/* ───────────── investigation layer (schema 22) ───────────── */
+
+export type RecordKind = "finding" | "asset" | "vulnerability" | "evidence" | "osint_entity" | "api_endpoint" | "sbom_component" | "technique" | "execution" | "project";
+
+/** A record of any module: kind, row id, and an index inside a document or a technique ID. */
+export interface RecordRef {
+  kind: RecordKind;
+  id: number;
+  sub: string;
+}
+
+export interface RecordNode {
+  ref: RecordRef;
+  /** "finding:12", "api_endpoint:3:5", "technique:T1059.001" */
+  key: string;
+  label: string;
+  detail: string;
+  severity: Severity | null;
+  flagged: boolean;
+}
+
+export interface RelationMatch {
+  fieldA: string;
+  valueA: string;
+  fieldB: string;
+  valueB: string;
+  /** exact, normalized, alias */
+  how: string;
+}
+
+export type RelationOrigin = "observed" | "imported" | "derived" | "inferred" | "manual" | "suggested";
+export type RelationVerification = "observed" | "verified" | "inferred" | "disputed" | "rejected";
+export type RelationReview = "pending" | "done" | "dismissed";
+
+export interface Relation {
+  id: number;
+  projectId: number;
+  a: RecordNode;
+  b: RecordNode;
+  type: string;
+  label: string;
+  directed: boolean;
+  origin: RelationOrigin;
+  verification: RelationVerification;
+  review: RelationReview;
+  confidence: "low" | "medium" | "high";
+  rules: string[];
+  reason: string;
+  matched: RelationMatch[];
+  createdBy: string;
+  materialized: boolean;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt: string | null;
+}
+
+export interface RelationPage {
+  items: Relation[];
+  total: number;
+  pending: number;
+  done: number;
+  dismissed: number;
+}
+
+export interface RelationFilter {
+  review?: RelationReview;
+  verification?: RelationVerification;
+  kind?: RecordKind;
+  minConfidence?: "low" | "medium" | "high";
+  rule?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface RelatedItem {
+  node: RecordNode;
+  via: string;
+  origin: RelationOrigin;
+  verification: RelationVerification;
+  relationId: number | null;
+}
+
+export interface RelatedView {
+  node: RecordNode;
+  related: RelatedItem[];
+  events: TimelineEvent[];
+}
+
+export interface InvestigationEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  label: string;
+  directed: boolean;
+  origin: RelationOrigin;
+  verification: RelationVerification;
+  confidence: "low" | "medium" | "high";
+  relationId: number | null;
+  updatedAt: string;
+}
+
+export interface InvestigationGraph {
+  nodes: RecordNode[];
+  edges: InvestigationEdge[];
+  truncated: boolean;
+}
+
+export interface InvestigationGraphFilter {
+  includePending?: boolean;
+  includeRejected?: boolean;
+  minConfidence?: "low" | "medium" | "high";
+  origins?: RelationOrigin[];
+  kinds?: RecordKind[];
+  since?: string;
+  limit?: number;
+  focus?: string;
+  depth?: number;
+}
+
+export interface CorrelationReport {
+  byRule: Record<string, number>;
+  stored: { new: number; updated: number; decided: number; linked: number; truncated: boolean };
+  elapsedMs: number;
+}
+
+export interface SearchHit {
+  projectId: number | null;
+  project: string;
+  archived: boolean;
+  node: RecordNode;
+  /** 3 exact, 2 prefix, 1 substring */
+  score: number;
 }
 
 export interface ScopeEvent {

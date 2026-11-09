@@ -786,6 +786,7 @@ pub fn entity_merge(c: &Connection, keep: i64, merge: i64) -> AppResult<()> {
     // what refers to the merged entity refers to the kept one: finding links, assets, events
     c.execute("UPDATE OR IGNORE finding_links SET ref_id = ?1 WHERE kind = 'osint_entity' AND ref_id = ?2", params![keep, merge])?;
     crate::workspace::findings::forget_ref(c, "osint_entity", merge)?;
+    crate::workspace::relations::repoint(c, "osint_entity", merge, keep)?;
     c.execute("UPDATE assets SET osint_entity_id = ?1 WHERE osint_entity_id = ?2", params![keep, merge])?;
     c.execute("UPDATE osint_events SET entity_id = ?1 WHERE entity_id = ?2", params![keep, merge])?;
     c.execute("DELETE FROM osint_entities WHERE id = ?1", params![merge])?;

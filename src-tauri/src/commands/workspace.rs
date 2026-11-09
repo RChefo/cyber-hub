@@ -437,7 +437,15 @@ pub async fn scan_import_commit(app: AppHandle, token: String, options: ImportOp
         let tool = pending.parsed.tool.clone();
         let rec = store.add_bytes(&db, pending.project_id, &pending.file_name, &pending.bytes, (&format!("{tool} results: {}", pending.file_name), &format!("Imported scan results ({tool}). SHA-256 {}", pending.sha256)), "import")?;
         let info = scan_import::FileInfo { file_name: &pending.file_name, sha256: &pending.sha256, evidence_id: Some(rec.id) };
-        let result = db.with(|c| scan_import::import(c, pending.project_id, &pending.parsed, options, &info));
+        let result = db.with(|c| {
+            let r = scan_import::import(c, pending.project_id, &pending.parsed, options, &info)?;
+            // the import is committed by now: a provenance write that fails must not undo it
+            let prov = crate::workspace::evidence::Provenance { source_module: "scan_import".into(), source_ref: format!("scan_import:{}", r.import_id), tool: tool.clone(), ..Default::default() };
+            if let Err(e) = crate::workspace::evidence::set_provenance(c, rec.id, &prov) {
+                eprintln!("Cyber Hub: provenance of evidence {} not recorded: {e}", rec.id);
+            }
+            Ok(r)
+        });
         if result.is_err() && existed.is_none() {
             // the import was not recorded: do not leave its file behind
             let _ = store.delete(&db, rec.id);

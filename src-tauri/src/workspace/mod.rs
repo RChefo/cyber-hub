@@ -4,17 +4,21 @@
 
 pub mod analysis;
 pub mod apisec;
+pub mod attack;
 pub mod assets;
+pub mod correlate;
 pub mod discovery;
 pub mod evidence;
 pub mod findings;
 pub mod attack_layer;
 pub mod findings_export;
 pub mod lockfiles;
+pub mod relations;
 pub mod report;
 pub mod sbom;
 pub mod scan_import;
 pub mod scope_gate;
+pub mod search;
 pub mod templates;
 pub mod timeline;
 pub mod vulns;

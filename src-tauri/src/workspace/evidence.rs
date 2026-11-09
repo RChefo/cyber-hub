@@ -38,9 +38,50 @@ pub struct EvidenceRecord {
     pub execution_id: Option<i64>,
     pub osint_evidence_id: Option<i64>,
     pub created_at: String,
+    /// provenance (schema 22): the module that produced it ("scan_import", "file_triage"…), the
+    /// record it came from ("scan_import:7"), the tool and its version, and when the source
+    /// collected it (empty or None when not known)
+    pub source_module: String,
+    pub source_ref: String,
+    pub tool: String,
+    pub tool_version: String,
+    pub collected_at: Option<String>,
+    /// the evidence this record was derived from (an analysis of another file)
+    pub derived_from: Option<i64>,
+    /// unverified, intact, damaged or missing: the last integrity check, and when it ran
+    pub verification: String,
+    pub verified_at: Option<String>,
 }
 
-const COLS: &str = "id, project_id, kind, title, description, source, sha256, size, file_name, execution_id, osint_evidence_id, created_at";
+const COLS: &str = "id, project_id, kind, title, description, source, sha256, size, file_name, execution_id, osint_evidence_id, created_at, source_module, source_ref, tool, tool_version, collected_at, derived_from, verification, verified_at";
+
+/// Where an evidence record came from. Fields left empty are not changed.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Provenance {
+    pub source_module: String,
+    pub source_ref: String,
+    pub tool: String,
+    pub tool_version: String,
+    pub collected_at: Option<String>,
+    pub derived_from: Option<i64>,
+}
+
+/// Records the provenance of an evidence record. A record that already has provenance keeps it:
+/// the same file added again later does not rewrite where it first came from.
+pub fn set_provenance(c: &Connection, id: i64, p: &Provenance) -> AppResult<()> {
+    let cut = |s: &str, n: usize| s.chars().take(n).collect::<String>();
+    c.execute(
+        "UPDATE evidence SET source_module = CASE WHEN source_module = '' THEN ?2 ELSE source_module END,
+                             source_ref = CASE WHEN source_ref = '' THEN ?3 ELSE source_ref END,
+                             tool = CASE WHEN tool = '' THEN ?4 ELSE tool END,
+                             tool_version = CASE WHEN tool_version = '' THEN ?5 ELSE tool_version END,
+                             collected_at = COALESCE(collected_at, ?6),
+                             derived_from = COALESCE(derived_from, ?7)
+         WHERE id = ?1",
+        params![id, cut(&p.source_module, 60), cut(&p.source_ref, 120), cut(&p.tool, 120), cut(&p.tool_version, 60), p.collected_at, p.derived_from.filter(|d| *d != id)],
+    )?;
+    Ok(())
+}
 
 fn row(r: &rusqlite::Row) -> rusqlite::Result<EvidenceRecord> {
     Ok(EvidenceRecord {
@@ -56,6 +97,14 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<EvidenceRecord> {
         execution_id: r.get(9)?,
         osint_evidence_id: r.get(10)?,
         created_at: r.get(11)?,
+        source_module: r.get(12)?,
+        source_ref: r.get(13)?,
+        tool: r.get(14)?,
+        tool_version: r.get(15)?,
+        collected_at: r.get(16)?,
+        derived_from: r.get(17)?,
+        verification: r.get(18)?,
+        verified_at: r.get(19)?,
     })
 }
 
@@ -288,6 +337,21 @@ impl EvidenceStore {
             }
         }
         report.problems.sort_by_key(|p| p.id);
+        // each stored record keeps the result of its last check
+        db.with(|c| {
+            let ts = now();
+            let tx = c.unchecked_transaction()?;
+            for r in records.iter().filter(|r| r.kind == "file" || r.kind == "text") {
+                let state = match report.problems.iter().find(|p| p.id == r.id) {
+                    None => "intact",
+                    Some(p) if p.problem.contains("missing") => "missing",
+                    Some(_) => "damaged",
+                };
+                tx.execute("UPDATE evidence SET verification = ?2, verified_at = ?3 WHERE id = ?1", params![r.id, state, ts])?;
+            }
+            tx.commit()?;
+            Ok(())
+        })?;
         let summary = if report.problems.is_empty() {
             format!("{} stored records match their SHA-256", report.checked)
         } else {
@@ -670,6 +734,37 @@ mod tests {
         assert!(!refused.exists() && fs::read_dir(dir.join("out")).unwrap().count() == 1);
         let noted: i64 = db.with(|c| Ok(c.query_row("SELECT COUNT(*) FROM timeline_events WHERE project_id = ?1 AND title = 'Evidence verified'", params![p], |r| r.get(0))?)).unwrap();
         assert_eq!(noted, 2, "each check is on the timeline");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn provenance_is_kept_and_each_check_is_recorded() {
+        let dir = tmpdir("provenance");
+        let store = EvidenceStore::new(dir.join("evidence"));
+        let db = Db::open_in_memory().unwrap();
+        let p = project(&db);
+        let src = dir.join("scan.nessus");
+        fs::write(&src, b"<NessusClientData_v2/>").unwrap();
+        let rec = store.add_file(&db, p, &src, "Scan", "", "import").unwrap();
+        assert_eq!((rec.source_module.as_str(), rec.verification.as_str(), rec.collected_at.as_deref()), ("", "unverified", None));
+        db.with(|c| {
+            let first = Provenance { source_module: "scan_import".into(), source_ref: "scan_import:1".into(), tool: "Nessus".into(), collected_at: Some("2026-11-01T08:00:00Z".into()), derived_from: Some(rec.id), ..Default::default() };
+            set_provenance(c, rec.id, &first)?;
+            // the same file imported again later keeps where it first came from
+            set_provenance(c, rec.id, &Provenance { source_module: "scan_import".into(), source_ref: "scan_import:2".into(), tool: "Other".into(), ..Default::default() })?;
+            let r = get(c, rec.id)?;
+            assert_eq!((r.source_ref.as_str(), r.tool.as_str(), r.collected_at.as_deref()), ("scan_import:1", "Nessus", Some("2026-11-01T08:00:00Z")));
+            assert_eq!(r.derived_from, None, "a record is never derived from itself");
+            Ok(())
+        })
+        .unwrap();
+        store.verify_project(&db, p).unwrap();
+        let r = db.with(|c| get(c, rec.id)).unwrap();
+        assert_eq!(r.verification, "intact");
+        assert!(r.verified_at.is_some());
+        fs::remove_file(store.file_path(&r).unwrap()).unwrap();
+        store.verify_project(&db, p).unwrap();
+        assert_eq!(db.with(|c| get(c, rec.id)).unwrap().verification, "missing");
         let _ = fs::remove_dir_all(&dir);
     }
 }

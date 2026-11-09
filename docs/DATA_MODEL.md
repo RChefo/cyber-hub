@@ -1,4 +1,4 @@
-# Project data model (schema 21)
+# Project data model (schema 22)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -8,6 +8,7 @@ projects ─┬─ project_targets ── scope_events          (scope and its a
           │            └─ finding_links ──▶ assets | executions | evidence | osint_entities
           ├─ assets ── asset_observations ──▶ discovery_snapshots
           ├─ evidence ──▶ executions | osint_evidence | <app data>/evidence/<ab>/<sha256>
+          ├─ relations ── relation_events            (relationships between records, decisions)
           └─ timeline_events                         (events with no table of their own)
 ```
 
@@ -354,6 +355,69 @@ With two or more SBOMs or lockfiles in a project, *Compare versions* compares an
 
 Each issue can be recorded once as a finding (category *Supply chain*, or *License compliance*), titled with both versions and keyed by both files' SHA-256, linked to the newer file's evidence record.
 
+## Investigation layer (schema 22)
+
+Projects → *Investigation* connects the results of the modules: which findings concern which assets, vulnerabilities, evidence, OSINT entities, API endpoints, SBOM components and ATT&CK techniques, how that is known, and what the analyst decided. The project stays the investigation: nothing here copies a record, and every relationship refers to the records where they are. The code is `workspace/relations.rs`, `workspace/correlate.rs`, `workspace/search.rs`, `workspace/attack.rs` and `commands/investigation.rs`; nothing here contacts a network.
+
+**References.** A relationship joins two records, each given by its kind, its row id and, for records inside another one, its place there:
+
+| Kind | Reference | Key |
+|---|---|---|
+| `finding`, `asset`, `vulnerability`, `evidence`, `osint_entity`, `execution` | the row id | `finding:12` |
+| `api_endpoint` | the API definition and the endpoint's index in it | `api_endpoint:3:5` |
+| `sbom_component` | the SBOM and the component's index in it | `sbom_component:2:14` |
+| `technique` | the ATT&CK technique ID | `technique:T1059.001` |
+
+A reference is checked when a relationship is made: the record must exist in the same project (an OSINT entity in an investigation linked to the project), and a technique must be in the bundled ATT&CK catalog. Revoked and deprecated techniques are accepted and labelled as such ("T1143 (revoked, now T1564.003)"); unknown IDs are refused.
+
+**`relations`** keeps one row per pair and type in a project:
+
+* `type`: `affects`, `supported_by` and `maps_to` have a direction; `corresponds_to`, `related_to`, `possible_duplicate` and `associated_with` do not, and store their two records in a fixed order so a pair is kept once.
+* `origin`, how it was established: `observed`, `imported`, `derived` (computed from stored values by a correlation rule), `inferred`, `manual` (the analyst) or `suggested`. The values are those of OSINT relationships, plus `imported`.
+* `verification`, whether it is a fact: `observed`, `verified`, `inferred`, `disputed` or `rejected`. A suggestion is `inferred` until the analyst decides; nothing becomes `verified` without the analyst.
+* `review`: `pending`, `done` or `dismissed`.
+* `confidence` (high, medium, low), `rules` (the rules that found it), `reason` (one sentence), `matched` (the fields and values that matched, and whether exactly or after normalizing), `created_by`, `note`, and the times it was made, changed and reviewed.
+
+**Decisions.**
+* *Accept* makes it `verified`. Between a finding and an asset, vulnerability, evidence record, OSINT entity or tool run, it also creates the finding link (source `correlation`), which reports and the evidence chain read; between an asset and an OSINT entity it records the entity on the asset when the asset has none. The relationship remembers what it created (`materialized`).
+* *Reject* makes it `rejected` and removes what accepting created. Correlation never suggests a rejected pair again.
+* *Dismiss* takes it out of the queue without deciding; *Mark reviewed* keeps it as it is; *Restore* puts a decided suggestion back in the queue and removes what it created.
+* *Link* (by hand) creates a `manual`, `verified` relationship, and the finding link where one applies. *Remove* deletes a link made by hand; a relationship a rule found is kept as `rejected` instead, so it is not suggested again.
+* Every decision is kept in `relation_events` (action, sentence, note, who, when), which the timeline shows as `correlation` events. Decisions are refused in archived projects.
+
+**Deletion.** Triggers remove the relationships of a record when it is deleted (findings, assets, vulnerabilities, evidence, OSINT entities, tool runs, and the API definitions and SBOMs whose endpoints and components they refer to); their history stays. When OSINT entities are merged, relationships move to the kept entity; a pair that already exists for it keeps the kept entity's decision, and a relationship between the two merged entities is removed.
+
+### Correlation
+
+*Correlate* runs the rules below over the project's records and stores what they find as suggestions. Rules compare exact or normalized values (URLs, web origins, hosts and addresses, CVE IDs, package URLs, file hashes, API paths); nothing is matched by similarity of text, and no two records are ever merged. Each side is indexed once, so a run is linear in the number of records.
+
+| Rule | Relationship | Confidence |
+|---|---|---|
+| `finding-asset` | the finding's affected target is an asset: the same value, else the same web origin, else the same host or address (the most specific match only; at most five assets per finding) | high; medium for a host match |
+| `finding-vulnerability` | the finding names the CVE of a tracked vulnerability on the same host | high; medium for a vulnerability without an asset |
+| `vulnerability-component` | the vulnerability's CVE is a known vulnerability of an SBOM component (the SBOM's own data or its OSV.dev result, aliases included) | high |
+| `finding-component` | the finding's target is the package URL of an SBOM component | high for the same version; medium (corresponds to) for another version |
+| `hash` | a file hash written in a finding (SHA-256, SHA-1 or MD5) is the SHA-256 of an evidence file or a file-hash entity of a linked investigation; an evidence file's SHA-256 is such an entity | high |
+| `finding-endpoint` | the finding's URL (without query and fragment, in any case) is a server of an API definition followed by an endpoint's path, a parameter standing for one path segment | high for one endpoint, medium for several |
+| `entity-asset` | an entity of a linked OSINT investigation is the host or address of an asset | high |
+| `finding-entity` | the finding's target is on the host of an entity of a linked investigation | medium |
+| `shared-evidence` | two findings are linked to the same evidence record | medium |
+| `duplicate` | two findings name the same CVE on the same host (high), or have the same title on the same target (medium) | as stated |
+
+* A pair already joined by a finding link is not suggested. A pair the analyst decided keeps the decision; one still pending is updated (rules, matches, the higher confidence).
+* Groups are capped so one large group cannot flood the queue: 50 pairs per group of findings that share something, and 5,000 pending suggestions per project. The report says how many were found per rule and how many were not stored.
+* Each run is recorded in `relation_events` with its counts and duration. Correlation is refused in archived projects.
+
+**Related records.** The record panel (any finding, asset, vulnerability, evidence record, entity, endpoint, component or technique) lists, with how each is known: its relationships (rejected ones only on request), finding links, the structural links that already exist (an asset's vulnerabilities and OSINT entity, the evidence an API definition or SBOM came from, the evidence a record was derived from) and the record's timeline events. A finding link that a verified relationship created is listed once, as the relationship.
+
+**Graph.** The investigation graph draws records as nodes and relationships and finding links as edges, each edge with its type, origin, verification, confidence and rules. Filters: pending and rejected suggestions (off by default), minimum confidence, origins, record kinds, a start date, and the neighbourhood of one record (1–6 steps). It is capped at 1,500 edges by default (at most 5,000), and says when it was cut. A shortest path between two records follows the same filters. The graph exports as JSON (format `cyberhub-investigation-graph`, with every edge's provenance), SVG or PNG through a native save dialog; each export is recorded on the timeline. The graph reuses the OSINT workspace's drawing and layout code.
+
+**Search** (`records_search`) finds projects, findings, assets, vulnerabilities, evidence, OSINT entities, tool runs, API endpoints, SBOM components and ATT&CK techniques by text, in one project or across projects. Exact matches rank before prefixes and prefixes before substrings; the wildcards of SQL `LIKE` in the text are matched literally. Archived projects are searched only when asked for, or when named. At most 200 results (50 by default).
+
+**ATT&CK catalog.** `catalog/attack-enterprise.json` is a compact copy of MITRE ATT&CK Enterprise 20.1 (tactics in matrix order, techniques and sub-techniques with their tactics and platforms, the revoked IDs with their replacements, the deprecated IDs), built by `scripts/attack-catalog.mjs` from MITRE's STIX bundle and bundled with the application. It records the source URL, the bundle's SHA-256 and when it was retrieved; the MITRE notice is in `THIRD_PARTY_NOTICES.md`.
+
+**Evidence provenance.** Evidence records gain `source_module` (the module that produced them, such as `scan_import`, `api_inventory` or `sbom`), `source_ref` (the record there, such as `sbom_doc:7`), `tool` and `tool_version`, `collected_at` (when the source says it was collected, such as an SBOM's creation time, kept apart from when Cyber Hub stored it), `derived_from` (the evidence it was derived from), `verification` (`unverified`, `intact`, `damaged`, `missing`) and `verified_at`. Imports of scan results, API definitions and SBOMs fill them; provenance that a record already has is never overwritten, so the same file added again keeps where it first came from. *Verify* stores each stored record's result.
+
 ## Analysis
 
 Projects → *Analysis* works on stored data only; nothing is contacted (`workspace/analysis.rs`).
@@ -384,11 +448,17 @@ References are never duplicated: there are unique indexes per project for the fi
 **Integrity.**
 * `text` records keep the SHA-256 and size of their content.
 * A file is exported through a native save dialog. The copy is hashed while it is written, and a copy that does not match the recorded SHA-256 is removed and refused.
-* *Verify* (Evidence tab) reports stored files that are missing, unreadable or changed, and text whose content no longer matches. References (runs, OSINT evidence) hold no copy and are counted separately. Each check is recorded on the project timeline, and so is each deletion.
+* *Verify* (Evidence tab) reports stored files that are missing, unreadable or changed, and text whose content no longer matches. References (runs, OSINT evidence) hold no copy and are counted separately. Each check is recorded on the project timeline, and so is each deletion. From schema 22 each stored record also keeps the result of its last check (`verification`, `verified_at`), and records keep their provenance (see [Investigation layer](#investigation-layer-schema-22)).
 
 ## Timeline
 
 `project_timeline` is a query, not a copy. It merges `timeline_events` with tool runs, finding history, scope history, evidence, events of linked OSINT investigations and discovery snapshots. Results are newest first, can be filtered by type (`execution`, `finding`, `vulnerability`, `scope`, `evidence`, `investigation`, `discovery`, `asset`, `workflow`, `remediation`, `report`, `note`, `utility`, `checklist`), and are paged with each event's `cursor` (time, source and row, so events of the same second are never skipped; a plain time is still accepted as `before`). `utility` events are HTTP requests (URL without its query, status, redirects) and TLS analyses sent from the assessment utilities. Asset status changes and project status changes (`note`) are recorded too.
+
+From schema 22 (`timeline_query`, the *Timeline* tab):
+* `correlation` events are the investigation layer's history: correlation runs and every decision on a relationship.
+* Events can also be limited to one record (a finding, asset, evidence record, vulnerability or tool run, as from a record panel's *Timeline* button), to text in the title or detail, and to a date range (the end date is included).
+* Each event keeps its own time. An evidence record whose source collected it at another time (an SBOM's creation time, for instance) also shows that time as `observedAt`, so the time an event happened and the time Cyber Hub recorded it are not confused.
+* The filtered timeline exports as CSV or JSON (at most 10,000 events) through a native save dialog.
 
 ## Migration 9
 

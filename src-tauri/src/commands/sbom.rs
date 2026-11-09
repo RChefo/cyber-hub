@@ -211,6 +211,15 @@ pub async fn sbom_import(app: AppHandle, project_id: i64) -> AppResult<Option<Sb
         let stored = db.with(|c| {
             let tx = c.unchecked_transaction()?;
             let id = sbom::store(&tx, project_id, &file_name, &sha256, Some(rec.id), &parsed)?;
+            // the tools that wrote the SBOM, and when it says it was created
+            let prov = crate::workspace::evidence::Provenance {
+                source_module: "sbom".into(),
+                source_ref: format!("sbom_doc:{id}"),
+                tool: parsed.tools.join(", "),
+                collected_at: (!parsed.created.trim().is_empty()).then(|| parsed.created.trim().to_string()),
+                ..Default::default()
+            };
+            crate::workspace::evidence::set_provenance(&tx, rec.id, &prov)?;
             let what = format!("{} components from {file_name}", parsed.components.len());
             timeline::record(&tx, project_id, "asset", &format!("{what_file}: {}", if parsed.subject.is_empty() { &file_name } else { &parsed.subject }), &what, Some("sbom"), Some(id))?;
             activity::log(&tx, "import", &format!("{what_file} imported"), &what, Some("project"), Some(&project_id.to_string()), Some(project_id))?;

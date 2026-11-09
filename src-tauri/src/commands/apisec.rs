@@ -231,6 +231,8 @@ pub async fn api_spec_import(app: AppHandle, project_id: i64) -> AppResult<Optio
         let stored = db.with(|c| {
             let tx = c.unchecked_transaction()?;
             let id = apisec::store(&tx, project_id, &file_name, &sha256, Some(rec.id), &spec)?;
+            let prov = crate::workspace::evidence::Provenance { source_module: "api_inventory".into(), source_ref: format!("api_spec:{id}"), tool: kind.to_string(), ..Default::default() };
+            crate::workspace::evidence::set_provenance(&tx, rec.id, &prov)?;
             let what = format!("{} endpoints from {file_name} ({kind})", spec.endpoints.len());
             timeline::record(&tx, project_id, "asset", &format!("API inventory: {}", if spec.title.is_empty() { &file_name } else { &spec.title }), &what, Some("api_spec"), Some(id))?;
             activity::log(&tx, "import", "API definition imported", &what, Some("project"), Some(&project_id.to_string()), Some(project_id))?;

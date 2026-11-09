@@ -22,12 +22,14 @@ This document states exactly what an upgrade does, what was tested, and how far 
 | development: URL exclusions keep excluding their host | 19 |
 | development: API security inventory | 20 |
 | development: SBOM analysis | 21 |
+| development: investigation layer | 22 |
 
-The schema version is SQLite's `user_version`. Migrations 9–21 are listed in [DATA_MODEL.md](DATA_MODEL.md).
+The schema version is SQLite's `user_version`. Migrations 9–22 are listed in [DATA_MODEL.md](DATA_MODEL.md).
 * Migrations 9–12 add tables and columns, rebuild `findings` once to give it the new lifecycle, and map the old finding statuses: `open` becomes `new`, `reported` becomes `confirmed`, and every finding that was `reported` gets a history entry recording the mapping. Ids and all other columns are kept.
 * Migrations 13–18 only add tables (`scan_imports`, `finding_fingerprints`; `finding_templates`; `checklist_items`) and columns with defaults (`finding_fingerprints.host`; `findings.cvss_vector`, `findings.cvss_score`; `scope_events.repeats`), and change nothing that exists.
 * Migration 19 changes scope entries only, as described below.
 * Migrations 20 and 21 only add tables (`api_specs`, the API inventory; `sbom_docs`, imported SBOMs) and change nothing that exists.
+* Migration 22 adds the investigation layer's tables (`relations`, `relation_events`), triggers that remove a deleted record's relationships, and provenance columns with defaults to `evidence` (`source_module`, `source_ref`, `tool`, `tool_version`, `collected_at`, `derived_from`, `verification`, `verified_at`). Existing evidence keeps its data and starts as `unverified` with no provenance. A test upgrades a populated schema-21 database and checks the data, the defaults, the triggers, `foreign_key_check` and `integrity_check`.
 
 **Scope semantics from schema 18.** URL scope entries authorize only their paths, not their host (see [SECURITY.md](SECURITY.md#path-level-scope)). A project that relied on a URL entry for host-level operations, such as an Nmap scan of the URL's host, now needs the host, its domain or its address range added to the scope. The refusal says so.
 

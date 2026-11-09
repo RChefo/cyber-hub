@@ -13,7 +13,7 @@ import { FeaturedIcon } from "@/components/vendor/untitledui/FeaturedIcon";
 import { copyCommand, copyText, notify } from "@/lib/actions";
 import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { Finding, Project, ProjectStatus } from "@/lib/types";
+import type { Finding, Project, ProjectStatus, RecordRef } from "@/lib/types";
 import { formatDate, formatDateTime, formatRelative, pluralize, shellQuote } from "@/lib/utils";
 import { AnalysisTab } from "./AnalysisTab";
 import { ApiTab } from "./ApiTab";
@@ -22,15 +22,19 @@ import { AssistantTab } from "./AssistantTab";
 import { AttackSurfaceTab } from "./AttackSurfaceTab";
 import { AutomationTab } from "./AutomationTab";
 import { ChecklistTab } from "./ChecklistTab";
-import { EvidenceVault, ReportTab, ScopeExtras, TimelineTab } from "./EngagementTabs";
+import { EvidenceVault, ReportTab, ScopeExtras, TimelineTab, type TimelineRecord } from "./EngagementTabs";
 import { FindingsTab } from "./FindingsTab";
+import { InvestigationTab } from "./InvestigationTab";
+import { tabFor } from "./investigation";
 import { ENGAGEMENT_TYPES, engagementOf, ProjectFormModal, STATUS_OPTIONS } from "./ProjectFormModal";
 import { isOpenFinding } from "@/lib/findings";
 import { countBySeverity } from "./report";
 import { ScopeTab } from "./ScopeTab";
 import { VulnerabilitiesTab } from "./VulnerabilitiesTab";
 
-type TabId = "overview" | "scope" | "surface" | "apis" | "components" | "vulns" | "findings" | "checklist" | "analysis" | "assistant" | "automation" | "timeline" | "evidence" | "report" | "notes" | "commands";
+type TabId = "overview" | "scope" | "surface" | "apis" | "components" | "vulns" | "findings" | "checklist" | "analysis" | "investigation" | "assistant" | "automation" | "timeline" | "evidence" | "report" | "notes" | "commands";
+
+const TAB_IDS: TabId[] = ["overview", "scope", "surface", "apis", "components", "vulns", "findings", "checklist", "analysis", "investigation", "assistant", "automation", "timeline", "evidence", "report", "notes", "commands"];
 
 function NotesTab({ project }: { project: Project }) {
   const [notes, setNotes] = useState(project.notes);
@@ -254,9 +258,21 @@ function OverviewTab({ project, findings, onTab }: { project: Project; findings:
 }
 
 export function ProjectDetail({ id }: { id: number }) {
-  const { runtime, navigate } = useApp();
+  const { runtime, navigate, route } = useApp();
   const confirm = useConfirm();
-  const [tab, setTab] = useState<TabId>("overview");
+  // a deep link (global search, another page) may name the tab
+  const [tab, setTab] = useState<TabId>(() => (TAB_IDS as string[]).includes(route.params?.tab ?? "") ? (route.params!.tab as TabId) : "overview");
+  // the record whose related records are shown in the investigation view, the finding to open,
+  // and the record the timeline is limited to
+  const [panelRecord, setPanelRecord] = useState<RecordRef | null>(null);
+  const [focusFinding, setFocusFinding] = useState<number | null>(() => (route.params?.finding && /^\d+$/.test(route.params.finding) ? Number(route.params.finding) : null));
+  const [timelineRecord, setTimelineRecord] = useState<TimelineRecord | null>(null);
+  const openRecordTab = (r: RecordRef) => {
+    const t = tabFor(r);
+    if (t === "attack") setTab("investigation");
+    else if (t !== "osint") setTab(t);
+    if (r.kind === "finding") setFocusFinding(r.id);
+  };
   const [editOpen, setEditOpen] = useState(false);
   const [report, setReport] = useState<string | null>(null);
   const project = useQuery(["projects"], () => api.projectGet(id), [id], runtime);
@@ -334,6 +350,7 @@ export function ProjectDetail({ id }: { id: number }) {
     { id: "findings", label: `Findings (${f.length})` },
     { id: "checklist", label: "Checklist" },
     { id: "analysis", label: "Analysis" },
+    { id: "investigation", label: "Investigation" },
     { id: "assistant", label: "Assistant" },
     { id: "automation", label: "Automation" },
     { id: "timeline", label: "Timeline" },
@@ -427,10 +444,22 @@ export function ProjectDetail({ id }: { id: number }) {
           <VulnerabilitiesTab project={p} />
         </Tabs.Panel>
         <Tabs.Panel id="findings">
-          {findings.error && !findings.data ? <ErrorBlock message={findings.error} onRetry={findings.reload} /> : <FindingsTab projectId={p.id} findings={f} />}
+          {findings.error && !findings.data ? <ErrorBlock message={findings.error} onRetry={findings.reload} /> : <FindingsTab projectId={p.id} findings={f} focusId={focusFinding} onFocused={() => setFocusFinding(null)} />}
         </Tabs.Panel>
         <Tabs.Panel id="analysis">
           <AnalysisTab project={p} />
+        </Tabs.Panel>
+        <Tabs.Panel id="investigation">
+          <InvestigationTab
+            project={p}
+            record={panelRecord}
+            onRecord={setPanelRecord}
+            onOpenRecord={openRecordTab}
+            onTimeline={(r, label) => {
+              setTimelineRecord({ kind: r.kind, id: r.id, label });
+              setTab("timeline");
+            }}
+          />
         </Tabs.Panel>
         <Tabs.Panel id="assistant">
           <AssistantTab project={p} />
@@ -451,7 +480,15 @@ export function ProjectDetail({ id }: { id: number }) {
           <ChecklistTab projectId={p.id} />
         </Tabs.Panel>
         <Tabs.Panel id="timeline">
-          <TimelineTab project={p} />
+          <TimelineTab
+            project={p}
+            record={timelineRecord}
+            onClearRecord={() => setTimelineRecord(null)}
+            onOpenRecord={(kind, refId) => {
+              setPanelRecord({ kind: kind as RecordRef["kind"], id: refId, sub: "" });
+              setTab("investigation");
+            }}
+          />
         </Tabs.Panel>
         <Tabs.Panel id="report">
           <ReportTab project={p} />

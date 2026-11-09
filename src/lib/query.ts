@@ -45,6 +45,8 @@ export type Tag =
   | "checklist"
   /** a database restore waiting for the next start */
   | "restore"
+  /** relationships of the investigation layer and correlation results */
+  | "relations"
   | "system";
 
 const versions = new Map<Tag, number>();

@@ -902,6 +902,86 @@ pub(crate) const MIGRATIONS: &[&str] = &[
         UNIQUE (project_id, sha256)
     );
     "#,
+    // 22 — investigation layer (docs/DATA_MODEL.md#investigation-layer-schema-22): relationships
+    // between records of different modules with their origin, verification and review state (the
+    // vocabulary of OSINT relationships), the history of every decision, and the provenance of
+    // evidence. Endpoints are (kind, id, sub) references into several tables, so they have no
+    // foreign key: triggers remove the relationships of deleted records.
+    r#"
+    CREATE TABLE relations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        a_kind TEXT NOT NULL,
+        a_id INTEGER NOT NULL,
+        a_sub TEXT NOT NULL DEFAULT '',
+        b_kind TEXT NOT NULL,
+        b_id INTEGER NOT NULL,
+        b_sub TEXT NOT NULL DEFAULT '',
+        type TEXT NOT NULL,
+        origin TEXT NOT NULL CHECK (origin IN ('observed','imported','derived','inferred','manual','suggested')),
+        verification TEXT NOT NULL CHECK (verification IN ('observed','verified','inferred','disputed','rejected')),
+        review TEXT NOT NULL DEFAULT 'pending' CHECK (review IN ('pending','done','dismissed')),
+        confidence TEXT NOT NULL DEFAULT 'medium' CHECK (confidence IN ('low','medium','high')),
+        rules TEXT NOT NULL DEFAULT '[]',
+        reason TEXT NOT NULL DEFAULT '',
+        matched TEXT NOT NULL DEFAULT '[]',
+        created_by TEXT NOT NULL,
+        materialized INTEGER NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        reviewed_at TEXT,
+        UNIQUE (project_id, type, a_kind, a_id, a_sub, b_kind, b_id, b_sub)
+    );
+    CREATE INDEX idx_relations_a ON relations(a_kind, a_id, project_id);
+    CREATE INDEX idx_relations_b ON relations(b_kind, b_id, project_id);
+    CREATE INDEX idx_relations_review ON relations(project_id, review);
+    CREATE TABLE relation_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        relation_id INTEGER REFERENCES relations(id) ON DELETE SET NULL,
+        action TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        actor TEXT NOT NULL,
+        at TEXT NOT NULL
+    );
+    CREATE INDEX idx_relation_events ON relation_events(project_id, at DESC);
+    CREATE INDEX idx_relation_events_relation ON relation_events(relation_id);
+    CREATE TRIGGER relations_findings_deleted AFTER DELETE ON findings BEGIN
+        DELETE FROM relations WHERE (a_kind = 'finding' AND a_id = OLD.id) OR (b_kind = 'finding' AND b_id = OLD.id);
+    END;
+    CREATE TRIGGER relations_assets_deleted AFTER DELETE ON assets BEGIN
+        DELETE FROM relations WHERE (a_kind = 'asset' AND a_id = OLD.id) OR (b_kind = 'asset' AND b_id = OLD.id);
+    END;
+    CREATE TRIGGER relations_vulnerabilities_deleted AFTER DELETE ON vulnerabilities BEGIN
+        DELETE FROM relations WHERE (a_kind = 'vulnerability' AND a_id = OLD.id) OR (b_kind = 'vulnerability' AND b_id = OLD.id);
+    END;
+    CREATE TRIGGER relations_evidence_deleted AFTER DELETE ON evidence BEGIN
+        DELETE FROM relations WHERE (a_kind = 'evidence' AND a_id = OLD.id) OR (b_kind = 'evidence' AND b_id = OLD.id);
+    END;
+    CREATE TRIGGER relations_osint_entities_deleted AFTER DELETE ON osint_entities BEGIN
+        DELETE FROM relations WHERE (a_kind = 'osint_entity' AND a_id = OLD.id) OR (b_kind = 'osint_entity' AND b_id = OLD.id);
+    END;
+    CREATE TRIGGER relations_api_specs_deleted AFTER DELETE ON api_specs BEGIN
+        DELETE FROM relations WHERE (a_kind = 'api_endpoint' AND a_id = OLD.id) OR (b_kind = 'api_endpoint' AND b_id = OLD.id);
+    END;
+    CREATE TRIGGER relations_sbom_docs_deleted AFTER DELETE ON sbom_docs BEGIN
+        DELETE FROM relations WHERE (a_kind = 'sbom_component' AND a_id = OLD.id) OR (b_kind = 'sbom_component' AND b_id = OLD.id);
+    END;
+    CREATE TRIGGER relations_executions_deleted AFTER DELETE ON executions BEGIN
+        DELETE FROM relations WHERE (a_kind = 'execution' AND a_id = OLD.id) OR (b_kind = 'execution' AND b_id = OLD.id);
+    END;
+    ALTER TABLE evidence ADD COLUMN source_module TEXT NOT NULL DEFAULT '';
+    ALTER TABLE evidence ADD COLUMN source_ref TEXT NOT NULL DEFAULT '';
+    ALTER TABLE evidence ADD COLUMN tool TEXT NOT NULL DEFAULT '';
+    ALTER TABLE evidence ADD COLUMN tool_version TEXT NOT NULL DEFAULT '';
+    ALTER TABLE evidence ADD COLUMN collected_at TEXT;
+    ALTER TABLE evidence ADD COLUMN derived_from INTEGER REFERENCES evidence(id) ON DELETE SET NULL;
+    ALTER TABLE evidence ADD COLUMN verification TEXT NOT NULL DEFAULT 'unverified';
+    ALTER TABLE evidence ADD COLUMN verified_at TEXT;
+    CREATE INDEX idx_evidence_derived ON evidence(derived_from);
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a
@@ -1685,6 +1765,56 @@ mod tests {
         assert!(file_db.with(|c| backup_to(c, &dir.join("live.db-wal"))).is_err());
         drop(file_db);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn schema_21_gains_the_investigation_layer_and_keeps_its_data() {
+        // a database of schema 21 with a finding, evidence and an SBOM, as an earlier version left it
+        let conn = schema12_with_data();
+        for (i, sql) in MIGRATIONS.iter().enumerate().take(21).skip(12) {
+            if REBUILD_MIGRATIONS.contains(&((i + 1) as i64)) {
+                run_rebuild(&conn, (i + 1) as i64, sql).unwrap();
+            } else {
+                conn.execute_batch(sql).unwrap();
+            }
+            conn.execute_batch(&format!("PRAGMA user_version = {}", i + 1)).unwrap();
+        }
+        conn.execute_batch("INSERT INTO sbom_docs (id, project_id, name, format, sha256, evidence_id, doc, imported_at) VALUES (8, 3, 'bom.json', 'cyclonedx-json', 'bb', 5, '{}', 't');").unwrap();
+        let db = Db::init(conn).unwrap();
+        assert_eq!(db.schema_version().unwrap(), MIGRATIONS.len() as i64);
+        db.with(|c| {
+            let kept: (String, String, String, String, Option<String>) =
+                c.query_row("SELECT title, file_name, source_module, verification, collected_at FROM evidence WHERE id = 5", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?;
+            assert_eq!(kept, ("scan.xml".into(), "scan.xml".into(), String::new(), "unverified".into(), None), "existing evidence keeps its data, with empty provenance");
+            // relationships go with the records they join, and with their project
+            c.execute_batch(
+                "INSERT INTO relations (project_id, a_kind, a_id, b_kind, b_id, type, origin, verification, created_by, created_at, updated_at) VALUES (3, 'finding', 21, 'evidence', 5, 'supported_by', 'manual', 'verified', 'user', 't', 't');
+                 INSERT INTO relations (project_id, a_kind, a_id, b_kind, b_id, b_sub, type, origin, verification, created_by, created_at, updated_at) VALUES (3, 'finding', 21, 'sbom_component', 8, '0', 'affects', 'derived', 'inferred', 'correlation', 't', 't');
+                 INSERT INTO relation_events (project_id, relation_id, action, summary, actor, at) VALUES (3, 1, 'linked', 'Linked', 'user', 't');",
+            )?;
+            assert!(c.execute("INSERT INTO relations (project_id, a_kind, a_id, b_kind, b_id, type, origin, verification, created_by, created_at, updated_at) VALUES (3, 'finding', 21, 'asset', 1, 'affects', 'guessed', 'verified', 'user', 't', 't')", []).is_err(), "unknown origins are refused");
+            // the triggers find a deleted record's relationships through the indexes, not by
+            // reading every relationship of every project
+            let plan: Vec<String> = c
+                .prepare("EXPLAIN QUERY PLAN DELETE FROM relations WHERE (a_kind = 'finding' AND a_id = 1) OR (b_kind = 'finding' AND b_id = 1)")?
+                .query_map([], |r| r.get::<_, String>(3))?
+                .collect::<Result<_, _>>()?;
+            assert!(plan.iter().any(|p| p.contains("idx_relations_a")) && plan.iter().any(|p| p.contains("idx_relations_b")) && !plan.iter().any(|p| p.starts_with("SCAN")), "{plan:?}");
+            let plan: Vec<String> = c.prepare("EXPLAIN QUERY PLAN DELETE FROM evidence WHERE id = 1")?.query_map([], |r| r.get::<_, String>(3))?.collect::<Result<_, _>>()?;
+            assert!(plan.iter().any(|p| p.contains("idx_evidence_derived")) && !plan.iter().any(|p| p.starts_with("SCAN evidence")), "records derived from a deleted one are found by index: {plan:?}");
+            c.execute("DELETE FROM sbom_docs WHERE id = 8", [])?;
+            assert_eq!(count(c, "SELECT COUNT(*) FROM relations"), 1, "the component's relationship went with its SBOM");
+            c.execute("DELETE FROM evidence WHERE id = 5", [])?;
+            assert_eq!(count(c, "SELECT COUNT(*) FROM relations"), 0);
+            assert_eq!(count(c, "SELECT COUNT(*) FROM relation_events WHERE relation_id IS NULL"), 1, "the history stays");
+            assert_eq!(count(c, "SELECT COUNT(*) FROM pragma_foreign_key_check"), 0);
+            c.execute("DELETE FROM projects WHERE id = 3", [])?;
+            assert_eq!(count(c, "SELECT COUNT(*) FROM relation_events"), 0, "history goes with its project");
+            let integrity: String = c.query_row("PRAGMA integrity_check", [], |r| r.get(0))?;
+            assert_eq!(integrity, "ok");
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
