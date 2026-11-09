@@ -732,3 +732,45 @@ Cyber Hub's own HTTP client keeps its per-hop checks (existing local-server test
   * **Suites:** 362 Rust tests, 36 of 36 frontend files, clippy and tsc clean, npm audit 0.
 * **Debian 12.** Build, then the suites (the same results), then the GUI pass: 69 of 69. Its screenshot after Unlink shows the refreshed row ("Failed", "Record finding"). The Ubuntu screenshot had been captured before the re-render; the Ubuntu data check had already passed.
 * **gitleaks:** this segment's commits and the tracked tree at HEAD; no leaks.
+
+## 2026-11-09T12:16Z: RC0 release candidate validation starts
+
+Validation only: no installers, no signing, no publishing, no push, never the real user database. Baseline: `release/v0.1.0` at `4361d36`, clean tree, version 0.1.0 everywhere, schema 19.
+
+## 12:16–12:30Z: MSRV (`2ad9a1c`)
+
+* The highest `rust-version` among the 627 locked registry packages is 1.90 (the Tauri crates, including `tauri-plugin-updater` 2.14.1).
+* `cargo +1.89.0 check --locked` refuses them; `cargo +1.90.0 test --locked` with a fresh target folder passed 362 tests.
+* `rust-version` 1.90, the docs, and a CI job on 1.90.0. No dependency changed. The 1.89.0 and 1.90.0 toolchains were added with rustup next to stable, which stays the default.
+
+## 12:25–12:45Z: upgrade rehearsal (Windows, real app)
+
+* A schema-12 copy with records of every kind, plus URL exclusions; every table and evidence hash snapshotted before and after.
+* The app upgraded it to 19 with an identical pre-upgrade backup. The only data changes are the schema-19 scope entries and their four history entries; 20 scope probes show nothing newly allowed or refused.
+* Integrity and foreign keys clean, evidence unchanged and verified, relationships intact; a second start changed nothing.
+
+## 12:30–13:00Z: restore rehearsal on Linux (Ubuntu 24.04.5, Debian 12)
+
+* The real app in containers without network, GTK dialogs driven with `xdotool`: invalid and damaged files, restore, undo, missing and modified evidence, a tampered file next to the backup, a kill after the confirmation, a kill during the copy of a 790 MB backup, and a schema-12 backup restored and upgraded.
+* 43 of 43 on both. Harness fixes on the way: an error toast is not a confirmation, and `pkill -f` matched its own shell.
+* Finding: a kill during the copy leaves `.restore-<id>.partial` in the data folder (never used). Documented, not blocking.
+
+## 12:40–12:58Z: redirect rule (`ae673e5`)
+
+* Each tool's source was read for options and files that turn redirects on: goflags (httpx, katana, nuclei) merges `config.yaml` from the user's configuration folder; nuclei also reads `/etc/nuclei` and template profiles; ffuf reads `ffufrc`; feroxbuster reads `ferox-config.toml` from four places and `--resume-from` restores a whole saved configuration; dalfox reads `config.toml`; nikto's `nikto.conf` can add options (`CLIOPTS`).
+* Browser modes ignore the redirect options: nuclei's headless engine leaves redirects to Chromium, katana's `-hl` engine has no redirect check, httpx `-ss` only applies a network policy.
+* Fix: browser modes count as following redirects; options that load a file of options are refused on path-only and near-exclusion runs; the files a tool reads on its own are named in a warning. Three new tests; the docs say what is not checked.
+
+## 13:00–13:12Z: release notes (`f90ab22`)
+
+Every claim was checked against the code. The fixes, missing modules and new limitations are listed in the commit; the notes no longer link to repository files, because they are published verbatim.
+
+## 13:05–13:10Z: restore rehearsal on Windows
+
+The real app with an isolated data folder, the native Open dialog driven with Win32 messages: the same cases as on Linux except the tampered-evidence and schema-12 ones, with a 395 MB backup for the kill during the copy. 37 of 37; the real database's modification time did not change.
+
+## 13:10–13:30Z: final validation
+
+* Windows: 365 Rust tests (3 ignored), clippy and tsc clean, 224 frontend tests, npm audit 0, cargo audit 0 vulnerabilities and 8 warnings, gitleaks over all 77 commits clean; GUI smoke over 16 pages and 14 project tabs on the upgraded data, and 7 of 7 feature checks.
+* Ubuntu 24.04.5 and Debian 12: the same suites (365 Rust tests, 36 frontend files, clippy, tsc, npm audit 0), and the GUI regression with two new option-file checks: 71 of 71 on both.
+* Decision: ready for a release-candidate build; final release authorization waits for Authenticode signing, the candidate's installer and updater validation, and the owner's review.

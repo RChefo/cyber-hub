@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | **Complete** (fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
+| Current phase | **Complete** (RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -129,8 +129,20 @@ None. The final results at `d6a192e`:
 | `223491c` | fix(db): add a guarded rebuild mode for referenced tables in migrations |
 | `ca685c0` | feat(reports): build HTML and Markdown reports from one model |
 | `d6a192e` | docs(release): prepare the 0.1.0 release notes and upgrade guidance |
+| `4361d36` | docs(mission): report the final pre-release hardening and its regression |
+| `2ad9a1c` | fix(build): declare Rust 1.90, the minimum the locked Tauri crates need |
+| `ae673e5` | fix(scope): cover browser modes and option files in the redirect rule |
+| `f90ab22` | docs(release): correct the 0.1.0 notes against the code |
+| (RC0 report) | docs(mission): report the RC0 release candidate validation |
 
 ## Next action
+
+**After RC0 (2026-11-09T13:30Z), the owner decides:**
+1. Set up Authenticode signing as `docs/SIGNING.md` describes (release blocker), preferably before the release-candidate build.
+2. Authorize the release-candidate build, then validate its installers: install, upgrade from a copy of a real database, uninstall, a first start of the release build, and an update through a staging feed.
+3. Review the version and `docs/releases/0.1.0.md`, which is published as written.
+
+Code candidates that are not blocking (MISSION_REPORT.md, "Technical debt"): remove partial restore copies at start, record refused tool runs in the scope history, read known option-file formats, pin the release toolchain.
 
 Second segment (from 2026-11-09T06:32Z), in this order:
 1. ~~Verify CVSS scoring against FIRST's reference calculators~~: done (`b46a075`); it found and fixed CVSS 3.0 scoring.

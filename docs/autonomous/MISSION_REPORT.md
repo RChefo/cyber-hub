@@ -362,4 +362,126 @@ The local target server's log shows only in-scope requests.
 1. **Authorization:** the owner must approve building installers, signing, notarization and publishing. None was done.
 2. **Version and notes:** confirm the version, then review `docs/releases/0.1.0.md`; it is published as written.
 3. **Upgrade rehearsal:** upgrade a copy of a real database from the previous build, checking the schema-19 host exclusions and the restore path, as `docs/releases/README.md` describes.
-4. **Build toolchains** must be at Rust 1.89 or later.
+4. **Build toolchains** must be at Rust 1.89 or later. (Corrected in RC0: the locked Tauri crates need **1.90**; see below.)
+
+## Release candidate validation, RC0 (2026-11-09)
+
+A validation pass before building a release candidate. No installer was built, nothing was signed or published, no signing key was generated or replaced, nothing was pushed, and the real user database was not opened (its modification time, 2026-11-05 17:58:24 local, is unchanged).
+
+### Statistics
+
+| Item | Value |
+|---|---|
+| Start | 2026-11-09T12:16Z, after `4361d36` |
+| End | 2026-11-09T13:30Z |
+| Commits | `2ad9a1c`, `ae673e5`, `f90ab22` and this report |
+| Tests | Rust 362 → 365, 3 ignored; frontend 224 (36 files) |
+
+### Baseline
+
+Branch `release/v0.1.0`, HEAD `4361d36`, clean tree. Version 0.1.0 in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`; schema 19 (19 migrations). There is no `rust-toolchain.toml`: the minimum is `rust-version` in `Cargo.toml`.
+
+### Changes
+
+| Commit | What |
+|---|---|
+| `2ad9a1c` | **Rust 1.90, not 1.89.** The highest `rust-version` among the 627 locked registry packages is 1.90 (`tauri` 2.12.5, `tauri-build` 2.7.4, `muda` 0.20.0, `tauri-plugin-updater` 2.14.1 and other Tauri crates). `cargo +1.89.0 check --locked` refuses to build; `cargo +1.90.0 test --locked` with a fresh target folder passed (362 tests). No dependency changed. CI gets an `msrv` job on 1.90.0. |
+| `ae673e5` | **Redirect rule: browser modes and files of options.** Found by reading each tool's source: the browser of nuclei `-headless` (`-dr` does not reach it), katana's headless engine (`-hl`) and httpx screenshots (`-ss`) follow redirects whatever the redirect options say. A file of options can turn redirects on (ffuf `-config`/`ffufrc`, goflags `config.yaml` for httpx, katana and nuclei, nuclei profiles, dalfox `config.toml`, nikto `nikto.conf` `CLIOPTS`, sqlmap `-c`, feroxbuster `--resume-from` and `ferox-config.toml`). On path-only and near-exclusion runs, options that load such a file are refused, and the files a tool reads on its own are named in a warning; their settings are not read. |
+| `f90ab22` | **Release notes checked line by line against the code.** Added the modules the notes left out; fixed claims that were wrong (no separate range kind in the scope; refused tool runs are not in the scope history; data leaves the computer with online features; Windows 10 not tested; Node 20.19+/22.12+); listed the cargo audit warnings; replaced relative links that break where the notes are published; new known limitations. UPGRADE.md: a restore killed during its copy is dropped, not resumed. |
+
+### Database upgrade rehearsal (Windows 11, the real app)
+
+A copy of the schema-12 QA database was given records of every kind the old schema holds: URL exclusions and in-scope URL entries in three projects, findings linked to evidence, a tool run and an OSINT entity, vulnerabilities with events, timeline events, an investigation, workflows, MCP settings, and three evidence files (one shared by two projects). Every table and evidence hash was recorded, and the debug build upgraded it with `CYBERHUB_DATA_DIR` pointing at the copy.
+
+* Schema 12 → 19; the pre-upgrade backup `cyberhub-schema12-<time>.db` is identical to the original, row by row.
+* Apart from the tool catalog (refreshed at every start), every original row is unchanged in its original columns. The changes: `api.acme.example` (in scope, with an excluded path on it) became an exclusion; host exclusions were added for `portal.acme.example`, `198.51.100.7` and `intranet.globex.example`; four scope-history entries with source "upgrade". New tables are empty.
+* 20 scope probes: no target the old rules refused is allowed, and none they allowed is refused.
+* `integrity_check` ok, `foreign_key_check` empty; evidence files 3 → 3, unchanged, *Verify* finds no problem; finding links (evidence, run, OSINT entity) keep their labels; the investigation, workflows, vulnerabilities, the timeline and the MCP policy (MCP off) are intact.
+* A second start: no migration, no second backup, no change.
+
+### Backup and restore rehearsal (the real app on all three platforms)
+
+| Case | Windows 11 | Ubuntu 24.04.5 | Debian 12 |
+|---|---|---|---|
+| not a database, damaged copy: refused, nothing staged | pass | pass | pass |
+| restore with the automatic restart; previous database kept with the evidence only it uses | pass | pass | pass |
+| undo by restoring the kept copy; evidence comes back | pass | pass | pass |
+| missing and modified evidence reported; tampered file next to the backup not copied in | — | pass | pass |
+| killed 0.3 s after the confirmation (copy made): applied whole at the next start | pass | pass | pass |
+| killed during the copy (395 MB on Windows, 790 MB on Linux): not applied, database unchanged, journal dropped | pass | pass | pass |
+| schema-12 backup restored by schema 19: upgraded after its own backup, evidence copied in and verified | — | pass | pass |
+| total | 37 of 37 | 43 of 43 | 43 of 43 |
+
+The Windows run drove the native Open dialog with Win32 messages, the Linux runs the GTK dialogs with `xdotool` in containers without network. The first Ubuntu run had 3 harness failures (an error toast taken for a confirmation, a `pkill -f` that matched its own shell); the app's behaviour in that log was correct, and the fixed script passed. A second Ubuntu run started in parallel with Debian failed at the first step because the window manager was not ready; run alone, it passed.
+
+**Finding (not blocking):** a kill while SQLite writes the copy leaves the unfinished `.restore-<id>.partial` file (and its `-journal`) in the data folder. It is never used; only disk space is lost. Documented in UPGRADE.md and the release notes.
+
+### Scope and redirects
+
+* Unit tests cover path-only authorization, host-level tools, network and port checks, URL exclusions in the forms servers treat as the same path (case, percent-encoding, `;params`, `//`, a `.` suffix), refused backslashes and encoded slashes, the history limits, per-hop redirect checks and the credential headers dropped on another origin (`Authorization`, `Cookie`, `Proxy-Authorization`). Other headers, such as `X-Api-Key`, are kept, but only reach in-scope hops.
+* In the real app on Ubuntu and Debian: ffuf with `-r` on a path-only URL is refused; without `-r` it is allowed and the warning names `ffufrc`; with `-config <file>` it is refused; with `-r` on an authorized host it is allowed. The local target saw only requests under the authorized `/api/` path.
+* Redirect enforcement is not complete: tools without a policy keep a warning, and the settings in files of options are not read.
+
+### Platform validation (source `ae673e5`; `f90ab22` changes documentation only)
+
+| Check | Windows 11 | Ubuntu 24.04.5 | Debian 12 |
+|---|---|---|---|
+| cargo test | 365 passed, 3 ignored | 365 passed, 3 ignored | 365 passed, 3 ignored |
+| clippy `-D warnings` | clean | clean | clean |
+| tsc | clean | clean | clean |
+| vitest | 224 passed (36 files) | 36 of 36 files | 36 of 36 files |
+| npm audit | 0 vulnerabilities | 0 vulnerabilities | 0 vulnerabilities |
+| cargo audit | 0 vulnerabilities, 8 warnings | not in the image (same lockfile) | not in the image (same lockfile) |
+| gitleaks | all 77 commits: no leaks | — | — |
+| database checks | `integrity_check` ok, no foreign-key violations after every GUI run | same | same |
+| real GUI | 16 pages and 14 project tabs on the upgraded data; 7 feature checks; restore 37 of 37 | 71 of 71; restore 43 of 43 | 71 of 71; restore 43 of 43 |
+
+* **Automated tests:** the rows above, on all three systems.
+* **Real GUI:** Windows on this machine's physical desktop (WebView2, driven over CDP). Linux under a virtual display (Xvfb) with WebKitGTK, driven by WebDriver and `xdotool`.
+* **Physical Linux desktop:** not tested (no GNOME/KDE session, no Wayland, no HiDPI).
+* **Offline:** the Linux GUI runs had no network; the local target was a server in the container.
+* **Live providers:** none. No API key was used; the project assistant was tested against a local stand-in only.
+
+### Rust MSRV
+
+1.90, proven both ways (1.89 refused by Cargo, 1.90.0 builds and passes the tests). `tauri-plugin-updater` 2.14.1 declares 1.90 itself, so the updater does not raise the minimum further. CI checks 1.90.0. Release builds use the latest stable toolchain (`release.yml`), which is not pinned.
+
+### Updater integrity
+
+* Minisign public key in `tauri.conf.json`; `requireSignedVersion`, so a signature must carry the version it was made for. Endpoints are empty in the repository and injected only by `release.yml` (`--config`); without them the app reports the updater as not configured.
+* The app offers only newer stable versions (no downgrade, no pre-release), uses HTTPS only, refuses non-HTTPS download URLs, caps downloads at 512 MB and asks for a native confirmation before installing. The web view has no updater permission; it calls the backend's commands.
+* Release notes from the manifest are not signed, so the Update Center shows them as plain text (control characters removed, length capped).
+* `scripts/updater-manifest.mjs`: platform keys `windows-x86_64-{nsis,msi}` and `linux-x86_64-{appimage,deb,rpm}` with `{os}-{arch}` fallbacks; validation requires semver, no pre-release on stable, HTTPS, existing files named for the version, a minisign signature that verifies against the configured key with an intact trusted comment, and a signed version equal to the manifest's. Its 4 tests pass.
+* `release.yml`: no permissions by default, actions pinned by SHA, the signing secrets only in the `build` job of the protected `release` environment, publishing only in the `publish` job.
+* Not exercised: a real update with the production key and feed. That needs release artifacts, which were not authorized.
+
+### Windows signing
+
+`docs/SIGNING.md` covers the certificate routes and their 460-day validity, every file to sign (including the sidecar, whose signing by the bundler is unverified), the Tauri configuration, RFC 3161 timestamping, verification with `signtool` and `Get-AuthenticodeSignature`, SmartScreen and Defender, secrets and OIDC in CI, rotation and revocation, and a checklist. Nothing was bought, configured or signed. `release.yml` has no Authenticode step yet.
+
+### Technical debt
+
+| Item | Class |
+|---|---|
+| Windows installers and executables are not Authenticode-signed; Defender quarantined an unsigned staging build | **release blocker** (final release) |
+| Release-candidate installers not built or tested: install, upgrade, uninstall, a release-profile first start, an update through a staging feed | **release blocker** (final release; needs authorization) |
+| Owner review: version, release notes (published verbatim), the production updater key in the `release` environment, the feed URL | **release blocker** (final release) |
+| Linux tested on a virtual display only; Windows 10 not tested | acceptable limitation (documented) |
+| Settings in files of options are not read (explicit options refused where it matters, automatic files named) | acceptable limitation (documented) |
+| Tools without a redirect policy keep a warning | acceptable limitation (documented) |
+| Refused tool runs are not kept in the scope history | acceptable limitation (documented) |
+| `.restore-<id>.partial` left after a kill during a restore's copy | acceptable limitation (documented) |
+| Reading a WAL-mode backup can add `-shm`/`-wal` next to it (the file itself is unchanged) | acceptable limitation (documented) |
+| Custom headers kept on cross-origin redirects of the HTTP request builder (each hop is scope-checked) | acceptable limitation |
+| The project assistant was not tested against the live API | acceptable limitation (documented) |
+| cargo audit: 7 unmaintained indirect crates and 1 unsound `glib` API, all from Tauri's Linux stack | acceptable limitation (documented) |
+| Update notes shown as plain text, Markdown syntax visible | acceptable limitation |
+| Remove partial copies at start; record refused tool runs; read known option-file formats; drop custom credential headers across origins; pin the release toolchain; pin `ci.yml` actions by SHA and add clippy there; cargo-audit in the Linux images; a physical Linux desktop pass | future improvements |
+
+No confirmed release-blocking defect remains in the code: the redirect-rule gaps were fixed in `ae673e5`, and the MSRV in `2ad9a1c`.
+
+### Decision
+
+**READY FOR RELEASE CANDIDATE BUILD.** The upgrade keeps every record and refuses nothing more and allows nothing new; restores are whole or not applied on all three platforms; the scope and redirect rules hold in the real app; the automated suites pass on Windows 11, Ubuntu 24.04.5 and Debian 12.
+
+**Not ready for final release authorization** until the three release blockers above are resolved: Authenticode signing (best set up before the release-candidate build, so the candidate exercises the final pipeline), validation of the candidate's installers and updater, and the owner's review.
