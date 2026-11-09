@@ -20,7 +20,7 @@ fn epss_enabled(db: &Db) -> bool {
     db.with(|c| Ok(c.query_row("SELECT value FROM user_preferences WHERE key = 'epss.enabled'", [], |r| r.get::<_, String>(0)).optional()?))
         .ok()
         .flatten()
-        .map_or(true, |v| v.trim() != "false")
+        .is_none_or(|v| v.trim() != "false")
 }
 
 /// EPSS for these CVEs: cached values (24 h), the rest fetched in one request.

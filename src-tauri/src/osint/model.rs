@@ -281,7 +281,7 @@ pub fn is_valid_type(id: &str) -> bool {
 }
 
 pub fn is_directed(id: &str) -> bool {
-    relationship_type(id).map_or(true, |r| r.directed)
+    relationship_type(id).is_none_or(|r| r.directed)
 }
 
 #[cfg(test)]

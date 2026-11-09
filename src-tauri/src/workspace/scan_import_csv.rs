@@ -80,7 +80,7 @@ fn delimiter(text: &str) -> Option<char> {
         let (rows, _, _) = split_rows(head, d, 5);
         let Some(n) = rows.first().map(Vec::len).filter(|n| *n >= 2) else { continue };
         let score = (rows[1..].iter().filter(|r| r.len() == n).count(), n);
-        if best.map_or(true, |(_, s)| score > s) {
+        if best.is_none_or(|(_, s)| score > s) {
             best = Some((d, score));
         }
     }

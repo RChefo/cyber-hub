@@ -47,7 +47,7 @@ pub fn pick_server(bootstrap: &Value, t: EntityType, value: &str) -> Option<Stri
             for svc in services {
                 for s in svc.get(0)?.as_array()?.iter().filter_map(Value::as_str) {
                     let s = s.to_ascii_lowercase();
-                    if (value == s || value.ends_with(&format!(".{s}"))) && best.as_ref().map_or(true, |(n, _)| s.len() > *n) {
+                    if (value == s || value.ends_with(&format!(".{s}"))) && best.as_ref().is_none_or(|(n, _)| s.len() > *n) {
                         if let Some(u) = urls_of(svc) {
                             best = Some((s.len(), u));
                         }
@@ -62,7 +62,7 @@ pub fn pick_server(bootstrap: &Value, t: EntityType, value: &str) -> Option<Stri
             for svc in services {
                 for s in svc.get(0)?.as_array()?.iter().filter_map(Value::as_str) {
                     if let Ok(net) = s.parse::<ipnet::IpNet>() {
-                        if net.contains(&ip) && best.as_ref().map_or(true, |(p, _)| net.prefix_len() > *p) {
+                        if net.contains(&ip) && best.as_ref().is_none_or(|(p, _)| net.prefix_len() > *p) {
                             if let Some(u) = urls_of(svc) {
                                 best = Some((net.prefix_len(), u));
                             }

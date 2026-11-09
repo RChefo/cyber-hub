@@ -1415,7 +1415,7 @@ trait OptEq {
 }
 impl OptEq for Option<&str> {
     fn is_none_or_eq(&self, other: &str) -> bool {
-        self.map_or(true, |s| s == other)
+        self.is_none_or(|s| s == other)
     }
 }
 

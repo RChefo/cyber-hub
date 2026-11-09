@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Cyber Hub — local-first cybersecurity workstation"
 authors = ["Cyber Hub contributors"]
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.89"
 default-run = "cyber-hub"
 
 [lib]
@@ -58,9 +58,9 @@ regex = "1.13.1"
 # developer-only provisioning tool (feature "provisioning"); not part of app builds
 rpassword = { version = "7.5.4", optional = true }
 # official Model Context Protocol SDK (stdio server in the `cyberhub-mcp` binary)
-rmcp = { version = "3.8.0", default-features = false, features = ["server", "macros", "transport-io"] }
+rmcp = { version = "3.9.0", default-features = false, features = ["server", "macros", "transport-io"] }
 reqwest = { version = "0.13.3", default-features = false, features = ["rustls", "json", "charset", "http2", "multipart", "stream", "query", "form"] }
-rusqlite = { version = "0.40.2", features = ["bundled"] }
+rusqlite = { version = "0.41.1", features = ["bundled"] }
 semver = "1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

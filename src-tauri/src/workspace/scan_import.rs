@@ -283,7 +283,7 @@ pub fn html_to_text(html: &str) -> String {
     // collapse runs of blank lines and trailing spaces
     let mut lines: Vec<&str> = Vec::new();
     for l in decoded.lines().map(str::trim_end) {
-        if l.trim().is_empty() && lines.last().map_or(true, |p| p.trim().is_empty()) {
+        if l.trim().is_empty() && lines.last().is_none_or(|p| p.trim().is_empty()) {
             continue;
         }
         lines.push(l);
@@ -545,7 +545,7 @@ fn parse_with(text: &str, mapping: Option<&csv::CsvMapping>) -> Result<Parsed, S
         Format::Csv => csv::parse_csv(text, mapping)?,
     };
     p.dedupe();
-    if p.findings.is_empty() && p.assets.is_empty() && p.csv.as_ref().map_or(true, |c| c.mapping.title.is_some()) {
+    if p.findings.is_empty() && p.assets.is_empty() && p.csv.as_ref().is_none_or(|c| c.mapping.title.is_some()) {
         p.warnings.push("The file contains no findings or hosts".into());
     }
     if p.truncated > 0 {

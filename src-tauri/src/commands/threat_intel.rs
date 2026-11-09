@@ -409,7 +409,7 @@ pub struct Investigation {
 
 pub(crate) async fn investigate(db: &Db, vtst: &VtState, tist: &TiState, ind: &Indicator, only: Option<&[ProviderId]>, refresh: bool) -> AppResult<Vec<ProviderResult>> {
     let enabled = enabled_map(db)?;
-    let want = |p: ProviderId| only.map_or(true, |o| o.contains(&p));
+    let want = |p: ProviderId| only.is_none_or(|o| o.contains(&p));
     let on = |p: ProviderId| enabled.get(p.as_str()).copied().unwrap_or(true);
     macro_rules! one {
         ($p:expr) => {

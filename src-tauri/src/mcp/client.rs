@@ -114,7 +114,7 @@ impl BridgeClient {
         let (tx, rx) = oneshot::channel();
         {
             let mut guard = self.conn.lock().await;
-            if guard.as_ref().map_or(true, |c| !c.alive.load(Ordering::Relaxed)) {
+            if guard.as_ref().is_none_or(|c| !c.alive.load(Ordering::Relaxed)) {
                 *guard = Some(self.connect().await?);
             }
             let conn = guard.as_mut().expect("connected");

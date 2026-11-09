@@ -8,7 +8,7 @@ No account and no telemetry. The only background request is the optional update 
 
 ## Quick start
 
-Prerequisites: Node.js 20+ (tested on 22 and 24), Rust 1.80+ (tested on 1.94 and 1.99), and the [Tauri 2 system prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS (WebView2 on Windows, WebKitGTK 4.1 + `libdbus-1-dev` on Linux).
+Prerequisites: Node.js 20+ (tested on 22 and 24), Rust 1.89+ (tested on 1.94 and 1.99), and the [Tauri 2 system prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS (WebView2 on Windows, WebKitGTK 4.1 + `libdbus-1-dev` on Linux).
 
 ```bash
 npm ci                 # also runs scripts/patch-deps.mjs (freezePrototype compatibility, self-tested)

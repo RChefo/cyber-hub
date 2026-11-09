@@ -66,9 +66,9 @@ pub fn list_templates(c: &Connection, q: &TemplateQuery) -> AppResult<Value> {
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
     let matching: Vec<templates::FindingTemplate> = templates::list(c)?
         .into_iter()
-        .filter(|t| q.severity.as_deref().map_or(true, |s| t.severity == s))
+        .filter(|t| q.severity.as_deref().is_none_or(|s| t.severity == s))
         .filter(|t| {
-            needle.as_deref().map_or(true, |n| {
+            needle.as_deref().is_none_or(|n| {
                 [&t.title, &t.category, &t.description].iter().any(|f| f.to_lowercase().contains(n)) || t.tags.iter().chain(&t.rules).any(|f| f.to_lowercase().contains(n))
             })
         })
@@ -145,7 +145,7 @@ pub fn checklist(c: &Connection, q: &ChecklistQuery) -> AppResult<Value> {
     let states: HashMap<String, methodology::ItemState> = methodology::items(c, q.project_id)?.into_iter().map(|i| (i.test_id.clone(), i)).collect();
     let cov = methodology::coverage(c, q.project_id)?;
     let mut tests = Vec::new();
-    for group in cat.categories.iter().filter(|g| q.category.as_deref().map_or(true, |id| g.id == id)) {
+    for group in cat.categories.iter().filter(|g| q.category.as_deref().is_none_or(|id| g.id == id)) {
         for t in &group.tests {
             let state = states.get(&t.id);
             let status = state.map_or("not_started", |s| s.status.as_str());

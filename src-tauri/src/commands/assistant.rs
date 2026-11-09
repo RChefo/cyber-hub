@@ -209,7 +209,7 @@ pub fn fallback_enabled(db: &Db) -> bool {
     })
     .ok()
     .flatten()
-    .map_or(true, |v| v.trim() != "false")
+    .is_none_or(|v| v.trim() != "false")
 }
 
 /// Where requests go (the real API; tests use a local server).

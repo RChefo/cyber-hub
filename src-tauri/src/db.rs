@@ -1090,6 +1090,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_bundled_sqlite_has_the_wal_page_size_fix() {
+        // RUSTSEC-2026-0459 (CVE-2026-119375): before 3.54.0, a database opened with a `-wal` of
+        // another page size could return uninitialized memory. Restore opens files chosen by the user.
+        let v: String = Connection::open_in_memory().unwrap().query_row("SELECT sqlite_version()", [], |r| r.get(0)).unwrap();
+        let parts: Vec<u32> = v.split('.').map(|p| p.parse().unwrap()).collect();
+        assert!((parts[0], parts[1]) >= (3, 54), "SQLite {v}");
+    }
+
+    #[test]
     fn databases_from_the_previous_schema_are_upgraded_in_place() {
         // a database as the previous release left it (schema 7) with an investigation and a graph
         let conn = Connection::open_in_memory().unwrap();

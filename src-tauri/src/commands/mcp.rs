@@ -491,7 +491,7 @@ pub fn client_rows(db: &Db, live: &[ConnView]) -> AppResult<Vec<McpClientRow>> {
         r.connected = true;
         r.connections += 1;
         r.session_requests += c.requests;
-        if r.connected_since.as_deref().map_or(true, |s| c.connected_at.as_str() < s) {
+        if r.connected_since.as_deref().is_none_or(|s| c.connected_at.as_str() < s) {
             r.connected_since = Some(c.connected_at.clone());
         }
     }

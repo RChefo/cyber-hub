@@ -60,7 +60,7 @@ pub fn classify(value: &str) -> AppResult<(String, &'static str)> {
         // scheme and host and resolves dot segments)
         let raw = value.trim();
         let mut u = url::Url::parse(raw).map_err(|_| validation(format!("Invalid URL: {raw}")))?;
-        if u.host_str().map_or(true, str::is_empty) {
+        if u.host_str().is_none_or(str::is_empty) {
             return Err(validation(format!("URL has no host: {raw}")));
         }
         // a scope entry is not a place for credentials; queries and fragments do not limit a scope
@@ -558,7 +558,7 @@ fn url_starts(token: &str) -> Vec<usize> {
                 s = i - k.len();
             }
         }
-        if s < i && starts.last().map_or(true, |l| *l < s) {
+        if s < i && starts.last().is_none_or(|l| *l < s) {
             starts.push(s);
         }
         from = i + 3;
