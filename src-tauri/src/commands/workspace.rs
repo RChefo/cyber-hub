@@ -536,14 +536,14 @@ pub async fn cvss_score(vector: String) -> AppResult<crate::cvss::Cvss> {
 
 /* ───────────────────────── findings export ───────────────────────── */
 
-/// Saves the chosen findings of a project as CSV or JSON through a native save dialog, in the
-/// order given. Returns the file name, or None if cancelled.
+/// Saves the chosen findings of a project as CSV, JSON, SARIF or an ATT&CK Navigator layer
+/// through a native save dialog, in the order given. Returns the file name, or None if cancelled.
 #[tauri::command]
 pub async fn findings_export(app: AppHandle, project_id: i64, ids: Vec<i64>, format: String) -> AppResult<Option<String>> {
     if ids.is_empty() || ids.len() > 50_000 {
         return Err(crate::error::validation("Choose 1 to 50,000 findings to export"));
     }
-    let (content, name, ext) = {
+    let (content, name, ext, stem, label) = {
         let db = app.state::<Db>();
         let (name, all) = db.with(|c| {
             let name: String = c.query_row("SELECT name FROM projects WHERE id = ?1", params![project_id], |r| r.get(0))?;
@@ -555,21 +555,22 @@ pub async fn findings_export(app: AppHandle, project_id: i64, ids: Vec<i64>, for
             return Err(crate::error::validation("None of these findings belong to the project"));
         }
         match format.as_str() {
-            "csv" => (crate::workspace::findings_export::csv(&chosen), name, "csv"),
-            "json" => (crate::workspace::findings_export::json(&name, &crate::util::now(), &chosen)?, name, "json"),
-            "sarif" => (crate::workspace::findings_export::sarif(&name, &crate::util::now(), &chosen)?, name, "sarif"),
-            _ => return Err(crate::error::validation("Export as csv, json or sarif")),
+            "csv" => (crate::workspace::findings_export::csv(&chosen), name, "csv", "findings", "CSV"),
+            "json" => (crate::workspace::findings_export::json(&name, &crate::util::now(), &chosen)?, name, "json", "findings", "JSON"),
+            "sarif" => (crate::workspace::findings_export::sarif(&name, &crate::util::now(), &chosen)?, name, "sarif", "findings", "SARIF"),
+            "attack-navigator" => (crate::workspace::attack_layer::layer(&name, &crate::util::now(), &chosen).map_err(crate::error::validation)?, name, "json", "attack-layer", "ATT&CK Navigator layer"),
+            _ => return Err(crate::error::validation("Export as csv, json, sarif or attack-navigator")),
         }
     };
     let safe: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).take(60).collect();
     let (tx, rx) = tokio::sync::oneshot::channel();
-    main_window_dialog(&app, "Export findings").set_file_name(format!("{safe}-findings.{ext}")).add_filter(ext.to_uppercase(), &[ext]).save_file(move |f| {
+    main_window_dialog(&app, "Export findings").set_file_name(format!("{safe}-{stem}.{ext}")).add_filter(ext.to_uppercase(), &[ext]).save_file(move |f| {
         let _ = tx.send(f.and_then(|f| f.into_path().ok()));
     });
     let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
     std::fs::write(&path, content).map_err(|e| AppError::Internal(format!("Could not write the export: {e}")))?;
     let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    let _ = app.state::<Db>().with(|c| timeline::record(c, project_id, "report", &format!("Findings exported ({})", ext.to_uppercase()), &file, None, None));
+    let _ = app.state::<Db>().with(|c| timeline::record(c, project_id, "report", &format!("Findings exported ({label})"), &file, None, None));
     Ok(Some(file))
 }
 

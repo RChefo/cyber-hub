@@ -347,10 +347,10 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
     }
   };
 
-  const exportList = async (format: "csv" | "json" | "sarif") => {
+  const exportList = async (format: "csv" | "json" | "sarif" | "attack-navigator") => {
     try {
       const file = await api.findingsExport(projectId, list.map((f) => f.id), format);
-      if (file) notify.success(`${list.length} findings exported`, file);
+      if (file) notify.success(format === "attack-navigator" ? "ATT&CK Navigator layer exported" : `${list.length} findings exported`, file);
     } catch (e) {
       notify.error("Could not export the findings", e);
     }
@@ -414,7 +414,7 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
                 <ChevronDown className="size-3" />
               </Button>
               <Dropdown.Popover placement="bottom end">
-                <Dropdown.Menu aria-label="Export format" onAction={(k) => void exportList(k as "csv" | "json" | "sarif")}>
+                <Dropdown.Menu aria-label="Export format" onAction={(k) => void exportList(k as "csv" | "json" | "sarif" | "attack-navigator")}>
                   <Dropdown.Item id="csv" textValue="CSV">
                     CSV (spreadsheets)
                   </Dropdown.Item>
@@ -423,6 +423,9 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
                   </Dropdown.Item>
                   <Dropdown.Item id="sarif" textValue="SARIF">
                     SARIF 2.1.0 (code scanning, vulnerability managers)
+                  </Dropdown.Item>
+                  <Dropdown.Item id="attack-navigator" textValue="ATT&CK Navigator layer">
+                    ATT&amp;CK Navigator layer (techniques of the findings)
                   </Dropdown.Item>
                 </Dropdown.Menu>
               </Dropdown.Popover>

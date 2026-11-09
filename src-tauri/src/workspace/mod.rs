@@ -8,6 +8,7 @@ pub mod assets;
 pub mod discovery;
 pub mod evidence;
 pub mod findings;
+pub mod attack_layer;
 pub mod findings_export;
 pub mod lockfiles;
 pub mod report;

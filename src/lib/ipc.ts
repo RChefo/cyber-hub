@@ -174,7 +174,7 @@ export const api = {
   cvssScore: (vector: string) => call<T.CvssResult>("cvss_score", { vector }),
   findingsBulkEdit: (ids: number[], edit: { addTags: string[]; removeTags: string[]; assignee: string | null }) =>
     call<{ changed: number[]; skipped: [number, string][] }>("findings_bulk_edit", { ids, edit }),
-  findingsExport: (projectId: number, ids: number[], format: "csv" | "json" | "sarif") => call<string | null>("findings_export", { projectId, ids, format }),
+  findingsExport: (projectId: number, ids: number[], format: "csv" | "json" | "sarif" | "attack-navigator") => call<string | null>("findings_export", { projectId, ids, format }),
   wstgCatalog: () => call<T.WstgCatalog>("wstg_catalog"),
   databaseBackup: () => call<{ fileName: string; size: number } | null>("database_backup"),
   databaseRestoreInspect: () => call<{ token: string; info: T.BackupInfo } | null>("database_restore_inspect"),

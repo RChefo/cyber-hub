@@ -113,7 +113,7 @@ Each criterion is rated from 1 to 5, where 5 is best: D demand (×3), U professi
 | 35 | Linux persistence triage from collected files | 3 | 4 | 5 | 4 | 4 | 5 | 5 | 4 | 53 | **Done** (Mission 2) |
 | 36 | OAuth 2.0 and OpenID Connect configuration review (RFC 9700) | 3 | 4 | 5 | 3 | 5 | 5 | 5 | 4 | 52 | **Done** (Mission 2) |
 | 37 | SBOM comparison between versions | 3 | 3 | 4 | 4 | 5 | 5 | 5 | 5 | 51 | Candidate |
-| 38 | ATT&CK technique view and Navigator layer per project | 3 | 4 | 4 | 5 | 3 | 5 | 4 | 3 | 50 | Candidate |
+| 38 | ATT&CK technique view and Navigator layer per project | 3 | 4 | 4 | 5 | 3 | 5 | 4 | 3 | 50 | **Done** in part (Mission 2): Navigator layer export of the listed findings; no matrix view inside Cyber Hub |
 | 39 | Request collections, variables and authentication profiles in the repeater | 4 | 4 | 4 | 4 | 2 | 4 | 3 | 3 | 48 | Deferred: large interface work for the gain |
 | 40 | YARA matching | 4 | 4 | 5 | 4 | 1 | 3 | 4 | 2 | 48 | Deferred: the Rust engine (yara-x) brings a WebAssembly runtime; libyara needs a C toolchain |
 
