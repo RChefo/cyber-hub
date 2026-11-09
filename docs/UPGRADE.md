@@ -36,6 +36,13 @@ The schema version is SQLite's `user_version`. Migrations 9–19 are listed in [
 
 Development databases already at schema 18 are treated the same way, because the step cannot tell when an exclusion was added. To exclude only the path, remove the host exclusion afterwards.
 
+**Behaviour changes that come with this version.** They need no migration, but users will notice them. See [SECURITY.md](SECURITY.md#path-level-scope) and [releases/0.1.0.md](releases/0.1.0.md).
+* **Redirects of external tools.** A tool run is refused when the tool would follow HTTP redirects and one of its URLs is authorized only by path, or lies on a host with an excluded path. The refusal names the option and says how to run the tool without redirects; the options are never changed. Authorize the host explicitly to allow redirects. Cyber Hub's own HTTP request builder keeps checking every redirect hop itself.
+* **Report confidentiality.** The HTML and Markdown reports have the same sections. Both list open findings only and count the closed ones, and neither includes the project's internal notes or contacts. The Markdown report used to export the notes.
+* **Project deletion.** A project cannot be deleted while one of its tool runs, workflow runs or discovery operations is still running. Runs and activity entries are kept, unlinked.
+* **Checklist.** Finding links can be removed, and every checklist change is recorded on the project timeline.
+* **Building from source** needs Rust 1.89 or later (the bundled SQLite 3.54.1 requires it).
+
 ## What happens at startup
 
 1. Cyber Hub reads the schema version.
