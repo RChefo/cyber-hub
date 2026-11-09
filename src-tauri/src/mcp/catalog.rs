@@ -279,7 +279,7 @@ pub static TOOLS: &[ToolSpec] = &[
         schema: || obj(json!({ "template_id": { "type": "integer", "minimum": 1, "description": "Template ID from cyberhub_list_finding_templates" } }), &["template_id"]) },
     // ── reports and history
     ToolSpec { name: "cyberhub_generate_report", title: "Generate project report", group: "reports", category: Category::Read,
-        description: "Markdown assessment report for a project (scope, findings, notes), generated from local data and returned as text.",
+        description: "Markdown assessment report for a project (summary, scope, open findings; closed findings are counted, internal notes are left out), generated from local data and returned as text.",
         schema: || obj(json!({ "project_id": project_id() }), &["project_id"]) },
     ToolSpec { name: "cyberhub_export_report", title: "Export a report file", group: "reports", category: Category::Export,
         description: "Save a project report or a threat-intelligence report to a file. Requires approval; the user chooses the location in a native save dialog.",

@@ -507,6 +507,8 @@ export interface TimelineEvent {
   refKind: string | null;
   refId: number | null;
   at: string;
+  /** where the next page starts (`before`) */
+  cursor: string;
 }
 
 export interface ScopeEvent {

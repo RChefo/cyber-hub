@@ -21,6 +21,8 @@ pub struct TimelineEvent {
     pub ref_kind: Option<String>,
     pub ref_id: Option<i64>,
     pub at: String,
+    /// where the next page starts (`before`): unique, so events of the same second are not skipped
+    pub cursor: String,
 }
 
 /// Records an event that has no table of its own (asset discoveries, workflow runs, reports…).
@@ -37,7 +39,9 @@ pub fn record(c: &Connection, project_id: i64, kind: &str, title: &str, detail: 
     Ok(())
 }
 
-/// The newest `limit` events (before `before`, when given), optionally limited to some types.
+/// The newest `limit` events, optionally limited to some types. `before` is the `cursor` of the
+/// last event of the previous page (or a time: events before it). Events are ordered by time, then
+/// by source and row, so a page boundary inside one second skips nothing.
 pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], before: Option<&str>, limit: i64) -> AppResult<Vec<TimelineEvent>> {
     for t in types {
         if !TYPES.contains(&t.as_str()) {
@@ -45,13 +49,19 @@ pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], befor
         }
     }
     let limit = limit.clamp(1, 1000);
+    let (before_at, before_src, before_rid): (Option<&str>, Option<&str>, Option<i64>) = match before.map(|b| b.splitn(3, '|').collect::<Vec<_>>()) {
+        None => (None, None, None),
+        Some(parts) if parts.len() == 3 => (Some(parts[0]), Some(parts[1]), Some(parts[2].parse().map_err(|_| validation("Invalid timeline cursor"))?)),
+        Some(_) => (before, None, None),
+    };
+    let types_json = (!types.is_empty()).then(|| serde_json::to_string(types).unwrap_or_default());
     let sql = "
-        SELECT type, title, detail, ref_kind, ref_id, at FROM (
-            SELECT type, title, detail, ref_kind, ref_id, at FROM timeline_events WHERE project_id = ?1
+        SELECT type, title, detail, ref_kind, ref_id, at, src, rid FROM (
+            SELECT type, title, detail, ref_kind, ref_id, at, 'a' AS src, id AS rid FROM timeline_events WHERE project_id = ?1
           UNION ALL
             SELECT 'execution',
                    CASE kind WHEN 'install' THEN 'Installed ' ELSE 'Ran ' END || tool_id || ' (' || status || ')',
-                   program, 'execution', id, started_at
+                   program, 'execution', id, started_at, 'b', id
             FROM executions WHERE project_id = ?1
           UNION ALL
             SELECT 'finding',
@@ -63,7 +73,7 @@ pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], befor
                      WHEN 'link' THEN 'Finding linked: ' || f.title
                      WHEN 'unlink' THEN 'Finding unlinked: ' || f.title
                      ELSE 'Finding updated: ' || f.title END,
-                   e.note, 'finding', f.id, e.at
+                   e.note, 'finding', f.id, e.at, 'c', e.id
             FROM finding_events e JOIN findings f ON f.id = e.finding_id WHERE e.project_id = ?1
           UNION ALL
             SELECT CASE WHEN e.kind IN ('remediation','verification') THEN 'remediation' ELSE 'vulnerability' END,
@@ -74,7 +84,7 @@ pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], befor
                      WHEN 'remediation' THEN 'Remediation plan for ' || v.cve_id
                      WHEN 'verification' THEN 'Fix verified: ' || v.cve_id
                      ELSE v.cve_id || ' updated' END,
-                   e.note, 'vulnerability', v.id, e.at
+                   e.note, 'vulnerability', v.id, e.at, 'd', e.id
             FROM vulnerability_events e JOIN vulnerabilities v ON v.id = e.vulnerability_id WHERE e.project_id = ?1
           UNION ALL
             SELECT 'scope',
@@ -83,32 +93,34 @@ pub fn project_timeline(c: &Connection, project_id: i64, types: &[String], befor
                                WHEN 'removed' THEN 'Scope entry removed: '
                                ELSE 'Blocked (out of scope): ' END || value
                                || CASE WHEN repeats > 0 THEN ' (' || (repeats + 1) || ' attempts)' ELSE '' END,
-                   note, 'scope', id, at
+                   note, 'scope', id, at, 'e', id
             FROM scope_events WHERE project_id = ?1
           UNION ALL
-            SELECT 'evidence', 'Evidence added: ' || title, kind, 'evidence', id, created_at FROM evidence WHERE project_id = ?1
+            SELECT 'evidence', 'Evidence added: ' || title, kind, 'evidence', id, created_at, 'f', id FROM evidence WHERE project_id = ?1
           UNION ALL
-            SELECT 'investigation', i.name || ': ' || ev.summary, ev.kind, 'investigation', i.id, ev.at
+            SELECT 'investigation', i.name || ': ' || ev.summary, ev.kind, 'investigation', i.id, ev.at, 'g', ev.id
             FROM osint_events ev JOIN osint_investigations i ON i.id = ev.investigation_id WHERE i.project_id = ?1
           UNION ALL
-            SELECT 'workflow', 'Workflow ' || w.name || ' (' || r.trigger || '): ' || r.status, r.summary, 'workflow_run', r.id, r.started_at
+            SELECT 'workflow', 'Workflow ' || w.name || ' (' || r.trigger || '): ' || r.status, r.summary, 'workflow_run', r.id, r.started_at, 'h', r.id
             FROM workflow_runs r JOIN workflows w ON w.id = r.workflow_id WHERE r.project_id = ?1
           UNION ALL
             SELECT 'discovery',
                    CASE source WHEN 'passive' THEN 'Passive discovery' WHEN 'http' THEN 'Web services check' WHEN 'nmap' THEN 'Service scan' ELSE 'Discovery' END || ': ' || status,
-                   note, 'discovery', id, started_at
+                   note, 'discovery', id, started_at, 'i', id
             FROM discovery_snapshots WHERE project_id = ?1
         )
-        WHERE (?2 IS NULL OR at < ?2)
-        ORDER BY at DESC
-        LIMIT ?3";
+        WHERE (?2 IS NULL OR at < ?2 OR (at = ?2 AND ?3 IS NOT NULL AND (src < ?3 OR (src = ?3 AND rid < ?4))))
+          AND (?5 IS NULL OR type IN (SELECT value FROM json_each(?5)))
+        ORDER BY at DESC, src DESC, rid DESC
+        LIMIT ?6";
     let mut st = c.prepare(sql)?;
     let rows = st
-        .query_map(params![project_id, before, if types.is_empty() { limit } else { limit * 20 }], |r| {
-            Ok(TimelineEvent { kind: r.get(0)?, title: r.get(1)?, detail: r.get(2)?, ref_kind: r.get(3)?, ref_id: r.get(4)?, at: r.get(5)? })
+        .query_map(params![project_id, before_at, before_src, before_rid, types_json, limit], |r| {
+            let (at, src, rid): (String, String, i64) = (r.get(5)?, r.get(6)?, r.get(7)?);
+            Ok(TimelineEvent { kind: r.get(0)?, title: r.get(1)?, detail: r.get(2)?, ref_kind: r.get(3)?, ref_id: r.get(4)?, cursor: format!("{at}|{src}|{rid}"), at })
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(rows.into_iter().filter(|e| types.is_empty() || types.contains(&e.kind)).take(limit as usize).collect())
+    Ok(rows)
 }
 
 #[cfg(test)]
@@ -146,6 +158,26 @@ mod tests {
             assert_eq!(only.iter().map(|e| e.kind.as_str()).collect::<Vec<_>>(), vec!["execution", "scope"]);
             let page = project_timeline(c, p, &[], Some("2026-11-02T10:00:00Z"), 100)?;
             assert_eq!(page.len(), 2, "paging by time");
+            // pages follow each other without gaps, also inside one second
+            for i in 0..250 {
+                c.execute("INSERT INTO timeline_events (project_id, type, title, at) VALUES (?1, 'asset', ?2, '2026-11-04T09:00:00Z')", params![p, format!("Asset {i}")])?;
+            }
+            let mut seen = Vec::new();
+            let mut before: Option<String> = None;
+            loop {
+                let page = project_timeline(c, p, &[], before.as_deref(), 100)?;
+                if page.is_empty() {
+                    break;
+                }
+                before = page.last().map(|e| e.cursor.clone());
+                seen.extend(page.into_iter().map(|e| e.title));
+            }
+            assert_eq!(seen.len(), 255, "every event once");
+            assert_eq!(seen.iter().collect::<std::collections::BTreeSet<_>>().len(), 255);
+            // a type filter finds its events behind many newer ones of other types
+            let scope = project_timeline(c, p, &["scope".into()], None, 10)?;
+            assert_eq!(scope.len(), 1, "{scope:?}");
+            assert!(project_timeline(c, p, &[], Some("x|a|notanumber"), 10).is_err());
             assert!(project_timeline(c, p, &["nope".into()], None, 10).is_err());
             assert_eq!(project_timeline(c, other, &[], None, 10)?.len(), 1, "other projects stay separate");
             Ok(())

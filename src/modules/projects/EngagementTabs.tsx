@@ -294,12 +294,12 @@ export function TimelineTab({ project }: { project: Project }) {
   const events = [...(first.data ?? []), ...more];
   const loadMore = async () => {
     const last = events[events.length - 1];
-    if (!last || pages.includes(last.at)) return;
+    if (!last || pages.includes(last.cursor)) return;
     setLoading(true);
     try {
-      const next = await api.projectTimeline(project.id, { types, before: last.at, limit: 100 });
+      const next = await api.projectTimeline(project.id, { types, before: last.cursor, limit: 100 });
       setMore((m) => [...m, ...next]);
-      setPages((p) => [...p, last.at]);
+      setPages((p) => [...p, last.cursor]);
     } catch (e) {
       notify.error("Could not load more", e);
     } finally {

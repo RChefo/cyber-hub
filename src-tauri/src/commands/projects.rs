@@ -766,9 +766,15 @@ fn md_cell(v: &str) -> String {
     }
 }
 
+/// Finding statuses a report leaves out, as the HTML report does by default.
+const REPORT_CLOSED: &[&str] = &["resolved", "accepted_risk", "false_positive"];
+
 /// Self-contained Markdown assessment report from local project data. `generated` is a
-/// YYYY-MM-DD date.
+/// YYYY-MM-DD date. Like the HTML report by default, it lists open findings only (closed ones are
+/// counted) and leaves out the project's internal notes.
 pub fn markdown_report(project: &Project, findings: &[Finding], generated: &str) -> String {
+    let closed = findings.iter().filter(|f| REPORT_CLOSED.contains(&f.status.as_str())).count();
+    let findings: Vec<&Finding> = findings.iter().filter(|f| !REPORT_CLOSED.contains(&f.status.as_str())).collect();
     let mut l: Vec<String> = Vec::new();
     l.push(format!("# {}", project.name));
     l.push(String::new());
@@ -792,7 +798,8 @@ pub fn markdown_report(project: &Project, findings: &[Finding], generated: &str)
     }
     l.push(format!("- **Period:** {} → {}", project.start_date.as_deref().unwrap_or("not set"), project.end_date.as_deref().unwrap_or("not set")));
     let counts: Vec<String> = SEVERITY_LABEL.iter().map(|(k, v)| format!("{v} {}", findings.iter().filter(|f| f.severity == *k).count())).collect();
-    l.push(format!("- **Findings:** {} ({})", findings.len(), counts.join(", ")));
+    let closed_note = if closed > 0 { format!("; {closed} closed not listed") } else { String::new() };
+    l.push(format!("- **Findings:** {} ({}){closed_note}", findings.len(), counts.join(", ")));
     if !project.description.trim().is_empty() {
         l.push(String::new());
         l.push(project.description.trim().to_string());
@@ -820,10 +827,18 @@ pub fn markdown_report(project: &Project, findings: &[Finding], generated: &str)
     l.push(String::new());
     l.push("## Findings".into());
     l.push(String::new());
-    let mut sorted: Vec<&Finding> = findings.iter().collect();
+    let mut sorted: Vec<&Finding> = findings.clone();
     sorted.sort_by(|a, b| severity_rank(&a.severity).cmp(&severity_rank(&b.severity)).then(b.updated_at.cmp(&a.updated_at)));
+    if closed > 0 {
+        l.push(format!(
+            "_{closed} closed finding{} (resolved, accepted risk or false positive) {} not listed._",
+            if closed == 1 { "" } else { "s" },
+            if closed == 1 { "is" } else { "are" }
+        ));
+        l.push(String::new());
+    }
     if sorted.is_empty() {
-        l.push("No findings recorded.".into());
+        l.push(if closed > 0 { "No open findings." } else { "No findings recorded." }.into());
     } else {
         l.push("| # | Title | Severity | Status | Affected |".into());
         l.push("| --- | --- | --- | --- | --- |".into());
@@ -870,12 +885,6 @@ pub fn markdown_report(project: &Project, findings: &[Finding], generated: &str)
             }
         }
     }
-    if !project.notes.trim().is_empty() {
-        l.push(String::new());
-        l.push("## Notes".into());
-        l.push(String::new());
-        l.push(project.notes.trim().to_string());
-    }
     l.push(String::new());
     l.join("\n")
 }
@@ -907,7 +916,9 @@ pub async fn project_report_export(app: tauri::AppHandle, db: State<'_, Db>, id:
     });
     let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
     std::fs::write(&path, md).map_err(|e| AppError::Internal(format!("Could not write the report: {e}")))?;
-    Ok(Some(path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()))
+    let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let _ = app.state::<Db>().with(|c| crate::workspace::timeline::record(c, id, "report", "Report exported (Markdown)", &file, None, None));
+    Ok(Some(file))
 }
 
 #[cfg(test)]
@@ -994,6 +1005,19 @@ Upgrade log4j-core to 2.17.1."));
     fn empty_projects_do_not_fabricate_content() {
         let md = markdown_report(&project(false), &[], "2026-11-03");
         assert!(md.contains("No scope entries recorded.") && md.contains("No findings recorded."));
+    }
+
+    #[test]
+    fn closed_findings_and_internal_notes_stay_out_of_the_report() {
+        let mut p = project(true);
+        p.notes = "Internal: client contact is difficult".into();
+        let md = markdown_report(&p, &[f(1, "low", "false_positive"), f(2, "critical", "confirmed"), f(3, "high", "resolved")], "2026-11-03");
+        assert!(!md.contains("Internal: client contact") && !md.contains("## Notes"), "{md}");
+        assert!(md.contains("### 1. Finding 2") && !md.contains("Finding 1") && !md.contains("Finding 3"));
+        assert!(md.contains("2 closed findings (resolved, accepted risk or false positive) are not listed."));
+        assert!(md.contains("- **Findings:** 1 (") && md.contains("; 2 closed not listed"));
+        let none_open = markdown_report(&p, &[f(1, "low", "resolved")], "2026-11-03");
+        assert!(none_open.contains("No open findings."));
     }
 }
 
