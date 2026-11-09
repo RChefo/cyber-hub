@@ -22,27 +22,28 @@ const base: ScanImportPreview = {
   notReported: [],
   notReportedCount: 0,
   csv: null,
+  cves: 0,
 };
 
 describe("scan import preview", () => {
   it("counts informational findings only when they are included", () => {
-    expect(importCount(base, { includeInfo: false, reopenResolved: true, useTemplates: true, resolveMissing: false })).toBe(2);
-    expect(importCount(base, { includeInfo: true, reopenResolved: true, useTemplates: true, resolveMissing: false })).toBe(5);
+    expect(importCount(base, { includeInfo: false, reopenResolved: true, useTemplates: true, resolveMissing: false, trackCves: false })).toBe(2);
+    expect(importCount(base, { includeInfo: true, reopenResolved: true, useTemplates: true, resolveMissing: false, trackCves: false })).toBe(5);
     expect(knownCount(base)).toBe(3);
   });
 
   it("knows when an import would change nothing", () => {
     const empty = { ...base, assets: 0, counts: { new: 0, seenAgain: 0, recurring: 0, dismissed: 0, outOfScope: 4, info: 2 } };
-    expect(nothingToImport(empty, { includeInfo: false, reopenResolved: false, useTemplates: true, resolveMissing: false })).toBe(true);
-    expect(nothingToImport(empty, { includeInfo: true, reopenResolved: false, useTemplates: true, resolveMissing: false })).toBe(false);
-    expect(nothingToImport(base, { includeInfo: false, reopenResolved: false, useTemplates: true, resolveMissing: false })).toBe(false);
-    expect(nothingToImport({ ...empty, notReportedCount: 1 }, { includeInfo: false, reopenResolved: false, useTemplates: true, resolveMissing: false })).toBe(false);
+    expect(nothingToImport(empty, { includeInfo: false, reopenResolved: false, useTemplates: true, resolveMissing: false, trackCves: false })).toBe(true);
+    expect(nothingToImport(empty, { includeInfo: true, reopenResolved: false, useTemplates: true, resolveMissing: false, trackCves: false })).toBe(false);
+    expect(nothingToImport(base, { includeInfo: false, reopenResolved: false, useTemplates: true, resolveMissing: false, trackCves: false })).toBe(false);
+    expect(nothingToImport({ ...empty, notReportedCount: 1 }, { includeInfo: false, reopenResolved: false, useTemplates: true, resolveMissing: false, trackCves: false })).toBe(false);
   });
 
   it("shows informational items as new once they are included", () => {
-    expect(shownOutcome("info", { includeInfo: true, reopenResolved: false, useTemplates: true, resolveMissing: false })).toBe("new");
-    expect(shownOutcome("info", { includeInfo: false, reopenResolved: false, useTemplates: true, resolveMissing: false })).toBe("info");
-    expect(shownOutcome("out_of_scope", { includeInfo: true, reopenResolved: false, useTemplates: true, resolveMissing: false })).toBe("out_of_scope");
+    expect(shownOutcome("info", { includeInfo: true, reopenResolved: false, useTemplates: true, resolveMissing: false, trackCves: false })).toBe("new");
+    expect(shownOutcome("info", { includeInfo: false, reopenResolved: false, useTemplates: true, resolveMissing: false, trackCves: false })).toBe("info");
+    expect(shownOutcome("out_of_scope", { includeInfo: true, reopenResolved: false, useTemplates: true, resolveMissing: false, trackCves: false })).toBe("out_of_scope");
   });
 });
 

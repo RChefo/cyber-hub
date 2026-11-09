@@ -1465,6 +1465,9 @@ pub struct Options {
     /// on a host it covers (off by default: the analyst decides)
     #[serde(default)]
     pub resolve_missing: bool,
+    /// track the CVEs of recorded findings as vulnerabilities of their asset (off by default)
+    #[serde(default)]
+    pub track_cves: bool,
 }
 
 fn yes() -> bool {
@@ -1473,7 +1476,7 @@ fn yes() -> bool {
 
 impl Default for Options {
     fn default() -> Self {
-        Options { include_info: false, reopen_resolved: false, use_templates: true, resolve_missing: false }
+        Options { include_info: false, reopen_resolved: false, use_templates: true, resolve_missing: false, track_cves: false }
     }
 }
 
@@ -1587,6 +1590,54 @@ pub struct Preview {
     pub not_reported_count: usize,
     /// a CSV file's columns and the mapping used
     pub csv: Option<csv::CsvInfo>,
+    /// distinct CVEs named by findings that would be recorded (what "track CVEs" would track)
+    pub cves: usize,
+}
+
+/// CVEs tracked from one finding, and from one import at most.
+const MAX_CVES_PER_FINDING: usize = 20;
+const MAX_TRACKED_CVES: usize = 500;
+
+/// The CVE identifiers a finding names (normalized, at most [`MAX_CVES_PER_FINDING`]).
+fn finding_cves(cve: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for c in cve.split(|ch: char| ch == ',' || ch == ';' || ch.is_whitespace()).filter_map(|s| crate::workspace::vulns::normalize_cve(s).ok()) {
+        if !out.contains(&c) && out.len() < MAX_CVES_PER_FINDING {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Tracks a recorded finding's CVEs as vulnerabilities of its asset (or of the project) and links
+/// them to the finding. Existing vulnerabilities are linked, not duplicated. Priorities use the
+/// cached NVD record and EPSS when there are any: the import never goes to the network.
+fn track_cves(c: &Connection, project_id: i64, finding_id: i64, cves: &[String], asset: Option<i64>, source_note: &str, r: &mut ImportResult) -> AppResult<()> {
+    use crate::workspace::vulns;
+    for cve in cves {
+        let existing: Option<i64> = c
+            .query_row("SELECT id FROM vulnerabilities WHERE project_id = ?1 AND cve_id = ?2 AND COALESCE(asset_id, 0) = COALESCE(?3, 0)", params![project_id, cve, asset], |r| r.get(0))
+            .optional()?;
+        let id = match existing {
+            Some(id) => {
+                r.vulns_linked += 1;
+                id
+            }
+            None if r.vulns_tracked >= MAX_TRACKED_CVES => {
+                r.vulns_skipped += 1;
+                continue;
+            }
+            None => {
+                let record = vulns::cached_record(c, cve)?;
+                let epss = vulns::epss_cached(c, cve)?;
+                let input = vulns::VulnInput { project_id, cve_id: cve.clone(), asset_id: asset, exposure: None, criticality: None, exploit_known: false, notes: format!("Tracked from the {source_note}") };
+                r.vulns_tracked += 1;
+                vulns::create_in(c, &input, record.as_ref(), epss.as_ref(), "import")?.id
+            }
+        };
+        lifecycle::link(c, finding_id, "vulnerability", id, "import")?;
+    }
+    Ok(())
 }
 
 const SEVERITY_ORDER: &[&str] = &["critical", "high", "medium", "low", "info"];
@@ -1691,9 +1742,13 @@ pub fn preview(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options) 
     }
     let mut out_hosts: BTreeSet<String> = BTreeSet::new();
     let lib = library(c, opts)?;
+    let mut cves: BTreeSet<String> = BTreeSet::new();
     for f in &parsed.findings {
         *pv.by_severity.entry(f.severity.to_string()).or_default() += 1;
         let (o, id) = outcome(c, project_id, &entries, f, opts)?;
+        if matches!(o, Outcome::New | Outcome::SeenAgain | Outcome::Recurring) {
+            cves.extend(finding_cves(&f.cve));
+        }
         let template = if o == Outcome::New { template_for(&lib, format, f) } else { None };
         if template.is_some() {
             pv.templated += 1;
@@ -1722,6 +1777,7 @@ pub fn preview(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options) 
             template: template.map(|t| t.title.clone()),
         });
     }
+    pv.cves = cves.len();
     pv.items.sort_by_key(|i| (SEVERITY_ORDER.iter().position(|s| *s == i.severity).unwrap_or(9), i.outcome as u8));
     pv.items.truncate(200);
     let (batch, left_out, hosts) = asset_batch(&entries, &parsed.assets);
@@ -1817,6 +1873,10 @@ pub struct ImportResult {
     pub not_reported: usize,
     /// of those, resolved as verified by this rescan (when asked)
     pub resolved: usize,
+    /// CVEs tracked as new vulnerabilities, linked to existing ones, and left out over the limit
+    pub vulns_tracked: usize,
+    pub vulns_linked: usize,
+    pub vulns_skipped: usize,
     pub summary: String,
 }
 
@@ -1892,6 +1952,13 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
                     if let Some(ev) = file.evidence_id {
                         lifecycle::link(c, id, "evidence", ev, "import")?;
                     }
+                    if opts.track_cves && o != Outcome::Dismissed {
+                        let asset = match f.asset.as_ref() {
+                            Some((kind, value)) => asset_id(c, project_id, kind, value)?,
+                            None => None,
+                        };
+                        track_cves(c, project_id, id, &finding_cves(&f.cve), asset, &source_note, &mut r)?;
+                    }
                 }
                 Outcome::New => {
                     let mut input = FindingInput {
@@ -1933,10 +2000,15 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
                     if let Some(ev) = file.evidence_id {
                         lifecycle::link(c, id, "evidence", ev, "import")?;
                     }
+                    let mut asset = None;
                     if let Some((kind, value)) = f.asset.as_ref() {
                         if let Some(aid) = asset_id(c, project_id, kind, value)? {
                             lifecycle::link(c, id, "asset", aid, "import")?;
+                            asset = Some(aid);
                         }
+                    }
+                    if opts.track_cves {
+                        track_cves(c, project_id, id, &finding_cves(&f.cve), asset, &source_note, &mut r)?;
                     }
                     r.created += 1;
                 }
@@ -1971,6 +2043,12 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
         if r.templated > 0 {
             summary.push_str(&format!(", {} written from library templates", r.templated));
         }
+        if r.vulns_tracked + r.vulns_linked > 0 {
+            summary.push_str(&format!(", {} tracked ({} already tracked)", discovery::plural(r.vulns_tracked + r.vulns_linked, "CVE", "CVEs"), r.vulns_linked));
+        }
+        if r.vulns_skipped > 0 {
+            summary.push_str(&format!(", {} more CVEs not tracked (at most {MAX_TRACKED_CVES} per import)", r.vulns_skipped));
+        }
         if r.not_reported > 0 {
             summary.push_str(&format!(", {} no longer reported", r.not_reported));
             if r.resolved > 0 {
@@ -1981,7 +2059,7 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
         r.summary = summary.clone();
         c.execute(
             "UPDATE scan_imports SET snapshot_id = ?2, summary = ?3 WHERE id = ?1",
-            params![import_id, snapshot, json!({ "created": r.created, "seenAgain": r.seen_again, "reopened": r.reopened, "dismissed": r.dismissed, "outOfScope": r.out_of_scope + left_out, "infoSkipped": r.info_skipped, "templated": r.templated, "notReported": r.not_reported, "resolved": r.resolved, "assetsNew": r.assets_new, "assetsSeen": r.assets_seen, "text": summary }).to_string()],
+            params![import_id, snapshot, json!({ "created": r.created, "seenAgain": r.seen_again, "reopened": r.reopened, "dismissed": r.dismissed, "outOfScope": r.out_of_scope + left_out, "infoSkipped": r.info_skipped, "templated": r.templated, "notReported": r.not_reported, "resolved": r.resolved, "vulnsTracked": r.vulns_tracked, "vulnsLinked": r.vulns_linked, "assetsNew": r.assets_new, "assetsSeen": r.assets_seen, "text": summary }).to_string()],
         )?;
         let title = format!("Imported {} results from {}", parsed.tool, trunc(file.file_name, 80));
         timeline::record(c, project_id, "finding", &title, &summary, Some("scan_import"), Some(import_id))?;

@@ -12,10 +12,7 @@ use crate::workspace::findings as lifecycle;
 use crate::workspace::vulns::{self, Epss, VulnInput, Vulnerability};
 
 fn cached_record(db: &Db, cve: &str) -> AppResult<Option<CveRecord>> {
-    db.with(|c| {
-        let raw: Option<String> = c.query_row("SELECT data FROM cve_cache WHERE id = ?1", params![cve], |r| r.get(0)).optional()?;
-        Ok(raw.and_then(|r| serde_json::from_str(&r).ok()))
-    })
+    db.with(|c| vulns::cached_record(c, cve))
 }
 
 /// EPSS is on unless the user turned it off (Settings → stored as `epss.enabled`).

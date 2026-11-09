@@ -17,7 +17,7 @@ const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
 export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: boolean; onOpenChange: (o: boolean) => void; projectId: number }) {
   const [pending, setPending] = useState<ScanImportPending | null>(null);
   const [preview, setPreview] = useState<ScanImportPreview | null>(null);
-  const [options, setOptions] = useState<ScanImportOptions>({ includeInfo: false, reopenResolved: true, useTemplates: true, resolveMissing: false });
+  const [options, setOptions] = useState<ScanImportOptions>({ includeInfo: false, reopenResolved: true, useTemplates: true, resolveMissing: false, trackCves: false });
   const [busy, setBusy] = useState<"pick" | "preview" | "apply" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tokenRef = useRef<string | null>(null);
@@ -28,7 +28,7 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
       setPending(null);
       setPreview(null);
       setError(null);
-      setOptions({ includeInfo: false, reopenResolved: true, useTemplates: true, resolveMissing: false });
+      setOptions({ includeInfo: false, reopenResolved: true, useTemplates: true, resolveMissing: false, trackCves: false });
     }
   }, [isOpen]);
 
@@ -196,6 +196,14 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
                 onChange={(v) => setOptions({ ...options, reopenResolved: v })}
                 label={`Reopen ${pluralize(preview.counts.recurring, "resolved finding")} that the file reports again`}
                 description="Otherwise the sighting is only noted in their history."
+              />
+            )}
+            {preview.cves > 0 && (
+              <SwitchInput
+                isSelected={options.trackCves}
+                onChange={(v) => setOptions({ ...options, trackCves: v })}
+                label={`Track ${pluralize(preview.cves, "CVE")} as vulnerabilities`}
+                description="Each CVE is tracked for its finding's asset (or the project) and linked to the finding; existing vulnerabilities are linked, not duplicated. Priorities use cached NVD and EPSS data; Vulnerabilities → Refresh fetches the rest."
               />
             )}
             {preview.counts.info > 0 && (

@@ -374,6 +374,8 @@ export interface ScanImportOptions {
   useTemplates: boolean;
   /** resolve open findings of earlier imports of the same tool that the file no longer reports on a host it covers */
   resolveMissing: boolean;
+  /** track the CVEs of recorded findings as vulnerabilities of their asset */
+  trackCves: boolean;
 }
 
 /** A reusable finding write-up from the finding library (docs/DATA_MODEL.md#finding-library-schema-14). */
@@ -423,6 +425,8 @@ export interface ScanImportPreview {
   notReportedCount: number;
   /** a CSV file's columns and the mapping used */
   csv: CsvInfo | null;
+  /** distinct CVEs named by findings that would be recorded */
+  cves: number;
 }
 
 /** Which column (0-based) holds which field of a CSV import; null: not read. */
@@ -471,6 +475,9 @@ export interface ScanImportResult {
   templated: number;
   notReported: number;
   resolved: number;
+  vulnsTracked: number;
+  vulnsLinked: number;
+  vulnsSkipped: number;
   summary: string;
 }
 

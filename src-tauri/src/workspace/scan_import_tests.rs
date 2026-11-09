@@ -257,6 +257,48 @@ fn imports_respect_scope_and_never_duplicate_findings() {
 }
 
 #[test]
+fn imported_cves_can_be_tracked_as_vulnerabilities_of_their_asset() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let p = setup(c);
+        let parsed = parse(NESSUS).unwrap();
+        let file = FileInfo { file_name: "weekly.nessus", sha256: "ab", evidence_id: None };
+        let pv = preview(c, p, &parsed, Options::default())?;
+        assert_eq!(pv.cves, 2, "the in-scope finding's two CVEs");
+        // off by default
+        import(c, p, &parsed, Options::default(), &file)?;
+        assert_eq!(count(c, "SELECT COUNT(*) FROM vulnerabilities"), 0);
+        // on: one vulnerability per CVE, for the finding's service, linked to the finding
+        let tracked = Options { track_cves: true, ..Default::default() };
+        let r = import(c, p, &parsed, tracked, &file)?;
+        assert_eq!((r.vulns_tracked, r.vulns_linked, r.seen_again), (2, 0, 1));
+        assert!(r.summary.contains("2 CVEs tracked (0 already tracked)"), "{}", r.summary);
+        let rows: Vec<(String, Option<i64>, String)> = c
+            .prepare("SELECT v.cve_id, v.asset_id, a.value FROM vulnerabilities v LEFT JOIN assets a ON a.id = v.asset_id ORDER BY v.cve_id")?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, Option<String>>(2)?.unwrap_or_default())))?
+            .collect::<Result<_, _>>()?;
+        assert_eq!(rows.iter().map(|r| r.0.as_str()).collect::<Vec<_>>(), vec!["CVE-2021-44224", "CVE-2021-44790"]);
+        assert!(rows.iter().all(|r| r.1.is_some() && r.2.contains("443")), "tracked for the service: {rows:?}");
+        let fid: i64 = c.query_row("SELECT id FROM findings", [], |r| r.get(0))?;
+        assert_eq!(lifecycle::links(c, fid)?.iter().filter(|l| l.kind == "vulnerability").count(), 2);
+        let source: String = c.query_row("SELECT source FROM vulnerabilities LIMIT 1", [], |r| r.get(0))?;
+        assert_eq!(source, "import");
+        // again: linked, never duplicated
+        let r2 = import(c, p, &parsed, tracked, &file)?;
+        assert_eq!((r2.vulns_tracked, r2.vulns_linked), (0, 2));
+        assert_eq!(count(c, "SELECT COUNT(*) FROM vulnerabilities"), 2);
+        // a dismissed finding's CVEs are not tracked
+        lifecycle::set_status(c, fid, "false_positive", "not exploitable", "user")?;
+        c.execute("DELETE FROM vulnerabilities", [])?;
+        let r3 = import(c, p, &parsed, tracked, &file)?;
+        assert_eq!((r3.dismissed, r3.vulns_tracked), (1, 0));
+        assert_eq!(finding_cves("cve-2021-44790, CVE-2021-44790;CVE-2021-44224 bogus"), vec!["CVE-2021-44790", "CVE-2021-44224"]);
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
 fn a_project_without_scope_records_nothing_but_code_findings() {
     let db = Db::open_in_memory().unwrap();
     db.with(|c| {

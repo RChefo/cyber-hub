@@ -351,6 +351,20 @@ pub fn normalize_cve(id: &str) -> AppResult<String> {
 
 /// Tracks a CVE in a project. `record` is the NVD record when known, `epss` when available.
 pub fn create(c: &Connection, input: &VulnInput, record: Option<&CveRecord>, epss: Option<&Epss>, source: &str) -> AppResult<Vulnerability> {
+    let tx = c.unchecked_transaction()?;
+    let v = create_in(&tx, input, record, epss, source)?;
+    tx.commit()?;
+    Ok(v)
+}
+
+/// The NVD record of a CVE from the local cache (no network).
+pub fn cached_record(c: &Connection, cve: &str) -> AppResult<Option<CveRecord>> {
+    let raw: Option<String> = c.query_row("SELECT data FROM cve_cache WHERE id = ?1", params![cve], |r| r.get(0)).optional()?;
+    Ok(raw.and_then(|r| serde_json::from_str(&r).ok()))
+}
+
+/// [`create`] inside the caller's transaction or savepoint (imports).
+pub fn create_in(c: &Connection, input: &VulnInput, record: Option<&CveRecord>, epss: Option<&Epss>, source: &str) -> AppResult<Vulnerability> {
     let cve = normalize_cve(&input.cve_id)?;
     let exists: i64 = c.query_row("SELECT COUNT(*) FROM projects WHERE id = ?1", params![input.project_id], |r| r.get(0))?;
     if exists == 0 {
@@ -388,7 +402,7 @@ pub fn create(c: &Connection, input: &VulnInput, record: Option<&CveRecord>, eps
     };
     let p = prioritize(&f);
     let ts = now();
-    let tx = c.unchecked_transaction()?;
+    let tx = c;
     let dup: Option<i64> = tx
         .query_row("SELECT id FROM vulnerabilities WHERE project_id = ?1 AND cve_id = ?2 AND COALESCE(asset_id, 0) = COALESCE(?3, 0)", params![input.project_id, cve, input.asset_id], |r| r.get(0))
         .optional()?;
@@ -405,9 +419,8 @@ pub fn create(c: &Connection, input: &VulnInput, record: Option<&CveRecord>, eps
             serde_json::to_string(&p.reasons)?, notes, source, ts
         ],
     )?;
-    let v = get(&tx, tx.last_insert_rowid())?;
-    record_event(&tx, &v, "created", (None, Some(p.level)), if record.is_none() { "NVD record not available; CVSS unknown" } else { "" }, source)?;
-    tx.commit()?;
+    let v = get(tx, tx.last_insert_rowid())?;
+    record_event(tx, &v, "created", (None, Some(p.level)), if record.is_none() { "NVD record not available; CVSS unknown" } else { "" }, source)?;
     Ok(v)
 }
 
