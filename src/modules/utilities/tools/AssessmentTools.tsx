@@ -1,18 +1,19 @@
 import { Button } from "@heroui/react";
-import { FileSearch, FolderSearch, Globe, Lock, Plus, Radar, Send, ServerCog, ShieldAlert, Trash2 } from "lucide-react";
+import { Copy, FileSearch, FolderSearch, Globe, History, Lock, Plus, Radar, Send, ServerCog, ShieldAlert, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/app/store";
 import { ToneChip } from "@/components/ui/Badges";
-import { CodeBlock } from "@/components/ui/Code";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/ui/Feedback";
 import { SearchInput, SelectInput, SwitchInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
-import { notify } from "@/lib/actions";
+import { copyText, notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { DnsIntelReport, HttpResponseOut, LeakScanResult, TlsReport, ToolIssue } from "@/lib/types";
 import { cn, formatRelative } from "@/lib/utils";
 import { searchPorts } from "../lib/ports";
 import { PrivacyNote } from "./shared";
+import { parseRawRequest, repeaterHistory, targetOf, toCurl, toRawRequest, useRepeaterHistory, type HistoryEntry, type RepeaterRequest } from "./repeater";
+import { ComparePanel, HistoryPanel, ResponseView } from "./RepeaterParts";
 
 const ISSUE_TONE: Record<ToolIssue["level"], "danger" | "warning" | "default"> = { critical: "danger", warning: "warning", info: "default" };
 
@@ -40,7 +41,7 @@ function useProjectPicker(optional = false, initial: string | null = null) {
     ...(projects.data ?? []).map((p) => ({ id: String(p.id), label: `${p.name} (${p.status})` })),
   ];
   const picker = <SelectInput label="Project" value={projectId} onChange={setProjectId} options={options} placeholder="Choose a project" className="w-64" />;
-  return { projectId: projectId && projectId !== "none" ? Number(projectId) : null, picker };
+  return { projectId: projectId && projectId !== "none" ? Number(projectId) : null, setProjectId, picker };
 }
 
 /* ───────────────────────── HTTP request builder ───────────────────────── */
@@ -51,95 +52,190 @@ export function HttpBuilderTool() {
   // opened from a project's API inventory: project, method and URL come with the route
   const { route } = useApp();
   const pre = route.params ?? {};
-  const { projectId, picker } = useProjectPicker(false, pre.project && /^\d+$/.test(pre.project) ? pre.project : null);
+  const { projectId, setProjectId, picker } = useProjectPicker(false, pre.project && /^\d+$/.test(pre.project) ? pre.project : null);
+  const [mode, setMode] = useState<"form" | "raw">("form");
   const [method, setMethod] = useState(pre.method && HTTP_METHODS.includes(pre.method) ? pre.method : "GET");
   const [url, setUrl] = useState(pre.url ?? "");
   const [headers, setHeaders] = useState<[string, string][]>([["Accept", "*/*"]]);
   const [body, setBody] = useState("");
+  const [raw, setRaw] = useState("");
+  const [target, setTarget] = useState("");
   const [insecure, setInsecure] = useState(false);
   const [follow, setFollow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<HttpResponseOut | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const history = useRepeaterHistory();
+  const [picked, setPicked] = useState<number[]>([]);
+
+  const formRequest = (): RepeaterRequest => ({ method, url: url.trim(), headers: headers.filter(([k]) => k.trim()), body: method === "GET" || method === "HEAD" ? "" : body });
+  const current = (): RepeaterRequest => (mode === "raw" ? parseRawRequest(raw, target) : formRequest());
+
+  // the form keeps the URL's own host: a Host header that repeats it is dropped
+  const toForm = (r: RepeaterRequest) => {
+    let host = "";
+    try {
+      host = new URL(r.url).host.toLowerCase();
+    } catch {
+      host = "";
+    }
+    const kept = r.headers.filter(([k, v]) => !(k.toLowerCase() === "host" && v.toLowerCase() === host));
+    setMethod(r.method);
+    setUrl(r.url);
+    setHeaders(kept.length ? kept : [["Accept", "*/*"]]);
+    setBody(r.body);
+  };
+  const switchMode = (m: "form" | "raw") => {
+    if (m === mode) return;
+    try {
+      if (m === "raw") {
+        const r = formRequest();
+        setRaw(toRawRequest(r));
+        setTarget(targetOf(r.url));
+      } else {
+        const r = parseRawRequest(raw, target);
+        if (!HTTP_METHODS.includes(r.method)) throw new Error(`${r.method} requests can be sent from the raw editor only`);
+        toForm(r);
+      }
+      setError(null);
+      setMode(m);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
 
   const send = async () => {
-    if (!projectId || !url.trim()) return;
+    if (!projectId) return;
+    let req: RepeaterRequest;
+    try {
+      req = current();
+    } catch (e) {
+      setError(errorMessage(e));
+      return;
+    }
+    if (!req.url) return;
     setBusy(true);
     setError(null);
     try {
-      setRes(await api.httpSend({ projectId, method, url: url.trim(), headers: headers.filter(([k]) => k.trim()), body, insecure, followRedirects: follow }));
+      const r = await api.httpSend({ projectId, method: req.method, url: req.url, headers: req.headers, body: req.body, insecure, followRedirects: follow });
+      setRes(r);
+      repeaterHistory.add({ projectId, request: req, insecure, followRedirects: follow, response: r, error: null });
       invalidate("activity");
     } catch (e) {
+      const msg = errorMessage(e);
       setRes(null);
-      setError(errorMessage(e));
+      setError(msg);
+      repeaterHistory.add({ projectId, request: req, insecure, followRedirects: follow, response: null, error: msg });
     } finally {
       setBusy(false);
     }
   };
 
+  const load = (e: HistoryEntry) => {
+    setProjectId(String(e.projectId));
+    if (HTTP_METHODS.includes(e.request.method)) {
+      toForm(e.request);
+      setMode("form");
+    } else {
+      setRaw(toRawRequest(e.request));
+      setTarget(targetOf(e.request.url));
+      setMode("raw");
+    }
+    setInsecure(e.insecure);
+    setFollow(e.followRedirects);
+    setRes(e.response);
+    setError(e.error);
+  };
+  const toggle = (id: number) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id].slice(-2)));
+  const pair = picked
+    .map((id) => history.find((e) => e.id === id))
+    .filter((e): e is HistoryEntry => !!e?.response)
+    .sort((a, b) => a.id - b.id);
+  const copyCurl = () => {
+    try {
+      void copyText(toCurl(current(), insecure), "cURL command copied");
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+  const ready = mode === "form" ? !!url.trim() : !!raw.trim();
+
   return (
     <div className="flex flex-col gap-4">
       <PrivacyNote network>
-        Sends one request to the URL when you press Send. The URL (and the same path on any Host header) must be in the selected project&apos;s authorized scope; the project must be active. Redirects are followed only when you turn it on, at most 5, and each one is checked against the scope before it is sent.
+        Sends one request to the URL when you press Send. The URL (and the same path on any Host header) must be in the selected project&apos;s authorized scope; the project must be active. Redirects are followed only when you turn it on, at most 5, and each one is checked against the scope before it is sent. Raw requests and resends from the history go through the same checks.
       </PrivacyNote>
       <div className="flex flex-wrap items-end gap-3">
         {picker}
-        <SelectInput label="Method" value={method} onChange={setMethod} options={HTTP_METHODS.map((m) => ({ id: m, label: m }))} className="w-32" />
-        <TextInput label="URL" value={url} onChange={setUrl} onEnter={send} placeholder="https://app.example.com/api/health" mono className="min-w-[280px] flex-1" />
+        <div className="flex gap-1 rounded-[10px] bg-white/[0.04] p-1" role="group" aria-label="Editor">
+          {(["form", "raw"] as const).map((m) => (
+            <Button key={m} size="sm" variant={mode === m ? "secondary" : "ghost"} onPress={() => switchMode(m)} aria-pressed={mode === m}>
+              {m === "form" ? "Form" : "Raw request"}
+            </Button>
+          ))}
+        </div>
       </div>
-      <div className="flex flex-col gap-2">
-        <span className="text-[12.5px] font-medium text-muted">Headers</span>
-        {headers.map(([k, v], i) => (
-          <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] gap-2">
-            <TextInput aria-label={`Header ${i + 1} name`} value={k} onChange={(x) => setHeaders((h) => h.map((p, j) => (j === i ? [x, p[1]] : p)))} mono />
-            <TextInput aria-label={`Header ${i + 1} value`} value={v} onChange={(x) => setHeaders((h) => h.map((p, j) => (j === i ? [p[0], x] : p)))} mono />
-            <Button isIconOnly variant="ghost" aria-label={`Remove header ${i + 1}`} onPress={() => setHeaders((h) => h.filter((_, j) => j !== i))}>
-              <Trash2 className="size-3.5" />
+      {mode === "form" ? (
+        <>
+          <div className="flex flex-wrap items-end gap-3">
+            <SelectInput label="Method" value={method} onChange={setMethod} options={HTTP_METHODS.map((m) => ({ id: m, label: m }))} className="w-32" />
+            <TextInput label="URL" value={url} onChange={setUrl} onEnter={send} placeholder="https://app.example.com/api/health" mono className="min-w-[280px] flex-1" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <span className="text-[12.5px] font-medium text-muted">Headers</span>
+            {headers.map(([k, v], i) => (
+              <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] gap-2">
+                <TextInput aria-label={`Header ${i + 1} name`} value={k} onChange={(x) => setHeaders((h) => h.map((p, j) => (j === i ? [x, p[1]] : p)))} mono />
+                <TextInput aria-label={`Header ${i + 1} value`} value={v} onChange={(x) => setHeaders((h) => h.map((p, j) => (j === i ? [p[0], x] : p)))} mono />
+                <Button isIconOnly variant="ghost" aria-label={`Remove header ${i + 1}`} onPress={() => setHeaders((h) => h.filter((_, j) => j !== i))}>
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            ))}
+            <Button size="sm" variant="tertiary" className="self-start" onPress={() => setHeaders((h) => [...h, ["", ""]])} isDisabled={headers.length >= 50}>
+              <Plus className="size-3.5" />
+              Add header
             </Button>
           </div>
-        ))}
-        <Button size="sm" variant="tertiary" className="self-start" onPress={() => setHeaders((h) => [...h, ["", ""]])} isDisabled={headers.length >= 50}>
-          <Plus className="size-3.5" />
-          Add header
-        </Button>
-      </div>
-      {method !== "GET" && method !== "HEAD" && <TextAreaInput label="Body" value={body} onChange={setBody} rows={5} mono placeholder='{"example": true}' />}
+          {method !== "GET" && method !== "HEAD" && <TextAreaInput label="Body" value={body} onChange={setBody} rows={5} mono placeholder='{"example": true}' />}
+        </>
+      ) : (
+        <>
+          <TextInput label="Target" value={target} onChange={setTarget} placeholder="https://app.example.com (optional: otherwise the Host header, over HTTPS)" mono />
+          <TextAreaInput
+            label="Raw request"
+            value={raw}
+            onChange={setRaw}
+            rows={12}
+            mono
+            placeholder={'POST /api/login HTTP/1.1\nHost: app.example.com\nContent-Type: application/json\n\n{"user": "alice"}'}
+            description="Paste a request from a proxy or the browser. Content-Length is computed when the request is sent."
+          />
+        </>
+      )}
       <div className="flex flex-wrap items-center gap-4">
         <SwitchInput label="Accept untrusted certificates" isSelected={insecure} onChange={setInsecure} />
         <SwitchInput label="Follow redirects (each checked against the scope)" isSelected={follow} onChange={setFollow} />
         <span className="flex-1" />
-        <Button variant="primary" onPress={send} isPending={busy} isDisabled={!projectId || !url.trim()}>
+        <Button variant="tertiary" onPress={copyCurl} isDisabled={!ready}>
+          <Copy className="size-3.5" />
+          Copy as cURL
+        </Button>
+        <Button variant="primary" onPress={send} isPending={busy} isDisabled={!projectId || !ready}>
           <Send className="size-3.5" />
           Send
         </Button>
       </div>
       {error && <ErrorBlock message={error} />}
-      {res && (
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2 text-[13px]">
-            <ToneChip tone={res.status < 300 ? "success" : res.status < 400 ? "accent" : res.status < 500 ? "warning" : "danger"}>
-              {res.status} {res.reason}
-            </ToneChip>
-            <span className="text-muted">
-              {res.version} · {res.elapsedMs} ms · {res.bodyBytes.toLocaleString()} bytes{res.truncated ? " (cut at 2 MB)" : ""}
-            </span>
-          </div>
-          {res.redirects.length > 0 && (
-            <ol className="flex flex-col gap-0.5 text-[12.5px] text-muted">
-              {res.redirects.map((h, i) => (
-                <li key={i} className="font-mono break-all">
-                  {h.status} {h.from} → {h.to}
-                </li>
-              ))}
-            </ol>
-          )}
-          {res.redirectStopped && (
-            <p className="rounded-[10px] bg-warning-soft px-3 py-2 text-[12.5px] text-warning-soft-foreground">{res.redirectStopped}</p>
-          )}
-          <CodeBlock code={res.headers.map(([k, v]) => `${k}: ${v}`).join("\n")} maxHeight={220} />
-          {res.body && <CodeBlock code={res.body} maxHeight={420} />}
-        </div>
-      )}
+      {res && <ResponseView res={res} />}
+      <section className="flex flex-col gap-2">
+        <h3 className="flex items-center gap-2 text-[13.5px] font-medium">
+          <History className="size-3.5 text-muted" aria-hidden />
+          History ({history.length}){pair.length === 2 && <span className="text-[12px] font-normal text-muted">· comparing the two selected responses</span>}
+        </h3>
+        <HistoryPanel entries={history} selected={picked} onToggle={toggle} onLoad={load} />
+        {pair.length === 2 && <ComparePanel a={pair[0]} b={pair[1]} />}
+      </section>
     </div>
   );
 }
