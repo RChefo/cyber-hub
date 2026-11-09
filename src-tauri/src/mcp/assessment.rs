@@ -185,6 +185,7 @@ pub fn checklist(c: &Connection, q: &ChecklistQuery) -> AppResult<Value> {
 /// for a request that would be refused, so it never reaches the user.
 pub fn describe_checklist_set(c: &Connection, a: &ChecklistSet) -> AppResult<(String, Vec<(String, String)>)> {
     let project = require_project(c, a.project_id)?;
+    crate::commands::projects::refuse_archived_for_clients(c, a.project_id)?;
     check_status(&a.status)?;
     let test = methodology::catalog()
         .categories
@@ -214,6 +215,7 @@ pub fn describe_checklist_set(c: &Connection, a: &ChecklistSet) -> AppResult<(St
 
 /// Sets a test's status. A note that is not given keeps the note already there.
 pub fn set_checklist(c: &Connection, a: &ChecklistSet) -> AppResult<Value> {
+    crate::commands::projects::refuse_archived_for_clients(c, a.project_id)?;
     let note = match &a.note {
         Some(n) => n.clone(),
         None => c
@@ -266,6 +268,24 @@ mod tests {
             let full = get_template(c, id)?;
             assert!(full["remediation"].as_str().is_some_and(|r| !r.is_empty()), "{full}");
             assert!(get_template(c, 9999).is_err());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn mcp_clients_cannot_change_archived_projects() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            let pid = project(c);
+            c.execute("UPDATE projects SET status = 'archived' WHERE id = ?1", [pid])?;
+            let set = ChecklistSet { project_id: pid, test_id: "WSTG-ATHZ-04".into(), status: "failed".into(), note: None, finding_id: None };
+            let err = describe_checklist_set(c, &set).unwrap_err().to_string();
+            assert!(err.contains("archived"), "{err}");
+            assert!(set_checklist(c, &set).is_err(), "also when the project was archived after the approval");
+            assert!(crate::commands::projects::refuse_archived_for_clients(c, pid + 100).is_err());
+            c.execute("UPDATE projects SET status = 'completed' WHERE id = ?1", [pid])?;
+            assert!(describe_checklist_set(c, &set).is_ok() && set_checklist(c, &set).is_ok());
             Ok(())
         })
         .unwrap();

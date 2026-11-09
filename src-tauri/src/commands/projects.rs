@@ -224,14 +224,21 @@ pub async fn project_upsert(db: State<'_, Db>, input: ProjectInput) -> AppResult
     let ts = now();
     db.with(|c| match input.id {
         Some(id) => {
-            let n = c.execute(
+            let before: Option<String> = c.query_row("SELECT status FROM projects WHERE id = ?1", params![id], |r| r.get(0)).optional()?;
+            let before = before.ok_or_else(|| AppError::NotFound(format!("project {id}")))?;
+            let tx = c.unchecked_transaction()?;
+            tx.execute(
                 "UPDATE projects SET name=?2, description=?3, status=?4, scope_notes=?5, notes=?6, start_date=?7, end_date=?8, updated_at=?9,
                      client=?10, engagement_type=?11, authorization_ref=?12, objectives=?13, methodology=?14, contacts=?15 WHERE id=?1",
                 params![id, name, description, status, scope_notes, notes, start, end, ts, client, engagement_type, authorization_ref, objectives, methodology, contacts],
             )?;
-            if n == 0 {
-                return Err(AppError::NotFound(format!("project {id}")));
+            // a status change (active, completed, archived…) changes what may run against the project
+            if before != status {
+                let what = format!("Project status changed: {before} → {status}");
+                crate::workspace::timeline::record(&tx, id, "note", &what, "", None, None)?;
+                log(&tx, "project", &format!("{what} (“{name}”)"), "", Some("project"), Some(&id.to_string()), Some(id))?;
             }
+            tx.commit()?;
             Ok(id)
         }
         None => {
@@ -768,6 +775,17 @@ fn md_cell(v: &str) -> String {
 
 /// Finding statuses a report leaves out, as the HTML report does by default.
 const REPORT_CLOSED: &[&str] = &["resolved", "accepted_risk", "false_positive"];
+
+/// MCP clients may not change an archived project (kept for reference); the analyst can, in the
+/// app, or set another status first.
+pub fn refuse_archived_for_clients(c: &Connection, project_id: i64) -> AppResult<()> {
+    let status: Option<String> = c.query_row("SELECT status FROM projects WHERE id = ?1", params![project_id], |r| r.get(0)).optional()?;
+    match status.as_deref() {
+        None => Err(AppError::NotFound(format!("project {project_id}"))),
+        Some("archived") => Err(validation(format!("Project #{project_id} is archived (kept for reference), so MCP clients cannot change it. Set another status in Cyber Hub first"))),
+        Some(_) => Ok(()),
+    }
+}
 
 /// Self-contained Markdown assessment report from local project data. `generated` is a
 /// YYYY-MM-DD date. Like the HTML report by default, it lists open findings only (closed ones are

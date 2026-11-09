@@ -815,6 +815,7 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
         "cyberhub_create_finding" => {
             let a: CreateFinding = parse(args)?;
             check_project(&db, a.project_id)?;
+            db.with(|c| projects::refuse_archived_for_clients(c, a.project_id)).map_err(app_err)?;
             // everything the save checks (lengths, severity, status, control characters, the CVSS
             // vector): a finding that would be refused never reaches the user
             projects::validate_finding(&a.input()).map_err(app_err)?;
@@ -1072,7 +1073,14 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
             let a: CreateFinding = parse(args)?;
             check_project(&db, a.project_id)?;
             let input = a.input();
-            let id = app.state::<Db>().with(|c| projects::finding_save(c, &input, "mcp")).map_err(app_err)?;
+            // checked again: the project may have been archived while the approval waited
+            let id = app
+                .state::<Db>()
+                .with(|c| {
+                    projects::refuse_archived_for_clients(c, a.project_id)?;
+                    projects::finding_save(c, &input, "mcp")
+                })
+                .map_err(app_err)?;
             Ok(json!({ "findingId": id, "projectId": a.project_id }))
         }
         "cyberhub_get_checklist" => {

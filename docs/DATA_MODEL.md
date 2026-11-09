@@ -188,7 +188,7 @@ Projects → *Findings* → *Import results* reads the output of other tools int
   * **Redaction.** Every copied field (title, target, description, remediation, technical details) passes through the secret redaction used for tool output. It covers credentials in URLs, headers, `key=value` and `key: value` pairs, JWTs, PEM private keys (also cut off), AWS key IDs, and GitHub and Slack tokens.
   * **Cleaning.** Control characters are removed and fields are cut to their limits, so one odd record cannot fail an import whose preview succeeded.
   * **HTML.** HTML in scanner descriptions becomes plain text.
-* **Archived projects** cannot receive imports.
+* **Archived projects** cannot receive imports, and MCP clients cannot record findings or checklist results in them (checked when the approval is shown and again when it is carried out). A project's status changes are recorded on its timeline and in the activity log.
 
 ### CSV findings
 
