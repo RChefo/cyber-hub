@@ -390,12 +390,18 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
     <Panel
       title="Findings"
       description={`${findings.length} recorded · sorted by severity`}
+      toolbar={
+        findings.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+            <SearchInput value={query} onChange={setQuery} placeholder="Search findings" className="min-w-[220px] flex-1" />
+            {tags.length > 0 && <SelectInput aria-label="Filter by tag" value={tag} onChange={setTag} options={[{ id: "all", label: "All tags" }, ...tags.map((t) => ({ id: t, label: t }))]} className="w-40" />}
+            <SelectInput aria-label="Filter by severity" value={sev} onChange={setSev} options={[{ id: "all", label: "All severities" }, ...SEVERITY_OPTIONS]} className="w-40" />
+            <SelectInput aria-label="Filter by status" value={status} onChange={setStatus} options={[{ id: "all", label: "All statuses" }, ...FINDING_STATUS_OPTIONS]} className="w-40" />
+          </div>
+        )
+      }
       actions={
         <>
-          <SearchInput value={query} onChange={setQuery} placeholder="Search findings" className="w-52" />
-          {tags.length > 0 && <SelectInput aria-label="Filter by tag" value={tag} onChange={setTag} options={[{ id: "all", label: "All tags" }, ...tags.map((t) => ({ id: t, label: t }))]} className="w-36" />}
-          <SelectInput aria-label="Filter by severity" value={sev} onChange={setSev} options={[{ id: "all", label: "All severities" }, ...SEVERITY_OPTIONS]} className="w-40" />
-          <SelectInput aria-label="Filter by status" value={status} onChange={setStatus} options={[{ id: "all", label: "All statuses" }, ...FINDING_STATUS_OPTIONS]} className="w-40" />
           <Button variant="secondary" size="sm" onPress={() => setImporting(true)}>
             <FileUp className="size-3.5" />
             Import results
