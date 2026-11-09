@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | **Complete** (2026-11-08T23:43Z): see [MISSION_REPORT.md](MISSION_REPORT.md) |
+| Current phase | **Resumed** 2026-11-09T06:32:12Z on the owner's instruction ("continue"). The first segment ended 2026-11-08T23:43Z: see [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -45,6 +45,8 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 9. OWASP WSTG checklist (`9c4ee92`)
 10. On-demand database backup (`4a320a8`)
 11. Security review fixes (`c3f26af`, `da545e8`, `bd6d73e`)
+12. CVSS 3.0 scoring fixed after a 709,160-vector comparison with FIRST's calculators (`b46a075`)
+13. Database restore in the app (`2eb4209`)
 
 ## Tests executed
 
@@ -77,10 +79,19 @@ None. The final results: Windows 302 Rust (306 with provisioning) and 217 fronte
 | `c3f26af` | fix(security): harden scan import, redaction and IOC extraction |
 | `da545e8` | test(security): mark made-up secret fixtures for the secret scanner |
 | `bd6d73e` | fix(findings): count skipped Nuclei lines in singular and plural |
+| `2afa5bd` | docs(mission): add the mission report and final verification results |
+| `b46a075` | fix(cvss): score CVSS 3.0 vectors with the 3.0 equations |
+| `2eb4209` | feat(settings): restore a database backup in the app |
 
 ## Next action
 
-None. The mission is complete. The next priorities for a new session are in MISSION_REPORT.md: restore in the app, MCP exposure of the new features, more import formats, and the deferred path-level scope rules. Release steps (installers, signing) need the owner's authorization.
+Second segment (from 2026-11-09T06:32Z), in this order:
+1. ~~Verify CVSS scoring against FIRST's reference calculators~~: done (`b46a075`); it found and fixed CVSS 3.0 scoring.
+2. ~~Restore from a backup inside the app~~: done (`2eb4209`); backlog item 12 is complete.
+3. Expose the new capabilities through MCP (CVSS, finding library, checklist). **Next.**
+4. More import formats, then notes, as time allows.
+
+Release steps (installers, signing) need the owner's authorization.
 
 ## Resume instruction
 

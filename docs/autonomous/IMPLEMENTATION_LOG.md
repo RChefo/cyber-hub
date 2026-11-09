@@ -269,3 +269,82 @@ A separate reviewer agent (read-only, unanchored on my reasoning) reviewed `092e
 * All 30 page and tab smoke checks pass.
 * A Nuclei preview showed the scope filtering, the merge, the skipped-line notice and the new incomplete-file notice. It was cancelled, so the QA data is unchanged.
 * The visible "1 lines" text was fixed (`bd6d73e`).
+
+## 2026-11-09T06:32Z: second segment starts
+
+The owner said "continue". The mission resumed with the verification gaps and deferred items from MISSION_REPORT.md.
+
+## 2026-11-09T06:35–06:48Z: CVSS scoring checked against FIRST's calculators (`b46a075`)
+
+**What:** [`scripts/cvss-reference.mjs`](../../scripts/cvss-reference.mjs) scores vectors with FIRST's own code:
+* the v4.0 reference calculator (`FIRSTdotorg/cvss-v4-calculator`, commit `c5b0d40`);
+* the 3.1 and 3.0 calculator scripts served by first.org.
+
+The scripts were downloaded into the scratchpad and reviewed first: plain arithmetic, no I/O. They then ran in a Docker container without network.
+
+**Vectors:**
+* every base vector of each version: 104,976 for 4.0, and 2,592 each for 3.1 and 3.0;
+* 200,000 seeded random vectors per version, with threat or temporal, environmental and supplemental metrics.
+
+**Result before the fix:**
+* v4.0: 304,976 vectors, 0 differences;
+* v3.1: 202,592 vectors, 0 differences;
+* v3.0: 10,043 of 202,592 differed. 3.0 vectors were scored with the 3.1 equations, but 3.0 has its own `Roundup` (`ceil(x × 10) / 10`) and its own modified impact for a changed scope.
+
+**Fix:** 3.0 vectors use the 3.0 equations, and both 3.x versions multiply in the calculators' order. Afterwards all 709,160 vectors match in both the base score and the score.
+
+**Tests:**
+* `matches_firsts_reference_calculators`: a 484-vector subset with FIRST's scores, in the regular suite;
+* `matches_firsts_reference_calculators_exhaustively`: the full comparison, an ignored test that needs the script's output.
+
+The CVSS feature is unreleased, so no stored scores needed recomputing.
+
+## 2026-11-09T06:50–07:25Z: restore a backup in the app (`2eb4209`)
+
+**What:** *Settings → Local data → Restore…* (backlog item 12, completing the backup work of `4a320a8`).
+* **Check:** the file comes from a backend open dialog. It must pass an integrity check, have a known schema version, and have exactly the schema SQL the migrations create for that version.
+* **Confirm:** the dialog shows the size, date, projects, findings, upgrade and evidence availability.
+* **Stage:** SQLite copies the file into the data folder. A file that changed after the confirmation is refused.
+* **Restart and swap:** before the database opens, the current database and its `-wal`/`-shm` files move to `backups/before-restore-<time>/`. Evidence files that only it refers to move too, because the start-up sweep would otherwise delete them. Missing evidence files are copied back from an `evidence/` folder next to the backup when their content matches their SHA-256 name.
+* **Safety:**
+  * A journal makes an interrupted swap resume.
+  * A database still in use postpones the restore, which Settings can cancel.
+  * A restored database that does not open goes aside, and the previous one returns with its evidence.
+  * A restored database never turns the MCP bridge on.
+  * The app connection runs with `trusted_schema` off.
+
+**Found on the way:** the documented manual restore (replace `cyberhub.db` by hand) lets the next start's evidence sweep delete evidence files that the replaced database still referred to. UPGRADE.md now says how to keep them, and the in-app restore avoids it.
+
+**Independent review:** a reviewer agent read the uncommitted code without my conclusions and found 11 issues. All were fixed before the commit:
+
+| Finding | Fix |
+|---|---|
+| A crash between the final rename and the journal update made the next start skip the evidence step, so the sweep deleted the previous database's evidence | the state is inferred from the files: a journal with a folder but no staged copy means "swapped", so evidence sorting resumes |
+| `undo` after evidence was sorted left those files in the kept folder | `undo` moves them back; no sweep at a start that restored |
+| `undo` ignored rename failures | patient renames; a failure stops start-up with a message that names the kept folder |
+| any swap failure discarded the staged copy | a database still in use keeps it for the next start (cancel in Settings) |
+| the schema check compared only names and columns | the SQL of every table, index, trigger and view is compared; `trusted_schema` off on the app connection |
+| restored preferences could turn the MCP bridge on | turned off after a restore, and the notice says so |
+| the file could change between the confirmation and the copy | size, date and counts are compared |
+| `.partial` copies left after a crash; unbounded sibling copies; symlinks | leftovers removed; files above the evidence limit and links skipped |
+| a stage could interleave with an unfinished restore | refused while a journal exists; the journal is written before the copy |
+| journal durability | the folder is synced on Unix |
+| doc claims ("nothing is deleted", "exactly the schema") | now true; reading a WAL-mode backup may add SQLite's `-shm` file next to it, which is documented |
+
+**Tests:** 7 Rust tests on disposable folders:
+* refusals: not SQLite, no version, foreign tables, an added trigger, a changed index, an added column, a newer schema, damaged pages, the live database;
+* a full restore with a dirty `-wal` and the round trip back;
+* interrupted swaps;
+* a failed restore and `undo` with evidence;
+* a file changed after the confirmation, and cancel;
+* `.partial` cleanup;
+* a database held open by another handle (Windows: the restore is postponed and then applied).
+
+There are 5 frontend tests for the summary and notice texts.
+
+**GUI (Windows, debug build, isolated QA data that had an unflushed `-wal` from a forced stop):**
+1. A marker project was added, then the schema-14 pre-upgrade backup was restored with *Restore and restart*. The app restarted by itself, upgraded the copy to 17, and showed the restored data. The kept folder holds the previous database with its `-wal`, including the marker project, and the one evidence file only that database referred to.
+2. That kept copy was restored again. The marker project came back, the evidence file was copied back from the kept folder, and the notice said so (seen 1.3 s after the restart).
+3. A postponed restore was simulated and cancelled in Settings.
+
+The first run's screenshot showed no notice; the outcome had been taken. The second run polled for the notice and found it 1.3 s after the restart.
