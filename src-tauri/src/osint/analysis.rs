@@ -205,7 +205,7 @@ pub fn shared_infrastructure(g: &Graph) -> Vec<SharedInfrastructure> {
             }
         })
         .collect();
-    out.sort_by(|a, b| b.members.len().cmp(&a.members.len()));
+    out.sort_by_key(|c| std::cmp::Reverse(c.members.len()));
     out
 }
 

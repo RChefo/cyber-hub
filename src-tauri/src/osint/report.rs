@@ -214,7 +214,7 @@ pub fn markdown(c: &Connection, inv: i64, generated: &str) -> AppResult<String> 
     if !i.tags.is_empty() {
         l.push(format!("- **Tags:** {}", i.tags.iter().map(|t| cell(t)).collect::<Vec<_>>().join(", ")));
     }
-    l.push(format!("- **Created:** {} · **Last updated:** {}", &i.created_at.get(..10).unwrap_or(&i.created_at), &i.updated_at.get(..10).unwrap_or(&i.updated_at)));
+    l.push(format!("- **Created:** {} · **Last updated:** {}", i.created_at.get(..10).unwrap_or(&i.created_at), i.updated_at.get(..10).unwrap_or(&i.updated_at)));
     if !i.authorization.trim().is_empty() {
         l.push(format!("- **Authorization / scope note:** {}", cell(&i.authorization)));
     }
