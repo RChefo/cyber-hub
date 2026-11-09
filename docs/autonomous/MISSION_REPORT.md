@@ -209,3 +209,87 @@ These were the priorities after the first segment. The second segment did items 
 ### Final assessment
 
 The deferred and unverified items from the first segment were closed one by one: the CVSS scorer is now proven against FIRST's own code, restore exists and was tested through the real restart path, MCP clients can use the assessment features under the same approval model, clippy runs on Linux, and imports were measured at their limits. Both independent reviews found real defects in my own new code, a crash among them, and all were fixed with regression tests before the end of the segment. Nothing was pushed, built for release, published or deployed; the owner's real data folder was never used.
+
+## Third segment (2026-11-09)
+
+### Statistics
+
+| Item | Value |
+|---|---|
+| Start | 2026-11-09T08:51:44Z (the owner asked to continue with path-level scope, Linux GUI verification, reliability and integration audits) |
+| End | 2026-11-09T11:05Z: about 2 h 15 min |
+| Commits | 10 code commits (`80f34de` … `0641a0e`) and the final docs commit |
+| Size | 52 files, +2,639 / −350 lines before the docs commit |
+| Tests | Rust 321 → 351 (355 with `provisioning`), 3 ignored; frontend 224 (36 files, several extended) |
+| Independent reviews | 2: the path-level scope (13 findings, all fixed in `8355745`) and a cross-module reference audit (13 items: 12 fixed or documented, 1 kept by decision) |
+| Linux GUI | 4 full passes of the real WebKitGTK app per distribution, offline, final: 62 of 62 checks on Ubuntu 24.04.5 and Debian 12 |
+
+### Implementation
+
+| Commit | What |
+|---|---|
+| `80f34de` | **Path-level scope.** A URL entry authorizes only its paths (same scheme, host, port; segment boundaries) and never its host. Port scans, service scans, TLS analysis, the HTTP check and host names in tool arguments need a domain, wildcard, address or range entry, and the refusal says what is missing. Excluded URLs exclude their path on every scheme and port and keep host-level operations away from their host. The HTTP request builder follows redirects only when asked, checking every hop against the scope and DNS vetting first. Identical refusals within ten minutes are counted on one history entry (schema 18). |
+| `e326ace` | Imported files saved as UTF-16 or Windows-1252 (Excel) are decoded correctly. |
+| `8355745` | **Fixes from the independent review of the path-level scope** (see IMPLEMENTATION_LOG.md): URLs in tool arguments are read whole and as cut at separators, attached option values and scheme-less forms are checked, unreadable URLs refuse the run, backslashes and ambiguous paths are refused, paths are also compared as servers read them, raw requests need both schemes, refusals are recorded without credentials, the clients that contact targets ignore system proxies, and schema 19 keeps URL exclusions from before schema 18 excluding their host. |
+| `96fe970` | **Cross-module references:** "Add tool run" to the evidence works; deleting an asset keeps its vulnerabilities for the project; clearing the run history keeps referenced runs; OSINT entity deletion and merges update finding links, asset origins and events; an investigation cannot be moved while its project refers to it; findings created from vulnerabilities or entities are saved with their links in one transaction. |
+| `d26f799` | The timeline filters in SQL and pages with a cursor (nothing hidden or skipped); the Markdown report leaves out closed findings and the project's internal notes, as the HTML report does. |
+| `aa4d17d` | **Evidence integrity:** *Verify* checks stored files and text against their SHA-256; exports hash the copy and refuse a mismatch; file placement and deletion run under the database lock. MCP approvals warn about a likely duplicate finding. |
+| `ce76bfa` | MCP clients cannot change archived projects (checked before the approval and again when it runs); project status changes are recorded. |
+| `7e74883` | HTTP requests and TLS analyses sent to targets, and asset status changes, appear on the project timeline. |
+| `6860814` | **Imported CVEs as vulnerabilities (optional):** each CVE of a recorded finding is tracked for its asset and linked to the finding, without network access during the import. |
+| `0641a0e` | **Two new advisories fixed:** RUSTSEC-2026-0459 (SQLite before 3.54.0 could expose uninitialized memory through a crafted `-wal`; restore opens user-chosen files) with `rusqlite` 0.41.1 and SQLite 3.54.1, guarded by a test; RUSTSEC-2026-0462 (`rmcp` HTTP client, not compiled in) with `rmcp` 3.9.0. The MSRV moves from 1.80 to 1.89. |
+
+### Verification
+
+**Automated suites at `0641a0e`:**
+
+| Check | Windows 11 | Ubuntu 24.04.5 | Debian 12 |
+|---|---|---|---|
+| cargo test | 351 passed, 3 ignored (355 with `provisioning`) | 351 passed, 3 ignored | 351 passed, 3 ignored |
+| clippy `-D warnings` | clean (0.1.94) | clean (0.1.99) | clean (0.1.99) |
+| tsc / vitest | clean / 224 passed (36 files) | clean / 36 of 36 files | clean / 36 of 36 files |
+| frontend build | succeeded | succeeded (embedded in the GUI build) | succeeded (embedded in the GUI build) |
+| npm audit / cargo audit | 0 / 0 vulnerabilities (8 allowed warnings, unchanged) | — | — |
+| gitleaks | no leaks in this segment's commits | — | — |
+
+**Real Linux GUI (WebKitGTK under Xvfb, offline containers, GTK dialogs answered like a user):** 62 of 62 checks on both distributions at `0641a0e`. Among them:
+* **Path scope:** requests inside the path pass; outside and excluded paths are refused; a redirect leaving the path is stopped. The local server's log proves that the refused URLs were never requested.
+* **CSV import:** through the GTK open dialog, with CVE tracking switched on in the real dialog.
+* **Evidence:**
+  * a checked export through the GTK save dialog;
+  * a stored file changed behind the app's back is reported, its export is refused, and no partial file is left.
+* **Assets and vulnerabilities:** the asset and vulnerability rules, timeline paging, project status history.
+* **MCP through the real sidecar:**
+  * a duplicate-finding warning in the approval;
+  * a refused write to an archived project.
+* **Backup, restore and recovery:**
+  * backup through the GTK save dialog;
+  * restore through the GTK open dialog, with the automatic restart and the previous database kept;
+  * recovery after SIGKILL during a workflow run.
+
+**Real Windows app (debug build, isolated copy of earlier QA data):** the copy at schema 12 was upgraded to 19 at startup, with a pre-upgrade backup and integrity ok. All 16 pages and 14 project tabs rendered with no error boundary or console error, and *Verify* reported the stored evidence intact. The owner's real database was not opened (its modification time is unchanged since 2026-11-05).
+
+### Not verified
+
+* **Third-party tools:** external tools' own redirect handling. Cyber Hub warns when a URL is authorized only by path; it cannot see a tool's later requests (documented as an accepted risk).
+* **Timings:** release-build timings; all measurements are debug builds.
+* **macOS:** out of scope by instruction.
+* **Live third-party services:** NVD, EPSS and crt.sh were not called during these passes (offline containers).
+* **Release artifacts:** installers, signing and published artifacts, which are not authorized.
+
+### Remaining release blockers and decisions for the owner
+
+1. **Release steps** need the owner's authorization: installers, signing, notarization and publishing were not done.
+2. **MSRV 1.89** (`0641a0e`) is needed for the SQLite fix. CI uses `stable` and is unaffected. Anyone building with an older toolchain must update.
+3. **Release notes for the scope change** must explain path-level URL entries and the schema-19 step. That step can add host exclusions; UPGRADE.md describes it.
+4. **Redirect flags of external tools:** decide whether a run authorized only by path should refuse such flags (today it warns).
+5. **Open audit items** (documented, lower risk):
+   * the HTML and Markdown reports still have different sections;
+   * checklist links cannot be cleared through the API;
+   * a migration that rebuilds a referenced table would need a foreign-key-off mode;
+   * the activity entry of a run whose project was deleted meanwhile is lost;
+   * importing another project's run into an OSINT investigation is kept by design (toggle and confirmation).
+
+### Final assessment
+
+The owner's request for a conservative path-level scope model is implemented and was attacked by an independent reviewer whose 13 findings were all fixed with regression tests. Every rule the owner listed holds in both the unit tests and the real Linux GUI, where the target server's own log shows that no refused URL was requested. The cross-module audit found real defects, among them a feature that always failed, a deletion that failed with a constraint error, and a history clear that destroyed other projects' references. They were fixed with tests and verified in the GUI. Two dependency advisories published since the last segment were fixed. Nothing was pushed, released or signed, and the owner's real data was never used.

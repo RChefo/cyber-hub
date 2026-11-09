@@ -35,7 +35,10 @@ Deferred or rejected items say why.
 | 13 | More import formats (competitor trackers: CSV mapping, Qualys, Nmap greppable) | 3 | 3 | 5 | 4 | 3 | 5 | 38 | **Done** for CSV with a column mapping (`53dac93`), which covers Qualys, Nessus and Greenbone CSV exports and spreadsheets |
 | 14 | MCP access to the new features (CVSS, library, checklist) | 2 | 3 | 5 | 4 | 4 | 5 | 34 | **Done** (`aaa7d0a`) |
 | 10 | Notes on assets and vulnerabilities | 3 | 3 | 3 | 5 | 3 | 4 | 33 | Deferred: finding history notes and project notes cover part of it |
-| 11 | Path-level scope rules | 4 | 3 | 3 | 3 | 2 | 4 | 33 | Deferred: changes the security-critical scope engine; needs its own design and review |
+| 11 | Path-level scope rules | 4 | 3 | 3 | 3 | 2 | 4 | 33 | **Done** (`80f34de`, review fixes `8355745`): URL entries authorize paths only, never hosts; redirects rechecked per hop; schema 19 keeps old URL exclusions at host level |
 | 12 | User-facing database backup and restore | 2 | 3 | 4 | 3 | 3 | 4 | 30 | **Done**: on-demand checked backup (`4a320a8`); restore in the app with a restart-time swap that keeps the previous database and its evidence (`2eb4209`) |
+| 15 | Evidence integrity: verify stored files and text, checked exports | 3 | 3 | 5 | 5 | 4 | 5 | 39 | **Done** (`aa4d17d`) |
+| 16 | Cross-module reference integrity (assets, runs, OSINT, timeline, reports) | 3 | 4 | 5 | 4 | 3 | 5 | 40 | **Done** (`96fe970`, `d26f799`, `ce76bfa`) |
+| 17 | Vulnerability records from imported CVEs | 3 | 3 | 4 | 4 | 3 | 4 | 35 | **Done**: optional at import, linked to the finding and its asset, no network during the import |
 | — | Jira or ticketing integration | 2 | 2 | 1 | 3 | 2 | 2 | — | Rejected: needs external accounts and credentials, and does not fit local-first |
 | — | Collaborative or multi-user editing | 2 | 2 | 1 | 2 | 1 | 2 | — | Rejected: needs server infrastructure |

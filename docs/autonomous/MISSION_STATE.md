@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | **Complete** (second segment 2026-11-09T06:32:12Z–08:07Z, after "continue"; the first segment ran 2026-11-08T21:31:01Z–23:43Z): see [MISSION_REPORT.md](MISSION_REPORT.md) |
+| Current phase | **Complete** (third segment 2026-11-09T08:51:44Z–11:05Z: path-level scope, Linux GUI, reliability and cross-module audits. Earlier segments: 2026-11-08T21:31:01Z–23:43Z and 2026-11-09T06:32:12Z–08:07Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -51,6 +51,16 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 15. Clippy 0.1.99 lints fixed (`7fb4008`)
 16. CSV findings import with a column mapping (`53dac93`)
 17. Second review's fixes: CSV detection panic, redaction gaps, MCP approval checks (`9d6dba6`)
+18. Path-level scope: URL entries authorize paths, never hosts; redirects rechecked per hop; repeated refusals counted (schema 18) (`80f34de`)
+19. Imported files in UTF-16 or Windows-1252 (`e326ace`)
+20. Review fixes for the path-level scope: whole-token URL reading, ambiguous forms, loose path matching, raw requests under both schemes, no system proxy; schema 19 keeps old URL exclusions at host level (`8355745`)
+21. Cross-module references: tool runs as evidence, asset deletion with vulnerabilities, run history, OSINT links, atomic finding creation (`96fe970`)
+22. Timeline paging without gaps; reports leave out notes and closed findings (`d26f799`)
+23. Evidence verification and checked exports; MCP duplicate-finding warning (`aa4d17d`)
+24. MCP clients kept out of archived projects; project status history (`ce76bfa`)
+25. Requests sent to targets and asset status on the timeline (`7e74883`)
+26. Imported CVEs tracked as vulnerabilities on request (`6860814`)
+27. SQLite 3.54.1 and rmcp 3.9.0 for two new advisories; MSRV 1.89 (`0641a0e`)
 
 ## Tests executed
 
@@ -58,7 +68,11 @@ See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md).
 
 ## Known failures
 
-None. The final results at `9d6dba6`: Windows 321 Rust (325 with provisioning) and 224 frontend tests; Ubuntu 24.04 and Debian 12 321 Rust tests and all 36 frontend test files; clippy (0.1.94 and 0.1.99), tsc, the build and the audits are clean.
+None. The final results at `0641a0e`:
+* **Windows:** 351 Rust tests (355 with provisioning) and 224 frontend tests.
+* **Ubuntu 24.04.5 and Debian 12:** 351 Rust tests and all 36 frontend test files.
+* **Static checks:** clippy (0.1.94 and 0.1.99), tsc, the build, the audits and gitleaks are clean.
+* **Real GUI:** 62 of 62 checks on Ubuntu and on Debian; the Windows smoke covered every page and project tab.
 
 ## Commits during the mission
 
@@ -92,6 +106,16 @@ None. The final results at `9d6dba6`: Windows 321 Rust (325 with provisioning) a
 | `53dac93` | feat(findings): import findings from CSV files with a column mapping |
 | `04114e8` | docs(mission): record the MCP tools, Linux clippy and the CSV import |
 | `9d6dba6` | fix(security): harden the CSV import and the new MCP approvals |
+| `80f34de` | feat(scope): authorize URL entries per path, never their host |
+| `e326ace` | fix(findings): read imported files saved as UTF-16 or Windows-1252 |
+| `8355745` | fix(scope): close path-scope bypasses found in review |
+| `96fe970` | fix(workspace): keep cross-module references consistent |
+| `d26f799` | fix(reports): page the timeline without gaps and keep notes out of reports |
+| `aa4d17d` | feat(evidence): verify stored evidence against its SHA-256 |
+| `ce76bfa` | fix(mcp): keep MCP clients out of archived projects |
+| `7e74883` | feat(timeline): record requests sent to targets and asset status changes |
+| `6860814` | feat(findings): track imported CVEs as vulnerabilities on request |
+| `0641a0e` | fix(deps): upgrade the bundled SQLite and rmcp for new advisories |
 
 ## Next action
 
@@ -104,7 +128,19 @@ Second segment (from 2026-11-09T06:32Z), in this order:
 6. ~~Independent review of `aaa7d0a`, `53dac93` and `b46a075`~~: done; fixes in `9d6dba6`.
 7. ~~Performance at the import limits, final regression on Windows and Linux, report~~: done.
 
-The remaining candidates are in MISSION_REPORT.md: path-level scope rules (needs the owner's decision), notes on assets, more native formats, the Linux GUI for the new features. Release steps (installers, signing) need the owner's authorization.
+Third segment (from 2026-11-09T08:51Z): all done.
+1. Path-level scope (`80f34de`), its independent review and fixes (`8355745`).
+2. Linux GUI verification of every listed area, on Ubuntu 24.04.5 and Debian 12.
+3. Reliability: encodings (`e326ace`), evidence integrity (`aa4d17d`), atomic finding creation (`96fe970`).
+4. Cross-module audit and fixes (`96fe970`, `d26f799`, `ce76bfa`, `7e74883`).
+5. Imported CVEs as vulnerabilities (`6860814`).
+6. Two new dependency advisories (`0641a0e`).
+
+The remaining candidates and the owner's decisions are in MISSION_REPORT.md ("Remaining release blockers"):
+* refusing redirect flags of external tools on path-only scopes;
+* one report model for HTML and Markdown;
+* notes on assets;
+* a foreign-key-off migration mode.
 
 Release steps (installers, signing) need the owner's authorization.
 

@@ -456,3 +456,179 @@ At `9d6dba6`:
 * MCP was turned off again in the QA data.
 * No file was written to Documents.
 * QA and performance data stay in the scratchpad.
+
+## 2026-11-09T08:51Z: third segment starts
+
+The owner asked to:
+* resolve path-level scope rules conservatively;
+* continue the Linux GUI verification;
+* audit reliability and cross-module references, and fix what is high-value;
+* keep researching.
+
+Not authorized: installers, signing, releases, production changes, or the real user database.
+
+## 2026-11-09T08:52–09:15Z: path-level scope (`80f34de`) and import encodings (`e326ace`)
+
+* **URL entries authorize paths.** A URL scope entry authorizes only URLs with the same scheme, host and effective port, inside its path: `/api` covers `/api` and `/api/…`, never `/apix`.
+* **They never authorize the host.** Host-level operations need a domain, wildcard, address or range entry:
+  * Nmap and other port scans;
+  * service scans, TLS analysis and the HTTP check;
+  * host names in tool arguments and target lists;
+  * host-level import results.
+
+  Refusals name the authorized URLs and say what is missing.
+* **Excluded URLs.** An excluded URL excludes its path on every scheme and port. It also refuses host-level operations on its host. Passive lookups of the host are not affected.
+* **Redirects.** The HTTP request builder can follow redirects, at most five:
+  * every hop is checked against the scope and DNS vetting before it is sent;
+  * credentials are dropped when the origin changes;
+  * a refused hop stops the chain and is recorded.
+* **Scope history (schema 18).** Identical refusals within ten minutes are counted on one entry ("N attempts"). At most 50 per attempt and 2,000 per project are kept.
+* **Encodings.** Imported files saved by Excel as UTF-16 or Windows-1252 are decoded instead of becoming replacement characters.
+* **Tests.** 331 → 332 Rust tests. A local redirect server proves that the URL outside the path is never requested.
+
+## 2026-11-09T09:15–09:50Z: independent review of the path-level scope (`8355745`)
+
+A reviewer agent got the code but not my conclusions. It found ways to reach paths outside an authorized URL. All were fixed, with regression tests:
+
+| Finding | Fix |
+|---|---|
+| URLs in tool arguments were split at `;` `,` `=` `(` `'` `\|` `<`. So `https://app/api/;/../../admin` was checked as `https://app/api/`. | A URL runs from its scheme to the next whitespace or the next URL. It is also read as cut at quotes, brackets and separators, and every reading must be in scope. |
+| `-uhttps://evil/` (an attached option value) and `-uhttps://x/?a=b` were not checked. | Options are scanned whole. An attached value is read from its web scheme. |
+| Scheme-less `host/path` values were not treated as URLs. | They are checked under both HTTP and HTTPS. |
+| URLs that could not be parsed were skipped. | They are refused ("cannot be read"). |
+| Some clients read `\` as `/`, others as part of the user info. | A backslash is refused in every URL. |
+| Servers resolve dot segments, `//` and `%2f`/`%5c` differently. | These forms are refused where a URL entry decides for the host. |
+| Exclusions matched byte for byte only, so `/Admin`, `/%61dmin`, `/admin;x=1`, `/admin.json` and fullwidth letters escaped them. | Paths are also compared the way servers commonly read them. Authorization needs both readings to match; an exclusion needs either. |
+| Raw request files were accepted when one scheme was authorized. | Both schemes must be authorized. |
+| Refused URLs were recorded with credentials and queries. | URLs are recorded as scheme, host, port and path. Other values are redacted. |
+| A system proxy would resolve names after DNS vetting. | The three clients that contact targets ignore system proxies. |
+| Passive discovery dropped names whose host had an excluded path. | They are recorded, since recording contacts nothing. |
+| OSINT values with quotes or spaces were checked after trimming but requested as stored. | They are refused. |
+| URL exclusions recorded before schema 18 excluded the whole host. | Schema 19 excludes their host: an in-scope entry with the same value becomes an exclusion, or a new exclusion is added. Each change gets a note and a scope-history entry. |
+
+Tool runs authorized only by URL entries now warn that the tool decides which further paths it requests and which redirects it follows. Redirect revalidation applies to Cyber Hub's own HTTP client. For external tools, the warning is the safeguard, and SECURITY.md documents this as an accepted risk.
+
+## 2026-11-09T09:50–10:05Z: Linux GUI pass on Ubuntu 24.04 at `8355745`
+
+**Setup.** An offline container (`--network none`) ran the real WebKitGTK app under Xvfb. It was driven through WebDriver and xdotool, and GTK dialogs were answered as a user would.
+
+**Result: 43 checks passed, 0 failed.**
+* **Path scope:**
+  * a request inside the path succeeded;
+  * requests outside the path and in the excluded path were refused;
+  * a redirect inside the path was followed, and a redirect leaving it was stopped;
+  * a host scan and a URL service scan were refused;
+  * four refusals were counted on one entry and shown on the timeline;
+  * the local server's log shows that `/admin` and `/api/private` were never requested.
+* **Findings and vulnerabilities:**
+  * CSV import through the GTK open dialog, with the copied secret masked;
+  * the findings table and bulk edit;
+  * a vulnerability added offline, with its warnings.
+* **Evidence and attack surface:**
+  * evidence added through the GTK open dialog, with its SHA-256 checked on disk;
+  * the attack-surface web check through the GTK confirmation.
+* **Workflows and OSINT:** a cancelled run, a report run that succeeded, and an OSINT investigation.
+* **MCP through the real sidecar:**
+  * 49 tools and a CVSS score;
+  * path-level validation;
+  * a refusal before approval;
+  * an approved checklist write, read back.
+* **Backup, restore and SIGKILL:**
+  * backup through the GTK save dialog;
+  * restore through the GTK open dialog. The app restarted itself, applied the restore, and kept the previous database with its marker project.
+  * SIGKILL during a workflow run: the run was marked interrupted at the next start, the integrity check was ok, and there were no foreign-key violations.
+
+## 2026-11-09T10:05–10:20Z: cross-module reference audit and fixes (`96fe970`, `d26f799`, `aa4d17d`, `ce76bfa`)
+
+A second agent audited every writer and deleter of project data for references between projects, assets, findings, evidence, runs, vulnerabilities and OSINT. Fixed:
+
+| Finding | Fix | Commit |
+|---|---|---|
+| Evidence → "Add tool run" always failed: no title was sent, and a title was required. | Untitled runs are named after the tool and the run number. | `96fe970` |
+| Deleting an asset failed with a UNIQUE error when one of its CVEs was also tracked project-wide, or silently dropped the asset. | Its vulnerabilities stay with the project, each with a history entry. A conflicting case is refused with the reason. | `96fe970` |
+| "Clear run history" removed every finished run of every project, leaving evidence and links pointing at nothing. | Runs referenced by evidence, finding links, OSINT evidence or discovery snapshots are kept. The result says how many. | `96fe970` |
+| Deleting or merging OSINT entities left dangling finding links. Merges also dropped asset origins and events. | Links are removed with the entity. On a merge they move to the kept entity, with the asset origin and events. | `96fe970` |
+| Re-linking an investigation to another project carried the old project's references along. | Refused while the current project refers to it. Both sides record the change. | `96fe970` |
+| Deleting an investigation left links behind and no trace in the project. | Links are removed. The deletion appears on the project timeline and in the activity log under the project. | `96fe970` |
+| Findings created from a vulnerability or an OSINT entity were saved before their links, so a failed link left a finding behind. | Both are written in one transaction. | `96fe970` |
+| The timeline type filter ran after a fixed window, so a filter could show nothing. Paging by second skipped events. | The filter runs in SQL, and paging uses a keyset cursor (time, source, row). | `d26f799` |
+| The Markdown report (export, MCP, workflows) included closed findings and the project's internal notes. | It lists open findings only and counts the closed ones. Notes are left out. Exports are recorded on the timeline. | `d26f799` |
+| Evidence exports were not checked against the stored hash. A deletion could race a new record of the same content. | The export hashes the copy and refuses a mismatch. *Verify* checks a project's files and text. Placement and deletion run under the database lock. Deletions appear on the timeline. | `aa4d17d` |
+| MCP approvals of a new finding did not mention an existing identical one. | The approval warns, with the numbers and statuses of the matches. | `aa4d17d` |
+| MCP clients could write into archived projects, and status changes left no trace. | Refused both before the approval and when it is carried out. Status changes appear on the timeline and in the activity log. | `ce76bfa` |
+
+Not changed, by decision: importing another project's run into an OSINT investigation is still possible behind the existing toggle and confirmation. It is a deliberate, GUI-only feature.
+
+Documented for later:
+* the Markdown and HTML reports still have different sections;
+* scan imports do not create vulnerability records;
+* checklist links cannot be cleared through the API;
+* rebuilding a referenced table in a migration would need a foreign-key-off mode (no such migration exists).
+
+Tests after these commits: 348 Rust tests passed (3 ignored); clippy and tsc clean; 224 frontend tests passed.
+
+## 2026-11-09T10:20–10:45Z: timeline, imported CVEs, dependency advisories (`7e74883`, `6860814`, `0641a0e`)
+
+* **Timeline (`7e74883`).** A new `utility` type records:
+  * HTTP requests sent from the request builder: method, URL without its query, status, redirects, and why a redirect was stopped;
+  * TLS analyses.
+
+  Asset status changes are recorded too. Tests: the local redirect server test now also checks the timeline entry; asset status changes are covered by a unit test.
+* **Imported CVEs (`6860814`).** The import preview offers *Track N CVEs as vulnerabilities* (off by default):
+  * each CVE of a recorded finding is tracked for the finding's asset, or for the project, and linked to the finding;
+  * an existing record is linked, not duplicated, and dismissed findings are skipped;
+  * limits: 20 CVEs per finding, 500 per import;
+  * priorities use only cached NVD and EPSS data, so the import stays offline;
+  * vulnerability creation can run inside the import's savepoint, so the import stays all or nothing.
+* **Advisories (`0641a0e`).** `cargo audit` reported two advisories published in November 2026:
+  * **RUSTSEC-2026-0459** (CVE-2026-119375): before 3.54.0, the bundled SQLite can return uninitialized memory for a database opened with a crafted `-wal` file of another page size. Restore opens a user-chosen file together with its `-wal`. Fixed with `rusqlite` 0.41.1 (SQLite 3.54.1). A test fails if the bundled SQLite is older than 3.54.
+  * **RUSTSEC-2026-0462**: `rmcp`'s Streamable HTTP client, which is not compiled into Cyber Hub. Upgraded to 3.9.0 anyway.
+  * **MSRV.** `rusqlite` 0.41 needs Rust 1.89, so `rust-version` went from 1.80 to 1.89. The 18 lints that clippy enables for that version were fixed mechanically (`is_none_or`, `is_some_and`, `is_multiple_of`). The lockfile is now format 4.
+
+## 2026-11-09T10:45–11:02Z: final verification of the third segment
+
+At `0641a0e`:
+
+| Check | Windows 11 | Ubuntu 24.04.5 | Debian 12 |
+|---|---|---|---|
+| cargo test | 351 passed, 3 ignored (355 with `provisioning`) | 351 passed, 3 ignored | 351 passed, 3 ignored |
+| clippy `-D warnings` | clean (0.1.94) | clean (0.1.99) | clean (0.1.99) |
+| tsc | clean | clean | clean |
+| vitest | 224 passed (36 files) | 36 of 36 files | 36 of 36 files |
+| frontend build | succeeded | succeeded (GUI build) | succeeded (GUI build) |
+| npm audit | 0 vulnerabilities | — | — |
+| cargo audit | 0 vulnerabilities, 8 allowed warnings | — | — |
+| gitleaks | no leaks (this segment's commits; tracked `src-tauri/src`, `src`, `docs`, `scripts` at HEAD) | — | — |
+| real GUI pass | smoke: 16 pages and 14 project tabs, no errors | 62 of 62 checks | 62 of 62 checks |
+
+**Linux GUI passes.** Each ran in an offline container: the real WebKitGTK app under Xvfb, driven through WebDriver and xdotool, with GTK dialogs answered like a user. The 62 checks added these to the earlier 43:
+* **Evidence:**
+  * *Verify* on clean data, then after the stored file was changed on disk;
+  * a checked export through the GTK save dialog;
+  * a refused export that left no partial file;
+  * the *Verify* button and its notice.
+* **Run history:** clearing it reports what it removed and what it kept.
+* **Assets and vulnerabilities:** an asset deletion that keeps its vulnerability, and a conflicting deletion that is refused.
+* **Timeline:**
+  * pages without overlap, and the type filter;
+  * requests sent from the utilities;
+  * asset and project status history.
+* **Report:** it leaves out internal notes.
+* **CSV import:** CVE tracking switched on in the real import dialog.
+* **MCP:**
+  * a duplicate-finding warning in the approval;
+  * an archived project refused through the real sidecar.
+
+The local target server's log, read at the end of every pass, shows only in-scope requests.
+
+**Windows app.** A debug build ran against an isolated copy of earlier QA data:
+* the copy was upgraded from schema 12 to 19 at startup, with a pre-upgrade backup and integrity ok;
+* the smoke script visited every page and project tab;
+* *Verify* reported the evidence intact.
+
+The owner's real database was not opened; its modification time is still 2026-11-05.
+
+**Housekeeping:**
+* The QA app, the Vite server and every container I started were stopped. Ports 1420 and 9223 are free.
+* Docker Desktop is still running. The `probot-mysql` container is not mine and was left alone.
+* QA data, logs and screenshots stay in the scratchpad (`linuxgui/`, `qa-seg3/`).
