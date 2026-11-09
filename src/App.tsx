@@ -2,6 +2,7 @@ import { Toast } from "@heroui/react";
 import { Component, lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { CommandPalette } from "@/app/CommandPalette";
 import { McpApprovals } from "@/app/McpApprovals";
+import { RestoreNotice } from "@/app/RestoreNotice";
 import { UpdateNotices } from "@/app/UpdateNotices";
 import type { PageId } from "@/app/routes";
 import { Sidebar } from "@/app/Sidebar";
@@ -72,6 +73,7 @@ export default function App() {
       <CommandPalette />
       <McpApprovals />
       <UpdateNotices />
+      <RestoreNotice />
       <Toast.Provider placement="bottom end" />
     </AppProvider>
   );

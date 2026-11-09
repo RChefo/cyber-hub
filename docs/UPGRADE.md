@@ -38,7 +38,40 @@ Credentials (API keys) are not in the database. They stay in the operating syste
 2. The copy is opened read-only and must pass `PRAGMA integrity_check`. Otherwise it is deleted and nothing is written.
 3. It is renamed to the chosen name.
 
-The live database file and its `-wal`, `-shm` and `-journal` files are refused as targets. The temporary file has a random name and is removed if anything fails. The copy contains the database only. Evidence files (`evidence/`) and credentials (the system credential store) are not included. To restore, close Cyber Hub and replace `cyberhub.db` in the data folder with the copy (delete `cyberhub.db-wal` and `cyberhub.db-shm` first), as for an upgrade backup. A copy made by a newer version is refused by an older one.
+The live database file and its `-wal`, `-shm` and `-journal` files are refused as targets. The temporary file has a random name and is removed if anything fails. The copy contains the database only. Evidence files (`evidence/`) and credentials (the system credential store) are not included. Restore it as described below. A copy made by a newer version is refused by an older one.
+
+## Restoring a backup
+
+*Settings* → *Local data* → *Restore…* restores a manual backup, an automatic pre-upgrade backup (`backups/cyberhub-schema<N>-<time>.db`), or the copy that an earlier restore kept. The code is in `src-tauri/src/restore.rs`.
+
+**Checking the file.** Nothing changes before you confirm. The file is chosen in a native dialog opened by the backend, and is refused unless:
+* it is an SQLite database that passes `PRAGMA integrity_check`;
+* its schema version is one this version knows (a backup from a newer version is refused);
+* its schema is exactly what Cyber Hub's migrations create for that version. The SQL of every table, index, trigger and view is compared, so a foreign database, an added trigger or view, or a changed constraint is refused.
+
+The confirmation shows the file's size and date, its projects and findings, whether it will be upgraded, and how many of the evidence files it refers to are available.
+
+**Restoring.** On confirmation, SQLite copies the file into the data folder as `restore-pending.db`, the copy is checked again, and Cyber Hub restarts. A file that changed after the confirmation is refused. At the start, before the database opens:
+1. The current database and its `-wal`/`-shm` files move to `backups/before-restore-<time>/`. Nothing is copied or rewritten, so changes that were still in the `-wal` file are kept.
+2. The copy becomes `cyberhub.db`. An older schema is then upgraded as usual, with a pre-upgrade backup first.
+3. Evidence files are sorted:
+   * Files that only the previous database refers to move to `backups/before-restore-<time>/evidence/`, because the start-up sweep deletes evidence files that no record refers to.
+   * Missing files that the restored database refers to are copied from an `evidence/` folder next to the chosen file, but only when their content matches their SHA-256 name and they are within the evidence size limit.
+   * Evidence files deleted after the backup was made stay missing.
+
+A notice and the activity log report the result.
+
+**Undoing a restore.** Restore `backups/before-restore-<time>/cyberhub.db`. Its evidence files come back from the folder next to it.
+
+**Safety:**
+* Nothing is deleted.
+* A journal (`restore-pending.json`) exists until the evidence files are sorted. While it exists, the evidence sweep does not run, and an interrupted restore resumes at the next start. The sweep is also skipped at the start that applies a restore.
+* If the database is still in use when Cyber Hub starts again (another process holds it), the copy waits for the next start. *Settings* shows it and can cancel it.
+* If the restored database does not open, it is set aside as `restored-cyberhub.db` in the same folder, and the previous database and its evidence files go back.
+* A restored database never turns the MCP bridge on by itself. If it was on in the backup, it is turned off and the notice says so.
+* Restoring one of the automatic pre-upgrade backups writes a new pre-upgrade copy of it before its upgrade. As always, only the three newest automatic copies are kept, so the oldest one, possibly the file you chose, is replaced by an identical newer copy.
+
+Restore backups you trust. A backup is a complete Cyber Hub database, and its contents (for example wordlist entries or preferences) are used like your own.
 
 ## What was tested (November 2026)
 
@@ -60,12 +93,14 @@ Tested on disposable copies, never on a real user database:
 
 ## Rollback
 
-There is **no automatic downgrade**. Going back to an older version means restoring the backup made before the upgrade:
+There is **no automatic downgrade**. Going back to an older version means restoring the backup made before the upgrade. A newer version can restore it in the app, but an older version cannot open a database with a newer schema, so do it by hand:
 
 1. Close Cyber Hub.
-2. In the data folder, rename `cyberhub.db` (keep it, it holds everything since the upgrade). Also remove `cyberhub.db-wal` and `cyberhub.db-shm` if they exist.
+2. In the data folder, move `cyberhub.db` together with `cyberhub.db-wal` and `cyberhub.db-shm` (if they exist) into a new folder. Keep all three together: the `-wal` file can hold the most recent changes, and it holds everything since the upgrade.
 3. Copy `backups/cyberhub-schema8-<time>.db` to `cyberhub.db`.
 4. Install and start the older version.
+
+The older version's evidence sweep deletes evidence files that its database does not refer to. Copy `evidence/` elsewhere first if you need the files that were added after the upgrade.
 
 Restoring a backup was tested: version 0.1.0 runs normally on its restored schema-8 backup. **Everything created or changed after the upgrade is not in the backup** and is lost to the older version. Only the three newest backups are kept, so copy the pre-upgrade backup elsewhere if it matters. Data cannot be merged back automatically.
 

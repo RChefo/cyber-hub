@@ -268,6 +268,33 @@ export interface WstgCatalog {
 
 export type ChecklistStatus = "not_started" | "in_progress" | "passed" | "failed" | "not_applicable";
 
+/** A backup checked before it is restored (Settings → Local data). */
+export interface BackupInfo {
+  fileName: string;
+  size: number;
+  modified: string | null;
+  schema: number;
+  latest: number;
+  projects: number;
+  findings: number;
+  evidenceReferenced: number;
+  evidenceAvailable: number;
+}
+
+/** The result of a restore, reported once after the restart. */
+export interface RestoreOutcome {
+  ok: boolean;
+  source: string;
+  keptIn: string | null;
+  evidenceKept: number;
+  evidenceRestored: number;
+  /** the restored database had the MCP bridge on; it was turned off */
+  mcpTurnedOff: boolean;
+  /** the backup waits for the next start (the database was still in use) */
+  retry: boolean;
+  error: string | null;
+}
+
 export interface ChecklistItem {
   testId: string;
   status: ChecklistStatus;

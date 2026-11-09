@@ -580,3 +580,100 @@ pub async fn database_backup(app: AppHandle) -> AppResult<Option<BackupResult>> 
     .map_err(|e| AppError::Internal(format!("the backup failed: {e}")))??;
     Ok(Some(BackupResult { file_name, size }))
 }
+
+/* ───────────────────────── database restore ───────────────────────── */
+
+/// The backup chosen for a restore (until it is confirmed), and the result of a restore applied
+/// at this start (reported once).
+pub struct RestoreState {
+    chosen: std::sync::Mutex<Option<(String, std::path::PathBuf, crate::restore::BackupInfo)>>,
+    outcome: std::sync::Mutex<Option<crate::restore::Outcome>>,
+}
+
+impl RestoreState {
+    pub fn new(outcome: Option<crate::restore::Outcome>) -> Self {
+        Self { chosen: std::sync::Mutex::new(None), outcome: std::sync::Mutex::new(outcome) }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreChoice {
+    token: String,
+    info: crate::restore::BackupInfo,
+}
+
+/// Choose a backup (native dialog) and check it. Nothing changes until it is confirmed with
+/// `database_restore_apply`. None when cancelled.
+#[tauri::command]
+pub async fn database_restore_inspect(app: AppHandle, state: State<'_, RestoreState>) -> AppResult<Option<RestoreChoice>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    main_window_dialog(&app, "Restore a backup").add_filter("SQLite database", &["db"]).pick_file(move |f| {
+        let _ = tx.send(f.and_then(|f| f.into_path().ok()));
+    });
+    let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
+    let dir = crate::util::data_dir(&app)?;
+    let chosen = path.clone();
+    let info = tauri::async_runtime::spawn_blocking(move || crate::restore::inspect(&chosen, &dir))
+        .await
+        .map_err(|e| AppError::Internal(format!("the backup could not be checked: {e}")))??;
+    let token = import_token()?;
+    *state.chosen.lock().map_err(|_| AppError::Internal("restore state poisoned".into()))? = Some((token.clone(), path, info.clone()));
+    Ok(Some(RestoreChoice { token, info }))
+}
+
+/// Copies the confirmed backup into the data folder and restarts Cyber Hub, which swaps it in
+/// before it opens the database (`restore.rs`). The current database is kept in
+/// `backups/before-restore-<time>/`.
+#[tauri::command]
+pub async fn database_restore_apply(app: AppHandle, state: State<'_, RestoreState>, token: String) -> AppResult<crate::restore::BackupInfo> {
+    let (path, confirmed) = {
+        let mut chosen = state.chosen.lock().map_err(|_| AppError::Internal("restore state poisoned".into()))?;
+        match chosen.take() {
+            Some((t, p, info)) if t == token => (p, info),
+            other => {
+                *chosen = other;
+                return Err(AppError::Validation("Choose the backup again".into()));
+            }
+        }
+    };
+    let dir = crate::util::data_dir(&app)?;
+    // the file must still be the one the user confirmed
+    let info = tauri::async_runtime::spawn_blocking(move || crate::restore::stage(&dir, &path, Some(&confirmed)))
+        .await
+        .map_err(|e| AppError::Internal(format!("the backup could not be prepared: {e}")))??;
+    let db = app.state::<Db>();
+    // recorded in the current database, which is kept with this entry
+    let _ = db.with(|c| crate::commands::activity::log(c, "restore", "Database restore prepared", &info.file_name, None, None, None));
+    // the WAL is written back so the kept database is one file
+    let _ = db.with(|c| Ok(c.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?));
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        // the reply reaches the window first
+        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+        handle.restart();
+    });
+    Ok(info)
+}
+
+/// The result of a restore applied when Cyber Hub started, once.
+#[tauri::command]
+pub fn database_restore_outcome(state: State<'_, RestoreState>) -> AppResult<Option<crate::restore::Outcome>> {
+    Ok(state.outcome.lock().map_err(|_| AppError::Internal("restore state poisoned".into()))?.take())
+}
+
+/// Whether a restore waits for the next start (it could not replace the database yet).
+#[tauri::command]
+pub fn database_restore_pending(app: AppHandle) -> AppResult<bool> {
+    Ok(crate::restore::pending(&crate::util::data_dir(&app)?))
+}
+
+/// Cancels a restore that waits for the next start. False when there was none.
+#[tauri::command]
+pub fn database_restore_cancel(app: AppHandle) -> AppResult<bool> {
+    let cancelled = crate::restore::cancel(&crate::util::data_dir(&app)?)?;
+    if cancelled {
+        let _ = app.state::<Db>().with(|c| crate::commands::activity::log(c, "restore", "Database restore cancelled", "", None, None, None));
+    }
+    Ok(cancelled)
+}

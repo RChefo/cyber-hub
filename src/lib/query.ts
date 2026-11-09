@@ -41,6 +41,8 @@ export type Tag =
   | "templates"
   /** project methodology checklists */
   | "checklist"
+  /** a database restore waiting for the next start */
+  | "restore"
   | "system";
 
 const versions = new Map<Tag, number>();

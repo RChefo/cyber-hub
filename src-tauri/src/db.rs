@@ -31,7 +31,7 @@ pub struct Db {
 }
 
 /// Ordered list of migrations. Never edit a shipped migration — append a new one.
-const MIGRATIONS: &[&str] = &[
+pub(crate) const MIGRATIONS: &[&str] = &[
     // 1 — initial schema
     r#"
     CREATE TABLE user_preferences (
@@ -975,7 +975,9 @@ impl Db {
 
     fn init(conn: Connection) -> AppResult<Self> {
         conn.execute_batch(
-            "PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;",
+            // trusted_schema off: SQL stored in the schema (defaults, checks, triggers, views) may
+            // only use harmless functions, whatever file ended up as the database
+            "PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000; PRAGMA trusted_schema = OFF;",
         )?;
         let db = Db { conn: Mutex::new(conn) };
         db.migrate()?;

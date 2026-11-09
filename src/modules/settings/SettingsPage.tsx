@@ -1,5 +1,5 @@
 import { Button } from "@heroui/react";
-import { DatabaseBackup, FolderOpen, ShieldCheck, Trash2 } from "lucide-react";
+import { ArchiveRestore, DatabaseBackup, FolderOpen, ShieldCheck, Trash2 } from "lucide-react";
 import { useApp } from "@/app/store";
 import { CopyButton, Kbd } from "@/components/ui/Code";
 import { useConfirm } from "@/components/ui/Dialogs";
@@ -7,9 +7,10 @@ import { SwitchInput } from "@/components/ui/Fields";
 import { PageHeader, Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
-import { invalidate } from "@/lib/query";
+import { invalidate, useQuery } from "@/lib/query";
 import { formatBytes, modKey } from "@/lib/utils";
 import { ProvidersPanel } from "./ProvidersPanel";
+import { restoreSummary } from "./restore";
 import { UpdatesPanel } from "./UpdatesPanel";
 
 function DataPanel() {
@@ -33,6 +34,38 @@ function DataPanel() {
       notify.error("Could not back up the database", errorMessage(e));
     }
   };
+  const pendingRestore = useQuery(["restore"], api.databaseRestorePending, [], runtime);
+  const cancelRestore = async () => {
+    try {
+      await api.databaseRestoreCancel();
+      invalidate("restore", "activity");
+      notify.success("Restore cancelled", "The current database stays in use.");
+    } catch (e) {
+      notify.error("Could not cancel the restore", e);
+    }
+  };
+  const restore = async () => {
+    try {
+      const chosen = await api.databaseRestoreInspect();
+      if (!chosen) return;
+      const ok = await confirm.ask({
+        title: "Restore this backup?",
+        body: (
+          <ul className="flex flex-col gap-1.5">
+            {restoreSummary(chosen.info).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        ),
+        confirmLabel: "Restore and restart",
+      });
+      if (!ok) return;
+      await api.databaseRestoreApply(chosen.token);
+      notify.info("Restarting Cyber Hub", "The backup takes the database's place when Cyber Hub starts again.");
+    } catch (e) {
+      notify.error("Could not restore the backup", e);
+    }
+  };
   const rows: { label: string; body: string; fn: () => Promise<void>; tags: Parameters<typeof invalidate> }[] = [
     { label: "activity log", body: "Removes all recorded activity shown on the dashboard.", fn: api.activityClear, tags: ["activity"] },
     { label: "command history", body: "Removes copied and executed command history. Saved commands are kept.", fn: api.commandHistoryClear, tags: ["history"] },
@@ -50,12 +83,32 @@ function DataPanel() {
       <div className="tile mb-1.5 flex items-center justify-between gap-3 px-3 py-2">
         <div className="min-w-0">
           <div className="text-[13.5px]">Back up the database</div>
-          <div className="text-[12px] text-muted">Saves a checked copy of projects, findings, the finding library, evidence records and settings to a file you choose. Evidence files and stored credentials are not included. Restoring is described in docs/UPGRADE.md.</div>
+          <div className="text-[12px] text-muted">Saves a checked copy of projects, findings, the finding library, evidence records and settings to a file you choose. Evidence files and stored credentials are not included.</div>
         </div>
         <Button size="sm" variant="tertiary" isDisabled={!runtime} onPress={() => void backup()}>
           <DatabaseBackup className="size-3.5" />
           Back up
         </Button>
+      </div>
+      <div className="tile mb-1.5 flex items-center justify-between gap-3 px-3 py-2">
+        <div className="min-w-0">
+          <div className="text-[13.5px]">Restore a backup</div>
+          <div className="text-[12px] text-muted">
+            {pendingRestore.data
+              ? "A backup waits to be restored at the next start of Cyber Hub. Restart Cyber Hub to restore it, or cancel it."
+              : "Checks a backup, then restarts Cyber Hub with it. The current database is kept in the backups folder with the evidence files only it refers to, so restoring that copy undoes the restore."}
+          </div>
+        </div>
+        {pendingRestore.data ? (
+          <Button size="sm" variant="tertiary" isDisabled={!runtime} onPress={() => void cancelRestore()}>
+            Cancel restore
+          </Button>
+        ) : (
+          <Button size="sm" variant="tertiary" isDisabled={!runtime} onPress={() => void restore()}>
+            <ArchiveRestore className="size-3.5" />
+            Restore…
+          </Button>
+        )}
       </div>
       <ul className="flex flex-col gap-1.5">
         {rows.map((r) => (

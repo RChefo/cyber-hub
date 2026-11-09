@@ -61,7 +61,7 @@ Other scripts:
 - [docs/PLATFORMS.md](docs/PLATFORMS.md): per-OS dependencies, validation status, platform-specific behavior
 - [docs/WEBSITE.md](docs/WEBSITE.md): the public website (landing and download pages): architecture, release-data integration, configuration, deployment
 - [docs/UPDATER.md](docs/UPDATER.md): signed automatic updates: formats, signing keys and their protection, the release workflow, manifest, staging tests, recovery and key rotation
-- [docs/UPGRADE.md](docs/UPGRADE.md): database upgrades: automatic backup, tested compatibility, rollback and its limits
+- [docs/UPGRADE.md](docs/UPGRADE.md): database upgrades (automatic backup, tested compatibility), manual backups, restoring a backup in the app, rollback and its limits
 - [docs/SIGNING.md](docs/SIGNING.md): Windows Authenticode signing: certificate routes, configuration, secrets, verification, SmartScreen
 
 ## Security at a glance

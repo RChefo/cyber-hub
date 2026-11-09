@@ -18,6 +18,7 @@ mod process;
 #[cfg(feature = "provisioning")]
 pub mod provision;
 mod redact;
+mod restore;
 mod scope;
 mod sectools;
 mod targets;
@@ -86,7 +87,41 @@ pub fn run() {
                 std::fs::set_permissions(&work, std::fs::Permissions::from_mode(0o700))?;
             }
             std::env::set_current_dir(&work)?;
-            let database = db::Db::open(&dir.join("cyberhub.db"))?;
+            // a restore staged before the restart replaces the database before it is opened; a
+            // restored database that does not open is set aside and the previous one goes back
+            let db_path = dir.join(restore::DB_NAME);
+            let mut restoring = restore::swap_pending(&dir);
+            let database = match db::Db::open(&db_path) {
+                Ok(d) => d,
+                Err(e) => match restoring.as_mut().filter(|s| !s.done()) {
+                    Some(swap) => {
+                        restore::undo(&dir, swap, &e)?;
+                        db::Db::open(&db_path)?
+                    }
+                    None => return Err(e.into()),
+                },
+            };
+            let restored = restoring.as_mut().map(|s| {
+                if s.done() {
+                    return s.outcome().clone();
+                }
+                // a restored database does not turn the MCP bridge on by itself
+                s.outcome_mut().mcp_turned_off = database
+                    .with(|c| Ok(c.execute("UPDATE user_preferences SET value = 'false' WHERE key = ?1 AND value = 'true'", [mcp::ops::ENABLED_PREF])?))
+                    .is_ok_and(|n| n > 0);
+                restore::finish(&dir, s)
+            });
+            if let Some(o) = &restored {
+                let (title, detail) = match (&o.error, o.ok) {
+                    (None, _) => ("Database restored", format!("{}; the previous database is kept in {}", o.source, o.kept_in.as_deref().unwrap_or("backups"))),
+                    (Some(e), true) => ("Database restored with a warning", e.clone()),
+                    (Some(e), false) => (if o.retry { "Database restore postponed" } else { "Database restore failed" }, e.clone()),
+                };
+                let _ = database.with(|c| activity::log(c, "restore", title, &detail, None, None, None));
+            }
+            // no evidence sweep at a start that restored or tried to restore a backup
+            let skip_sweep = restored.is_some() || restore::sorting_evidence(&dir);
+            app.manage(workspace_commands::RestoreState::new(restored));
             tools::sync_catalog(&database)?;
             app.manage(database);
             app.manage(process::ProcessManager::default());
@@ -101,7 +136,11 @@ pub fn run() {
             // evidence files (content-addressed, private folder); leftovers of an interrupted copy
             // and files no record refers to any more are removed
             let evidence = std::sync::Arc::new(workspace::evidence::EvidenceStore::new(dir.join("evidence")));
-            if let Err(e) = evidence.sweep(&app.state::<db::Db>()) {
+            // not while a restore is in progress, nor right after one: some files belong to the
+            // previous database
+            if skip_sweep {
+                eprintln!("Cyber Hub: evidence folder not swept at this start (database restore)");
+            } else if let Err(e) = evidence.sweep(&app.state::<db::Db>()) {
                 eprintln!("Cyber Hub: evidence folder not checked: {e}");
             }
             app.manage(evidence);
@@ -218,6 +257,11 @@ pub fn run() {
             workspace_commands::checklist_items,
             workspace_commands::checklist_set,
             workspace_commands::database_backup,
+            workspace_commands::database_restore_inspect,
+            workspace_commands::database_restore_apply,
+            workspace_commands::database_restore_outcome,
+            workspace_commands::database_restore_pending,
+            workspace_commands::database_restore_cancel,
             workspace_commands::report_html,
             workspace_commands::report_export_html,
             workspace_commands::report_save_evidence,
