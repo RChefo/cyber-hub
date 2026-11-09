@@ -118,7 +118,7 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
       onOpenChange={close}
       size="lg"
       title="Import scan results"
-      description="Nmap, Nessus and Greenbone/OpenVAS XML, Burp Suite issue exports, Nuclei, OWASP ZAP and SARIF JSON, and CSV files with a header row. You see what the file contains before anything is recorded."
+      description="Nmap, Nessus and Greenbone/OpenVAS XML, Burp Suite issue exports, Nuclei, OWASP ZAP, SARIF and Prowler (OCSF) JSON, and CSV files with a header row. You see what the file contains before anything is recorded."
       footer={
         <>
           <Button variant="tertiary" onPress={() => close(false)}>
@@ -239,7 +239,11 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
                 isSelected={options.resolveMissing}
                 onChange={(v) => setOptions({ ...options, resolveMissing: v })}
                 label={`Resolve ${pluralize(preview.notReportedCount, "open finding")} this rescan no longer reports`}
-                description={`They came from earlier ${preview.tool} imports, and this file covers their hosts without reporting them. Resolve them only if the scan covered the same checks. Otherwise each finding only gets a note.`}
+                description={
+                  preview.notReportedPassed === preview.notReportedCount
+                    ? `They came from earlier ${preview.tool} imports, and this file reports their checks as passing on the same resources. Without this option, each finding only gets a note.`
+                    : `They came from earlier ${preview.tool} imports, and this file covers their hosts without reporting them. Resolve them only if the scan covered the same checks. Otherwise each finding only gets a note.`
+                }
               />
               <ul className="panel-inset max-h-40 overflow-auto px-3 py-2 text-[12.5px]">
                 {preview.notReported.map((m) => (

@@ -309,6 +309,8 @@ fn a_project_without_scope_records_nothing_but_code_findings() {
         assert_eq!(pv.counts.new, 0);
         assert!(pv.warnings.iter().any(|w| w.contains("no scope entries")));
         let file = FileInfo { file_name: "semgrep.sarif", sha256: "cd", evidence_id: None };
+        let code = preview(c, p, &parse(&sarif()).unwrap(), Options::default())?;
+        assert!(!code.warnings.iter().any(|w| w.contains("no scope entries")), "a file without network targets needs no scope");
         let r = import(c, p, &parse(&sarif()).unwrap(), Options::default(), &file)?;
         assert_eq!(r.created, 2, "source-code findings have no network target to check");
         c.execute("UPDATE projects SET status = 'archived' WHERE id = ?1", params![p])?;

@@ -423,6 +423,8 @@ export interface ScanImportPreview {
   /** open findings of earlier imports of this tool that the file no longer reports (at most 200 listed) */
   notReported: ScanImportPreview["items"];
   notReportedCount: number;
+  /** of those, findings whose checks the file reports as passing (Prowler) */
+  notReportedPassed: number;
   /** a CSV file's columns and the mapping used */
   csv: CsvInfo | null;
   /** distinct CVEs named by findings that would be recorded */

@@ -21,6 +21,7 @@ const base: ScanImportPreview = {
   templated: 0,
   notReported: [],
   notReportedCount: 0,
+  notReportedPassed: 0,
   csv: null,
   cves: 0,
 };

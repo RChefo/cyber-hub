@@ -1,9 +1,9 @@
 //! Import of scanner output into a project (docs/DATA_MODEL.md#scan-import).
 //!
 //! Supported files: Nmap XML, Nuclei JSON lines (or its JSON array export), Nessus v2 (`.nessus`),
-//! Burp Suite issue export (XML), OWASP ZAP JSON report and SARIF 2.1.0. Reading a file never
-//! contacts anything. The file itself is kept in the evidence vault and every imported finding is
-//! linked to it.
+//! Burp Suite issue export (XML), OWASP ZAP JSON report, SARIF 2.1.0 and OCSF detection findings
+//! (Prowler's JSON output). Reading a file never contacts anything. The file itself is kept in the
+//! evidence vault and every imported finding is linked to it.
 //!
 //! * Findings are deduplicated by a fingerprint of tool, rule and location. A finding seen again in
 //!   a later import is not duplicated: its history records the sighting, a resolved finding can be
@@ -57,6 +57,7 @@ pub enum Format {
     Sarif,
     OpenVas,
     Csv,
+    Ocsf,
 }
 
 impl Format {
@@ -70,6 +71,7 @@ impl Format {
             Format::Sarif => "sarif",
             Format::OpenVas => "openvas",
             Format::Csv => "csv",
+            Format::Ocsf => "ocsf",
         }
     }
     pub fn label(self) -> &'static str {
@@ -82,6 +84,7 @@ impl Format {
             Format::Sarif => "SARIF 2.1.0",
             Format::OpenVas => "Greenbone / OpenVAS report (XML)",
             Format::Csv => "CSV with a header row",
+            Format::Ocsf => "OCSF detection findings (JSON, Prowler)",
         }
     }
 }
@@ -169,6 +172,9 @@ pub struct Parsed {
     pub no_absence: bool,
     /// a CSV file's columns and mapping
     pub csv: Option<csv::CsvInfo>,
+    /// fingerprints of checks the file reports as passing (OCSF): proof that the finding of an
+    /// earlier import with that fingerprint is fixed
+    pub passed: BTreeSet<String>,
 }
 
 impl Parsed {
@@ -241,6 +247,8 @@ impl Parsed {
 
 #[path = "scan_import_csv.rs"]
 pub mod csv;
+#[path = "scan_import_ocsf.rs"]
+mod ocsf;
 
 /* ───────────────────────── helpers ───────────────────────── */
 
@@ -459,10 +467,17 @@ pub fn detect(text: &str) -> Result<Format, String> {
             if first.get("template-id").is_some() || first.get("templateID").is_some() {
                 return Ok(Format::Nuclei);
             }
+            if ocsf::finding_class(&first).is_some() {
+                return Ok(Format::Ocsf);
+            }
             if v.as_array().is_some_and(|a| a.is_empty()) {
                 return Err("The file is an empty list".into());
             }
-            return Err("JSON files are accepted from Nuclei, OWASP ZAP and SARIF tools; this one is none of them".into());
+            return Err("JSON files are accepted from Nuclei, OWASP ZAP, SARIF tools and Prowler (OCSF); this one is none of them".into());
+        }
+        // Prowler's array without its closing bracket (an interrupted scan)
+        if ocsf::repair(t).is_some() {
+            return Ok(Format::Ocsf);
         }
         // JSON lines
         if let Some(line) = t.lines().map(str::trim).find(|l| !l.is_empty()) {
@@ -475,7 +490,7 @@ pub fn detect(text: &str) -> Result<Format, String> {
     if csv::looks_like_csv(t) {
         return Ok(Format::Csv);
     }
-    Err("Choose an Nmap, Nessus, Burp Suite or Greenbone XML file, a Nuclei, OWASP ZAP or SARIF JSON file, or a CSV file with a header row".into())
+    Err("Choose an Nmap, Nessus, Burp Suite or Greenbone XML file, a Nuclei, OWASP ZAP, SARIF or Prowler (OCSF) JSON file, or a CSV file with a header row".into())
 }
 
 fn xml_root(xml: &str) -> Option<String> {
@@ -543,6 +558,7 @@ fn parse_with(text: &str, mapping: Option<&csv::CsvMapping>) -> Result<Parsed, S
         Format::Sarif => parse_sarif(text)?,
         Format::OpenVas => parse_openvas(text),
         Format::Csv => csv::parse_csv(text, mapping)?,
+        Format::Ocsf => ocsf::parse(text)?,
     };
     p.dedupe();
     if p.findings.is_empty() && p.assets.is_empty() && p.csv.as_ref().is_none_or(|c| c.mapping.title.is_some()) {
@@ -1603,6 +1619,8 @@ pub struct Preview {
     /// it covers (at most 200 listed)
     pub not_reported: Vec<PreviewItem>,
     pub not_reported_count: usize,
+    /// of those, findings whose checks the file reports as passing
+    pub not_reported_passed: usize,
     /// a CSV file's columns and the mapping used
     pub csv: Option<csv::CsvInfo>,
     /// distinct CVEs named by findings that would be recorded (what "track CVEs" would track)
@@ -1752,7 +1770,8 @@ pub fn preview(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options) 
     if parsed.incomplete {
         pv.warnings.push("The file was not read completely, so findings it does not report are not listed as fixed".into());
     }
-    if !pv.has_scope {
+    // files without network targets (source code, cloud resources) need no scope
+    if !pv.has_scope && (!parsed.assets.is_empty() || parsed.findings.iter().any(|f| f.network || f.host.is_some())) {
         pv.warnings.push("The project has no scope entries, so every host in the file is outside the scope. Add the scope first.".into());
     }
     let mut out_hosts: BTreeSet<String> = BTreeSet::new();
@@ -1804,6 +1823,7 @@ pub fn preview(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options) 
     pv.out_of_scope_hosts = out_hosts.into_iter().take(20).map(|h| clean_text(&redact_text(&h), 255)).collect();
     let missing = not_reported(c, project_id, parsed)?;
     pv.not_reported_count = missing.len();
+    pv.not_reported_passed = missing.iter().filter(|m| m.passed).count();
     pv.not_reported = missing
         .into_iter()
         .take(200)
@@ -1827,29 +1847,41 @@ pub struct Missing {
     pub severity: String,
     pub target: String,
     pub host: String,
+    /// the file reports the check as passing (rather than covering the host without the finding)
+    pub passed: bool,
 }
 
-/// Open findings first imported from the same tool, on hosts the file covers, whose fingerprints
-/// are not in the file. Findings without a recorded host (imported before schema 15) and source-code
-/// findings (no host) are never listed: their absence proves nothing.
+/// Open findings first imported from the same tool whose fingerprints are not in the file, on
+/// hosts the file covers, or whose checks the file reports as passing (OCSF). Without such proof
+/// a finding is never listed: findings without a recorded host (imported before schema 15) and
+/// source-code findings (no host), or any finding of a file that was not read completely, prove
+/// nothing by their absence.
 pub fn not_reported(c: &Connection, project_id: i64, parsed: &Parsed) -> AppResult<Vec<Missing>> {
-    if parsed.incomplete || parsed.no_absence {
-        return Ok(Vec::new());
-    }
-    let covered = covered_hosts(parsed);
-    if covered.is_empty() {
+    let covered = if parsed.incomplete || parsed.no_absence { BTreeSet::new() } else { covered_hosts(parsed) };
+    if covered.is_empty() && parsed.passed.is_empty() {
         return Ok(Vec::new());
     }
     let present: BTreeSet<&str> = parsed.findings.iter().map(|f| f.fingerprint.as_str()).collect();
     let mut stmt = c.prepare(&format!(
         "SELECT x.fingerprint, x.host, f.id, f.title, f.severity, f.affected_target FROM finding_fingerprints x JOIN findings f ON f.id = x.finding_id
-         WHERE x.project_id = ?1 AND x.tool = ?2 AND x.host <> '' AND f.status IN {} ORDER BY f.id",
+         WHERE x.project_id = ?1 AND x.tool = ?2 AND f.status IN {} ORDER BY f.id",
         lifecycle::OPEN_SQL
     ))?;
     let rows = stmt
-        .query_map(params![project_id, parsed.tool], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, Missing { finding_id: r.get(2)?, title: r.get(3)?, severity: r.get(4)?, target: r.get(5)?, host: r.get(1)? })))?
+        .query_map(params![project_id, parsed.tool], |r| Ok((r.get::<_, String>(0)?, Missing { finding_id: r.get(2)?, title: r.get(3)?, severity: r.get(4)?, target: r.get(5)?, host: r.get(1)?, passed: false })))?
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(rows.into_iter().filter(|(fp, host, _)| covered.contains(&host.to_lowercase()) && !present.contains(fp.as_str())).map(|(_, _, m)| m).collect())
+    Ok(rows
+        .into_iter()
+        .filter(|(fp, _)| !present.contains(fp.as_str()))
+        .filter_map(|(fp, mut m)| {
+            if parsed.passed.contains(&fp) {
+                m.passed = true;
+                Some(m)
+            } else {
+                (!m.host.is_empty() && covered.contains(&m.host.to_lowercase())).then_some(m)
+            }
+        })
+        .collect())
 }
 
 fn count_new_assets(c: &Connection, project_id: i64, items: &[AssetItem], entries: &[ScopeEntry]) -> AppResult<usize> {
@@ -2030,11 +2062,16 @@ pub fn import(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options, f
             }
         }
         for m in &missing {
+            let what = if m.passed { format!("the check passes for {} in the {source_note}", trunc(&m.target, 200)) } else { format!("not reported again for {} by the {source_note}", m.host) };
             if opts.resolve_missing {
-                lifecycle::set_status(c, m.finding_id, "resolved", &format!("Verified by rescan: not reported again for {} by the {source_note}", m.host), "import")?;
+                lifecycle::set_status(c, m.finding_id, "resolved", &format!("Verified by rescan: {what}"), "import")?;
                 r.resolved += 1;
             } else {
-                lifecycle::add_note(c, m.finding_id, &format!("Not reported again for {} by the {source_note}", m.host), "import")?;
+                let mut note = what;
+                if let Some(first) = note.get_mut(..1) {
+                    first.make_ascii_uppercase();
+                }
+                lifecycle::add_note(c, m.finding_id, &note, "import")?;
             }
             r.not_reported += 1;
         }
