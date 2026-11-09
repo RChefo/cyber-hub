@@ -163,7 +163,17 @@ Projects → *Findings* provides:
   * Content: per finding, the description, reproduction, technical details, remediation and evidence, including the SHA-256 of linked files.
   * Output: *Print or save as PDF* uses the system web view's print dialog (decision 3; no PDF library). *Save as HTML* writes the file through a native save dialog. *Keep a copy in the evidence* stores the HTML as text evidence.
   * Safety: the backend escapes all content, and the document has its own Content-Security-Policy (`default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'`). The print frame may not run scripts.
-  * Exports, prints and saved copies appear on the timeline (`report`). The Markdown report (header button, MCP, the workflow `save_report` step) follows the HTML report's defaults: it lists open findings only and counts the closed ones (resolved, accepted risk, false positive), and it leaves out the project's internal notes. Its exports and workflow copies also appear on the timeline.
+  * Exports, prints and saved copies appear on the timeline (`report`). The Markdown report (header button, MCP, the workflow `save_report` step) and the HTML report are built from the same data, with the same sections, order and terms:
+  1. classification, title and engagement details;
+  2. Executive summary: the analyst's summary or the project description, key figures, objectives, methodology, checklist coverage;
+  3. Scope, with the rules of engagement;
+  4. Findings: open findings only, each with its severity, CVSS vector, CVE, texts and evidence (references, and linked records with their SHA-256). Closed findings and findings below the minimum severity are counted, not listed.
+  5. Vulnerabilities;
+  6. Assets;
+  7. Evidence register;
+  8. Timeline (optional).
+
+  Neither format ever includes the project's internal notes or contacts. The Markdown report uses the HTML report's default options. Free text keeps its Markdown formatting, but a `<` that could open HTML outside code is escaped, so imported text cannot become markup in a viewer. Exports and workflow copies appear on the timeline.
 
 ## Scan import (schema 13)
 

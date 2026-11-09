@@ -152,7 +152,9 @@ fn findings_keep_a_validated_cvss_vector_and_its_score() {
         // reports show the score with its vector
         finding_save(c, &FindingInput { id: Some(id), ..input("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H") }, "user")?;
         let html = report::render(c, p, &report::ReportOptions::default(), "2026-11-08")?;
-        assert!(html.contains("CVSS 9.8 (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)"));
+        assert!(html.contains("CVSS: 9.8 (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)"));
+        let md = report::markdown(c, p, &report::ReportOptions::default(), "2026-11-08")?;
+        assert!(md.contains("- **CVSS:** `9.8 (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)`"), "{md}");
         Ok(())
     })
     .unwrap();
