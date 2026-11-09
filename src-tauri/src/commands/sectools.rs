@@ -11,7 +11,7 @@ use crate::commands::activity::log;
 use crate::db::Db;
 use crate::error::{validation, AppError, AppResult};
 use crate::redact::redact_text;
-use crate::sectools::{containers, dns_intel, http, secrets, tls};
+use crate::sectools::{containers, dns_intel, http, logs, pcap, secrets, tls};
 use crate::workspace::{assets, scope_gate};
 
 /// Host and port of a TLS target ("host", "host:port", "[v6]:port" or a URL).
@@ -220,6 +220,78 @@ pub async fn container_scan_pick(app: AppHandle, folder: bool) -> AppResult<Opti
     let root = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string_lossy().to_string());
     let result = tauri::async_runtime::spawn_blocking(move || containers::scan_path(&path)).await.map_err(|e| AppError::Internal(format!("check failed: {e}")))?;
     Ok(Some(ContainerScan { root, result }))
+}
+
+/// A native Open dialog for one file; None when cancelled.
+async fn pick_one(app: &AppHandle, title: &str, filter: (&str, &[&str])) -> Option<std::path::PathBuf> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut d = app.dialog().file().set_title(title).add_filter(filter.0, filter.1).add_filter("All files", &["*"]);
+    if let Some(w) = app.get_webview_window("main") {
+        d = d.set_parent(&w);
+    }
+    d.pick_file(move |f| {
+        let _ = tx.send(f.and_then(|f| f.into_path().ok()));
+    });
+    rx.await.ok().flatten()
+}
+
+fn open_limited(path: &std::path::Path, max: u64) -> AppResult<std::io::BufReader<std::fs::File>> {
+    let meta = std::fs::metadata(path)?;
+    if !meta.is_file() {
+        return Err(validation("Choose a file"));
+    }
+    if meta.len() > max {
+        return Err(validation(format!("The file is larger than {} MB", max / 1024 / 1024)));
+    }
+    Ok(std::io::BufReader::with_capacity(1 << 20, std::fs::File::open(path)?))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureScan {
+    pub file: String,
+    pub report: pcap::Report,
+}
+
+/// Choose a pcap or pcapng file (native dialog) and summarize it locally. None when cancelled.
+#[tauri::command]
+pub async fn pcap_analyze_pick(app: AppHandle) -> AppResult<Option<CaptureScan>> {
+    let Some(path) = pick_one(&app, "Analyze a packet capture", ("Packet captures", &["pcap", "pcapng", "cap", "dmp"])).await else { return Ok(None) };
+    let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let report = tauri::async_runtime::spawn_blocking(move || -> AppResult<pcap::Report> { pcap::analyze(open_limited(&path, pcap::MAX_FILE_BYTES)?).map_err(AppError::Validation) })
+        .await
+        .map_err(|e| AppError::Internal(format!("the analysis failed: {e}")))??;
+    Ok(Some(CaptureScan { file, report }))
+}
+
+/// Triage of pasted log lines.
+#[tauri::command]
+pub async fn log_analyze_text(text: String) -> AppResult<logs::Report> {
+    if text.len() > logs::MAX_TEXT {
+        return Err(validation(format!("Paste at most {} MB; open larger logs as a file", logs::MAX_TEXT / 1024 / 1024)));
+    }
+    tauri::async_runtime::spawn_blocking(move || logs::analyze(std::io::Cursor::new(text)).map_err(AppError::Validation)).await.map_err(|e| AppError::Internal(format!("the analysis failed: {e}")))?
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogScan {
+    pub file: String,
+    pub report: logs::Report,
+}
+
+/// Choose a log file (native dialog) and triage it locally. None when cancelled.
+#[tauri::command]
+pub async fn log_analyze_pick(app: AppHandle) -> AppResult<Option<LogScan>> {
+    let Some(path) = pick_one(&app, "Analyze a log file", ("Logs", &["log", "txt", "1", "gz"])).await else { return Ok(None) };
+    if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("gz")) {
+        return Err(validation("Decompress the log first (compressed logs are not read)"));
+    }
+    let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let report = tauri::async_runtime::spawn_blocking(move || -> AppResult<logs::Report> { logs::analyze(open_limited(&path, logs::MAX_FILE_BYTES)?).map_err(AppError::Validation) })
+        .await
+        .map_err(|e| AppError::Internal(format!("the analysis failed: {e}")))??;
+    Ok(Some(LogScan { file, report }))
 }
 
 /// Choose a file or folder (native dialog) and scan it locally. None when cancelled.

@@ -3,6 +3,8 @@
 
 pub mod dns_intel;
 pub mod http;
+pub mod logs;
+pub mod pcap;
 pub mod containers;
 pub mod secrets;
 pub mod tls;

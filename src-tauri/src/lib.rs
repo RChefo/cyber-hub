@@ -329,6 +329,9 @@ pub fn run() {
             sectool_commands::leak_scan_pick,
             sectool_commands::container_scan_text,
             sectool_commands::container_scan_pick,
+            sectool_commands::pcap_analyze_pick,
+            sectool_commands::log_analyze_text,
+            sectool_commands::log_analyze_pick,
             sectool_commands::services_by_port,
             // tools & execution engine
             tools::tools_catalog,

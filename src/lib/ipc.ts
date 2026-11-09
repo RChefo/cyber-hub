@@ -153,6 +153,10 @@ export const api = {
   // Container and Kubernetes configuration checks (local only)
   containerScanText: (text: string, kind: string) => call<T.ContainerFileReport>("container_scan_text", { text, kind }),
   containerScanPick: (folder: boolean) => call<T.ContainerScan | null>("container_scan_pick", { folder }),
+  // Packet capture and log triage (local only)
+  pcapAnalyzePick: () => call<{ file: string; report: T.CaptureReport } | null>("pcap_analyze_pick"),
+  logAnalyzeText: (text: string) => call<T.LogReport>("log_analyze_text", { text }),
+  logAnalyzePick: () => call<{ file: string; report: T.LogReport } | null>("log_analyze_pick"),
   findingTemplatesList: () => call<T.FindingTemplate[]>("finding_templates_list"),
   findingTemplateSave: (input: T.FindingTemplateInput) => call<T.FindingTemplate>("finding_template_save", { input }),
   findingTemplateDelete: (id: number) => call<void>("finding_template_delete", { id }),

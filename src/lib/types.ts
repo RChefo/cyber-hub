@@ -1621,3 +1621,53 @@ export interface ContainerScan {
   root: string;
   result: ContainerScanResult;
 }
+
+/* ───────── Packet capture and log triage (sectools/pcap.rs, sectools/logs.rs) ───────── */
+
+export interface CaptureIssue {
+  rule: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  title: string;
+  detail: string;
+  remediation: string;
+  evidence: string[];
+}
+
+export interface CaptureReport {
+  format: string;
+  links: string[];
+  packets: number;
+  bytes: number;
+  first: number | null;
+  last: number | null;
+  hosts: { ip: string; packets: number; bytes: number; peers: number }[];
+  conversations: { client: string; server: string; protocol: string; port: number; packets: number; bytes: number }[];
+  dns: { name: string; kind: string; answers: string[]; queries: number }[];
+  http: { method: string; host: string; path: string; userAgent: string; server: string; count: number }[];
+  tls: { name: string; server: string; count: number }[];
+  credentials: { protocol: string; client: string; server: string; user: string; secretLength: number }[];
+  issues: CaptureIssue[];
+  undecoded: number;
+  warnings: string[];
+}
+
+export interface LogDetection {
+  rule: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  title: string;
+  detail: string;
+  remediation: string;
+  count: number;
+  sources: { ip: string; count: number; examples: string[] }[];
+}
+
+export interface LogReport {
+  kind: "web" | "ssh" | "mixed" | "unknown";
+  lines: number;
+  recognised: number;
+  first: string;
+  last: string;
+  clients: { ip: string; requests: number; clientErrors: number; serverErrors: number; sshFailures: number; sshLogins: number }[];
+  detections: LogDetection[];
+  warnings: string[];
+}
