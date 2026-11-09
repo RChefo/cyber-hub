@@ -266,6 +266,8 @@ pub fn run() {
             apisec_commands::api_spec_get,
             apisec_commands::api_spec_delete,
             apisec_commands::api_issue_record,
+            apisec_commands::api_spec_compare,
+            apisec_commands::api_compare_record,
             sbom_commands::sbom_import,
             sbom_commands::sboms_list,
             sbom_commands::sbom_get,

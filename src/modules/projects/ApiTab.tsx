@@ -10,9 +10,9 @@ import { Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
 import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { ApiIssue, ApiSpecSummary, ApiSpecView, Project } from "@/lib/types";
+import type { ApiIssue, ApiRecordedIssue, ApiSpecSummary, ApiSpecView, Project } from "@/lib/types";
 import { cn, formatRelative } from "@/lib/utils";
-import { API_FORMAT_LABEL, METHOD_TONE, authLabel, builderParams, filterEndpoints, issueSummary, type EndpointView } from "./apisec";
+import { API_FORMAT_LABEL, METHOD_TONE, authLabel, builderParams, compareSummary, filterEndpoints, issueSummary, type EndpointView } from "./apisec";
 
 const ENDPOINTS_SHOWN = 300;
 
@@ -108,6 +108,7 @@ export function ApiTab({ project, onOpenFindings }: { project: Project; onOpenFi
           </ul>
         )}
       </Panel>
+      {list.length >= 2 && <Compare list={list} onOpenFindings={onOpenFindings} />}
       {current && <SpecDetail key={current.id} id={current.id} projectId={project.id} onOpenFindings={onOpenFindings} />}
       {confirm.element}
     </div>
@@ -137,7 +138,7 @@ function SpecDetail({ id, projectId, onOpenFindings }: { id: number; projectId: 
         ) : (
           <ul className="flex flex-col gap-2">
             {issues.map((i) => (
-              <IssueRow key={i.id} issue={i} specId={id} recorded={v.recorded[i.id]} onOpenFindings={onOpenFindings} />
+              <IssueRow key={i.id} issue={i} recordWith={() => api.apiIssueRecord(id, i.id)} recorded={v.recorded[i.id]} onOpenFindings={onOpenFindings} />
             ))}
           </ul>
         )}
@@ -146,7 +147,7 @@ function SpecDetail({ id, projectId, onOpenFindings }: { id: number; projectId: 
         <Panel title="Test plan" description="Endpoints worth testing for flaws that no definition can show. Record a finding when a test shows one.">
           <ul className="flex flex-col gap-2">
             {tests.map((i) => (
-              <IssueRow key={i.id} issue={i} specId={id} onOpenFindings={onOpenFindings} />
+              <IssueRow key={i.id} issue={i} recordWith={() => api.apiIssueRecord(id, i.id)} onOpenFindings={onOpenFindings} />
             ))}
           </ul>
         </Panel>
@@ -156,14 +157,86 @@ function SpecDetail({ id, projectId, onOpenFindings }: { id: number; projectId: 
   );
 }
 
-function IssueRow({ issue, specId, recorded, onOpenFindings }: { issue: ApiIssue; specId: number; recorded?: number; onOpenFindings: () => void }) {
+/** Two imports of the API compared: the older and the newer one, by default the last two. */
+function Compare({ list, onOpenFindings }: { list: ApiSpecSummary[]; onOpenFindings: () => void }) {
+  const { runtime } = useApp();
+  const options = list.map((s) => ({ id: String(s.id), label: `${s.title || s.name}${s.version ? ` ${s.version}` : ""} · ${formatRelative(s.importedAt)}` }));
+  const [older, setOlder] = useState<string | null>(String(list[1].id));
+  const [newer, setNewer] = useState<string | null>(String(list[0].id));
+  const ready = !!older && !!newer && older !== newer;
+  const q = useQuery(["apis", "findings"], () => api.apiSpecCompare(Number(older), Number(newer)), [older, newer], runtime && ready);
+  const v = ready ? q.data : undefined;
+  const c = v?.comparison;
+  return (
+    <Panel title="Compare definitions" description="What changed between two imports of the API: endpoints added, removed and changed, and the changes that matter for security. Endpoints match by method and path; renamed path parameters do not count as changes.">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <SelectInput label="Older" value={older} onChange={setOlder} options={options} className="w-72" />
+          <SelectInput label="Newer" value={newer} onChange={setNewer} options={options} className="w-72" />
+        </div>
+        {!ready ? (
+          <p className="text-[12.5px] text-muted">Choose two different definitions.</p>
+        ) : q.error ? (
+          <ErrorBlock message={q.error} onRetry={q.reload} />
+        ) : !c || !v ? (
+          <LoadingRows rows={2} />
+        ) : (
+          <>
+            <p className="text-[13px]">
+              {compareSummary(c)}
+              {c.serversAdded.length > 0 && <span className="text-muted"> · servers added: {c.serversAdded.join(", ")}</span>}
+              {c.serversRemoved.length > 0 && <span className="text-muted"> · servers removed: {c.serversRemoved.join(", ")}</span>}
+            </p>
+            {c.issues.length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {c.issues.map((i) => (
+                  <IssueRow key={i.id} issue={i} recordWith={() => api.apiCompareRecord(v.old.id, v.new.id, i.id)} recorded={v.recorded[i.id]} onOpenFindings={onOpenFindings} />
+                ))}
+              </ul>
+            )}
+            {c.changed.length > 0 && (
+              <section className="flex flex-col gap-1">
+                <h3 className="text-[13.5px] font-medium">Changed endpoints ({c.changed.length})</h3>
+                <ul className="flex flex-col gap-1">
+                  {c.changed.map((ch) => (
+                    <li key={ch.endpoint} className="tile px-3 py-1.5 text-[12.5px]">
+                      <span className="font-mono">{ch.endpoint}</span>
+                      <span className="text-muted"> · {ch.details.join(" · ")}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {(
+              [
+                ["Added endpoints", c.added],
+                ["Removed endpoints", c.removed],
+              ] as const
+            )
+              .filter(([, items]) => items.length > 0)
+              .map(([title, items]) => (
+                <section key={title} className="flex flex-col gap-1">
+                  <h3 className="text-[13.5px] font-medium">
+                    {title} ({items.length})
+                  </h3>
+                  <p className="font-mono text-[12px] break-all text-muted">{items.join(" · ")}</p>
+                </section>
+              ))}
+          </>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function IssueRow({ issue, recordWith, recorded, onOpenFindings }: { issue: ApiIssue; recordWith: () => Promise<ApiRecordedIssue>; recorded?: number; onOpenFindings: () => void }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const shown = open ? issue.endpoints : issue.endpoints.slice(0, 5);
   const record = async () => {
     setBusy(true);
     try {
-      const r = await api.apiIssueRecord(specId, issue.id);
+      const r = await recordWith();
       invalidate("findings", "apis", "activity");
       notify.success(r.created ? "Finding recorded" : "Already recorded", `Finding #${r.findingId}: ${issue.title}`);
     } catch (e) {

@@ -1447,6 +1447,30 @@ export interface ApiSpec {
   warnings: string[];
 }
 
+export interface ApiChange {
+  /** "POST /users" in the newer definition */
+  endpoint: string;
+  details: string[];
+}
+
+export interface ApiComparison {
+  added: string[];
+  removed: string[];
+  changed: ApiChange[];
+  unchanged: number;
+  serversAdded: string[];
+  serversRemoved: string[];
+  issues: ApiIssue[];
+}
+
+export interface ApiCompareView {
+  old: ApiSpecSummary;
+  new: ApiSpecSummary;
+  comparison: ApiComparison;
+  /** issue id → finding id */
+  recorded: Record<string, number>;
+}
+
 export interface ApiIssue {
   id: string;
   rule: string;

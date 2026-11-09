@@ -111,6 +111,73 @@ pub(crate) fn record_issue(c: &Connection, spec_id: i64, issue_id: &str) -> AppR
     Ok(RecordedIssue { finding_id, created: true })
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiCompareView {
+    pub old: SpecSummary,
+    pub new: SpecSummary,
+    pub comparison: apisec::compare::Comparison,
+    /// issue id → finding id, for the issues already recorded
+    pub recorded: BTreeMap<String, i64>,
+}
+
+/// Two definitions of the project, the older first.
+fn compared(c: &Connection, old_id: i64, new_id: i64) -> AppResult<(SpecSummary, SpecSummary, apisec::ApiSpec, apisec::compare::Comparison)> {
+    if old_id == new_id {
+        return Err(validation("Choose two different definitions"));
+    }
+    let (old, old_spec) = apisec::get(c, old_id)?;
+    let (new, new_spec) = apisec::get(c, new_id)?;
+    if old.project_id != new.project_id {
+        return Err(validation("Both definitions must belong to the same project"));
+    }
+    let name = format!("{} (imported {})", old.name, old.imported_at.get(..10).unwrap_or(&old.imported_at));
+    let comparison = apisec::compare::compare(&old_spec, &new_spec, &name);
+    Ok((old, new, new_spec, comparison))
+}
+
+pub(crate) fn compare_view(c: &Connection, old_id: i64, new_id: i64) -> AppResult<ApiCompareView> {
+    let (old, new, new_spec, comparison) = compared(c, old_id, new_id)?;
+    let mut recorded = BTreeMap::new();
+    for i in comparison.issues.iter().filter(|i| i.kind == "issue") {
+        if let Some(fid) = recorded_finding(c, &apisec::finding_for(&new, &new_spec, i))? {
+            recorded.insert(i.id.clone(), fid);
+        }
+    }
+    Ok(ApiCompareView { old, new, comparison, recorded })
+}
+
+/// Compares two definitions of the project: endpoints added, removed and changed.
+#[tauri::command]
+pub async fn api_spec_compare(db: State<'_, Db>, old_id: i64, new_id: i64) -> AppResult<ApiCompareView> {
+    db.with(|c| compare_view(c, old_id, new_id))
+}
+
+/// Records an issue of a comparison as a finding, once, against the newer definition.
+pub(crate) fn record_compared(c: &Connection, old_id: i64, new_id: i64, issue_id: &str) -> AppResult<RecordedIssue> {
+    let (_, new, new_spec, comparison) = compared(c, old_id, new_id)?;
+    let issue = comparison.issues.into_iter().find(|i| i.id == issue_id).ok_or_else(|| AppError::NotFound(format!("issue {issue_id}")))?;
+    if issue.kind != "issue" {
+        return Err(validation("A test is a list of endpoints to test, not a finding. Record a finding when a test shows a flaw."));
+    }
+    let input = apisec::finding_for(&new, &new_spec, &issue);
+    if let Some(finding_id) = recorded_finding(c, &input)? {
+        return Ok(RecordedIssue { finding_id, created: false });
+    }
+    let tx = c.unchecked_transaction()?;
+    let finding_id = crate::commands::projects::finding_write(&tx, &input, "api", true)?;
+    if let Some(ev) = new.evidence_id {
+        findings::link(&tx, finding_id, "evidence", ev, "api")?;
+    }
+    tx.commit()?;
+    Ok(RecordedIssue { finding_id, created: true })
+}
+
+#[tauri::command]
+pub async fn api_compare_record(db: State<'_, Db>, old_id: i64, new_id: i64, issue_id: String) -> AppResult<RecordedIssue> {
+    db.with(|c| record_compared(c, old_id, new_id, &issue_id))
+}
+
 /// Choose a file (native dialog) and add it to the project's API inventory. The file is kept in
 /// the evidence vault. None when the dialog is cancelled.
 #[tauri::command]
@@ -241,6 +308,40 @@ mod tests {
             assert_eq!(view(c, id)?.recorded.get(&issue), Some(&first.finding_id));
             let test = v.issues.iter().find(|i| i.kind == "test").unwrap().id.clone();
             assert!(record_issue(c, id, &test).is_err(), "tests are not findings");
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn comparisons_record_their_issues_once_and_refuse_tests() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            c.execute("INSERT INTO projects (name, status, created_at, updated_at) VALUES ('Shop', 'active', '2026-11-09T00:00:00Z', '2026-11-09T00:00:00Z')", [])?;
+            let pid = c.last_insert_rowid();
+            let v1 = apisec::parse(r#"{"openapi":"3.0.3","info":{"title":"Shop","version":"1"},"servers":[{"url":"https://api.shop.example"}],
+                "components":{"securitySchemes":{"key":{"type":"apiKey","in":"header","name":"X-Key"}}},"security":[{"key":[]}],
+                "paths":{"/orders":{"get":{"responses":{"200":{"description":"ok"}}}}}}"#).unwrap();
+            let v2 = apisec::parse(r#"{"openapi":"3.0.3","info":{"title":"Shop","version":"2"},"servers":[{"url":"https://api.shop.example"}],
+                "components":{"securitySchemes":{"key":{"type":"apiKey","in":"header","name":"X-Key"}}},"security":[{"key":[]}],
+                "paths":{"/orders":{"get":{"security":[],"responses":{"200":{"description":"ok"}}}},"/reports":{"get":{"responses":{"200":{"description":"ok"}}}}}}"#).unwrap();
+            let a = apisec::store(c, pid, "shop-v1.json", "a1", None, &v1)?;
+            let b = apisec::store(c, pid, "shop-v2.json", "b2", None, &v2)?;
+            assert!(compare_view(c, a, a).is_err(), "a definition is not compared with itself");
+            let view = compare_view(c, a, b)?;
+            assert_eq!((view.comparison.added.clone(), view.comparison.changed.len()), (vec!["GET /reports".to_string()], 1));
+            assert!(view.recorded.is_empty());
+            let lost = view.comparison.issues.iter().find(|i| i.rule == "CMP-AUTH-REMOVED").unwrap().id.clone();
+            let first = record_compared(c, a, b, &lost)?;
+            assert!(first.created);
+            let again = record_compared(c, a, b, &lost)?;
+            assert_eq!((again.finding_id, again.created), (first.finding_id, false), "recorded once");
+            let f = crate::commands::projects::finding_get(c, first.finding_id)?;
+            assert_eq!((f.severity.as_str(), f.affected_target.as_str()), ("high", "https://api.shop.example/orders"));
+            assert!(f.description.starts_with("Compared with shop-v1.json (imported"), "{}", f.description);
+            assert_eq!(compare_view(c, a, b)?.recorded.get(&lost), Some(&first.finding_id), "the view knows it is recorded");
+            let test = view.comparison.issues.iter().find(|i| i.kind == "test").unwrap().id.clone();
+            assert!(record_compared(c, a, b, &test).is_err(), "a test is not a finding");
             Ok(())
         })
         .unwrap();

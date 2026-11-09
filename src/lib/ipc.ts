@@ -143,6 +143,8 @@ export const api = {
   apiSpecGet: (id: number) => call<T.ApiSpecView>("api_spec_get", { id }),
   apiSpecDelete: (id: number) => call<void>("api_spec_delete", { id }),
   apiIssueRecord: (specId: number, issueId: string) => call<T.ApiRecordedIssue>("api_issue_record", { specId, issueId }),
+  apiSpecCompare: (oldId: number, newId: number) => call<T.ApiCompareView>("api_spec_compare", { oldId, newId }),
+  apiCompareRecord: (oldId: number, newId: number, issueId: string) => call<T.ApiRecordedIssue>("api_compare_record", { oldId, newId, issueId }),
   // SBOM analysis: reading contacts nothing; sbomCheck asks OSV.dev with package URLs only
   sbomImport: (projectId: number) => call<T.SbomSummary | null>("sbom_import", { projectId }),
   sbomsList: (projectId: number) => call<T.SbomSummary[]>("sboms_list", { projectId }),

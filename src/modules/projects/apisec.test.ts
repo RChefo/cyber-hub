@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ApiEndpoint, ApiEndpointScope } from "@/lib/types";
-import { authLabel, builderParams, filterEndpoints, issueSummary } from "./apisec";
+import { compareSummary, authLabel, builderParams, filterEndpoints, issueSummary } from "./apisec";
 
 const ep = (method: string, path: string, extra: Partial<ApiEndpoint> = {}): ApiEndpoint => ({
   method,
@@ -56,3 +56,10 @@ describe("API inventory helpers", () => {
     expect(issueSummary({ issues: [0, 0, 0, 0, 0] })).toBe("no issues");
   });
 });
+
+describe("comparison summary", () => {
+  it("counts every kind of change", () => {
+    expect(compareSummary({ added: ["GET /a", "POST /b"], removed: ["GET /old"], changed: [{ endpoint: "GET /orders", details: ["authentication removed (was bearer)"] }], unchanged: 12 })).toBe("2 added · 1 removed · 1 changed · 12 unchanged");
+  });
+});
+

@@ -1,4 +1,4 @@
-import type { ApiEndpoint, ApiEndpointScope, ApiSpecSummary } from "@/lib/types";
+import type { ApiComparison, ApiEndpoint, ApiEndpointScope, ApiSpecSummary } from "@/lib/types";
 import type { Tone } from "@/components/ui/Badges";
 
 export const API_FORMAT_LABEL: Record<string, string> = {
@@ -50,6 +50,11 @@ export function builderParams(projectId: number, method: string, url: string): R
 }
 
 /** "2 high, 3 medium" from a summary's issue counts; "no issues" when there are none. */
+/** "2 added · 1 removed · 3 changed · 12 unchanged" */
+export function compareSummary(c: Pick<ApiComparison, "added" | "removed" | "changed" | "unchanged">): string {
+  return [`${c.added.length} added`, `${c.removed.length} removed`, `${c.changed.length} changed`, `${c.unchanged} unchanged`].join(" · ");
+}
+
 export function issueSummary(s: Pick<ApiSpecSummary, "issues">): string {
   const names = ["critical", "high", "medium", "low", "info"];
   const parts = s.issues.map((n, i) => (n > 0 ? `${n} ${names[i]}` : "")).filter(Boolean);

@@ -1321,6 +1321,9 @@ pub fn finding_for(summary: &SpecSummary, spec: &ApiSpec, issue: &Issue) -> crat
     }
 }
 
+#[path = "apisec_compare.rs"]
+pub mod compare;
+
 #[cfg(test)]
 #[path = "apisec_tests.rs"]
 mod tests;
