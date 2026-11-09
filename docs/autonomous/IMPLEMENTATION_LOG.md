@@ -891,7 +891,7 @@ The owner's brief asked for research-driven new capabilities in seven tracks (we
 * The tests found that packages moved to a URL source lost their ecosystem and could not be matched; they now match by name. The real-app check showed that "0 new, 0 gone" read as an all-clear when nothing was looked up; the panel now names the data it compared.
 * 4 Rust tests and 1 frontend test; the real app 17/17.
 
-## 19:46–20:05Z: final checks
+## 19:46–19:55Z: final checks
 
 * Several lockfile formats are read line by line by Cyber Hub's own code, and the lockfile and IaC readers had no test with cut input, as every other parser has; one was added for each (`a7b0368`). Both passed without a change.
 * Windows: 459 Rust tests (6 ignored), `cargo clippy --all-targets -- -D warnings` and tsc clean, 258 frontend tests in 45 files, cargo audit 0 vulnerabilities in 640 crates (8 allowed warnings), npm audit 0, gitleaks over the mission's commits clean; `cargo +1.90.0 check --locked --all-targets` passes.

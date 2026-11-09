@@ -554,7 +554,7 @@ The owner's brief asked for new capabilities chosen from research in seven track
 
 | Item | Value |
 |---|---|
-| Time | 2026-11-09T16:31:14Z–20:05Z (about 3 h 35 min) |
+| Time | 2026-11-09T16:31:14Z–19:55Z (about 3 h 24 min) |
 | Commits | 12: the research and ranking (`c3a79c1`), ten capabilities and a parser robustness test (`a7b0368`), plus this report |
 | Schema | unchanged (21); no migration |
 | Tests | Rust 405 → 459 (3 → 6 ignored); frontend 243 → 258 (41 → 45 files) |
