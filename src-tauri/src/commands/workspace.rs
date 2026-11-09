@@ -37,7 +37,20 @@ pub async fn asset_add(db: State<'_, Db>, mut input: assets::AssetInput) -> AppR
 
 #[tauri::command]
 pub async fn asset_set_status(db: State<'_, Db>, id: i64, status: String) -> AppResult<assets::Asset> {
-    db.with(|c| assets::set_status(c, id, &status))
+    db.with(|c| set_asset_status(c, id, &status))
+}
+
+/// Changes an asset's status (active, not observed, retired); a change is on the project timeline.
+fn set_asset_status(c: &rusqlite::Connection, id: i64, status: &str) -> AppResult<assets::Asset> {
+    assets::with_savepoint(c, || {
+        let before = assets::get(c, id)?;
+        let a = assets::set_status(c, id, status)?;
+        if before.status != a.status {
+            let title = format!("Asset {}: {} → {}", a.value, before.status.replace('_', " "), a.status.replace('_', " "));
+            timeline::record(c, a.project_id, "asset", &title, &a.kind, Some("asset"), Some(a.id))?;
+        }
+        Ok(a)
+    })
 }
 
 #[tauri::command]
@@ -704,4 +717,25 @@ pub fn database_restore_cancel(app: AppHandle) -> AppResult<bool> {
         let _ = app.state::<Db>().with(|c| crate::commands::activity::log(c, "restore", "Database restore cancelled", "", None, None, None));
     }
     Ok(cancelled)
+}
+
+#[cfg(test)]
+mod asset_status_tests {
+    use super::*;
+
+    #[test]
+    fn asset_status_changes_are_on_the_timeline() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'P', 'active', 't', 't')", [])?;
+            c.execute("INSERT INTO assets (id, project_id, type, value, key, source, first_seen, last_seen, created_at, updated_at) VALUES (1, 1, 'ip', '10.0.0.5', '10.0.0.5', 'manual', 't', 't', 't', 't')", [])?;
+            set_asset_status(c, 1, "retired")?;
+            set_asset_status(c, 1, "retired")?;
+            let titles: Vec<String> = c.prepare("SELECT title FROM timeline_events WHERE project_id = 1 AND type = 'asset'")?.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
+            assert_eq!(titles, vec!["Asset 10.0.0.5: active → retired".to_string()], "an unchanged status records nothing");
+            assert!(set_asset_status(c, 1, "gone").is_err());
+            Ok(())
+        })
+        .unwrap();
+    }
 }

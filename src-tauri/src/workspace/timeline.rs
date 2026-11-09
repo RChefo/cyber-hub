@@ -9,7 +9,7 @@ use serde::Serialize;
 use crate::error::{validation, AppResult};
 use crate::util::now;
 
-pub const TYPES: &[&str] = &["execution", "finding", "vulnerability", "scope", "evidence", "investigation", "discovery", "asset", "workflow", "remediation", "report", "note"];
+pub const TYPES: &[&str] = &["execution", "finding", "vulnerability", "scope", "evidence", "investigation", "discovery", "asset", "workflow", "remediation", "report", "note", "utility"];
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]

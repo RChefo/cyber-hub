@@ -323,7 +323,7 @@ References are never duplicated: there are unique indexes per project for the fi
 
 ## Timeline
 
-`project_timeline` is a query, not a copy. It merges `timeline_events` with tool runs, finding history, scope history, evidence, events of linked OSINT investigations and discovery snapshots. Results are newest first, can be filtered by type (`execution`, `finding`, `scope`, `evidence`, `investigation`, `discovery`, `asset`, `workflow`, `remediation`, `report`, `note`), and are paged by time (`before`).
+`project_timeline` is a query, not a copy. It merges `timeline_events` with tool runs, finding history, scope history, evidence, events of linked OSINT investigations and discovery snapshots. Results are newest first, can be filtered by type (`execution`, `finding`, `vulnerability`, `scope`, `evidence`, `investigation`, `discovery`, `asset`, `workflow`, `remediation`, `report`, `note`, `utility`), and are paged with each event's `cursor` (time, source and row, so events of the same second are never skipped; a plain time is still accepted as `before`). `utility` events are HTTP requests (URL without its query, status, redirects) and TLS analyses sent from the assessment utilities. Asset status changes and project status changes (`note`) are recorded too.
 
 ## Migration 9
 

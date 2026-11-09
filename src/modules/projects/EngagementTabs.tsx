@@ -302,6 +302,7 @@ const TYPE_LABEL: Record<TimelineEventType, string> = {
   remediation: "Remediation",
   report: "Reports",
   note: "Notes",
+  utility: "Utilities",
 };
 
 export function TimelineTab({ project }: { project: Project }) {

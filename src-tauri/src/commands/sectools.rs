@@ -71,7 +71,9 @@ pub async fn tls_analyze(db: State<'_, Db>, project_id: i64, target: String, por
             };
             assets::upsert_observation(c, &input, None)?;
         }
-        log(c, "utility", "TLS analysis", &format!("{host}:{port} ({})", report.protocol.clone().unwrap_or_default()), Some("project"), Some(&project_id.to_string()), Some(project_id))
+        let protocol = report.protocol.clone().unwrap_or_default();
+        crate::workspace::timeline::record(c, project_id, "utility", &format!("TLS analysis: {host}:{port}"), &protocol, None, None)?;
+        log(c, "utility", "TLS analysis", &format!("{host}:{port} ({protocol})"), Some("project"), Some(&project_id.to_string()), Some(project_id))
     })?;
     Ok(report)
 }
@@ -114,6 +116,8 @@ pub(crate) async fn send_checked(db: &Db, input: http::HttpRequestInput) -> AppR
     db.with(|c| scope_gate::enforce(c, Some(input.project_id), &current.targets, scope_gate::Mode::Active, "HTTP request").map(|_| ()))?;
     let mut pin = vetted_pin(db, input.project_id, &current.url, "HTTP request").await?;
     let first = format!("{} {}", current.method, redact_text(current.url.as_str()));
+    // the project timeline shows the URL without its query
+    let shown = format!("{} {}", current.method, http::label(&current.url));
     let mut body = input.body.clone();
     let mut hops: Vec<http::RedirectHop> = Vec::new();
     loop {
@@ -150,7 +154,10 @@ pub(crate) async fn send_checked(db: &Db, input: http::HttpRequestInput) -> AppR
         }
         out.redirects = hops;
         let chain = if out.redirects.is_empty() { String::new() } else { format!(" after {}", crate::workspace::discovery::plural(out.redirects.len(), "redirect", "redirects")) };
-        db.with(|c| log(c, "utility", "HTTP request", &format!("{first} → {}{chain}", out.status), Some("project"), Some(&input.project_id.to_string()), Some(input.project_id)))?;
+        db.with(|c| {
+            crate::workspace::timeline::record(c, input.project_id, "utility", &format!("HTTP request: {shown} → {}{chain}", out.status), out.redirect_stopped.as_deref().unwrap_or(""), None, None)?;
+            log(c, "utility", "HTTP request", &format!("{first} → {}{chain}", out.status), Some("project"), Some(&input.project_id.to_string()), Some(input.project_id))
+        })?;
         return Ok(out);
     }
 }
@@ -334,6 +341,11 @@ secret".to_string()
         assert_eq!(admin.load(std::sync::atomic::Ordering::SeqCst), 0, "the refused URL was never requested");
         let blocked: i64 = db.with(|c| Ok(c.query_row("SELECT COUNT(*) FROM scope_events WHERE action = 'blocked' AND source = 'HTTP redirect'", [], |r| r.get(0))?)).unwrap();
         assert_eq!(blocked, 1, "the refused redirect is in the scope history");
+        // requests sent to the target are on the project timeline, without their query
+        let sent: Vec<(String, String)> = db
+            .with(|c| Ok(c.prepare("SELECT title, detail FROM timeline_events WHERE type = 'utility' ORDER BY id")?.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<Vec<_>, _>>()?))
+            .unwrap();
+        assert!(sent.iter().any(|(t, d)| t.starts_with("HTTP request: GET http://127.0.0.1:") && t.contains("→ 302 after 1 redirect") && d.contains("was not followed")), "{sent:?}");
     }
 
     #[test]

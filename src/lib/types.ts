@@ -498,7 +498,8 @@ export type TimelineEventType =
   | "workflow"
   | "remediation"
   | "report"
-  | "note";
+  | "note"
+  | "utility";
 
 export interface TimelineEvent {
   type: TimelineEventType;
