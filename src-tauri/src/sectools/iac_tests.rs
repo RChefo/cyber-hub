@@ -317,3 +317,13 @@ fn folders_are_scanned_for_cloud_configuration() {
     assert_eq!(rules(&res.files[1]), vec!["AWS-SG-ADMIN-OPEN"]);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn cut_or_multibyte_configurations_never_panic() {
+    // with panic = "abort" a parser panic would end the app
+    for (name, text) in [("main.tf", MAIN_TF.replace("bucket", "bücket")), ("stack.yaml", TEMPLATE.replace("Bucket", "Bückét"))] {
+        for (i, _) in text.char_indices().step_by(3) {
+            let _ = analyze(name, &text[..i], "auto");
+        }
+    }
+}

@@ -229,3 +229,25 @@ fn the_repository_lockfiles_parse() {
         assert!(n.components.iter().any(|x| x.dev));
     }
 }
+
+#[test]
+fn cut_or_multibyte_lockfiles_never_panic() {
+    // with panic = "abort" a parser panic would end the app; several formats are read line by line
+    let files: &[(&str, &str)] = &[
+        ("yarn.lock", "# yarn lockfile v1\n\n\"@b/é@^7\", \"@b/é@^7.1\":\n  version \"7.12.13\"\n  resolved \"https://registry.yarnpkg.com/@b/é/-/é-7.12.13.tgz#dad\"\n  integrity sha512-日本==\n"),
+        ("yarn.lock", "__metadata:\n  version: 6\n\n\"日本@npm:^4\":\n  version: 4.17.21\n  resolution: \"日本@npm:4.17.21\"\n  checksum: eb83\n"),
+        ("pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .:\n    dependencies:\n      é:\n        specifier: ^1\n        version: 1.0.0\npackages:\n  é@1.0.0:\n    resolution: {integrity: sha512-日本}\n"),
+        ("requirements.txt", "--extra-index-url https://ä.example/simple\nDjängo==3.2.0 \\n    --hash=sha256:日本\nmylib @ https://é.example/x.tar.gz\n"),
+        ("Gemfile.lock", "GEM\n  remote: https://rubygems.org/\n  specs:\n    nökogiri (1.13.10-x86_64-linux)\n      racc (~> 1.4)\n\nDEPENDENCIES\n  nökogiri\n"),
+        ("go.mod", "module example.com/日本\n\nrequire (\n\tgithub.com/é/gin v1.9.0 // indirect\n)\nreplace github.com/é/gin => ../é\n"),
+        ("gradle.lockfile", "com.é:jäckson:2.13.0=compileClasspath\n日本=annotationProcessor\n"),
+        ("Cargo.lock", "version = 4\n\n[[package]]\nname = \"sérde\"\nversion = \"1.0.200\"\nsource = \"registry+https://github.com/rust-lang/crates.io-index\"\n"),
+        ("package-lock.json", "{\"name\":\"日本\",\"lockfileVersion\":3,\"packages\":{\"\":{\"name\":\"日本\"},\"node_modules/é\":{\"version\":\"1.0.0\",\"resolved\":\"https://registry.npmjs.org/é/-/é-1.0.0.tgz\"}}}"),
+    ];
+    for (name, text) in files {
+        assert!(parse(name, text).is_some_and(|r| r.is_ok()), "{name} reads whole");
+        for (i, _) in text.char_indices() {
+            let _ = parse(name, &text[..i]);
+        }
+    }
+}
