@@ -179,7 +179,7 @@ Projects → *Findings* provides:
   4. Findings: open findings only, each with its severity, CVSS vector, CVE, texts and evidence (references, and linked records with their SHA-256). Closed findings and findings below the minimum severity are counted, not listed.
   5. Vulnerabilities;
   6. Assets;
-  7. Evidence register;
+  7. Evidence register (with each record's source: module, tool and version, collection time, the record it was derived from);
   8. Timeline (optional).
 
   Neither format ever includes the project's internal notes or contacts. The Markdown report uses the HTML report's default options. Free text keeps its Markdown formatting, but a `<` that could open HTML outside code is escaped, so imported text cannot become markup in a viewer. Exports and workflow copies appear on the timeline.

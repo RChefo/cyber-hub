@@ -270,7 +270,20 @@ fn collect(c: &Connection, project_id: i64, o: &ReportOptions, today: &str) -> A
     let evidence = if o.include_evidence {
         crate::workspace::evidence::list(c, project_id)?
             .into_iter()
-            .map(|e| vec![e.id.to_string(), e.title, e.kind, e.sha256.unwrap_or_default(), e.created_at.chars().take(10).collect()])
+            .map(|e| {
+                // where the record came from: module, tool and version, when the source collected it
+                let source = [
+                    (!e.source_module.is_empty()).then(|| e.source_module.replace('_', " ")),
+                    (!e.tool.is_empty()).then(|| if e.tool_version.is_empty() { e.tool.clone() } else { format!("{} {}", e.tool, e.tool_version) }),
+                    e.collected_at.as_ref().map(|t| format!("collected {}", t.chars().take(10).collect::<String>())),
+                    e.derived_from.map(|d| format!("derived from #{d}")),
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(", ");
+                vec![e.id.to_string(), e.title, e.kind, e.sha256.unwrap_or_default(), source, e.created_at.chars().take(10).collect()]
+            })
             .collect()
     } else {
         vec![]
@@ -380,7 +393,7 @@ const SCOPE_HEAD: &[&str] = &["Target", "Type", "Scope", "Note"];
 const FINDINGS_HEAD: &[&str] = &["#", "Title", "Severity", "Status", "Affected"];
 const VULNS_HEAD: &[&str] = &["Priority", "CVE", "Asset", "CVSS", "Status", "Due", "Description"];
 const ASSETS_HEAD: &[&str] = &["Type", "Asset", "Status", "Last seen"];
-const EVIDENCE_HEAD: &[&str] = &["#", "Title", "Kind", "SHA-256", "Added"];
+const EVIDENCE_HEAD: &[&str] = &["#", "Title", "Kind", "SHA-256", "Source", "Added"];
 const TIMELINE_HEAD: &[&str] = &["When", "Type", "Event"];
 
 fn scope_rows(d: &Data) -> Vec<Vec<String>> {
@@ -823,7 +836,7 @@ mod tests {
                (4, 1, 'Not a real issue', 'high', 'false_positive', '', '', '', '', '', NULL, 'medium', '[]', 't', '2026-11-01')",
             [],
         )?;
-        c.execute("INSERT INTO evidence (id, project_id, kind, title, source, sha256, size, file_name, created_at) VALUES (7, 1, 'file', 'Login request', 'user', ?1, 10, 'req.txt', '2026-11-03')", params!["ab".repeat(32)])?;
+        c.execute("INSERT INTO evidence (id, project_id, kind, title, source, sha256, size, file_name, created_at, source_module, tool, tool_version) VALUES (7, 1, 'file', 'Login request', 'user', ?1, 10, 'req.txt', '2026-11-03', 'scan_import', 'Burp Suite', '2026.10')", params!["ab".repeat(32)])?;
         c.execute("INSERT INTO finding_links (finding_id, kind, ref_id, created_at) VALUES (1, 'evidence', 7, 't')", [])?;
         c.execute("INSERT INTO assets (id, project_id, type, value, key, source, first_seen, last_seen, created_at, updated_at) VALUES (3, 1, 'subdomain', 'app.acme.test', 'app.acme.test', 'manual', 't', '2026-11-02', 't', 't')", [])?;
         c.execute(
@@ -886,6 +899,7 @@ mod tests {
                 "evidence/req-1.txt",
                 &"ab".repeat(32),
                 "Login request",
+                "scan import, Burp Suite 2026.10",
                 "2 closed findings (resolved, accepted risk or false positive) are not listed.",
                 "OWASP Web Security Testing Guide: 1 of",
                 "P1",
