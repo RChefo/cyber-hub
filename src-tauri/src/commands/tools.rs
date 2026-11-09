@@ -357,11 +357,12 @@ fn validate_exec(db: &Db, req: &ExecRequest, snapshot_dir: Option<&std::path::Pa
             return Err(AppError::Scope("The project has no in-scope targets defined".into()));
         }
         let res = targets::resolve(&req.args, &req.targets, &entries, snapshot_dir).map_err(AppError::Scope)?;
-        check_redirects(&tool.name, &tool.id, &req.args, &res).map_err(AppError::Scope)?;
+        let redirect_warning = check_redirects(&tool.name, &tool.id, &req.args, &res).map_err(AppError::Scope)?;
         args = res.args;
         info.checked_targets = res.checked;
         info.file_targets = res.file_targets;
         info.warnings = res.warnings;
+        info.warnings.extend(redirect_warning);
         info.notes = res.notes;
         project_name = Some(name);
     }
@@ -377,19 +378,30 @@ pub async fn exec_validate(db: State<'_, Db>, request: ExecRequest) -> AppResult
 
 /// Refuses a run that would follow redirects when one of its URLs is authorized only by path or sits
 /// on a host with an excluded path: a redirect can leave the authorized paths, or reach the excluded
-/// one, and Cyber Hub cannot check where an external tool's redirects go. The options are not changed.
-pub(crate) fn check_redirects(name: &str, tool_id: &str, args: &[String], res: &targets::Resolution) -> Result<(), String> {
+/// one, and Cyber Hub cannot check where an external tool's redirects go. A run that loads a file of
+/// options is refused too, because the file can turn redirects on. Returns a warning naming the
+/// files of options the tool reads on its own, which Cyber Hub does not read. The options are not
+/// changed.
+pub(crate) fn check_redirects(name: &str, tool_id: &str, args: &[String], res: &targets::Resolution) -> Result<Option<String>, String> {
     if res.path_only.is_empty() && res.near_exclusions.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
-    match crate::redirects::follows(tool_id, args) {
-        Some(why) => Err(redirect_refusal(name, tool_id, &why, &res.path_only, &res.near_exclusions)),
-        None => Ok(()),
+    if let Some(arg) = crate::redirects::option_file(tool_id, args) {
+        let why = format!("{arg} loads a file of options, and Cyber Hub cannot check whether that file turns on redirects");
+        return Err(redirect_refusal(name, tool_id, &why, true, &res.path_only, &res.near_exclusions));
     }
+    if let Some(why) = crate::redirects::follows(tool_id, args) {
+        return Err(redirect_refusal(name, tool_id, &why, false, &res.path_only, &res.near_exclusions));
+    }
+    let own = crate::redirects::own_option_files(tool_id);
+    Ok((!own.is_empty()).then(|| {
+        format!("{name} also reads options from {own}. Cyber Hub does not read these files: make sure they do not turn on redirects, because this run's URLs need host-level authorization for redirects.")
+    }))
 }
 
-/// Why a run that would follow redirects is refused, and what the analyst can do.
-fn redirect_refusal(name: &str, tool_id: &str, why: &str, path_only: &[String], near: &[String]) -> String {
+/// Why a run that would follow redirects is refused, and what the analyst can do. `option_file`:
+/// the run was refused because it loads a file of options.
+fn redirect_refusal(name: &str, tool_id: &str, why: &str, option_file: bool, path_only: &[String], near: &[String]) -> String {
     let list = |v: &[String]| {
         let shown: Vec<&str> = v.iter().take(3).map(String::as_str).collect();
         let more = if v.len() > 3 { format!(" and {} more", v.len() - 3) } else { String::new() };
@@ -407,7 +419,9 @@ fn redirect_refusal(name: &str, tool_id: &str, why: &str, path_only: &[String], 
         reasons.push(format!("{} {} on a host with an excluded path, which a redirect can reach", list(near), if near.len() == 1 { "is" } else { "are" }));
     }
     let stop = crate::redirects::how_to_stop(tool_id);
-    let fix = if stop.is_empty() {
+    let fix = if option_file {
+        "Put the options on the command line instead (without following redirects), or authorize the host itself (a domain, wildcard or address entry) without excluded paths".to_string()
+    } else if stop.is_empty() {
         format!("{name} cannot be run on these URLs: authorize the host itself (a domain, wildcard or address entry) without excluded paths")
     } else {
         format!("Run it without following redirects ({stop}), or authorize the host itself (a domain, wildcard or address entry) without excluded paths")
@@ -670,7 +684,7 @@ mod redirect_tests {
         let (v, kind) = crate::scope::classify(value).unwrap();
         ScopeEntry { value: v, kind: kind.to_string(), in_scope }
     }
-    fn run(tool: &str, args: &[&str], scope: &[ScopeEntry]) -> Result<(), String> {
+    fn run(tool: &str, args: &[&str], scope: &[ScopeEntry]) -> Result<Option<String>, String> {
         let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
         let res = targets::resolve(&args, &[], scope, None)?;
         check_redirects(tool, tool, &args, &res)
@@ -707,6 +721,46 @@ mod redirect_tests {
         // exclusions and path checks still apply before any redirect question
         assert!(run("ffuf", &["-u", "https://app.example.com/admin/FUZZ"], &excluded).unwrap_err().contains("excluded"));
         assert!(run("ffuf", &["-u", "https://app.example.com/other/FUZZ"], &path).unwrap_err().contains("outside the authorized URLs"));
+    }
+
+    /// A file of options that turns redirects on (no endpoints in it, so it is not a target list)
+    fn options_file(name: &str, content: &str) -> String {
+        let p = std::env::temp_dir().join(format!("cyberhub-redirect-test-{}-{name}", std::process::id()));
+        std::fs::write(&p, content).unwrap();
+        p.to_string_lossy().to_string()
+    }
+
+    #[test]
+    fn files_of_options_are_refused_or_named_when_redirects_need_host_authorization() {
+        let path = vec![e("https://app.example.com/api/", true)];
+        let host = vec![e("*.example.com", true)];
+        let excluded = vec![e("*.example.com", true), e("https://app.example.com/admin", false)];
+        let ffufrc = options_file("ffufrc", "[http]\n    followredirects = true\n");
+        let profile = options_file("profile.yaml", "follow-redirects: true\n");
+        let sqlmap = options_file("sqlmap.conf", "[Request]\nignoreRedirects = False\n");
+        // an option that loads a file of options: refused, with what to do instead
+        let err = run("ffuf", &["-u", "https://app.example.com/api/FUZZ", "-config", &ffufrc], &path).unwrap_err();
+        assert!(err.contains("-config loads a file of options") && err.contains("Put the options on the command line"), "{err}");
+        assert!(err.contains("were not changed"), "{err}");
+        let err = run("nuclei", &["-u", "https://app.example.com/api/", "-dr", "-tp", &profile], &excluded).unwrap_err();
+        assert!(err.contains("-tp loads a file of options") && err.contains("excluded path"), "{err}");
+        assert!(run("sqlmap", &["-u", "https://app.example.com/api/item?id=1", "--ignore-redirects", "-c", &sqlmap], &path).is_err());
+        // browser modes count as following redirects
+        let err = run("nuclei", &["-u", "https://app.example.com/api/", "-dr", "-headless"], &path).unwrap_err();
+        assert!(err.contains("-headless makes nuclei follow redirects"), "{err}");
+        assert!(run("httpx", &["-u", "https://app.example.com/api/", "-ss"], &path).is_err());
+        // allowed runs name the files the tool reads on its own
+        let warning = run("ffuf", &["-u", "https://app.example.com/api/FUZZ", "-w", "words.txt"], &path).unwrap().expect("a warning");
+        assert!(warning.contains("ffufrc") && warning.contains("does not read these files"), "{warning}");
+        assert!(run("katana", &["-u", "https://app.example.com/api/", "-dr"], &path).unwrap().is_some_and(|w| w.contains("config.yaml")));
+        // sqlmap reads no file of options on its own: no warning
+        assert_eq!(run("sqlmap", &["-u", "https://app.example.com/api/item?id=1", "--ignore-redirects"], &path), Ok(None));
+        // host-level authorization without excluded paths: files of options are the analyst's choice
+        assert_eq!(run("ffuf", &["-u", "https://app.example.com/FUZZ", "-config", &ffufrc], &host), Ok(None));
+        assert_eq!(run("nuclei", &["-u", "https://app.example.com/", "-headless"], &host), Ok(None));
+        for f in [ffufrc, profile, sqlmap] {
+            let _ = std::fs::remove_file(f);
+        }
     }
 }
 

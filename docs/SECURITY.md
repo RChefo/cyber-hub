@@ -173,16 +173,18 @@ A URL entry is a path-level authorization:
   | ffuf | follows with `-r` |
   | gobuster | follows with `-r` / `--follow-redirect` |
   | feroxbuster | follows with `-r` / `--redirects`, also bundled as in `-kr` |
-  | httpx | follows with `-fr` / `-fhr` and their long forms |
+  | httpx | follows with `-fr` / `-fhr` and their long forms; the headless browser of `-ss` / `-screenshot` follows redirects itself |
   | dalfox | follows with `-F` / `--follow-redirects` |
   | nikto | follows with `-followredirects` and its prefixes such as `-f` |
-  | nuclei | its templates may follow; refused unless `-dr` / `-disable-redirects` is given |
-  | katana | follows by default; refused unless `-dr` is given |
+  | nuclei | its templates may follow; refused unless `-dr` / `-disable-redirects` is given. `-headless` is refused too: `-dr` does not stop the browser of headless templates |
+  | katana | follows by default; refused unless `-dr` is given. `-hl` / `-headless` is refused too: that engine leaves redirects to the browser (the hybrid engine, `-hh`, honours `-dr`) |
   | sqlmap | follows by default; refused unless `--ignore-redirects` is given |
   | whatweb | follows by default; refused unless `--follow-redirect=never` is given |
   | wpscan, CeWL | always follow; refused on such URLs |
 
-  Explicitly authorized hosts keep the normal behaviour. Tools without an entry keep the warning. Configuration files that a tool reads on its own (for example a ffuf or nuclei config) are not parsed for redirect settings: see the accepted risks.
+  A file of options can turn redirects on where Cyber Hub cannot see it, and Cyber Hub does not read such files. On these runs, an option that loads one is therefore refused too: ffuf, httpx and katana `-config`, nuclei `-config` and `-tp` / `-profile`, dalfox `--config`, nikto `-config`, sqlmap `-c`, and feroxbuster `--resume-from` (a saved scan's whole configuration). The files a tool reads on its own are named in a warning in the preview and the confirmation: ffuf's `ffufrc`, feroxbuster's `ferox-config.toml`, the `config.yaml` of httpx, katana and nuclei, dalfox's `config.toml` or `config.json`, and nikto's `nikto.conf` (whose `CLIOPTS` adds options). Whether such a file turns on redirects is not checked; see the accepted risks.
+
+  Explicitly authorized hosts keep the normal behaviour. Tools without an entry keep the warning.
 * **Service scans** (and workflow service-scan steps) refuse URLs before the scope check: they work on hosts, addresses and networks.
 * **Inventory.** A web service whose origin has authorized URLs may be recorded as an asset by a scan import. Every operation on it is checked on its own.
 * **Passive discovery** derives its root domains only from domain and wildcard entries. A URL entry is never a root, and names are recorded only when the scope covers them as hosts.
@@ -235,7 +237,7 @@ Tests: `src-tauri/src/scope.rs` and `src-tauri/src/targets.rs` (target files, ex
 | Risk | Status / mitigation |
 |---|---|
 | **Single-word arguments** (`intranet`, `dir`, `smb`) cannot be told apart from sub-commands without per-tool knowledge, so they are not scope-checked when they appear as bare arguments. | The preview shows a warning listing them; target files reject them; URLs and `host:port` forms are checked. Use fully-qualified names or IPs. |
-| **Indirect inputs not visible on the command line** — configuration files, resume/state files, environment variables, tool-internal crawling, recursion, redirects and template-defined hosts. Redirect options on the command line are enforced for the tools listed under "Redirects of external tools"; redirect settings inside a tool's own configuration file are not read. | Files named in arguments are inspected (a config or resume file that names endpoints is treated as a target list and must be fully in scope). Crawl/recursion behavior is the tool's; keep depth and rate limits conservative. stdin is closed. |
+| **Indirect inputs not visible on the command line** — configuration files, resume/state files, environment variables, tool-internal crawling, recursion, redirects and template-defined hosts. Redirect options on the command line are enforced for the tools listed under "Redirects of external tools". Cyber Hub does not read a tool's files of options: on runs that need host-level authorization for redirects, options that load such a file are refused and the files the tool reads on its own are named in a warning, but their settings are not checked. | Files named in arguments are inspected (a config or resume file that names endpoints is treated as a target list and must be fully in scope). Crawl/recursion behavior is the tool's; keep depth and rate limits conservative. stdin is closed. |
 | **Tool features that execute code** (custom scripts, plugins) are part of many security tools. | Every run requires the native OS confirmation showing the full command; there is no shell and no automatic execution. |
 | **DNS-based scope**: names are checked, not the addresses they resolve to. Alternative IP spellings as bare arguments (`2130706433`, `127.1`) are not recognised as targets. | Prefer IPs/CIDRs for internal ranges; exclusions still apply by name. Every run still needs the native confirmation, which shows the full command. |
 | **Tools that are not target-based scanners** (OpenSSL, hashcat, tshark, Responder and others marked as not needing a scope in the catalog) are not scope-checked, also when an MCP client asks for them. | The MCP approval shows a warning and the native confirmation says that Cyber Hub does not check targets for the tool. Runs requested through MCP still need your approval and the native confirmation. |
