@@ -87,6 +87,10 @@ fn check_scope(db: &Db, inv: &store::Investigation, t: EntityType, value: &str) 
     if status != "active" {
         return Err(AppError::Scope(format!("The linked project is '{status}'; set it to active to contact targets")));
     }
+    // the value is requested exactly as stored: quotes or spaces around it would be checked away
+    if value.trim() != value || value.contains(['"', '\'']) {
+        return Err(AppError::Scope("The value has quotes or spaces around it; edit the entity before contacting it".into()));
+    }
     // a URL is checked as the URL it is (path-level entries can authorize it); a domain is
     // contacted over HTTPS and HTTP at `/`, so the host itself must be authorized
     let target = match t {
@@ -570,5 +574,25 @@ mod tests {
         let exec: i64 = db.with(|c| Ok(c.query_row("SELECT execution_id FROM osint_evidence WHERE kind = 'tool_run'", [], |r| r.get(0))?)).unwrap();
         assert_eq!(exec, run, "evidence keeps the tool run");
         assert!(import_internal(&db, inv, "finding", "1").is_err(), "findings need a linked project");
+    }
+
+    #[test]
+    fn contacted_values_are_checked_exactly_as_they_are_requested() {
+        let db = Db::open_in_memory().unwrap();
+        let inv_id = crate::osint::ingest::tests::inv(&db);
+        db.with(|c| {
+            c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (5, 'P', 'active', 't', 't')", [])?;
+            c.execute("INSERT INTO project_targets (project_id, value, kind, in_scope, created_at) VALUES (5, 'https://app.example.com/api/', 'url', 1, 't')", [])?;
+            c.execute("UPDATE osint_investigations SET project_id = 5 WHERE id = ?1", params![inv_id])?;
+            Ok(())
+        })
+        .unwrap();
+        let inv = db.with(|c| store::investigation_get(c, inv_id)).unwrap();
+        assert!(check_scope(&db, &inv, EntityType::Url, "https://app.example.com/api/x").is_ok());
+        for v in ["\"https://app.example.com/api/x\"", " https://app.example.com/api/x", "https://app.example.com/api/x'", "https://app.example.com/admin"] {
+            assert!(check_scope(&db, &inv, EntityType::Url, v).is_err(), "{v}");
+        }
+        let err = check_scope(&db, &inv, EntityType::Domain, "app.example.com").unwrap_err().to_string();
+        assert!(err.contains("specific URLs"), "a domain is contacted as a host: {err}");
     }
 }

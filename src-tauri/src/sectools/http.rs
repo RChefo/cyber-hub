@@ -178,7 +178,8 @@ pub fn next_request(current: &Prepared, status: u16, location: Option<&str>) -> 
 /// Sends the request. `pin` holds the vetted addresses of the URL's host name: the client
 /// connects only to them (no second DNS resolution).
 pub async fn send(p: Prepared, body: String, insecure: bool, pin: Option<(String, Vec<std::net::SocketAddr>)>) -> Result<HttpResponseOut, String> {
-    let mut builder = reqwest::Client::builder();
+    // straight to the vetted addresses: a system proxy would resolve names itself
+    let mut builder = reqwest::Client::builder().no_proxy();
     if let Some((host, addrs)) = &pin {
         builder = builder.resolve_to_addrs(host, addrs);
     }

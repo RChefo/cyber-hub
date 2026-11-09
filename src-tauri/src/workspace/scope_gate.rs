@@ -86,9 +86,15 @@ pub fn decide(c: &Connection, project_id: Option<i64>, targets: &[String], mode:
         None => Vec::new(),
     };
     for raw in targets.iter().take(MAX_TARGETS) {
-        let target = raw.trim().to_string();
+        let parsed = scope::parse_target(raw.trim());
+        // what is shown and recorded: a URL without credentials, query or fragment; anything else
+        // redacted and cut
+        let target = match &parsed {
+            Some(t @ Target::Url(_)) => scope::target_label(t),
+            _ => crate::redact::redact_text(raw.trim()).chars().take(255).collect(),
+        };
         let v = |allowed: bool, reason: String| Verdict { target: target.clone(), allowed, reason };
-        let Some(t) = scope::parse_target(&target) else {
+        let Some(t) = parsed else {
             verdicts.push(v(false, "Not a recognizable host, IP address, network or URL".into()));
             continue;
         };
@@ -141,12 +147,6 @@ pub fn enforce(c: &Connection, project_id: Option<i64>, targets: &[String], mode
         for b in blocked.iter().take(50) {
             record_blocked(c, pid, &b.target, &b.reason, operation)?;
         }
-        // refused attempts are kept, but only the newest ones: the history cannot be flooded
-        c.execute(
-            "DELETE FROM scope_events WHERE project_id = ?1 AND action = 'blocked' AND id NOT IN
-               (SELECT id FROM scope_events WHERE project_id = ?1 AND action = 'blocked' ORDER BY id DESC LIMIT ?2)",
-            params![pid, MAX_BLOCKED_EVENTS],
-        )?;
     }
     let list = blocked.iter().map(|b| if b.target.is_empty() { b.reason.clone() } else { format!("{}: {}", b.target, b.reason) }).collect::<Vec<_>>().join("; ");
     Err(AppError::Scope(format!("{operation} was not started. {list}")))
@@ -191,6 +191,12 @@ pub fn record_blocked(c: &Connection, project_id: i64, target: &str, reason: &st
     c.execute(
         "INSERT INTO scope_events (project_id, action, value, kind, in_scope, note, source, at) VALUES (?1, 'blocked', ?2, '', NULL, ?3, ?4, ?5)",
         params![project_id, value, note, source, ts],
+    )?;
+    // refused attempts are kept, but only the newest ones: the history cannot be flooded
+    c.execute(
+        "DELETE FROM scope_events WHERE project_id = ?1 AND action = 'blocked' AND id NOT IN
+           (SELECT id FROM scope_events WHERE project_id = ?1 AND action = 'blocked' ORDER BY id DESC LIMIT ?2)",
+        params![project_id, MAX_BLOCKED_EVENTS],
     )?;
     Ok(())
 }
@@ -419,6 +425,24 @@ mod tests {
             c.execute("UPDATE scope_events SET at = '2020-01-01T00:00:00Z' WHERE project_id = ?1 AND value = 'example.org'", params![p])?;
             let _ = enforce(c, Some(p), &s(&["example.org"]), Mode::Active, "TLS analysis");
             assert_eq!(c.query_row("SELECT COUNT(*) FROM scope_events WHERE project_id = ?1 AND action = 'blocked' AND value = 'example.org'", params![p], |r| r.get::<_, i64>(0))?, 3);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn refusals_are_shown_and_recorded_without_credentials_or_queries() {
+        let (db, p) = setup("active", &[("example.com", true)]);
+        db.with(|c| {
+            let err = enforce(c, Some(p), &s(&["https://user:hunter2@evil.example.net/x?token=abc#frag"]), Mode::Active, "HTTP request").unwrap_err().to_string();
+            assert!(!err.contains("hunter2") && !err.contains("token=abc"), "{err}");
+            let v: String = c.query_row("SELECT value FROM scope_events WHERE project_id = ?1 AND action = 'blocked'", params![p], |r| r.get(0))?;
+            assert_eq!(v, "https://evil.example.net/x");
+            // a value that is not a target is redacted before it is shown or recorded
+            let err = enforce(c, Some(p), &s(&["password=hunter2 evil"]), Mode::Active, "HTTP request").unwrap_err().to_string();
+            assert!(!err.contains("hunter2"), "{err}");
+            let leaked: i64 = c.query_row("SELECT COUNT(*) FROM scope_events WHERE project_id = ?1 AND (value LIKE '%hunter2%' OR note LIKE '%hunter2%')", params![p], |r| r.get(0))?;
+            assert_eq!(leaked, 0);
             Ok(())
         })
         .unwrap();

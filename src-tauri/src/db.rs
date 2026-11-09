@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
-use rusqlite::Connection;
+use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::error::{AppError, AppResult};
 
@@ -858,7 +858,50 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE scope_events ADD COLUMN repeats INTEGER NOT NULL DEFAULT 0;
     "#,
+    // 19 — URL entries became path-level at schema 18; URL exclusions recorded before keep excluding
+    // their whole host. Data only: the step is `keep_url_exclusions` (no schema change).
+    r#"
+    UPDATE project_targets SET note = note WHERE 0;
+    "#,
 ];
+
+/// Schema 19: a URL exclusion recorded before URL entries became path-level excluded its whole host.
+/// Its host is excluded too (an in-scope entry with that exact value becomes an exclusion), and the
+/// scope history says why, so nothing that was excluded becomes allowed.
+fn keep_url_exclusions(c: &Connection) -> AppResult<()> {
+    let rows: Vec<(i64, String)> = c
+        .prepare("SELECT project_id, value FROM project_targets WHERE kind = 'url' AND in_scope = 0 ORDER BY id")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    let ts = crate::util::now();
+    for (pid, value) in rows {
+        let host = url::Url::parse(value.trim()).ok().and_then(|u| match u.host()? {
+            url::Host::Domain(d) => Some((d.trim_end_matches('.').to_ascii_lowercase(), "domain")),
+            url::Host::Ipv4(ip) => Some((ip.to_string(), "ip")),
+            url::Host::Ipv6(ip) => Some((ip.to_string(), "ip")),
+        });
+        let Some((host, kind)) = host else { continue };
+        let note = format!("Excluded at the upgrade to schema 19: the URL exclusion {value} excluded this whole host before URL entries became path-level");
+        let existing: Option<(i64, bool)> =
+            c.query_row("SELECT id, in_scope FROM project_targets WHERE project_id = ?1 AND value = ?2", params![pid, host], |r| Ok((r.get(0)?, r.get::<_, i64>(1)? != 0))).optional()?;
+        let action = match existing {
+            Some((_, false)) => continue,
+            Some((id, true)) => {
+                c.execute("UPDATE project_targets SET in_scope = 0, note = ?2 WHERE id = ?1", params![id, note])?;
+                "updated"
+            }
+            None => {
+                c.execute("INSERT INTO project_targets (project_id, value, kind, in_scope, note, created_at) VALUES (?1, ?2, ?3, 0, ?4, ?5)", params![pid, host, kind, note, ts])?;
+                "added"
+            }
+        };
+        c.execute(
+            "INSERT INTO scope_events (project_id, action, value, kind, in_scope, note, source, at) VALUES (?1, ?2, ?3, ?4, 0, ?5, 'upgrade', ?6)",
+            params![pid, action, host, kind, note, ts],
+        )?;
+    }
+    Ok(())
+}
 
 /// Backups kept in `<data dir>/backups` (the newest ones; older copies are removed).
 pub const BACKUPS_KEPT: usize = 3;
@@ -1018,6 +1061,9 @@ impl Db {
                 if version > current {
                     let tx = conn.unchecked_transaction()?;
                     tx.execute_batch(sql)?;
+                    if version == 19 {
+                        keep_url_exclusions(&tx)?;
+                    }
                     tx.execute_batch(&format!("PRAGMA user_version = {version}"))?;
                     tx.commit()?;
                 }
@@ -1093,6 +1139,51 @@ mod tests {
 
     fn count(c: &Connection, sql: &str) -> i64 {
         c.query_row(sql, [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn url_exclusions_recorded_before_path_level_scopes_keep_their_host_excluded() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        for (i, sql) in MIGRATIONS.iter().take(18).enumerate() {
+            conn.execute_batch(sql).unwrap();
+            conn.execute_batch(&format!("PRAGMA user_version = {}", i + 1)).unwrap();
+        }
+        conn.execute_batch(
+            "INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'A', 'active', 't', 't'), (2, 'B', 'active', 't', 't');
+             INSERT INTO project_targets (project_id, value, kind, in_scope, note, created_at) VALUES
+               (1, '*.example.com', 'wildcard', 1, '', 't'),
+               (1, 'app.example.com', 'domain', 1, 'listed', 't'),
+               (1, 'https://app.example.com/admin', 'url', 0, '', 't'),
+               (1, 'http://10.0.0.5:8080/x', 'url', 0, '', 't'),
+               (1, 'https://api.example.com/v1/', 'url', 1, '', 't'),
+               (2, 'https://old.example.org/', 'url', 0, '', 't'),
+               (2, 'old.example.org', 'domain', 0, 'already excluded', 't');",
+        )
+        .unwrap();
+        let db = Db::init(conn).unwrap();
+        assert_eq!(db.schema_version().unwrap(), MIGRATIONS.len() as i64);
+        db.with(|c| {
+            let row = |p: i64, v: &str| -> Option<(String, i64, String)> {
+                c.query_row("SELECT kind, in_scope, note FROM project_targets WHERE project_id = ?1 AND value = ?2", params![p, v], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).optional().unwrap()
+            };
+            let (kind, in_scope, note) = row(1, "app.example.com").unwrap();
+            assert_eq!((kind.as_str(), in_scope), ("domain", 0), "the listed host becomes an exclusion");
+            assert!(note.contains("schema 19") && note.contains("https://app.example.com/admin"), "{note}");
+            assert_eq!(row(1, "10.0.0.5").map(|r| (r.0, r.1)), Some(("ip".to_string(), 0)), "an unlisted host is added as an exclusion");
+            assert_eq!(row(1, "https://app.example.com/admin").map(|r| r.1), Some(0), "the URL exclusion itself stays");
+            assert_eq!(row(1, "api.example.com"), None, "in-scope URL entries change nothing");
+            assert_eq!(row(2, "old.example.org").map(|r| r.2), Some("already excluded".to_string()), "an existing exclusion is left as it is");
+            assert_eq!(count(c, "SELECT COUNT(*) FROM scope_events WHERE source = 'upgrade'"), 2, "each change is in the scope history");
+            // host-level operations and other paths stay refused, as before the upgrade
+            let entries = crate::commands::projects::scope_entries(c, 1)?;
+            for t in ["app.example.com", "https://app.example.com/api/x", "10.0.0.5"] {
+                assert!(crate::scope::check_target(&entries, &crate::scope::parse_target(t).unwrap()).is_err(), "{t}");
+            }
+            assert!(crate::scope::check_target(&entries, &crate::scope::parse_target("www.example.com").unwrap()).is_ok());
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]

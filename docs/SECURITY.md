@@ -139,24 +139,39 @@ A URL entry is a path-level authorization:
 
   The refusal names the authorized URLs and says what is missing.
 * **URL operations are checked on the exact URL**, after parsing:
-  * dot segments are resolved, and `\` counts as `/`;
+  * dot segments are resolved;
   * scheme and host are lowercased, and the effective port is compared;
-  * the path is compared byte for byte and case-sensitively, so encoded separators such as `%2F` stay inside their segment;
+  * the path must be inside the entry's path twice: compared byte for byte and case-sensitively, and also as servers commonly read paths (percent-decoded, lowercase, fullwidth letters as ASCII, `;parameters` and empty segments dropped);
   * queries and fragments do not matter.
 
   This applies to URLs in tool arguments and target lists, HTTP request builder requests, OSINT URL entities, and scan-import findings at URLs.
-* **Host headers.** In the HTTP request builder, a `Host` header is checked as the same path on that virtual host. In a raw request file, the `Host` header and the request path are checked under HTTPS and HTTP, because the file does not say which the tool will use: one authorized scheme accepts it, and an exclusion of either refuses it.
-* **Exclusions.** An out-of-scope URL excludes its path on every scheme and port of its host. Because a host-level operation could reach that path, it also refuses host-level operations on that host. Passive lookups about the host (DNS, certificate transparency) do not reach paths and are not affected.
+* **Forms that clients and servers read differently are refused:**
+  * a backslash, in any URL, because some clients end the host there and others do not;
+  * where a URL entry decides for the host, also dot segments (`.`, `..`, `%2e`), empty segments (`//`) and encoded slashes or backslashes (`%2F`, `%5C`).
+
+  Write the URL in its plain form.
+* **URLs in tool arguments are read in every way a tool may read them**, and each reading must be in scope:
+  * a URL runs from its scheme to the next whitespace or the next URL, so nothing after a separator (`;` `,` `=` `(` `'` `|` `<`) escapes the check;
+  * it is also read as cut at the first quote, bracket or separator after its scheme, as a tool that ends it there would read it;
+  * an option with its value attached (`-uhttps://…`, `-uhttps://host/?a=b`) is read from its web scheme;
+  * scheme-less `host/path` forms are checked under both HTTP and HTTPS;
+  * a URL that cannot be parsed refuses the run instead of being skipped.
+* **Host headers.** In the HTTP request builder, a `Host` header is checked as the same path on that virtual host. In a raw request file, the `Host` header and the request path must be authorized under both HTTPS and HTTP, because the file does not say which the tool will use. Otherwise, pass the URL itself.
+* **Exclusions.** An out-of-scope URL excludes its path on every scheme and port of its host, also in the forms servers commonly treat as the same path: other case, percent-encoding, `;parameters`, `//`, and a `.` suffix (`/admin.json` is inside an excluded `/admin`). Because a host-level operation could reach that path, it also refuses host-level operations on that host. Passive lookups about the host (DNS, certificate transparency) do not reach paths and are not affected, and passive discovery records such names.
+* **Tools decide further paths.** Cyber Hub checks the URLs on a tool's command line, but the tool decides which further paths it requests (wordlist entries, templates, crawling) and whether it follows redirects. When only URL entries authorize a run's URLs, the preview warns about this. The HTTP request builder is the way to stay inside a path with every request and redirect checked.
 * **Service scans** (and workflow service-scan steps) refuse URLs before the scope check: they work on hosts, addresses and networks.
 * **Inventory.** A web service whose origin has authorized URLs may be recorded as an asset by a scan import. Every operation on it is checked on its own.
 * **Passive discovery** derives its root domains only from domain and wildcard entries. A URL entry is never a root, and names are recorded only when the scope covers them as hosts.
 * **Internal addresses.** For an internal web application authorized by URL, the name's private addresses must be authorized too, as addresses, or the URL must name the address. Otherwise DNS vetting refuses it, as before.
 * **Redirects.** The HTTP request builder follows redirects only when asked, at most five:
   * every hop is a new request, checked against the scope and DNS vetting before it is sent;
-  * credentials are dropped when the origin changes;
+  * `Authorization`, `Cookie` and `Proxy-Authorization` headers are dropped when the origin (scheme, host or port) changes;
+  * a 303, and a 301 or 302 after a POST, continue as a GET without the body;
   * a refused hop ends the chain with its reason and is recorded.
 
   All other HTTP clients in Cyber Hub never follow redirects.
+* **No system proxy.** The clients that contact targets (the HTTP request builder, the attack-surface HTTP check and the OSINT web source) connect straight to the addresses that DNS vetting checked. A system proxy would resolve names itself, after the check.
+* **History.** A refused URL is shown and recorded without its credentials, query and fragment; any other refused value is redacted and cut to 255 characters.
 
 Nothing widens a scope automatically.
 
@@ -183,9 +198,11 @@ For a scope-required run every argument value (whole positional values and the p
 Fuzzing keywords in host names need no special handling: `https://FUZZ.example.com/` is a real host under `*.example.com` and passes only if that wildcard is in scope, while `https://exaFUZZ.com/`, `https://FUZZ/` or `https://10.0.0.FUZZ/` name other hosts and are rejected.
 
 Tests: `src-tauri/src/scope.rs` and `src-tauri/src/targets.rs` (target files, exclusions, malformed lines, request files, `--opt=file` rewriting, smuggling through mixed arguments, TLD look-alikes, fuzz keywords, IPv6/mapped addresses, empty targets). Path-level scope:
-* `scope.rs`: path boundaries, dot segments, encoded separators, case, scheme, port, user-info tricks, origin entries, IPv6, host-level refusals with their reasons, excluded paths;
-* `targets.rs`: tool arguments, URL and host lists, raw requests;
-* `scope_gate.rs`: active and passive decisions, service scans refusing URLs, repeated refusals counted;
+* `scope.rs`: path boundaries, dot segments, encoded separators, case, scheme, port, user-info tricks, backslashes, origin entries, IPv6, host-level refusals with their reasons, excluded paths and the forms servers read as the same path, URLs read whole and cut at separators, scheme-less forms;
+* `targets.rs`: tool arguments (attached option values, unreadable URLs, the path-level warning), URL and host lists, raw requests under both schemes;
+* `scope_gate.rs`: active and passive decisions, service scans refusing URLs, repeated refusals counted, refusals recorded without credentials or queries;
+* `workspace/discovery.rs`: names on hosts with an excluded path are recorded; `osint/discovery.rs`: values are checked exactly as they are requested;
+* `db.rs`: the schema-19 upgrade keeps old URL exclusions excluding their host;
 * `commands/sectools.rs`: Host headers, and redirects against a local server, where the URL outside the path is never requested;
 * `scan_import_tests.rs`: findings at URLs, host-level results, CSV rows.
 

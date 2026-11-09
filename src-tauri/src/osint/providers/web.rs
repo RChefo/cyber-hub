@@ -143,6 +143,8 @@ pub async fn run(t: EntityType, value: &str) -> Result<Output, Error> {
     // would also be used for the plain-HTTP fallback and connect to the wrong service
     let pinned: Vec<SocketAddr> = pinned_addrs(&addrs);
     let client = reqwest::Client::builder()
+        // straight to the checked addresses: a system proxy would resolve names itself
+        .no_proxy()
         .timeout(Duration::from_secs(12))
         .redirect(reqwest::redirect::Policy::none())
         .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION"), " (OSINT fingerprint)"))

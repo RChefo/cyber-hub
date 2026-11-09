@@ -17,8 +17,13 @@
 //! excludes its path on every scheme and port of its host; because a host-level operation could
 //! reach that path, it also refuses host-level operations on the host.
 //!
-//! Paths are compared after URL parsing (dot segments resolved, `\` as `/`), byte for byte and
-//! case-sensitively; queries and fragments do not matter. Nothing here ever adds to a scope.
+//! Paths are compared after URL parsing (dot segments resolved), byte for byte and case-sensitively,
+//! and again as servers commonly read them (decoded, lowercase, `;parameters` and empty segments
+//! dropped): both must agree for an authorization; either suffices for an exclusion. When a path
+//! decides (the host has URL entries), URLs whose text servers and tools may resolve differently
+//! (dot segments, `//`, encoded slashes) are refused; a backslash is refused in any URL, because some
+//! clients read it as part of the host. Queries and fragments do not matter. Nothing here ever adds
+//! to a scope.
 
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -105,6 +110,28 @@ pub struct WebTarget {
     pub url: url::Url,
     /// its host as a host-level target (`Host` or `Ip`)
     pub host: Target,
+    /// the text as given (what a tool receives)
+    pub raw: String,
+}
+
+/// The host-level target of a parsed URL (`Host` or `Ip`).
+fn url_host(u: &url::Url) -> Option<Target> {
+    Some(match u.host()? {
+        url::Host::Domain(d) => {
+            // Any host in a URL is a real destination — including single-label names
+            // like `intranet`, which can never match a scope entry and are therefore rejected.
+            let h = d.trim_end_matches('.').to_ascii_lowercase();
+            if h == "localhost" {
+                Target::Ip(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST))
+            } else if h.is_empty() {
+                return None;
+            } else {
+                Target::Host(h)
+            }
+        }
+        url::Host::Ipv4(ip) => Target::Ip(IpAddr::V4(ip)),
+        url::Host::Ipv6(ip) => Target::Ip(canon(IpAddr::V6(ip))),
+    })
 }
 
 impl Target {
@@ -131,23 +158,8 @@ pub fn parse_target(raw: &str) -> Option<Target> {
     }
     if s.contains("://") {
         let u = url::Url::parse(s).ok()?;
-        let host = match u.host()? {
-            url::Host::Domain(d) => {
-                // Any host in a URL is a real destination — including single-label names
-                // like `intranet`, which can never match a scope entry and are therefore rejected.
-                let h = d.trim_end_matches('.').to_ascii_lowercase();
-                if h == "localhost" {
-                    Target::Ip(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST))
-                } else if h.is_empty() {
-                    return None;
-                } else {
-                    Target::Host(h)
-                }
-            }
-            url::Host::Ipv4(ip) => Target::Ip(IpAddr::V4(ip)),
-            url::Host::Ipv6(ip) => Target::Ip(canon(IpAddr::V6(ip))),
-        };
-        return Some(Target::Url(Box::new(WebTarget { url: u, host })));
+        let host = url_host(&u)?;
+        return Some(Target::Url(Box::new(WebTarget { url: u, host, raw: s.to_string() })));
     }
     // [IPv6] or [IPv6]:port
     if let Some(rest) = s.strip_prefix('[') {
@@ -223,15 +235,91 @@ fn net_matches(entry: &ScopeEntry, net: &IpNet) -> bool {
     }
 }
 
-/// A `url` entry: the URL as a target (its scheme, host, port and path).
+/// A `url` entry: the URL as a target (its scheme, host, port and path). Stored entries were
+/// checked by the URL parser when they were added (older ones may contain spaces).
 fn url_entry(e: &ScopeEntry) -> Option<WebTarget> {
     if e.kind != "url" {
         return None;
     }
-    match parse_target(&e.value)? {
-        Target::Url(w) => Some(*w),
-        _ => None,
+    let url = url::Url::parse(e.value.trim()).ok()?;
+    let host = url_host(&url)?;
+    Some(WebTarget { url, host, raw: e.value.clone() })
+}
+
+fn hex(c: u8) -> Option<u8> {
+    (c as char).to_digit(16).map(|d| d as u8)
+}
+
+/// A path as servers commonly read it: percent-decoded, lowercase, fullwidth forms as ASCII, `\` as
+/// `/`, empty segments and `;parameters` dropped, dot segments resolved.
+fn loose_path(path: &str) -> String {
+    let b = path.as_bytes();
+    let mut bytes = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let (Some(h), Some(l)) = (hex(b[i + 1]), hex(b[i + 2])) {
+                bytes.push(h * 16 + l);
+                i += 3;
+                continue;
+            }
+        }
+        bytes.push(b[i]);
+        i += 1;
     }
+    let text: String = String::from_utf8_lossy(&bytes)
+        .chars()
+        .map(|c| match c {
+            '\\' => '/',
+            '\u{FF01}'..='\u{FF5E}' => char::from_u32(c as u32 - 0xFEE0).unwrap_or(c),
+            c => c,
+        })
+        .collect::<String>()
+        .to_lowercase();
+    let mut segs: Vec<&str> = Vec::new();
+    for seg in text.split('/') {
+        match seg.split(';').next().unwrap_or("") {
+            "" | "." => {}
+            ".." => {
+                segs.pop();
+            }
+            s => segs.push(s),
+        }
+    }
+    let mut out = format!("/{}", segs.join("/"));
+    if text.ends_with('/') && !segs.is_empty() {
+        out.push('/');
+    }
+    out
+}
+
+/// Whether `path` is inside `prefix` once both are read as servers commonly read them; a `.` also
+/// ends a segment here (`/admin.json` is inside `/admin`).
+fn loose_within(prefix: &str, path: &str) -> bool {
+    let (prefix, path) = (loose_path(prefix), loose_path(path));
+    let prefix = prefix.trim_end_matches('/');
+    prefix.is_empty() || path == prefix || path.strip_prefix(prefix).is_some_and(|r| r.starts_with('/') || r.starts_with('.'))
+}
+
+/// What in a URL's text could be read differently by HTTP clients and servers, if anything.
+fn ambiguity(raw: &str) -> Option<&'static str> {
+    if raw.contains('\\') {
+        return Some("a backslash");
+    }
+    let after = raw.split_once("://").map_or(raw, |(_, r)| r);
+    let rest = &after[after.find(['/', '?', '#']).unwrap_or(after.len())..];
+    let path = rest.split(['?', '#']).next().unwrap_or("");
+    let lower = path.to_ascii_lowercase();
+    if lower.contains("%2f") || lower.contains("%5c") {
+        return Some("an encoded slash or backslash");
+    }
+    if path.contains("//") {
+        return Some("an empty path segment (//)");
+    }
+    if lower.split('/').any(|seg| matches!(seg.split(';').next().unwrap_or("").replace("%2e", ".").as_str(), "." | "..")) {
+        return Some("a dot segment (. or ..)");
+    }
+    None
 }
 
 /// Whether `path` is inside the entry path `prefix`: `/api/` covers `/api/…`; `/api` covers `/api`
@@ -247,14 +335,20 @@ fn path_within(prefix: &str, path: &str) -> bool {
     }
 }
 
-/// An in-scope URL entry authorizes a URL with the same scheme, host and port inside its path.
+/// An in-scope URL entry authorizes a URL with the same scheme, host and port inside its path,
+/// read both exactly and as servers commonly read paths.
 fn url_authorizes(e: &WebTarget, w: &WebTarget) -> bool {
-    e.url.scheme() == w.url.scheme() && e.host == w.host && e.url.port_or_known_default() == w.url.port_or_known_default() && path_within(e.url.path(), w.url.path())
+    e.url.scheme() == w.url.scheme()
+        && e.host == w.host
+        && e.url.port_or_known_default() == w.url.port_or_known_default()
+        && path_within(e.url.path(), w.url.path())
+        && loose_within(e.url.path(), w.url.path())
 }
 
-/// An out-of-scope URL entry covers its path on every scheme and port of its host.
+/// An out-of-scope URL entry covers its path on every scheme and port of its host, also in the forms
+/// servers commonly treat as the same path (case, encoding, `;parameters`, `//`, a `.` suffix).
 fn url_excludes(e: &WebTarget, w: &WebTarget) -> bool {
-    e.host == w.host && path_within(e.url.path(), w.url.path())
+    e.host == w.host && (path_within(e.url.path(), w.url.path()) || loose_within(e.url.path(), w.url.path()))
 }
 
 /// Whether a host-level target touches the host of an excluded URL (a host-level operation could
@@ -354,7 +448,34 @@ pub fn exclusion(entries: &[ScopeEntry], t: &Target, host_level_paths: bool) -> 
 
 /// Returns Ok(()) when the target is authorized, Err(reason) otherwise.
 pub fn check_target(entries: &[ScopeEntry], t: &Target) -> Result<(), String> {
-    if let Some(reason) = exclusion(entries, t, true) {
+    check_target_with(entries, t, true)
+}
+
+/// Whether a URL is authorized by URL entries only (its host is not authorized as a host): the tool
+/// that receives it decides which further paths it requests.
+pub fn path_level_only(entries: &[ScopeEntry], t: &Target) -> bool {
+    matches!(t, Target::Url(w) if check_target(entries, &w.host).is_err()) && check_target(entries, t).is_ok()
+}
+
+/// [`check_target`] with the choice whether an excluded URL path also refuses host-level targets on
+/// its host (`false` for passive use, such as recording names found by passive discovery).
+pub fn check_target_with(entries: &[ScopeEntry], t: &Target, host_level_paths: bool) -> Result<(), String> {
+    if let Target::Url(w) = t {
+        let label = target_label(t);
+        if w.raw.contains('\\') {
+            return Err(format!("{label} contains a backslash, which HTTP clients read differently (some as part of the host); write the URL with forward slashes"));
+        }
+        // where a path decides, a path that servers and tools may resolve differently is refused
+        if entries.iter().filter_map(url_entry).any(|u| u.host == w.host) {
+            if let Some(what) = ambiguity(&w.raw) {
+                return Err(format!(
+                    "{label}: the URL contains {what}, which servers and tools resolve differently. The scope of {} is decided by path, so such URLs are refused; write the URL in its plain form",
+                    target_label(&w.host)
+                ));
+            }
+        }
+    }
+    if let Some(reason) = exclusion(entries, t, host_level_paths) {
         return Err(reason);
     }
     if entries.iter().filter(|e| e.in_scope).any(|e| authorizes(e, t)) {
@@ -413,13 +534,111 @@ fn looks_like_hostname(token: &str) -> bool {
     }
 }
 
+/// Web schemes recognized at the end of an option with its value attached (`-uhttps://…`).
+const WEB_SCHEMES: &[&str] = &["https", "http", "wss", "ws"];
+
+/// Byte offsets where URLs start inside a token: a scheme (a letter, then letters, digits, `+ - .`)
+/// right before `://`. In an option with its value attached (`-uhttps://…`), the URL starts at the
+/// web scheme its letters end with.
+fn url_starts(token: &str) -> Vec<usize> {
+    let b = token.as_bytes();
+    let mut starts: Vec<usize> = Vec::new();
+    let mut from = 0;
+    while let Some(i) = token[from..].find("://").map(|i| i + from) {
+        let mut s = i;
+        while s > 0 && (b[s - 1].is_ascii_alphanumeric() || matches!(b[s - 1], b'+' | b'-' | b'.')) {
+            s -= 1;
+        }
+        while s < i && !b[s].is_ascii_alphabetic() {
+            s += 1;
+        }
+        let scheme = token[s..i].to_ascii_lowercase();
+        if token.starts_with('-') && token[..s].bytes().all(|c| c == b'-') && !WEB_SCHEMES.contains(&scheme.as_str()) {
+            if let Some(k) = WEB_SCHEMES.iter().filter(|k| scheme.ends_with(*k)).max_by_key(|k| k.len()) {
+                s = i - k.len();
+            }
+        }
+        if s < i && starts.last().map_or(true, |l| *l < s) {
+            starts.push(s);
+        }
+        from = i + 3;
+    }
+    starts
+}
+
+/// The URLs in a value, each running from its scheme to the next URL or the end of its
+/// whitespace-separated token: nothing after a delimiter (`;` `,` `=` `(` …) escapes the check.
+pub fn url_tokens(value: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    for token in value.split_whitespace() {
+        let starts = url_starts(token);
+        for (k, s) in starts.iter().enumerate() {
+            out.push(&token[*s..starts.get(k + 1).copied().unwrap_or(token.len())]);
+        }
+    }
+    out
+}
+
+/// Characters that may end a URL written inside quotes, brackets or a list.
+const URL_CLOSERS: &[char] = &['"', '\'', '`', ')', ']', '}', '>', ',', ';', '|'];
+
+/// Whether no resolver can find the host: its last label has characters no top-level domain has
+/// (a quote or bracket that closed a written URL, read as part of its host).
+fn unresolvable(t: &Target) -> bool {
+    matches!(t, Target::Host(h) if h.rsplit('.').next().is_some_and(|tld| tld.bytes().any(|b| !(b.is_ascii_alphanumeric() || b == b'-'))))
+}
+
+/// The ways a URL token may be read, each one a target to check: whole, and cut at the first of
+/// each quote, bracket or separator after its scheme (as a tool that ends the URL there reads it).
+/// A reading whose host no resolver can find is dropped.
+fn url_readings(token: &str) -> Vec<Target> {
+    let after = token.find("://").map_or(0, |i| i + 3);
+    let mut cuts = vec![token.len()];
+    for c in URL_CLOSERS {
+        if let Some(i) = token[after..].find(*c) {
+            cuts.push(after + i);
+        }
+    }
+    let mut out: Vec<Target> = Vec::new();
+    for cut in cuts {
+        if let Some(t @ Target::Url(_)) = parse_target(&token[..cut]) {
+            if !unresolvable(t.host_level()) && !out.contains(&t) {
+                out.push(t);
+            }
+        }
+    }
+    out
+}
+
+/// A URL-looking token of the value that cannot be checked (no reading of it names a host), if any.
+/// Local `file:` and `unix:` URLs without a host are not network targets.
+pub fn invalid_url(value: &str) -> Option<&str> {
+    url_tokens(value)
+        .into_iter()
+        .find(|u| url_readings(u).is_empty() && !url::Url::parse(u).is_ok_and(|p| p.host().is_none() && matches!(p.scheme(), "file" | "unix")))
+}
+
+/// `host/path`, `host:port/path`, `host?query` without a scheme, as tools such as nuclei, httpx and
+/// sqlmap accept them: the URL under both schemes is a target.
+fn schemeless_url(p: &str) -> Vec<Target> {
+    let p = p.strip_prefix("//").unwrap_or(p);
+    let Some(cut) = p.find(['/', '\\', '?', '#']).filter(|c| *c > 0) else { return Vec::new() };
+    let host = &p[..cut];
+    let bare = host.rsplit_once(':').filter(|(_, port)| port.chars().all(|c| c.is_ascii_digit())).map_or(host, |(h, _)| h);
+    if !(looks_like_hostname(host) || IpAddr::from_str(bare.trim_matches(['[', ']'])).is_ok()) {
+        return Vec::new();
+    }
+    ["http", "https"].iter().filter_map(|s| parse_target(&format!("{s}://{p}"))).collect()
+}
+
 /// Loose scan of a single argument value for anything that names a network endpoint.
 /// Used for values whose meaning is not modelled by a tool policy (e.g. `--script-args`
-/// or values of unknown options). Unambiguous forms are reported: URLs, IPs, [IPv6],
-/// CIDRs, IPv4 ranges, `user@host` and domain-like tokens whose last label is not a
-/// common file extension (so `common.txt` is not treated as a host).
+/// or values of unknown options). Unambiguous forms are reported: URLs (whole, and their pieces
+/// between delimiters), scheme-less `host/path` forms, IPs, [IPv6], CIDRs, IPv4 ranges,
+/// `user@host` and domain-like tokens whose last label is not a common file extension (so
+/// `common.txt` is not treated as a host).
 pub fn loose_targets(value: &str) -> Vec<Target> {
-    let mut out = Vec::new();
+    let mut out: Vec<Target> = url_tokens(value).into_iter().flat_map(url_readings).collect();
     for raw in value.split([',', ';', '=', ' ', '\t', '(', ')', '"', '\'', '|', '<', '>']) {
         let mut p = raw.trim();
         if p.is_empty() || p.starts_with('-') {
@@ -436,14 +655,16 @@ pub fn loose_targets(value: &str) -> Vec<Target> {
         }
         if let Ok(ip) = IpAddr::from_str(p) {
             out.push(Target::Ip(canon(ip)));
-        } else if p.starts_with('[') {
+        } else if p.starts_with('[') && !p.contains(['/', '?', '#']) {
             if let Some(t) = parse_target(p) {
                 out.push(t);
             }
-        } else if p.contains('/') && p.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+        } else if p.contains('/') && p.chars().next().is_some_and(|c| c.is_ascii_digit()) && IpNet::from_str(p).is_ok() {
             if let Ok(n) = IpNet::from_str(p) {
                 out.push(Target::Net(n.trunc()));
             }
+        } else if p.contains(['/', '\\', '?', '#']) {
+            out.extend(schemeless_url(p));
         } else if IP_RANGE_RE.is_match(p) || looks_like_hostname(p) {
             if let Some(t) = parse_target(p) {
                 out.push(t);
@@ -541,8 +762,11 @@ mod tests {
             .map(|s| s.to_string())
             .collect();
         let t = extract_targets_from_args(&args);
-        assert_eq!(t.len(), 5, "{t:?}");
-        assert_eq!(t[4], Target::Host("corp.example.org".into()));
+        // a URL is read whole and as cut at its separators: the same label may come more than once
+        let mut labels: Vec<String> = t.iter().map(target_label).collect();
+        labels.dedup();
+        assert_eq!(labels, ["https://t.example.com/FUZZ", "10.1.1.1", "10.1.1.2", "192.168.0.0/24", "corp.example.org"], "{t:?}");
+        assert_eq!(t.last(), Some(&Target::Host("corp.example.org".into())));
         // a URL stays a URL (with its path), its host is the host-level part
         assert!(matches!(&t[0], Target::Url(w) if w.url.path() == "/FUZZ"), "{:?}", t[0]);
         assert_eq!(t[0].host_level(), &Target::Host("t.example.com".into()));
@@ -568,8 +792,6 @@ mod tests {
             "https://app.example.com/api/",
             "https://app.example.com/api/v1/users?id=1#x",
             "https://APP.Example.com:443/api/v1",
-            "https://app.example.com/api/../api/v2",
-            "https://app.example.com\\api\\v3",
             "https://user:pw@app.example.com/api/v1",
         ] {
             assert!(ok(&s, t), "{t} is inside https://app.example.com/api/");
@@ -587,9 +809,14 @@ mod tests {
             "https://app.example.com:8443/api/v1",
             "https://api.app.example.com/api/v1",
             "https://app.example.com@evil.net/api/v1",
+            // forms that servers and tools resolve differently are refused where a path decides
+            "https://app.example.com/api/../api/v2",
+            "https://app.example.com/api//v1",
+            "https://app.example.com\\api\\v3",
         ] {
             assert!(!ok(&s, t), "{t} must be refused");
         }
+        assert!(why(&s, "https://app.example.com/api/./v1").contains("dot segment"));
         // without a trailing slash, the entry covers the path itself and below it
         let s = vec![e("https://app.example.com/api", true)];
         assert!(ok(&s, "https://app.example.com/api") && ok(&s, "https://app.example.com/api/x"));
@@ -648,5 +875,76 @@ mod tests {
         assert!(origin_has_authorized_paths(&[e("https://app.example.com/api/", true)], "https://app.example.com"));
         assert!(!origin_has_authorized_paths(&[e("https://app.example.com/api/", true)], "http://app.example.com"));
         assert!(!origin_has_authorized_paths(&[e("https://app.example.com/api/", false)], "https://app.example.com"));
+    }
+
+    #[test]
+    fn urls_in_arguments_are_read_whole_and_as_a_tool_may_cut_them() {
+        let s = vec![e("https://app.example.com/api/", true)];
+        let refused = |v: &str| invalid_url(v).is_some() || loose_targets(v).iter().any(|t| check_target(&s, t).is_err());
+        for v in [
+            // nothing after a separator escapes the check
+            "https://app.example.com/api/;/../../admin",
+            "https://app.example.com/api/,/../admin",
+            "https://app.example.com/api/=/../../admin",
+            "https://app.example.com/api/(/../../admin",
+            "https://app.example.com/api/'/../../admin",
+            "https://app.example.com/api/|/../../admin",
+            "https://app.example.com/api/</../../admin",
+            "https://app.example.com/api/x,https://evil.example.net/",
+            "https://app.example.com/api/x=https://evil.example.net/",
+            // the host as each client reads it
+            "https://app.example.com'@evil.example.net/api/",
+            "https://app.example.com\\@evil.example.net/api/",
+            "https://app.example.com\".evil.example.net/api/",
+            // scheme-less forms are checked under both schemes
+            "evil.example.net/api/x",
+            "app.example.com/api/x",
+            // a URL that cannot be read cannot be checked
+            "http://[::1/",
+        ] {
+            assert!(refused(v), "{v} must be refused");
+        }
+        for v in [
+            "https://app.example.com/api/x",
+            "\"https://app.example.com/api/x\"",
+            "{\"u\":\"https://app.example.com/api/x\"}",
+            "('https://app.example.com/api/x')",
+            "file:///etc/hosts",
+        ] {
+            assert!(!refused(v), "{v} is inside the authorized path");
+        }
+        // an option with its value attached: the URL starts at its web scheme
+        let t = loose_targets("-uhttps://app.example.com/api/x?a=b");
+        assert!(!t.is_empty() && t.iter().all(|t| target_label(t) == "https://app.example.com/api/x"), "{t:?}");
+        let t = loose_targets("evil.example.net/x");
+        assert_eq!(t.iter().map(target_label).collect::<Vec<_>>(), vec!["http://evil.example.net/x", "https://evil.example.net/x"]);
+        assert!(loose_targets("wordlists/common.txt").is_empty() && loose_targets("/usr/share/x.y").is_empty(), "paths are not URLs");
+    }
+
+    #[test]
+    fn excluded_paths_cover_the_forms_servers_read_as_the_same_path() {
+        let s = vec![e("*.example.com", true), e("https://app.example.com/admin", false)];
+        for t in [
+            "https://app.example.com/admin",
+            "https://app.example.com//admin",
+            "https://app.example.com/Admin",
+            "https://app.example.com/%61dmin",
+            "https://app.example.com/admin;x=1",
+            "https://app.example.com/admin%2fusers",
+            "https://app.example.com/admin.json",
+            "https://app.example.com/admin%2e",
+            "https://app.example.com/\u{ff41}\u{ff44}\u{ff4d}\u{ff49}\u{ff4e}",
+            "https://app.example.com/x/..%2fadmin",
+            "https://app.example.com/x/%2e%2e/admin",
+            "http://app.example.com:8080/ADMIN/users",
+        ] {
+            assert!(!ok(&s, t), "{t} reaches the excluded path");
+        }
+        for t in ["https://app.example.com/administrator", "https://app.example.com/api/admin", "https://www.example.com/admin"] {
+            assert!(ok(&s, t), "{t} is outside the excluded path");
+        }
+        // a backslash is refused in every URL: clients disagree on whether it ends the host
+        assert!(why(&s, "https://app.example.com\\@evil.example.net/").contains("backslash"));
+        assert!(!ok(&s, "https://www.example.com\\x"));
     }
 }

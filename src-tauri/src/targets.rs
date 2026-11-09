@@ -233,18 +233,12 @@ where
     if urls.is_empty() {
         return Err(format!("Host header '{shown}' is not a valid target"));
     }
-    // an exclusion of either scheme refuses the request; one authorized scheme accepts it
-    let results: Vec<Result<(), String>> = urls.iter().map(|t| scope::check_target(entries, t)).collect();
-    if let Some(Err(e)) = results.iter().find(|r| r.as_ref().is_err_and(|e| e.contains("excluded"))) {
-        return Err(e.clone());
-    }
-    match urls.iter().zip(&results).find(|(_, r)| r.is_ok()) {
-        Some((t, _)) => {
-            if !out.contains(t) {
-                out.push(t.clone());
-            }
+    // the file does not say whether the tool sends it over HTTPS or HTTP: both must be authorized
+    for t in urls {
+        scope::check_target(entries, &t).map_err(|e| format!("{e} (a request file does not say whether it is sent over HTTPS or HTTP, so both must be in the scope; or pass the URL itself)"))?;
+        if !out.contains(&t) {
+            out.push(t);
         }
-        None => return Err(results.into_iter().find_map(Result::err).unwrap_or_default()),
     }
     Ok(out)
 }
@@ -272,6 +266,16 @@ pub fn resolve(args: &[String], explicit: &[String], entries: &[ScopeEntry], sna
 
     let mut unverifiable: Vec<String> = Vec::new();
     for (idx, arg) in args.iter().enumerate() {
+        if let Some(bad) = scope::invalid_url(arg) {
+            return Err(format!("'{}' looks like a URL but cannot be read, so it cannot be checked against the scope", truncate(bad, 120)));
+        }
+        // the URLs of an option are targets wherever they are in it: attached (`-uhttps://…`), or
+        // with a `=` of their own (`-uhttps://host/?a=b`)
+        if arg.starts_with('-') && arg.contains("://") {
+            for t in scope::loose_targets(arg) {
+                push(t, &mut found)?;
+            }
+        }
         let Some((offset, value)) = value_of(arg) else { continue };
 
         if let Some(path) = existing_file(value) {
@@ -317,6 +321,14 @@ pub fn resolve(args: &[String], explicit: &[String], entries: &[ScopeEntry], sna
     if found.is_empty() {
         return Err("No target could be identified. Pass at least one host, IP, CIDR, URL or target file on the command line.".into());
     }
+    // URLs authorized by path only: the tool decides which further paths it requests
+    let path_only: Vec<String> = found.iter().filter(|t| scope::path_level_only(entries, t)).map(scope::target_label).take(5).collect();
+    if !path_only.is_empty() {
+        res.warnings.push(format!(
+            "Only URL entries authorize {}: Cyber Hub checks the URLs on the command line, but the tool decides which further paths it requests and whether it follows redirects. Keep its options inside the authorized paths; the HTTP request tool checks every redirect before following it.",
+            path_only.join(", ")
+        ));
+    }
     if !unverifiable.is_empty() {
         unverifiable.truncate(10);
         res.warnings.push(format!(
@@ -324,7 +336,11 @@ pub fn resolve(args: &[String], explicit: &[String], entries: &[ScopeEntry], sna
             unverifiable.join(", ")
         ));
     }
-    res.checked = found.iter().map(scope::target_label).collect();
+    for label in found.iter().map(scope::target_label) {
+        if !res.checked.contains(&label) {
+            res.checked.push(label);
+        }
+    }
     Ok(res)
 }
 
@@ -382,9 +398,16 @@ mod tests {
         assert!(resolve(&a(&["-l", &bad]), &[], &s, None).unwrap_err().contains("line 2"));
         let hosts = write(&t.0, "hosts.txt", b"app.example.com\n");
         assert!(resolve(&a(&["-iL", &hosts]), &[], &s, None).is_err(), "a host list needs host-level authorization");
-        // raw requests: the Host header with the request path, under either scheme
+        // raw requests: the Host header with the request path, under both schemes (the file does
+        // not say which one the tool uses)
         let inside = write(&t.0, "in.req", b"POST /api/v1/login HTTP/1.1\r\nHost: app.example.com\r\n\r\nuser=a");
-        assert_eq!(resolve(&a(&["-r", &inside]), &[], &s, None).unwrap().checked, vec!["https://app.example.com/api/v1/login".to_string()]);
+        let err = resolve(&a(&["-r", &inside]), &[], &s, None).unwrap_err();
+        assert!(err.contains("http://app.example.com/api/v1/login") && err.contains("both must be in the scope"), "{err}");
+        let both = vec![e("https://app.example.com/api/", true), e("http://app.example.com/api/", true)];
+        assert_eq!(
+            resolve(&a(&["-r", &inside]), &[], &both, None).unwrap().checked,
+            vec!["https://app.example.com/api/v1/login".to_string(), "http://app.example.com/api/v1/login".to_string()]
+        );
         let outside = write(&t.0, "out.req", b"GET /admin HTTP/1.1\r\nHost: app.example.com\r\n\r\n");
         assert!(resolve(&a(&["-r", &outside]), &[], &s, None).unwrap_err().contains("outside the authorized URLs"));
         let excluded = write(&t.0, "ex.req", b"GET /api/admin/x HTTP/1.1\r\nHost: app.example.com\r\n\r\n");
@@ -468,7 +491,7 @@ mod tests {
     fn http_request_files_validate_host_and_request_line() {
         let t = tmpdir("req");
         let ok = write(&t.0, "ok.req", b"POST /login HTTP/1.1\r\nHost: app.example.com\r\nReferer: https://elsewhere.net/\r\n\r\nuser=a");
-        assert_eq!(resolve(&a(&["-r", &ok]), &[], &scope(), None).unwrap().checked, vec!["https://app.example.com/login".to_string()]);
+        assert_eq!(resolve(&a(&["-r", &ok]), &[], &scope(), None).unwrap().checked, vec!["https://app.example.com/login".to_string(), "http://app.example.com/login".to_string()]);
         let bad = write(&t.0, "bad.req", b"GET / HTTP/1.1\r\nHost: evil.net\r\n\r\n");
         assert!(resolve(&a(&["-r", &bad]), &[], &scope(), None).is_err());
         let abs = write(&t.0, "abs.req", b"GET http://evil.net/ HTTP/1.1\r\nHost: app.example.com\r\n\r\n");
@@ -533,6 +556,21 @@ mod tests {
     fn explicit_targets_are_strict() {
         assert!(resolve(&a(&["-sV"]), &a(&["not a host"]), &scope(), None).is_err());
         assert!(resolve(&a(&["-sV"]), &a(&["10.0.0.9"]), &scope(), None).is_ok());
+    }
+
+    #[test]
+    fn urls_attached_to_options_are_checked_and_unreadable_urls_refused() {
+        let s = vec![e("https://app.example.com/api/", true)];
+        for arg in ["-uhttps://evil.example.net/", "-uhttps://evil.example.net/?a=b", "--url=https://app.example.com/api/x,https://evil.example.net/", "-uhttps://app.example.com/admin?x=1"] {
+            assert!(resolve(&a(&[arg]), &[], &s, None).is_err(), "{arg}");
+        }
+        let r = resolve(&a(&["-uhttps://app.example.com/api/x?a=b"]), &[], &s, None).unwrap();
+        assert_eq!(r.checked, vec!["https://app.example.com/api/x".to_string()]);
+        // only URL entries authorize it: the analyst is told that the tool decides further paths
+        assert!(r.warnings.iter().any(|w| w.contains("Only URL entries authorize https://app.example.com/api/x")), "{:?}", r.warnings);
+        assert!(resolve(&a(&["-u", "https://app.example.com/x"]), &[], &scope(), None).unwrap().warnings.iter().all(|w| !w.contains("Only URL entries")), "hosts in scope: no warning");
+        let err = resolve(&a(&["-u", "https://app.example.com/api/x", "-H", "X: http://[::1/"]), &[], &s, None).unwrap_err();
+        assert!(err.contains("cannot be read"), "{err}");
     }
 
     #[test]

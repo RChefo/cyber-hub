@@ -344,8 +344,10 @@ pub fn passive_roots(entries: &[ScopeEntry]) -> Vec<String> {
     roots.into_iter().take(MAX_ROOTS).collect()
 }
 
+/// Whether a name or address found by discovery may be recorded: authorized as a host. An excluded
+/// URL path does not keep its host out of the inventory (recording contacts nothing).
 fn in_scope(entries: &[ScopeEntry], raw: &str) -> bool {
-    scope::parse_target(raw).is_some_and(|t| scope::check_target(entries, &t).is_ok())
+    scope::parse_target(raw).is_some_and(|t| scope::check_target_with(entries, &t, false).is_ok())
 }
 
 /// DNS answers for one name, mapped to items. Returns whether the name resolves.
@@ -463,6 +465,8 @@ pub async fn passive_collect(db: &Db, entries: &[ScopeEntry], roots: &[String], 
 
 fn http_client_builder(insecure: bool) -> reqwest::ClientBuilder {
     reqwest::Client::builder()
+        // straight to the vetted addresses: a system proxy would resolve names itself
+        .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(10))
         .connect_timeout(Duration::from_secs(6))
@@ -775,6 +779,13 @@ mod tests {
     fn passive_roots_come_from_in_scope_domains_only() {
         let e = entries(&[("example.com", true), ("*.corp.example.net", true), ("https://app.example.org/login", true), ("10.0.0.0/24", true), ("secret.example.com", false)]);
         assert_eq!(passive_roots(&e), vec!["corp.example.net", "example.com"], "a URL entry authorizes paths, never name discovery for its host");
+    }
+
+    #[test]
+    fn names_whose_host_has_an_excluded_path_are_still_recorded() {
+        let e = entries(&[("*.example.com", true), ("https://app.example.com/admin", false), ("secret.example.com", false)]);
+        assert!(in_scope(&e, "app.example.com"), "recording a name contacts nothing; only the path is excluded");
+        assert!(!in_scope(&e, "secret.example.com") && !in_scope(&e, "example.org"));
     }
 
     #[test]

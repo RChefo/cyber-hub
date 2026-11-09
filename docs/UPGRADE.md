@@ -19,10 +19,22 @@ This document states exactly what an upgrade does, what was tested, and how far 
 | development: CVSS on findings | 16 |
 | development: methodology checklist | 17 |
 | development: repeated scope refusals counted | 18 |
+| development: URL exclusions keep excluding their host | 19 |
 
-The schema version is SQLite's `user_version`. Migrations 9–18 are listed in [DATA_MODEL.md](DATA_MODEL.md). Migrations 13–18 only add tables (`scan_imports`, `finding_fingerprints`; `finding_templates`; `checklist_items`) and columns with defaults (`finding_fingerprints.host`; `findings.cvss_vector`, `findings.cvss_score`; `scope_events.repeats`), and change nothing that exists.
+The schema version is SQLite's `user_version`. Migrations 9–19 are listed in [DATA_MODEL.md](DATA_MODEL.md).
+* Migrations 9–12 add tables and columns, rebuild `findings` once to give it the new lifecycle, and map the old finding statuses: `open` becomes `new`, `reported` becomes `confirmed`, and every finding that was `reported` gets a history entry recording the mapping. Ids and all other columns are kept.
+* Migrations 13–18 only add tables (`scan_imports`, `finding_fingerprints`; `finding_templates`; `checklist_items`) and columns with defaults (`finding_fingerprints.host`; `findings.cvss_vector`, `findings.cvss_score`; `scope_events.repeats`), and change nothing that exists.
+* Migration 19 changes scope entries only, as described below.
 
-**Scope semantics after this version.** URL scope entries now authorize only their paths, not their host (see [SECURITY.md](SECURITY.md#path-level-scope)). The stored entries are unchanged. A project that relied on a URL entry for host-level operations, such as an Nmap scan of the URL's host, now needs the host, its domain or its address range added to the scope. The refusal says so. They add tables and columns, rebuild `findings` once to give it the new lifecycle, and map the old finding statuses: `open` becomes `new`, `reported` becomes `confirmed`, and every finding that was `reported` gets a history entry recording the mapping. Ids and all other columns are kept.
+**Scope semantics from schema 18.** URL scope entries authorize only their paths, not their host (see [SECURITY.md](SECURITY.md#path-level-scope)). A project that relied on a URL entry for host-level operations, such as an Nmap scan of the URL's host, now needs the host, its domain or its address range added to the scope. The refusal says so.
+
+**Schema 19: old URL exclusions keep excluding their host.** Before schema 18, an out-of-scope URL entry excluded its whole host. So that the new semantics never allow something that was excluded, the upgrade to schema 19 excludes the host of every out-of-scope URL entry:
+* an in-scope entry with exactly that host becomes an exclusion;
+* otherwise a host exclusion is added;
+* each change gets a note and a scope history entry (source "upgrade");
+* the URL entries themselves are kept.
+
+Development databases already at schema 18 are treated the same way, because the step cannot tell when an exclusion was added. To exclude only the path, remove the host exclusion afterwards.
 
 ## What happens at startup
 
