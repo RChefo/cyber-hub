@@ -56,6 +56,7 @@ pub enum Format {
     Zap,
     Sarif,
     OpenVas,
+    Csv,
 }
 
 impl Format {
@@ -68,6 +69,7 @@ impl Format {
             Format::Zap => "zap",
             Format::Sarif => "sarif",
             Format::OpenVas => "openvas",
+            Format::Csv => "csv",
         }
     }
     pub fn label(self) -> &'static str {
@@ -79,6 +81,7 @@ impl Format {
             Format::Zap => "OWASP ZAP report (JSON)",
             Format::Sarif => "SARIF 2.1.0",
             Format::OpenVas => "Greenbone / OpenVAS report (XML)",
+            Format::Csv => "CSV with a header row",
         }
     }
 }
@@ -162,6 +165,10 @@ pub struct Parsed {
     /// the file was not read completely (limits, a broken document, skipped lines): findings it
     /// does not report prove nothing
     pub incomplete: bool,
+    /// the format cannot show that a finding is gone (CSV exports are often filtered)
+    pub no_absence: bool,
+    /// a CSV file's columns and mapping
+    pub csv: Option<csv::CsvInfo>,
 }
 
 impl Parsed {
@@ -229,6 +236,9 @@ impl Parsed {
         self.findings = out;
     }
 }
+
+#[path = "scan_import_csv.rs"]
+pub mod csv;
 
 /* ───────────────────────── helpers ───────────────────────── */
 
@@ -460,7 +470,10 @@ pub fn detect(text: &str) -> Result<Format, String> {
         }
         return Err("The file is not valid JSON".into());
     }
-    Err("Choose an Nmap, Nessus or Burp Suite XML file, a Nuclei, OWASP ZAP or SARIF JSON file".into())
+    if csv::looks_like_csv(t) {
+        return Ok(Format::Csv);
+    }
+    Err("Choose an Nmap, Nessus, Burp Suite or Greenbone XML file, a Nuclei, OWASP ZAP or SARIF JSON file, or a CSV file with a header row".into())
 }
 
 fn xml_root(xml: &str) -> Option<String> {
@@ -476,10 +489,24 @@ fn xml_root(xml: &str) -> Option<String> {
     None
 }
 
-/// Reads a file: detects the format and parses it.
+/// Reads a file: detects the format and parses it. A CSV file is read with the columns its
+/// headers suggest.
 pub fn parse(text: &str) -> Result<Parsed, String> {
+    parse_with(text, None)
+}
+
+/// Reads a CSV file again with the columns the user chose.
+pub fn parse_csv_with(text: &str, mapping: &csv::CsvMapping) -> Result<Parsed, String> {
+    parse_with(text, Some(mapping))
+}
+
+fn parse_with(text: &str, mapping: Option<&csv::CsvMapping>) -> Result<Parsed, String> {
     let text = text.trim_start_matches('\u{feff}');
-    let mut p = match detect(text)? {
+    let format = detect(text)?;
+    if mapping.is_some() && format != Format::Csv {
+        return Err("Columns can only be chosen for CSV files".into());
+    }
+    let mut p = match format {
         Format::Nmap => parse_nmap(text)?,
         Format::Nuclei => parse_nuclei(text)?,
         Format::Nessus => parse_nessus(text),
@@ -487,9 +514,10 @@ pub fn parse(text: &str) -> Result<Parsed, String> {
         Format::Zap => parse_zap(text)?,
         Format::Sarif => parse_sarif(text)?,
         Format::OpenVas => parse_openvas(text),
+        Format::Csv => csv::parse_csv(text, mapping)?,
     };
     p.dedupe();
-    if p.findings.is_empty() && p.assets.is_empty() {
+    if p.findings.is_empty() && p.assets.is_empty() && p.csv.as_ref().map_or(true, |c| c.mapping.title.is_some()) {
         p.warnings.push("The file contains no findings or hosts".into());
     }
     if p.truncated > 0 {
@@ -1529,6 +1557,8 @@ pub struct Preview {
     /// it covers (at most 200 listed)
     pub not_reported: Vec<PreviewItem>,
     pub not_reported_count: usize,
+    /// a CSV file's columns and the mapping used
+    pub csv: Option<csv::CsvInfo>,
 }
 
 const SEVERITY_ORDER: &[&str] = &["critical", "high", "medium", "low", "info"];
@@ -1610,6 +1640,7 @@ pub fn preview(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options) 
         merged: parsed.merged,
         marked_false_positive: parsed.marked_false_positive,
         has_scope: entries.iter().any(|e| e.in_scope),
+        csv: parsed.csv.clone(),
         ..Default::default()
     };
     if parsed.incomplete {
@@ -1690,7 +1721,7 @@ pub struct Missing {
 /// are not in the file. Findings without a recorded host (imported before schema 15) and source-code
 /// findings (no host) are never listed: their absence proves nothing.
 pub fn not_reported(c: &Connection, project_id: i64, parsed: &Parsed) -> AppResult<Vec<Missing>> {
-    if parsed.incomplete {
+    if parsed.incomplete || parsed.no_absence {
         return Ok(Vec::new());
     }
     let covered = covered_hosts(parsed);

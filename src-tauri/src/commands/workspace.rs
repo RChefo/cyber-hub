@@ -324,7 +324,7 @@ static COMMIT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 pub async fn scan_import_pick(app: AppHandle, project_id: i64, options: Option<ImportOptions>) -> AppResult<Option<ScanImportPreview>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     main_window_dialog(&app, "Import scan results")
-        .add_filter("Scan results", &["xml", "nessus", "json", "jsonl", "sarif"])
+        .add_filter("Scan results", &["xml", "nessus", "json", "jsonl", "sarif", "csv", "tsv", "txt"])
         .add_filter("All files", &["*"])
         .pick_file(move |f| {
             let _ = tx.send(f.and_then(|f| f.into_path().ok()));
@@ -372,6 +372,16 @@ pub async fn scan_import_pick(app: AppHandle, project_id: i64, options: Option<I
 pub async fn scan_import_preview(db: State<'_, Db>, imports: State<'_, ScanImports>, token: String, options: ImportOptions) -> AppResult<Preview> {
     let m = imports.0.lock().map_err(|_| AppError::Internal("scan import state poisoned".into()))?;
     let p = m.get(&token).ok_or_else(|| crate::error::validation("This preview has expired; choose the file again"))?;
+    db.with(|c| scan_import::preview(c, p.project_id, &p.parsed, options))
+}
+
+/// Reads a previewed CSV file again with the columns the user chose, and previews it.
+#[tauri::command]
+pub async fn scan_import_remap(db: State<'_, Db>, imports: State<'_, ScanImports>, token: String, mapping: scan_import::csv::CsvMapping, options: ImportOptions) -> AppResult<Preview> {
+    let mut m = imports.0.lock().map_err(|_| AppError::Internal("scan import state poisoned".into()))?;
+    let p = m.get_mut(&token).ok_or_else(|| crate::error::validation("This preview has expired; choose the file again"))?;
+    let text = String::from_utf8_lossy(&p.bytes).into_owned();
+    p.parsed = scan_import::parse_csv_with(&text, &mapping).map_err(AppError::Validation)?;
     db.with(|c| scan_import::preview(c, p.project_id, &p.parsed, options))
 }
 

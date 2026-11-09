@@ -241,6 +241,7 @@ pub fn run() {
             workspace_commands::evidence_delete,
             workspace_commands::scan_import_pick,
             workspace_commands::scan_import_preview,
+            workspace_commands::scan_import_remap,
             workspace_commands::scan_import_commit,
             workspace_commands::scan_import_discard,
             workspace_commands::scan_imports_list,

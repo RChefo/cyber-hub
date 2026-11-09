@@ -421,6 +421,34 @@ export interface ScanImportPreview {
   /** open findings of earlier imports of this tool that the file no longer reports (at most 200 listed) */
   notReported: ScanImportPreview["items"];
   notReportedCount: number;
+  /** a CSV file's columns and the mapping used */
+  csv: CsvInfo | null;
+}
+
+/** Which column (0-based) holds which field of a CSV import; null: not read. */
+export interface CsvMapping {
+  title: number | null;
+  severity: number | null;
+  target: number | null;
+  port: number | null;
+  description: number | null;
+  remediation: number | null;
+  cve: number | null;
+  cvss: number | null;
+  ruleId: number | null;
+  references: number | null;
+  details: number | null;
+}
+
+export interface CsvInfo {
+  headers: string[];
+  /** the first rows, cells cut to 120 characters */
+  sample: string[][];
+  rows: number;
+  delimiter: string;
+  mapping: CsvMapping;
+  /** how the severity column was read */
+  severityScale: "words" | "levels" | "scores" | null;
 }
 
 export interface ScanImportPending extends ScanImportPreview {

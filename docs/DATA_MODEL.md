@@ -168,6 +168,7 @@ Projects → *Findings* → *Import results* reads the output of other tools int
 | OWASP ZAP JSON report | `site` list | one per alert and site, with up to 25 instances; risk code, confidence, CWE, references | web service |
 | Greenbone / OpenVAS report (GMP XML) | `<report>` root with `<results>` | one per NVT, host and port; `threat` High/Medium/Low/Critical, Log as informational, False Positive and Debug skipped; results with a quality of detection below 70 % left out (Greenbone's default filter); summary, insight and impact from the NVT tags, the result text, solution, CVEs, URL references, CVSS vector from `severities` | address, name, services |
 | SARIF 2.1.0 | `version` 2.1.x and `runs` | one per result; `security-severity` mapped like GitHub code scanning (≥ 9 critical, ≥ 7 high, ≥ 4 medium, > 0 low), otherwise `level` (error high, warning medium, note low) | none (source-code locations have no network target) |
+| CSV with a header row | none of the above, and a first line with at least two named columns separated by commas, semicolons or tabs | one per row, with the columns chosen in the preview (see [CSV findings](#csv-findings)) | addresses and names of the targets |
 
 * **Flow.** The file (at most 50 MB, 10,000 findings, 20,000 asset values) is chosen in a native dialog, read and previewed. The preview says what each finding would do: new, already recorded, resolved and reported again, dismissed earlier, outside the scope, or informational (not imported unless selected). Nothing is written until *Import* is pressed. The preview can be used once.
 * **Scope.** Every network target is checked against the project scope with the scope engine, on the value that is stored (a Nuclei finding on its `matched-at` target, each asset on its own host, a Burp address as an address). Findings and assets outside it are counted and their hosts listed; they are not recorded. A network finding whose host cannot be read (for example an invalid port) counts as outside the scope. A project without in-scope entries records no network results. SARIF results with a URL location (DAST tools) are scope-checked like network findings; results with source-code locations have no network target and are always imported.
@@ -179,6 +180,35 @@ Projects → *Findings* → *Import results* reads the output of other tools int
   * **Cleaning.** Control characters are removed and fields are cut to their limits, so one odd record cannot fail an import whose preview succeeded.
   * **HTML.** HTML in scanner descriptions becomes plain text.
 * **Archived projects** cannot receive imports.
+
+### CSV findings
+
+A CSV file can come from a spreadsheet or from a scanner's CSV export (Nessus, Qualys, Greenbone and others). The code is in `workspace/scan_import_csv.rs`.
+
+**Reading the file.** The file is read as RFC 4180:
+* quoted values may contain delimiters, `""` and line breaks;
+* CRLF or LF line ends; blank lines are skipped; a UTF-8 BOM is ignored;
+* the delimiter is the most frequent of comma, semicolon and tab outside quotes in the first line (a comma wins a tie);
+* at most 200 columns and 50,000 characters per cell are kept.
+
+A file that ends inside a quoted value keeps the rows before it and is marked as not read completely.
+
+**Columns.** The preview shows the eleven fields and the column each one is read from: title (required), severity, target, port, description, remediation, CVE, CVSS, rule ID, references and technical details. The columns are suggested from the header names; for example *Name* or *Title*, *Risk* or *Severity*, *Host*, *IP* or *URL*, *Plugin ID* or *QID*, *Solution*, *See Also*, and *Plugin Output* or *Results*. Changing a column reads the file again (`scan_import_remap`) and refreshes the preview.
+
+**Values:**
+* **Severity** is read per column:
+  * words (critical, high, medium or moderate, low, info, none, log);
+  * whole numbers 1 to 5 as levels, as Qualys uses them (5 critical, 4 high, 3 medium, 2 low, 1 informational);
+  * numbers with decimals, or above 5, as CVSS scores (≥ 9 critical, ≥ 7 high, ≥ 4 medium, > 0 low). A decimal comma is accepted.
+  * Without a severity column, a valid CVSS vector or score decides. Otherwise the finding is informational, and the preview says so.
+* **Target.** A port column is joined to a plain host or address (`host:port`). URLs and values with a port stay as they are.
+* **CVE.** CVE values are split on commas, semicolons and spaces.
+* **References.** Only http(s) URLs are kept.
+* **CVSS.** A valid CVSS vector is scored. Any other value goes into the technical details.
+
+**Scope and copied text.** As for the other formats: rows whose target is outside the scope are not recorded, and every copied value is redacted and cleaned. The sample values the preview shows are redacted too.
+
+**Deduplication and fixes.** The fingerprint is the rule ID (or the title when there is none) and the target, so the same rows are recognized in a later file. **A CSV file never verifies fixes**: exports are often filtered by severity or host, so a finding that a CSV file does not list proves nothing. Library templates do not apply to CSV rows, because a rule ID in a CSV file does not say which scanner it belongs to.
 
 ## Finding library (schema 14)
 

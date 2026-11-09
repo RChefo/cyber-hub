@@ -132,6 +132,7 @@ export const api = {
   evidenceDelete: (id: number) => call<void>("evidence_delete", { id }),
   scanImportPick: (projectId: number, options: T.ScanImportOptions) => call<T.ScanImportPending | null>("scan_import_pick", { projectId, options }),
   scanImportPreview: (token: string, options: T.ScanImportOptions) => call<T.ScanImportPreview>("scan_import_preview", { token, options }),
+  scanImportRemap: (token: string, mapping: T.CsvMapping, options: T.ScanImportOptions) => call<T.ScanImportPreview>("scan_import_remap", { token, mapping, options }),
   scanImportCommit: (token: string, options: T.ScanImportOptions) => call<T.ScanImportResult>("scan_import_commit", { token, options }),
   scanImportDiscard: (token: string) => call<void>("scan_import_discard", { token }),
   scanImportsList: (projectId: number) => call<T.ScanImportRecord[]>("scan_imports_list", { projectId }),

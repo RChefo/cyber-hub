@@ -2,14 +2,14 @@ import { Button } from "@heroui/react";
 import { FileUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { SeverityBadge, ToneChip, type Tone } from "@/components/ui/Badges";
-import { importCount, knownCount, nothingToImport, OUTCOME_META, shownOutcome } from "./scanImport";
+import { columnOptions, CSV_FIELDS, importCount, knownCount, nothingToImport, OUTCOME_META, severityScaleText, shownOutcome, withColumn } from "./scanImport";
 import { AppModal } from "@/components/ui/Dialogs";
 import { ErrorBlock, InlineSpinner } from "@/components/ui/Feedback";
-import { SwitchInput } from "@/components/ui/Fields";
+import { SelectInput, SwitchInput } from "@/components/ui/Fields";
 import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { ScanImportOptions, ScanImportPending, ScanImportPreview, Severity } from "@/lib/types";
+import type { CsvInfo, CsvMapping, ScanImportOptions, ScanImportPending, ScanImportPreview, Severity } from "@/lib/types";
 import { formatDateTime, formatNumber, pluralize } from "@/lib/utils";
 
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
@@ -75,6 +75,19 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
     }
   };
 
+  const remap = async (mapping: CsvMapping) => {
+    if (!pending) return;
+    setBusy("preview");
+    setError(null);
+    try {
+      setPreview(await api.scanImportRemap(pending.token, mapping, options));
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const apply = async () => {
     if (!pending) return;
     setBusy("apply");
@@ -105,7 +118,7 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
       onOpenChange={close}
       size="lg"
       title="Import scan results"
-      description="Nmap, Nessus and Greenbone/OpenVAS XML, Burp Suite issue exports, Nuclei, OWASP ZAP and SARIF JSON. You see what the file contains before anything is recorded."
+      description="Nmap, Nessus and Greenbone/OpenVAS XML, Burp Suite issue exports, Nuclei, OWASP ZAP and SARIF JSON, and CSV files with a header row. You see what the file contains before anything is recorded."
       footer={
         <>
           <Button variant="tertiary" onPress={() => close(false)}>
@@ -163,6 +176,8 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
             <Stat label="Already recorded" value={formatNumber(knownCount(preview))} />
             <Stat label="Assets" value={formatNumber(preview.assets)} hint={preview.assetsNew > 0 ? `${formatNumber(preview.assetsNew)} new` : undefined} />
           </div>
+
+          {preview.csv && <CsvColumns info={preview.csv} isDisabled={busy !== null} onChange={(m) => void remap(m)} />}
 
           {preview.findings > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -278,6 +293,32 @@ export function ScanImportModal({ isOpen, onOpenChange, projectId }: { isOpen: b
         </div>
       )}
     </AppModal>
+  );
+}
+
+/** The column of each field, for a CSV file: suggested from its header names, changed here. */
+function CsvColumns({ info, isDisabled, onChange }: { info: CsvInfo; isDisabled: boolean; onChange: (m: CsvMapping) => void }) {
+  const options = columnOptions(info);
+  const scale = severityScaleText(info.severityScale);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-[12.5px] text-muted">
+        <span className="font-medium text-foreground">Columns</span> · {pluralize(info.rows, "row")}, {info.delimiter === "tab" ? "tab" : `“${info.delimiter}”`}-separated. Suggested from the header names; change any of them. CSV exports are often filtered, so a CSV file never marks findings as fixed.
+      </div>
+      <div className="grid gap-x-3 gap-y-2 sm:grid-cols-3">
+        {CSV_FIELDS.map((f) => (
+          <SelectInput
+            key={f.key}
+            label={f.key === "title" ? `${f.label} (required)` : f.label}
+            value={info.mapping[f.key] == null ? "none" : String(info.mapping[f.key])}
+            options={options}
+            isDisabled={isDisabled}
+            onChange={(id) => onChange(withColumn(info.mapping, f.key, id))}
+          />
+        ))}
+      </div>
+      {scale && info.mapping.severity != null && <p className="text-[12px] text-muted">{scale}</p>}
+    </div>
   );
 }
 

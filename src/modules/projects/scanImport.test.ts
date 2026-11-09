@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ScanImportPreview } from "@/lib/types";
-import { importCount, knownCount, nothingToImport, shownOutcome } from "./scanImport";
+import type { CsvInfo, ScanImportPreview } from "@/lib/types";
+import { columnOptions, CSV_FIELDS, importCount, knownCount, nothingToImport, severityScaleText, shownOutcome, withColumn } from "./scanImport";
 
 const base: ScanImportPreview = {
   format: "nessus",
@@ -21,6 +21,7 @@ const base: ScanImportPreview = {
   templated: 0,
   notReported: [],
   notReportedCount: 0,
+  csv: null,
 };
 
 describe("scan import preview", () => {
@@ -42,5 +43,33 @@ describe("scan import preview", () => {
     expect(shownOutcome("info", { includeInfo: true, reopenResolved: false, useTemplates: true, resolveMissing: false })).toBe("new");
     expect(shownOutcome("info", { includeInfo: false, reopenResolved: false, useTemplates: true, resolveMissing: false })).toBe("info");
     expect(shownOutcome("out_of_scope", { includeInfo: true, reopenResolved: false, useTemplates: true, resolveMissing: false })).toBe("out_of_scope");
+  });
+});
+
+describe("CSV column mapping", () => {
+  const info: CsvInfo = {
+    headers: ["Name", "Risk", "", "Host"],
+    sample: [["", "High", "x", "10.0.0.5"], ["A very long finding title that goes on and on and on", "Low", "", "10.0.0.6"]],
+    rows: 2,
+    delimiter: ",",
+    mapping: { title: 0, severity: 1, target: 3, port: null, description: null, remediation: null, cve: null, cvss: null, ruleId: null, references: null, details: null },
+    severityScale: "words",
+  };
+
+  it("offers every column with its first value", () => {
+    const opts = columnOptions(info);
+    expect(opts[0]).toEqual({ id: "none", label: "Not used" });
+    expect(opts[1].label).toBe("Name (A very long finding title that goes on a…)");
+    expect(opts[2].label).toBe("Risk (High)");
+    expect(opts[3].label).toBe("Column 3 (x)");
+    expect(opts).toHaveLength(5);
+  });
+
+  it("changes one field at a time", () => {
+    expect(withColumn(info.mapping, "port", "2").port).toBe(2);
+    expect(withColumn(info.mapping, "title", "none").title).toBeNull();
+    expect(CSV_FIELDS.map((f) => f.key)).toContain("ruleId");
+    expect(severityScaleText("levels")).toContain("5 is critical");
+    expect(severityScaleText(null)).toBeNull();
   });
 });

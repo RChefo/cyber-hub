@@ -568,3 +568,103 @@ fn one_odd_record_does_not_abort_an_import() {
     })
     .unwrap();
 }
+
+/* ───────────────────────── CSV ───────────────────────── */
+
+/// A Nessus-style CSV export: quoted multi-line cells, a duplicate row, an out-of-scope host, an
+/// informational row, a secret in the output column and a cell that looks like a formula.
+const CSV: &str = "\u{feff}Plugin ID,CVE,CVSS v3.0 Base Score,Risk,Host,Protocol,Port,Name,Synopsis,Description,Solution,See Also,Plugin Output\r\n\
+156860,\"CVE-2021-44790,CVE-2021-44224\",9.8,Critical,93.184.215.7,tcp,443,Apache 2.4.x < 2.4.52 Multiple Vulnerabilities,The remote web server is affected.,\"Line one\r\nline two, with a comma\",Upgrade to 2.4.52,https://httpd.apache.org/security/vulnerabilities_24.html,Login with password=hunter2 succeeded\r\n\
+156860,\"CVE-2021-44790\",9.8,Critical,93.184.215.7,tcp,443,Apache 2.4.x < 2.4.52 Multiple Vulnerabilities,dup,dup,Upgrade,,\r\n\
+70658,,,Medium,10.9.9.9,tcp,22,SSH Server CBC Mode Ciphers Enabled,CBC,CBC,Disable CBC,,\r\n\
+19506,,,None,93.184.215.7,tcp,0,Nessus Scan Information,Info,Info,n/a,,\r\n\
+99999,,,High,app.example.com,tcp,8443,\"=HYPERLINK(\"\"http://evil.example\"\")\",x,x,y,,\r\n";
+
+#[test]
+fn csv_files_are_mapped_scoped_and_deduplicated() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let p = setup(c);
+        assert_eq!(detect(CSV.trim_start_matches('\u{feff}')), Ok(Format::Csv));
+        let parsed = parse(CSV).unwrap();
+        let info = parsed.csv.clone().expect("CSV columns");
+        assert_eq!((info.rows, info.delimiter.as_str(), info.headers.len()), (5, ",", 13));
+        assert_eq!((info.mapping.title, info.mapping.severity, info.mapping.target, info.mapping.port), (Some(7), Some(3), Some(4), Some(6)));
+        assert_eq!(info.severity_scale.as_deref(), Some("words"));
+        assert_eq!(parsed.merged, 1, "the duplicate row is merged");
+        let apache = &parsed.findings[0];
+        assert_eq!((apache.target.as_str(), apache.host.as_deref(), apache.severity), ("93.184.215.7:443", Some("93.184.215.7"), "critical"));
+        assert_eq!(apache.cve, "CVE-2021-44790, CVE-2021-44224");
+        assert_eq!(apache.description, "Line one\nline two, with a comma", "quoted line breaks stay; carriage returns go like other control characters");
+        assert!(!apache.technical.contains("hunter2"), "copied text is redacted: {}", apache.technical);
+        assert_eq!(apache.references, ["https://httpd.apache.org/security/vulnerabilities_24.html"]);
+        assert!(info.sample.iter().flatten().all(|c| !c.contains("hunter2")), "the preview sample is redacted too");
+        // a formula is stored as text (exports guard it again)
+        assert!(parsed.findings.iter().any(|f| f.title.starts_with("=HYPERLINK")));
+
+        let pv = preview(c, p, &parsed, Options::default())?;
+        assert_eq!((pv.counts.new, pv.counts.out_of_scope, pv.counts.info), (2, 1, 1), "{:?}", pv.counts);
+        assert!(pv.csv.is_some());
+        let ev = evidence::add_text(c, p, "csv stand-in", "x", "", "user")?;
+        let file = FileInfo { file_name: "export.csv", sha256: "cd", evidence_id: Some(ev.id) };
+        let r = import(c, p, &parsed, Options::default(), &file)?;
+        assert_eq!(r.created, 2);
+        assert_eq!(count(c, "SELECT COUNT(*) FROM assets WHERE value LIKE '10.9.9.9%'"), 0, "out-of-scope hosts are not recorded");
+        let again = import(c, p, &parsed, Options::default(), &file)?;
+        assert_eq!((again.created, again.seen_again), (0, 2), "the same rows are recognized");
+
+        // a later, filtered export without the Apache row never marks it as fixed
+        let filtered: String = CSV.lines().filter(|l| !l.starts_with("156860")).map(|l| format!("{l}\n")).collect();
+        let later = parse(&filtered).unwrap();
+        assert!(later.findings.iter().all(|f| !f.title.starts_with("Apache")));
+        assert!(not_reported(c, p, &later)?.is_empty(), "CSV files never verify fixes");
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn csv_columns_can_be_chosen_and_are_checked() {
+    // a spreadsheet with its own header names, semicolons and decimal commas
+    let sheet = "Issue;Score;Where;Notes\nWeak TLS;5,3;app.example.com:443;TLS 1.0 enabled\nOpen admin;9;https://app.example.com/admin;\n;7;app.example.com;no title\n";
+    let first = parse(sheet).unwrap();
+    let info = first.csv.clone().unwrap();
+    assert_eq!((info.delimiter.as_str(), info.mapping.title, info.mapping.severity), (";", Some(0), None), "{:?}", info.mapping);
+    assert!(first.warnings.iter().any(|w| w.contains("informational")), "{:?}", first.warnings);
+
+    let mapping = csv::CsvMapping { title: Some(0), severity: Some(1), target: Some(2), description: Some(3), ..Default::default() };
+    let p = parse_csv_with(sheet, &mapping).unwrap();
+    assert_eq!(p.csv.as_ref().unwrap().severity_scale.as_deref(), Some("scores"), "decimal commas are CVSS scores");
+    let sev: Vec<(&str, &str)> = p.findings.iter().map(|f| (f.title.as_str(), f.severity)).collect();
+    assert_eq!(sev, [("Weak TLS", "medium"), ("Open admin", "critical")]);
+    assert!(p.warnings.iter().any(|w| w.contains("1 row without a title was skipped")), "{:?}", p.warnings);
+    assert_eq!(p.findings[1].host.as_deref(), Some("app.example.com"));
+
+    // levels 1 to 5, as Qualys uses them
+    let levels = "Title,Severity,IP\nA,5,93.184.215.7\nB,3,93.184.215.7\nC,1,93.184.215.7\n";
+    let sev: Vec<&str> = parse(levels).unwrap().findings.iter().map(|f| f.severity).collect();
+    assert_eq!(sev, ["critical", "medium", "info"]);
+
+    // no title column: nothing is read until one is chosen
+    let untitled = parse("Host,Port\n93.184.215.7,443\n").unwrap();
+    assert!(untitled.findings.is_empty() && untitled.warnings.iter().any(|w| w.contains("Choose the column")), "{:?}", untitled.warnings);
+    assert!(parse_csv_with(sheet, &csv::CsvMapping { title: Some(9), ..Default::default() }).unwrap_err().contains("Column 10 does not exist"));
+    assert!(parse_csv_with(NUCLEI, &csv::CsvMapping { title: Some(0), ..Default::default() }).unwrap_err().contains("only be chosen for CSV"));
+    assert!(serde_json::from_value::<csv::CsvMapping>(json!({ "title": 0, "sql": 1 })).is_err(), "unknown fields are refused");
+
+    // text that is not CSV is still refused
+    assert!(detect("just some words").is_err());
+    assert!(detect("one-column\nvalue\n").is_err());
+}
+
+#[test]
+fn csv_parsing_survives_cut_and_multibyte_input() {
+    let doc = CSV.replace("Line one", "Zeile eins 日本語 \"\"zitat\"\"");
+    for (i, _) in doc.char_indices().step_by(5) {
+        let _ = parse(&doc[..i]);
+    }
+    // a file that ends inside a quoted value keeps what came before, and is marked incomplete
+    let cut = parse("Name,Host\nA,93.184.215.7\n\"B, open,93.184.215.7\n").unwrap();
+    assert!(cut.incomplete && cut.warnings.iter().any(|w| w.contains("quoted")), "{:?}", cut.warnings);
+    assert_eq!(cut.findings[0].title, "A");
+}
