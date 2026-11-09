@@ -683,7 +683,7 @@ The owner's brief asked for the layer that connects the modules' results: one da
 | Item | Value |
 |---|---|
 | Time | 2026-11-09T20:10:11Z–22:35Z (about 2 h 25 min) |
-| Commits | 11: nine capabilities, a concurrency test (`54576dd`) and this report |
+| Commits | 10: eight capabilities, a concurrency test (`54576dd`) and this report (`2d23aba`) |
 | Schema | 21 → 23 (migration 22: relations, decisions, evidence provenance; migration 23: ATT&CK assessments and layers); each upgrade keeps a backup first |
 | Tests | Rust 459 → 482 (6 → 7 ignored); frontend 258 → 264 (45 → 47 files) |
 | New dependencies | none; the ATT&CK Enterprise 20.1 catalog is bundled as data (MITRE's notice in THIRD_PARTY_NOTICES.md) |
