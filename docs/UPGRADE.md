@@ -94,7 +94,8 @@ A notice and the activity log report the result.
 
 **Safety:**
 * Nothing is deleted.
-* A journal (`restore-pending.json`) exists until the evidence files are sorted. While it exists, the evidence sweep does not run, and an interrupted restore resumes at the next start. The sweep is also skipped at the start that applies a restore.
+* A journal (`restore-pending.json`) exists until the evidence files are sorted. While it exists, the evidence sweep does not run, and an interrupted restore resumes at the next start once its copy exists. The sweep is also skipped at the start that applies a restore.
+* A restore interrupted while SQLite is still making the copy is not resumed: the next start drops it, and the current database stays in use unchanged. The unfinished copy, a hidden `.restore-<id>.partial` file (with a `-journal` file next to it), stays in the data folder; it is never used and can be deleted.
 * If the database is still in use when Cyber Hub starts again (another process holds it), the copy waits for the next start. *Settings* shows it and can cancel it.
 * If the restored database does not open, it is set aside as `restored-cyberhub.db` in the same folder, and the previous database and its evidence files go back.
 * A restored database never turns the MCP bridge on by itself. If it was on in the backup, it is turned off and the notice says so.
@@ -117,6 +118,19 @@ Tested on disposable copies, never on a real user database:
   * a normal restart completed the upgrade, and all 400,015 findings were verified.
 
   At that size the first start takes about 9 seconds and shows no progress indicator.
+* **Release candidate upgrade, schema 12 to 19** (Windows 11). A schema-12 copy held records of every kind: projects whose scope had excluded and in-scope URL entries, findings linked to evidence, a tool run and an OSINT entity, vulnerabilities with their history, timeline events, an investigation, workflows, MCP settings, and three evidence files, one of them shared by two projects. After the application upgraded it:
+  * the automatic backup is identical to the original, row by row;
+  * apart from the tool catalog, which is refreshed at every start, every original row is unchanged in its original columns. The only changes are the schema-19 scope entries: one in-scope entry became an exclusion, three host exclusions were added, and four scope history entries record them (source "upgrade");
+  * of 20 scope checks, none that the old rules refused is allowed after the upgrade, and none that they allowed is refused;
+  * `integrity_check` and `foreign_key_check` are clean, the evidence files are unchanged and pass *Verify*, and finding links, runs, the investigation, workflows, vulnerabilities, the timeline and the MCP settings are intact;
+  * a second start changes nothing and makes no second backup.
+* **Release candidate restore** (the real app on Windows 11, and on Ubuntu 24.04 and Debian 12 with a virtual display and no network):
+  * a file that is not a database and a damaged copy are refused, and nothing is staged;
+  * a restore keeps the previous database in `backups/before-restore-<time>/` with the evidence files only it refers to, and restoring that copy brings both back;
+  * on Linux, *Verify* reported a missing and a modified evidence file, and a file next to the backup whose content did not match its SHA-256 was not copied in;
+  * killed 0.3 s after the confirmation, when the copy was made, the restore was applied whole at the next start;
+  * killed while SQLite copied a large backup (395 MB on Windows, 790 MB on Linux), the restore was not applied: the database was unchanged, and only the unfinished copy stayed in the data folder;
+  * on Linux, a schema-12 backup restored by schema 19 was upgraded after its own pre-upgrade backup, with its evidence copied from the folder next to it and verified.
 * **Newer database.** The current build refuses a database whose `user_version` is higher than it supports and leaves the file unchanged. There is an automated test.
 * **Old build on an upgraded database** (0.1.0 opening schema 12). This is **not supported and not safe**. The old build does not check the version: it opens the file without a warning and then shows wrong counts of open findings, fails to create findings, rejects editing findings in the new statuses, and the Findings tab crashes. Only the current build has the newer-database check. It protects against downgrades from later versions, not against 0.1.0.
 
