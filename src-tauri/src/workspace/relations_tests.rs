@@ -222,3 +222,58 @@ fn related_records_graph_paths_and_merged_entities() {
     })
     .unwrap();
 }
+
+#[test]
+fn concurrent_correlation_and_review_keep_one_row_per_pair() {
+    let db = Db::open_in_memory().unwrap();
+    let p = db
+        .with(|c| {
+            let p = project(c, "Concurrent");
+            for i in 0..30 {
+                finding(c, p, &format!("Issue {i}"), &format!("h{i}.example.com"));
+                asset(c, p, "subdomain", &format!("h{i}.example.com"));
+            }
+            Ok(p)
+        })
+        .unwrap();
+    // correlation from several threads while another accepts suggestions as they appear
+    std::thread::scope(|s| {
+        for _ in 0..4 {
+            s.spawn(|| {
+                for _ in 0..5 {
+                    db.with(|c| crate::workspace::correlate::run(c, p)).unwrap();
+                }
+            });
+        }
+        s.spawn(|| {
+            for _ in 0..20 {
+                db.with(|c| {
+                    for r in list(c, p, &Filter { review: Some("pending".into()), limit: Some(3), ..Default::default() })?.items {
+                        review(c, r.id, "accept", "", "user")?;
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            }
+        });
+    });
+    db.with(|c| {
+        let dupes: i64 = c.query_row(
+            "SELECT COUNT(*) FROM (SELECT COUNT(*) AS n FROM relations GROUP BY project_id, type, a_kind, a_id, a_sub, b_kind, b_id, b_sub HAVING n > 1)",
+            [],
+            |r| r.get(0),
+        )?;
+        assert_eq!(dupes, 0, "one relationship per pair and type");
+        let (total, verified, pending): (i64, i64, i64) = c.query_row(
+            "SELECT COUNT(*), SUM(verification = 'verified'), SUM(review = 'pending') FROM relations WHERE project_id = ?1",
+            params![p],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )?;
+        assert_eq!(total, 30, "one suggestion per finding and asset");
+        assert!(verified > 0 && verified + pending == total, "decisions are kept: {verified} accepted, {pending} pending");
+        let links: i64 = c.query_row("SELECT COUNT(*) FROM finding_links WHERE kind = 'asset'", [], |r| r.get(0))?;
+        assert_eq!(links, verified, "each accepted suggestion made its finding link once");
+        Ok(())
+    })
+    .unwrap();
+}
