@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | **Complete** (third segment 2026-11-09T08:51:44Z–11:05Z: path-level scope, Linux GUI, reliability and cross-module audits. Earlier segments: 2026-11-08T21:31:01Z–23:43Z and 2026-11-09T06:32:12Z–08:07Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
+| Current phase | **Complete** (fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -61,6 +61,12 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 25. Requests sent to targets and asset status on the timeline (`7e74883`)
 26. Imported CVEs tracked as vulnerabilities on request (`6860814`)
 27. SQLite 3.54.1 and rmcp 3.9.0 for two new advisories; MSRV 1.89 (`0641a0e`)
+28. Redirects of external tools need host-level authorization (`e43f3cb`)
+29. Checklist links can be removed; checklist history on the timeline (`c4c80c8`)
+30. Project deletion refused during active work; atomic end-of-run records (`a1e78ca`)
+31. Guarded rebuild mode for migrations of referenced tables (`223491c`)
+32. HTML and Markdown reports from one model (`ca685c0`)
+33. Release notes and upgrade guidance (`d6a192e`)
 
 ## Tests executed
 
@@ -68,11 +74,11 @@ See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md).
 
 ## Known failures
 
-None. The final results at `0641a0e`:
-* **Windows:** 351 Rust tests (355 with provisioning) and 224 frontend tests.
-* **Ubuntu 24.04.5 and Debian 12:** 351 Rust tests and all 36 frontend test files.
-* **Static checks:** clippy (0.1.94 and 0.1.99), tsc, the build, the audits and gitleaks are clean.
-* **Real GUI:** 62 of 62 checks on Ubuntu and on Debian; the Windows smoke covered every page and project tab.
+None. The final results at `d6a192e`:
+* **Windows:** 362 Rust tests (366 with provisioning) and 224 frontend tests.
+* **Ubuntu 24.04.5 and Debian 12:** 362 Rust tests and all 36 frontend test files.
+* **Static checks:** clippy, tsc, the build, npm audit, cargo audit (Windows) and gitleaks are clean.
+* **Real GUI:** 69 of 69 checks on Ubuntu and on Debian; the Windows smoke and 7 feature checks passed.
 
 ## Commits during the mission
 
@@ -116,6 +122,13 @@ None. The final results at `0641a0e`:
 | `7e74883` | feat(timeline): record requests sent to targets and asset status changes |
 | `6860814` | feat(findings): track imported CVEs as vulnerabilities on request |
 | `0641a0e` | fix(deps): upgrade the bundled SQLite and rmcp for new advisories |
+| `dcba30b` | docs(mission): report the third segment and its final verification |
+| `e43f3cb` | feat(scope): refuse tool runs that follow redirects on path-only URLs |
+| `c4c80c8` | feat(checklist): remove checklist finding links and record every change |
+| `a1e78ca` | fix(projects): keep run history when a project is deleted during a run |
+| `223491c` | fix(db): add a guarded rebuild mode for referenced tables in migrations |
+| `ca685c0` | feat(reports): build HTML and Markdown reports from one model |
+| `d6a192e` | docs(release): prepare the 0.1.0 release notes and upgrade guidance |
 
 ## Next action
 

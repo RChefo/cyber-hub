@@ -293,3 +293,73 @@ The deferred and unverified items from the first segment were closed one by one:
 ### Final assessment
 
 The owner's request for a conservative path-level scope model is implemented and was attacked by an independent reviewer whose 13 findings were all fixed with regression tests. Every rule the owner listed holds in both the unit tests and the real Linux GUI, where the target server's own log shows that no refused URL was requested. The cross-module audit found real defects, among them a feature that always failed, a deletion that failed with a constraint error, and a history clear that destroyed other projects' references. They were fixed with tests and verified in the GUI. Two dependency advisories published since the last segment were fixed. Nothing was pushed, released or signed, and the owner's real data was never used.
+
+## Fourth segment: final pre-release hardening (2026-11-09)
+
+### Statistics
+
+| Item | Value |
+|---|---|
+| Start | 2026-11-09T11:28:28Z |
+| End | 2026-11-09T12:20Z: about 50 min |
+| Commits | 7: `e43f3cb`, `c4c80c8`, `a1e78ca`, `223491c`, `ca685c0`, `d6a192e` and the final docs commit |
+| Tests | Rust 351 → 362 (366 with `provisioning`), 3 ignored; frontend 224 |
+
+### Implementation
+
+| Commit | What |
+|---|---|
+| `e43f3cb` | **Redirects of external tools need host-level authorization.** A run is refused when the tool would follow redirects and one of its URLs is authorized only by path, or lies on a host with an excluded path. Per-tool policies are taken from each tool's help text or source (checked in November 2026): ffuf, gobuster, feroxbuster (also bundled short options), httpx, dalfox and nikto follow when asked; nuclei, katana, sqlmap and whatweb follow unless told not to; wpscan and CeWL always follow. The refusal names the option and the way out, and the options are never changed. Explicitly authorized hosts keep the normal behaviour. Cyber Hub's own HTTP client still checks every redirect hop. |
+| `c4c80c8` | **WSTG checklist links can be removed:** the Unlink button, `unlink` in the app's API, and `unlink_finding` through MCP. MCP keeps the approval and the archived-project refusal. Every checklist change is now on the project timeline, with who made it. |
+| `a1e78ca` | **Project deletion during active work.** Deletion is refused while a tool run, workflow run or discovery is still running for the project (one transaction). The end of a run is recorded atomically, under the project it belongs to at that moment, so its activity entry can no longer be lost. Evidence files only the deleted project used are removed at once, unless a restore is being sorted. |
+| `223491c` | **Migration rebuild mode.** No current migration needs foreign keys off: migration 9 rebuilt `findings` before any table referred to it. Rebuilds of referenced tables now have a guarded mode: foreign keys off only around their transaction, `foreign_key_check` before commit, enforcement always restored. A test fails if a migration drops a referenced table without it. |
+| `ca685c0` | **One model for both reports.** HTML and Markdown have the same sections, order and terms. Only open findings are listed; closed and below-minimum findings are counted. Notes and contacts are never included. Markdown free text cannot become HTML in a viewer. |
+| `d6a192e` | Release notes (`docs/releases/0.1.0.md`), release preparation, UPGRADE and SECURITY updates. |
+
+### Verification at `d6a192e`
+
+| Check | Windows 11 | Ubuntu 24.04.5 | Debian 12 |
+|---|---|---|---|
+| cargo test | 362 passed, 3 ignored (366 with `provisioning`) | 362 passed, 3 ignored | 362 passed, 3 ignored |
+| clippy `-D warnings` | clean, with and without `provisioning` | clean | clean |
+| tsc | clean | clean | clean |
+| vitest | 224 passed (36 files) | 36 of 36 files | 36 of 36 files |
+| npm audit | 0 vulnerabilities | 0 vulnerabilities | 0 vulnerabilities |
+| cargo audit | 0 vulnerabilities, 8 allowed warnings | not installed in the image; the lockfile is the same | not installed in the image; the lockfile is the same |
+| gitleaks | no leaks: this segment's commits, and the tracked `src-tauri/src`, `src`, `docs` and `scripts` at HEAD | — | — |
+| database integrity | QA copy upgraded 12 → 19 with its backup; `integrity_check` ok, no foreign-key violations | ok after SIGKILL, no foreign-key violations | ok after SIGKILL, no foreign-key violations |
+| real GUI | smoke over 16 pages and 14 project tabs, plus 7 feature checks | 69 of 69 checks | 69 of 69 checks |
+
+**What the real app showed.** These come from the GUI passes, not only from backend tests:
+* **Redirects:** an ffuf run with `-r` on a path-only URL is refused in the preview, with the option and the way out. The same run is allowed without `-r`, and allowed with `-r` when the host is authorized. A stand-in `ffuf` on the app's PATH only answers the detection; the preview never runs it.
+* **Checklist:** the Unlink button removes a test's finding link, and the change appears on the timeline. Checked on Ubuntu, Debian and Windows.
+* **Reports:** both formats have the same sections and findings, and neither contains contacts, notes or closed findings. Checked on all three platforms.
+* **Deletion:** a project with a running workflow is not deleted; after the workflow is cancelled it is. Checked on all three platforms.
+* **Earlier checks, rerun:** scope, CSV import with CVE tracking, evidence verification and checked export, MCP through the real sidecar, backup and restore with the automatic restart, and recovery after SIGKILL.
+
+The local target server's log shows only in-scope requests.
+
+### Security assessment
+
+* **Scope.** Path-level authorization never implies host-level authorization. Host-level tools need explicit host or network entries. HTTP operations are checked on the exact URL, with ambiguous forms refused. Cyber Hub's own redirects are rechecked per hop. Redirects of external tools now need host-level authorization for the tools whose options are known.
+* **Remaining exposure.** For tools without a policy, Cyber Hub cannot see redirects, crawling or settings inside a tool's own configuration file. These are documented as accepted risks.
+* **Reports.** The HTML report is inert (escaped, CSP). Markdown cannot carry raw HTML outside code. Internal notes and contacts are never exported.
+* **Data integrity.** Deletions, end-of-run records and migrations are transactional. Rebuilds of referenced tables have a guarded mode. Evidence is verifiable by SHA-256, and exports are checked.
+* **Dependencies.** Audits are clean. The SQLite memory-exposure advisory that affects restore is fixed (3.54.1).
+* **Testing.** No production system, real user database or third-party target was touched. All network tests used a local server in an offline container.
+
+### Remaining limitations
+
+* **Tool configuration files.** Cyber Hub reads redirect options on the command line, not settings inside a tool's own configuration file (for example ffuf `-config` or nuclei `-config`).
+* **Tools without a policy** keep the warning instead of a refusal.
+* **Linux desktops:** GNOME/KDE, Wayland and HiDPI were not tested; the Linux checks ran on a virtual display.
+* **macOS** is not supported.
+* **Linux images:** cargo-audit is not in them (the same lockfile is audited on Windows).
+* **Release builds:** their timings and installers were not measured or built, which needs authorization.
+
+### Release blockers
+
+1. **Authorization:** the owner must approve building installers, signing, notarization and publishing. None was done.
+2. **Version and notes:** confirm the version, then review `docs/releases/0.1.0.md`; it is published as written.
+3. **Upgrade rehearsal:** upgrade a copy of a real database from the previous build, checking the schema-19 host exclusions and the restore path, as `docs/releases/README.md` describes.
+4. **Build toolchains** must be at Rust 1.89 or later.

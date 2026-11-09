@@ -632,3 +632,103 @@ The owner's real database was not opened; its modification time is still 2026-11
 * The QA app, the Vite server and every container I started were stopped. Ports 1420 and 9223 are free.
 * Docker Desktop is still running. The `probot-mysql` container is not mine and was left alone.
 * QA data, logs and screenshots stay in the scratchpad (`linuxgui/`, `qa-seg3/`).
+
+## 2026-11-09T11:28Z: fourth segment starts (final pre-release hardening)
+
+The owner decided that external tools must not follow redirects when a target is authorized only by path. The owner also asked for:
+* report consistency;
+* clearing checklist links through the API;
+* a decision on the foreign-key-off migration mode;
+* a fix for project deletion during active runs;
+* a final regression on all three platforms;
+* release documentation.
+
+Not authorized: installers, signing, publishing, production changes, and the real database.
+
+## 11:30–11:45Z: redirects of external tools (`e43f3cb`)
+
+**Sources.** Each tool's redirect options and default were checked in its official help text or source:
+* **ffuf:** `-r`, "Follow redirects (default: false)".
+* **gobuster:** `follow-redirect`, alias `r`, default false (`cli/options.go`).
+* **feroxbuster:** `-r, --redirects` (clap, so short options can be bundled).
+* **httpx:** `-fr`, `-fhr`.
+* **nuclei:** `-fr`, `-fhr`; `-dr, -disable-redirects`. Templates may follow redirects themselves.
+* **katana:** `-dr, -disable-redirects  disable following redirects (default false)`, so it follows by default.
+* **sqlmap:** asks "Do you want to follow? [Y/n]" with `default='Y'`, and runs have no input, so it follows; `--ignore-redirects` stops it.
+* **whatweb:** `--follow-redirect=WHEN`, "Default: always".
+* **dalfox:** `-F, --follow-redirects`.
+* **nikto:** `-followredirects`; Getopt accepts prefixes such as `-f`.
+* **wpscan:** the main redirect is always requested; `--ignore-main-redirect` only changes what is scanned.
+* **CeWL:** the spider queues every redirect location.
+
+**Rule.** A run is refused when the tool would follow redirects and a URL is authorized only by path, or lies on a host with an excluded path. The options are never changed. The refusal names the option and says how to run the tool without redirects, or to authorize the host.
+
+**Tests:**
+* the per-tool option parser (attached values, `=false`, bundles, prefixes, values);
+* end to end through scope resolution: path-only, host-level, excluded paths, attached URLs, and exclusions and path checks still applying first.
+
+Cyber Hub's own HTTP client keeps its per-hop checks (existing local-server test).
+
+## 11:45–11:52Z: checklist links (`c4c80c8`)
+
+* **API.** `Link::{Keep, To, Clear}` replaces "finding or nothing":
+  * the GUI command takes `unlink`;
+  * MCP takes `unlink_finding`, and its approval names the finding whose link goes;
+  * a finding and an unlink together are refused, and finding ids must be positive.
+* **History.** Every change (status, note, link, unlink) is recorded on the project timeline (type `checklist`), with whether the analyst or an MCP client made it.
+* **Tests:** clearing; invalid test, project and finding ids; contradictions; archived projects through MCP (before the approval and when it is carried out); the history.
+
+## 11:52–12:00Z: project deletion during runs (`a1e78ca`)
+
+* **Cause.** The end of a run was two autocommitted statements. With the project deleted meanwhile, the activity insert failed its foreign key, and the log line wrongly said the run stayed "running".
+* **Fix.**
+  * Deletion is refused while a tool run, workflow run or discovery is still running; the check and the deletion are one transaction.
+  * The end of a run is one transaction, under the run's current project. A deleted project is noted in the entry.
+  * Evidence files that only the deleted project used are removed under the database lock, unless a restore is being sorted.
+* **Tests:**
+  * refusal, then deletion;
+  * the end of a run after the project was removed;
+  * an interrupted end-of-run write (a trigger that fails the insert, then nothing is half-written);
+  * a deletion racing the end of a run on two threads (foreign keys and integrity checked).
+
+## 12:00–12:05Z: migration rebuild mode (`223491c`)
+
+* **Analysis.** Only migration 9 rebuilds a table (`findings`), and at schema 8 nothing referred to it. No current migration needs foreign keys off.
+* **Why a helper anyway.** Today `findings` is referred to with `ON DELETE CASCADE`, so a rebuild written like migration 9 would delete finding history, links and fingerprints. A test demonstrates this.
+* **Helper.** `REBUILD_MIGRATIONS` plus `run_rebuild`:
+  * foreign keys are turned off only around the migration's transaction;
+  * `foreign_key_check` must find nothing before commit;
+  * enforcement is always restored.
+* **Tests:**
+  * the guard test (no migration drops a referenced table outside the mode);
+  * a rebuild keeps child rows;
+  * a failing and a lossy rebuild change nothing;
+  * an interrupted rebuild is rolled back at the next open.
+
+## 12:05–12:15Z: one report model (`ca685c0`)
+
+* **Shared model.** `collect()` feeds `render()` (HTML) and `markdown()`. The sections, order, terms, counts of closed and below-minimum findings, linked evidence with SHA-256, vulnerabilities, assets, the evidence register and the checklist line are all shared.
+* **Markdown escaping.** In free text, a `<` that could open HTML outside code is escaped. The CommonMark rules for code spans, backslash escapes and unpaired backticks are respected.
+* **Tests:**
+  * section and finding order equal in both formats, under several option sets;
+  * facts both state, and secrets neither states;
+  * inert Markdown that keeps code blocks;
+  * empty projects.
+* **Old builder.** The Markdown builder in `commands/projects.rs` is gone; `project_report` (export, MCP, workflows) uses the shared model.
+
+## 12:05–12:20Z: final regression at `d6a192e`
+
+* **Windows.** The checks are in the table below.
+  * **GUI:** a fresh copy of the QA data, upgraded 12 → 19 with its backup.
+    * the smoke covered 16 pages and 14 project tabs (the Vulnerabilities tab, which the smoke caught mid-switch, was rechecked directly: no error);
+    * `seg4-win.mjs` passed 7 of 7: report parity, no contacts or closed findings, the Unlink button and its history, deletion refused and then allowed, evidence verification.
+  * **Database:** integrity ok, no foreign-key violations.
+* **Ubuntu 24.04.5.** Build, then the GUI pass, then the suites.
+  * **GUI:** 69 of 69, including the new real-app checks:
+    * the ffuf preview with `-r` on a path-only URL is refused; without `-r` it is allowed, and on a host-level scope with `-r` too (a stand-in `ffuf` on the app's PATH only answers the detection);
+    * the Unlink button removes the link;
+    * the report formats match;
+    * deletion is refused while a workflow runs.
+  * **Suites:** 362 Rust tests, 36 of 36 frontend files, clippy and tsc clean, npm audit 0.
+* **Debian 12.** Build, then the suites (the same results), then the GUI pass: 69 of 69. Its screenshot after Unlink shows the refreshed row ("Failed", "Record finding"). The Ubuntu screenshot had been captured before the re-render; the Ubuntu data check had already passed.
+* **gitleaks:** this segment's commits and the tracked tree at HEAD; no leaks.
