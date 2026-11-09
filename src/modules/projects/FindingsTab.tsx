@@ -347,7 +347,7 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
     }
   };
 
-  const exportList = async (format: "csv" | "json") => {
+  const exportList = async (format: "csv" | "json" | "sarif") => {
     try {
       const file = await api.findingsExport(projectId, list.map((f) => f.id), format);
       if (file) notify.success(`${list.length} findings exported`, file);
@@ -408,12 +408,15 @@ export function FindingsTab({ projectId, findings }: { projectId: number; findin
                 <ChevronDown className="size-3" />
               </Button>
               <Dropdown.Popover placement="bottom end">
-                <Dropdown.Menu aria-label="Export format" onAction={(k) => void exportList(k as "csv" | "json")}>
+                <Dropdown.Menu aria-label="Export format" onAction={(k) => void exportList(k as "csv" | "json" | "sarif")}>
                   <Dropdown.Item id="csv" textValue="CSV">
                     CSV (spreadsheets)
                   </Dropdown.Item>
                   <Dropdown.Item id="json" textValue="JSON">
                     JSON (other tools)
+                  </Dropdown.Item>
+                  <Dropdown.Item id="sarif" textValue="SARIF">
+                    SARIF 2.1.0 (code scanning, vulnerability managers)
                   </Dropdown.Item>
                 </Dropdown.Menu>
               </Dropdown.Popover>

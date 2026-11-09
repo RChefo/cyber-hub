@@ -140,9 +140,16 @@ Projects → *Findings* provides:
 * history and links per finding, with notes;
 * bulk status changes. `findings_bulk_status` changes each selected finding on its own with the lifecycle rule, records every change, and reports the findings it left unchanged instead of failing.
 * bulk edits of tags and the assignee (*Edit tags or assignee* on a selection). `findings_bulk_edit` adds tags and removes them (matched without regard to case; at most 20 per finding), sets or clears the assignee, saves each finding on its own so that its history records what changed, and reports findings left unchanged;
-* export (*Export* → CSV or JSON) of the findings currently listed, in the order shown, through a native save dialog. The backend reads them from the database (`workspace/findings_export.rs`).
+* export (*Export* → CSV, JSON or SARIF) of the findings currently listed, in the order shown, through a native save dialog. The backend reads them from the database (`workspace/findings_export.rs`).
   * **CSV** follows RFC 4180 (every field quoted, CRLF line ends) with a UTF-8 byte-order mark, and has 21 columns including the CVSS score and vector and the references. Finding text can come from scanners and so from the assessed systems, so cells starting with `=`, `+`, `-`, `@`, tab or carriage return get a leading apostrophe and are not read as formulas (CSV injection).
   * **JSON** is `{"format":"cyberhub-findings","version":1,"project":…,"exportedAt":…,"findings":[…]}` with the full finding records.
+  * **SARIF 2.1.0** (OASIS) is for code-scanning platforms such as GitHub and for vulnerability managers that read SARIF. A finding is an analyst's judgement rather than a scanner rule, so each finding gets its own rule (`cyberhub/finding/<id>`) with the title, the description and the remediation as help text.
+    * `level`: critical and high are `error`, medium is `warning`, low and informational are `note`.
+    * `security-severity` (the score GitHub ranks alerts by): the CVSS score, or else 9.5, 8.0, 5.5, 3.0 or 0.0 for the severity. The rule's `tags` start with `security`, followed by the category and the finding's tags.
+    * Location: a URL or a file path (a relative path, an absolute Windows path as a `file:` URI, or a bare file name such as `Dockerfile` or `docker-compose.yml`) is a physical location; a host, an address, a package URL or free text is a logical location.
+    * `partialFingerprints` holds the finding ID, so the same finding stays the same alert across exports; the status, confidence, CVE and CVSS vector are result properties. False positives and accepted risks are exported as suppressed results (`suppressions`, status `accepted`).
+    * `automationDetails.id` is `cyberhub/<project>/`, so exports of different projects do not replace each other in GitHub.
+    * Exports pass the OASIS SARIF 2.1.0 JSON schema, and Cyber Hub's SARIF import reads them back with their titles, severities and file locations.
   * The project timeline records the export.
 
 ## Engagement workspace (schema 12)

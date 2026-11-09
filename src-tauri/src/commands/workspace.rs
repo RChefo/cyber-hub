@@ -557,7 +557,8 @@ pub async fn findings_export(app: AppHandle, project_id: i64, ids: Vec<i64>, for
         match format.as_str() {
             "csv" => (crate::workspace::findings_export::csv(&chosen), name, "csv"),
             "json" => (crate::workspace::findings_export::json(&name, &crate::util::now(), &chosen)?, name, "json"),
-            _ => return Err(crate::error::validation("Export as csv or json")),
+            "sarif" => (crate::workspace::findings_export::sarif(&name, &crate::util::now(), &chosen)?, name, "sarif"),
+            _ => return Err(crate::error::validation("Export as csv, json or sarif")),
         }
     };
     let safe: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).take(60).collect();
