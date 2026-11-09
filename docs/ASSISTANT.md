@@ -8,7 +8,7 @@ The application owner provisions an Anthropic API key with `cyberhub-keys set an
 
 ## What is sent, and when
 
-* **Nothing before the first question.** The first question of a conversation sends the question and the project data the user selected: scope and rules of engagement, assets, vulnerabilities, findings, recent activity. Every record is one line, and the data is limited to 150,000 characters.
+* **Nothing before the first question.** The first question of a conversation sends the question and the project data the user selected: scope and rules of engagement, assets, vulnerabilities, findings, relationships and ATT&CK (off by default), recent activity. The relationships section lists what the analyst confirmed apart from what correlation or an MCP client only suggested, and the ATT&CK section the analyst's assessments apart from techniques findings only name; the system prompt tells the model to say which kind it relies on and to present its conclusions as suggestions. Every answer is labelled as an AI suggestion to verify. Every record is one line, and the data is limited to 150,000 characters.
 * **Credentials are redacted** (`redact_text`) before anything is sent.
 * **The data can be inspected first.** *Preview exactly what is sent* shows the text.
 * **Native confirmation.** Before sending, a system dialog names the destination (api.anthropic.com), the model, the sections and their size. Cancelling sends nothing.

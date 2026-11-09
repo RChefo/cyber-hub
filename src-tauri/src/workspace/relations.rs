@@ -559,7 +559,8 @@ pub fn link(c: &Connection, project_id: i64, a: Ref, b: Ref, rel_type: &str, not
     d.node(c, project_id, &a)?;
     d.node(c, project_id, &b)?;
     let (a, b) = ordered(rel_type, a, b);
-    let proposal = actor == "mcp";
+    // an MCP client ("mcp" or "mcp:<client>") proposes; only the analyst links
+    let proposal = actor == "mcp" || actor.starts_with("mcp:");
     let (origin, verification, review) = if proposal { ("suggested", "inferred", "pending") } else { ("manual", "verified", "done") };
     let tx = c.unchecked_transaction()?;
     let ts = now();
@@ -579,8 +580,8 @@ pub fn link(c: &Connection, project_id: i64, a: Ref, b: Ref, rel_type: &str, not
         None => {
             tx.execute(
                 "INSERT INTO relations (project_id, a_kind, a_id, a_sub, b_kind, b_id, b_sub, type, origin, verification, review, confidence, reason, created_by, note, created_at, updated_at, reviewed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'high', ?12, ?13, ?14, ?15, ?15, CASE WHEN ?11 = 'done' THEN ?15 END)",
-                params![project_id, a.kind, a.id, a.sub, b.kind, b.id, b.sub, rel_type, origin, verification, review, if proposal { "Proposed by an MCP client" } else { "Linked by the analyst" }, actor, note.trim(), ts],
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?16, ?12, ?13, ?14, ?15, ?15, CASE WHEN ?11 = 'done' THEN ?15 END)",
+                params![project_id, a.kind, a.id, a.sub, b.kind, b.id, b.sub, rel_type, origin, verification, review, if proposal { "Proposed by an MCP client (AI suggestion)" } else { "Linked by the analyst" }, actor, note.trim(), ts, if proposal { "low" } else { "high" }],
             )?;
             tx.last_insert_rowid()
         }

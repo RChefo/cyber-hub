@@ -120,6 +120,9 @@ fn indicator() -> Value {
 fn hash() -> Value {
     json!({ "type": "string", "pattern": "^[0-9a-fA-F]{32}$|^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$", "description": "MD5, SHA-1 or SHA-256 hash" })
 }
+fn record_key() -> Value {
+    json!({ "type": "string", "maxLength": 80, "pattern": "^((finding|asset|vulnerability|evidence|osint_entity|execution):[0-9]+|(api_endpoint|sbom_component):[0-9]+:[0-9]+|technique:[Tt][0-9]{4}(\\.[0-9]{3})?)$", "description": "A record key as cyberhub_search_records returns it: finding:12, asset:3, api_endpoint:3:5 (definition and endpoint index), sbom_component:2:14, technique:T1059.001" })
+}
 fn investigation_id() -> Value {
     json!({ "type": "integer", "minimum": 1, "description": "OSINT investigation ID (from cyberhub_osint_list_investigations)" })
 }
@@ -359,6 +362,44 @@ pub static TOOLS: &[ToolSpec] = &[
         description: "Markdown report of an investigation (summary, collection, sources, entities, relationships, graph analysis, confidence, timeline, evidence, limitations, next steps), generated from local data.",
         schema: || obj(json!({ "investigation_id": investigation_id() }), &["investigation_id"]) },
     // ── approvals
+    // ── investigation: records of every module, their relationships and ATT&CK
+    ToolSpec { name: "cyberhub_search_records", title: "Search project records", group: "investigation", category: Category::Read,
+        description: "Find findings, assets, vulnerabilities, evidence, OSINT entities, tool runs, API endpoints, SBOM components and ATT&CK techniques by text, in one project or across projects. Archived projects are left out unless include_archived is true. Each hit has a record key (for example finding:12) for cyberhub_get_related_records.",
+        schema: || obj(json!({
+            "text": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "project_id": project_id(),
+            "kinds": { "type": "array", "maxItems": 10, "items": { "type": "string", "enum": ["project", "finding", "asset", "vulnerability", "evidence", "osint_entity", "execution", "api_endpoint", "sbom_component", "technique"] } },
+            "include_archived": { "type": "boolean", "description": "Also search archived projects (read-only)" },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        }), &["text"]) },
+    ToolSpec { name: "cyberhub_get_related_records", title: "Related records", group: "investigation", category: Category::Read,
+        description: "Everything related to one record of a project, with how each relation is known: relationships with their origin (observed, imported, derived, inferred, manual, suggested) and verification (verified is analyst-confirmed; inferred is a suggestion, not a fact), finding links, structural links, and the record's timeline events.",
+        schema: || obj(json!({ "project_id": project_id(), "record": record_key(), "include_rejected": { "type": "boolean" } }), &["project_id", "record"]) },
+    ToolSpec { name: "cyberhub_list_record_relationships", title: "List record relationships", group: "investigation", category: Category::Read,
+        description: "A project's relationships between records, with the rules that found them, the values that matched, the confidence and the analyst's decision. review=pending lists the correlation suggestions waiting for the user.",
+        schema: || obj(json!({
+            "project_id": project_id(),
+            "review": { "type": "string", "enum": ["pending", "done", "dismissed"] },
+            "kind": { "type": "string", "enum": ["finding", "asset", "vulnerability", "evidence", "osint_entity", "execution", "api_endpoint", "sbom_component", "technique"], "description": "Only relationships with a record of this kind on either side" },
+            "min_confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+            "offset": { "type": "integer", "minimum": 0 }
+        }), &["project_id"]) },
+    ToolSpec { name: "cyberhub_get_attack_matrix", title: "ATT&CK matrix of a project", group: "investigation", category: Category::Read,
+        description: "The ATT&CK techniques of a project, keeping apart what findings name (tool leads, not confirmed activity), the analyst's assessments (confirmed, hypothesis, ruled out, with confidence) and imported Navigator layers such as detection coverage (an overlay that never counts as observed).",
+        schema: || obj(json!({ "project_id": project_id() }), &["project_id"]) },
+    ToolSpec { name: "cyberhub_correlate_project", title: "Correlate a project's records", group: "investigation", category: Category::LocalWrite,
+        description: "Run Cyber Hub's correlation rules over a project's records (exact matches of URLs, hosts, CVEs, package URLs, file hashes and API paths). Matches are stored as suggestions in the user's review queue; nothing is confirmed or merged. Requires the user's approval in Cyber Hub.",
+        schema: || obj(json!({ "project_id": project_id() }), &["project_id"]) },
+    ToolSpec { name: "cyberhub_propose_record_relationship", title: "Propose a relationship between records", group: "investigation", category: Category::LocalWrite,
+        description: "Propose that two records of a project are related, for example that a finding affects an asset or maps to an ATT&CK technique. It is stored as an unconfirmed, low-confidence suggestion in the user's review queue, never as a fact. Requires the user's approval in Cyber Hub.",
+        schema: || obj(json!({
+            "project_id": project_id(),
+            "source": record_key(),
+            "target": record_key(),
+            "relationship": { "type": "string", "enum": ["affects", "corresponds_to", "supported_by", "related_to", "possible_duplicate", "maps_to", "associated_with"] },
+            "rationale": { "type": "string", "minLength": 10, "maxLength": 2000, "description": "Why the records are related, from data you read in Cyber Hub" }
+        }), &["project_id", "source", "target", "relationship", "rationale"]) },
     ToolSpec { name: "cyberhub_get_approval_status", title: "Approval status", group: "approvals", category: Category::Read,
         description: "Status of a request that is waiting for the user's approval in Cyber Hub, and its result once decided.",
         schema: || obj(json!({ "approval_id": { "type": "string", "minLength": 8, "maxLength": 64 } }), &["approval_id"]) },
@@ -401,6 +442,7 @@ pub const GROUPS: &[(&str, &str)] = &[
     ("vulnerabilities", "Vulnerability Intelligence"),
     ("library", "Finding Library"),
     ("osint", "OSINT Workspace"),
+    ("investigation", "Investigation"),
     ("reports", "Reports & History"),
     ("approvals", "Approvals"),
 ];
@@ -436,7 +478,7 @@ mod tests {
                 assert!(s["properties"].get(r.as_str().unwrap()).is_some(), "{} requires an undefined property", t.name);
             }
         }
-        assert_eq!(TOOLS.len(), 49);
+        assert_eq!(TOOLS.len(), 55);
     }
 
     #[test]
@@ -447,6 +489,8 @@ mod tests {
             ("cyberhub_create_finding", Category::LocalWrite),
             ("cyberhub_set_checklist_item", Category::LocalWrite),
             ("cyberhub_save_indicator", Category::LocalWrite),
+            ("cyberhub_correlate_project", Category::LocalWrite),
+            ("cyberhub_propose_record_relationship", Category::LocalWrite),
             ("cyberhub_export_report", Category::Export),
             ("cyberhub_threat_intel_lookup", Category::ExternalLookup),
             ("cyberhub_osint_discover", Category::ExternalLookup),

@@ -37,7 +37,7 @@ export const ORIGIN_LABEL: Record<RelationOrigin, string> = {
   derived: "Derived",
   inferred: "Inferred",
   manual: "Analyst",
-  suggested: "Suggested",
+  suggested: "Suggested by an MCP client",
 };
 
 export const VERIFICATION_LABEL: Record<RelationVerification, string> = {

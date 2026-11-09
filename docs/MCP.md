@@ -30,7 +30,7 @@ MCP has its own page in the sidebar (Integrations → MCP). The switch at the to
 | Overview | Server state, transport (STDIO), local bridge address, connected clients, catalog size, waiting approvals, recent activity |
 | Approvals | The Approval Center: every waiting request with the client, action, project, target, the checks Cyber Hub ran, and time left; Approve and Decline; recent decisions from the audit log |
 | Clients | Connected clients (from the running bridge) and clients seen before (from the audit log), with self-reported name and version, last activity, request counts and the latest result |
-| Tools | All 49 tools from the server catalog, grouped as below, with permission category, whether they ask you under the current policy, availability and parameters |
+| Tools | All 55 tools from the server catalog, grouped as below, with permission category, whether they ask you under the current policy, availability and parameters |
 | Resources & prompts | The resources, the scope template and the prompts, with their parameters |
 | Permissions | The policy for each category (below) |
 | Activity | The audit log, filterable by client, permission category and status, with redacted arguments per entry |
@@ -38,7 +38,7 @@ MCP has its own page in the sidebar (Integrations → MCP). The switch at the to
 
 The page reads everything from the app: the catalog comes from the same definitions `cyberhub-mcp` advertises, and clients and activity come from the bridge and the `mcp_audit` table. MCP settings are no longer in Settings.
 
-## Tools (49)
+## Tools (55)
 
 | Group | Tools | Permission category |
 |---|---|---|
@@ -60,6 +60,8 @@ The page reads everything from the app: the catalog comes from the same definiti
 | | `cyberhub_osint_propose_relationship` (stored as an unverified suggestion with low confidence) | local write |
 
 The OSINT tools were exercised with Claude Code 2.1.318 on Windows: all eight read tools, a refused discovery of a private address, a refused web fingerprint outside the project scope (both refused before any approval prompt), an approved DNS collection whose results stayed pending review, and an approved relationship proposal stored as inferred with low confidence and the client's rationale as evidence. The audit log recorded each call with its category and approval.
+| Investigation | `cyberhub_search_records` (archived projects only with `include_archived`), `cyberhub_get_related_records`, `cyberhub_list_record_relationships`, `cyberhub_get_attack_matrix` | read |
+| | `cyberhub_correlate_project` (stores suggestions only), `cyberhub_propose_record_relationship` (stored as an unconfirmed suggestion with low confidence) | local write |
 | Reports and history | `cyberhub_generate_report`, `cyberhub_get_activity`, `cyberhub_get_run_details` | read |
 | | `cyberhub_export_report` | export |
 | Approvals | `cyberhub_get_approval_status` | read |
@@ -72,6 +74,12 @@ The assessment tools (added in November 2026) work as follows:
 * `cyberhub_list_finding_templates` and `cyberhub_get_finding_template` return the user's own write-ups, so an assistant can reuse vetted text instead of writing its own.
 * `cyberhub_get_checklist` returns a project's WSTG coverage and the status of every test.
 * `cyberhub_set_checklist_item` changes one test, after the same checks as the Checklist tab: the test exists, the status is valid, and a linked finding belongs to the project. An invalid request is refused before an approval is shown. A note that is not given keeps the existing note.
+
+The investigation tools (Mission 3) give a client the same view of a project's records as the Investigation tab, and keep its conclusions apart from the analyst's:
+* Records are named by keys (`finding:12`, `api_endpoint:3:5`, `technique:T1059.001`) that `cyberhub_search_records` returns and the other tools accept; a key of another project is refused.
+* Relationships come with their origin and verification: `verified` is confirmed by the analyst, `inferred` is a suggestion. `cyberhub_get_attack_matrix` keeps techniques that findings name (leads) apart from the analyst's assessments and from imported layers; its result says so.
+* A client can run correlation and propose relationships, each after your approval. Both only add suggestions to the review queue: a proposal is stored as `suggested`, `inferred`, low confidence, with the client's name and rationale, and becomes a fact only when you accept it in Cyber Hub. Clients cannot accept, reject or link records themselves, and cannot change ATT&CK assessments.
+* Both write tools refuse archived projects, before the approval and when it is carried out.
 
 Arguments are JSON objects with strict schemas; unknown fields are rejected, and every value is validated again in Rust. `cyberhub_run_tool` takes a catalog tool ID, a project and an argument list. No shell is involved (pipes and redirection have no effect), and the program is always the detected catalog executable. Arguments that refer to local files (target lists such as `-iL`, wordlists, request or configuration files) are refused for MCP clients; pass targets directly, or start file-based runs in Cyber Hub. `cyberhub_cancel_run` stops only runs started through MCP. Threat-intelligence results keep each provider's own verdict and scores; there is no combined score.
 

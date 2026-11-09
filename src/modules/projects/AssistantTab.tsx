@@ -18,6 +18,7 @@ const SECTIONS: { key: keyof AssistantContextOptions; label: string }[] = [
   { key: "assets", label: "Assets" },
   { key: "vulnerabilities", label: "Vulnerabilities" },
   { key: "findings", label: "Findings" },
+  { key: "investigation", label: "Relationships and ATT&CK (confirmed and suggested kept apart)" },
   { key: "timeline", label: "Recent activity" },
 ];
 
@@ -30,7 +31,7 @@ interface Turn {
 export function AssistantTab({ project }: { project: Project }) {
   const { runtime } = useApp();
   const status = useQuery(["system"], () => api.assistantStatus(), [], runtime);
-  const [options, setOptions] = useState<AssistantContextOptions>({ scope: true, assets: true, vulnerabilities: true, findings: true, timeline: false });
+  const [options, setOptions] = useState<AssistantContextOptions>({ scope: true, assets: true, vulnerabilities: true, findings: true, timeline: false, investigation: false });
   const [conversation, setConversation] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState("");
@@ -64,7 +65,7 @@ export function AssistantTab({ project }: { project: Project }) {
         {
           role: "assistant",
           text: a.text,
-          meta: `${a.fallback ? `Answered by the fallback model ${a.model} because ${a.fallbackFrom ?? "the first model"} declined the request` : `Answered by ${a.model}`} · ${a.inputTokens.toLocaleString()} in${a.cacheReadTokens ? ` (${a.cacheReadTokens.toLocaleString()} cached)` : ""} / ${a.outputTokens.toLocaleString()} out`,
+          meta: `AI suggestion: verify it against the project data before acting · ${a.fallback ? `Answered by the fallback model ${a.model} because ${a.fallbackFrom ?? "the first model"} declined the request` : `Answered by ${a.model}`} · ${a.inputTokens.toLocaleString()} in${a.cacheReadTokens ? ` (${a.cacheReadTokens.toLocaleString()} cached)` : ""} / ${a.outputTokens.toLocaleString()} out`,
         },
       ]);
     } catch (e) {

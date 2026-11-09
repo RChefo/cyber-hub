@@ -911,6 +911,8 @@ export interface AssistantContextOptions {
   vulnerabilities: boolean;
   findings: boolean;
   timeline: boolean;
+  /** relationships between records and the ATT&CK matrix, confirmed apart from suggested */
+  investigation: boolean;
 }
 
 export interface AssistantAnswer {

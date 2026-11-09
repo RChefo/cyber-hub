@@ -109,8 +109,9 @@ fn links_by_hand_are_checked_and_mcp_links_wait_for_review() {
         assert!(get(c, ev.id).is_err(), "a link made by hand is deleted");
         assert!(links(c, f).is_empty(), "with the finding link it made");
 
-        let proposal = link(c, p, Ref::new("evidence", e), Ref::new("finding", f), "related_to", "same campaign", "mcp")?;
+        let proposal = link(c, p, Ref::new("evidence", e), Ref::new("finding", f), "related_to", "same campaign", "mcp:Claude Code")?;
         assert_eq!((proposal.origin.as_str(), proposal.verification.as_str(), proposal.review.as_str(), proposal.materialized), ("suggested", "inferred", "pending", false));
+        assert_eq!((proposal.confidence.as_str(), proposal.created_by.as_str()), ("low", "mcp:Claude Code"), "an AI suggestion is low confidence and names its client");
         assert!(links(c, f).is_empty(), "a proposal links nothing until accepted");
         // symmetric types keep one order: the same pair the other way round is the same relationship
         let same = link(c, p, Ref::new("finding", f), Ref::new("evidence", e), "related_to", "", "mcp")?;
