@@ -16,6 +16,9 @@ A workflow is a list of steps of predefined types with validated settings. There
 | Update vulnerability scores | no (NVD and EPSS lookups) | none | up to 3 | 5 min / 30 min |
 | Save project report | no | evidence title (optional) | no | 1 min / 5 min |
 | Wait | no | seconds (1–3600) | no | ~1 h |
+| Correlate records | no (local) | none | up to 3 | 5 min / 30 min |
+| Verify evidence | no (local) | none | up to 3 | 5 min / 1 h |
+| Wait for a recorded result | no | result: file triage, log or event log triage, packet capture triage, imported scan results, SBOM or lockfile, API definition, ATT&CK layer | no | 1 h / 4 h |
 
 A workflow has 1 to 20 steps.
 
@@ -37,6 +40,8 @@ A workflow has 1 to 20 steps.
 * **Result.** The run is *succeeded* (all steps), *partial* (some failed but the run continued), *failed* or *cancelled*.
 * **Records.** Every run stores a copy of the definition it ran, and each step its state, attempts, summary and a log (the last 64 KB). Runs appear on the project timeline. Runs interrupted by closing Cyber Hub are marked failed at the next start, along with their running and pending steps.
 
+**Investigation steps** (Mission 3). *Correlate records* runs the correlation rules ([DATA_MODEL.md](DATA_MODEL.md#correlation)); matches are only suggestions. *Verify evidence* checks every stored file and text against its SHA-256 and records the result on each record; it fails when a record does not match, naming the first three. *Wait for a recorded result* waits until the analyst records a result of the chosen kind in the project: a utility result recorded with its evidence (file, log or event log, packet capture triage), an imported scan, an SBOM or lockfile, an API definition or an ATT&CK layer. Results recorded since the run started count, including before the step began. Cyber Hub never runs the capability itself: the analyst chooses the file in its native dialog and confirms anything that contacts a service, so a playbook cannot do anything the analyst did not do. The step ends with the time limit when nothing is recorded, and a cancellation stops it.
+
 ## Templates
 
 | Template | Steps |
@@ -44,6 +49,13 @@ A workflow has 1 to 20 steps.
 | Passive attack surface refresh | passive discovery (1 retry, continue on error), update vulnerability scores (continue on error), save report; can be scheduled |
 | External exposure check | passive discovery, check web services |
 | Service baseline | service scan (targets to fill in), save report |
+| Playbook: suspicious file | wait for a file triage (2 h), correlate, verify evidence (continue on error), save report |
+| Playbook: incident logs | wait for a log or event log triage (2 h), correlate, verify evidence (continue on error), save report |
+| Playbook: vulnerable dependency | wait for an SBOM or lockfile (2 h; the OSV.dev check stays in the Components tab, which asks first), update vulnerability scores (continue on error), correlate, save report |
+| Playbook: web application | passive discovery (1 retry, continue on error), check web services (confirmed when the run starts), wait for imported scanner results (4 h), correlate, save report |
+| Playbook: cloud account | wait for an imported cloud audit such as Prowler OCSF (2 h), correlate, verify evidence (continue on error), save report |
+
+Playbooks are workflows like any other: they keep their runs, step states, summaries and logs, appear on the timeline, can be cancelled, and are run again to retry (every step is safe to repeat: correlation keeps decisions, recorded results are not duplicated, each report is a new evidence record).
 
 ## Tests
 

@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use rusqlite::params;
 use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -121,6 +122,49 @@ async fn run_step(app: &AppHandle, project_id: i64, wf_name: &str, step: &Step, 
                 Ok(format!("Waited {secs} s"))
             } else {
                 Err("Cancelled".into())
+            }
+        }
+        "correlate" => {
+            let r = db.with(|c| crate::workspace::correlate::run(c, project_id)).map_err(|e| e.to_string())?;
+            Ok(format!(
+                "{} new suggestion{}, {} updated, {} already decided{}",
+                r.stored.new,
+                if r.stored.new == 1 { "" } else { "s" },
+                r.stored.updated,
+                r.stored.decided,
+                if r.stored.truncated { "; the review queue is full" } else { "" }
+            ))
+        }
+        "verify_evidence" => {
+            let handle = app.clone();
+            let report = tauri::async_runtime::spawn_blocking(move || handle.state::<Arc<crate::workspace::evidence::EvidenceStore>>().verify_project(&handle.state::<Db>(), project_id))
+                .await
+                .map_err(|e| e.to_string())?
+                .map_err(|e| e.to_string())?;
+            if report.problems.is_empty() {
+                Ok(format!("{} stored record{} match their SHA-256", report.checked, if report.checked == 1 { "" } else { "s" }))
+            } else {
+                Err(format!(
+                    "{} of {} records do not match: {}",
+                    report.problems.len(),
+                    report.checked,
+                    report.problems.iter().take(3).map(|p| format!("#{} {}", p.id, p.problem)).collect::<Vec<_>>().join("; ")
+                ))
+            }
+        }
+        "await_result" => {
+            let source = step.text("source").unwrap_or_default();
+            let label = wf::RESULT_SOURCES.iter().find(|(k, _)| *k == source).map(|(_, l)| *l).unwrap_or("a result");
+            // results recorded since the run started count, also those recorded before this step
+            let since: String = db.with(|c| Ok(c.query_row("SELECT started_at FROM workflow_runs WHERE id = ?1", params![run], |r| r.get(0))?)).map_err(|e| e.to_string())?;
+            log(app, run, pos, &format!("Waiting for: {label}"));
+            loop {
+                if let Some(what) = db.with(|c| wf::recorded_since(c, project_id, &source, &since)).map_err(|e| e.to_string())? {
+                    return Ok(format!("Recorded: {what}"));
+                }
+                if !pause(Duration::from_secs(2), cancel).await {
+                    return Err("Cancelled".into());
+                }
             }
         }
         other => Err(format!("Unknown step type {other}")),

@@ -120,7 +120,68 @@ pub const NODES: &[NodeSpec] = &[
         max_timeout: 3700,
         params: &[ParamSpec { key: "seconds", label: "Seconds", kind: ParamKind::Number, required: true, help: "", options: &[], min: 1, max: 3600 }],
     },
+    NodeSpec {
+        kind: "correlate",
+        label: "Correlate records",
+        description: "Runs the correlation rules over the project's records; matches become suggestions in the Investigation review queue. Local only; nothing is confirmed.",
+        active: false,
+        retryable: true,
+        default_timeout: 300,
+        max_timeout: 1800,
+        params: NO_PARAMS,
+    },
+    NodeSpec {
+        kind: "verify_evidence",
+        label: "Verify evidence",
+        description: "Checks every stored evidence file and text against its SHA-256 and records the result on each record. Fails when a record does not match. Local only.",
+        active: false,
+        retryable: true,
+        default_timeout: 300,
+        max_timeout: 3600,
+        params: NO_PARAMS,
+    },
+    NodeSpec {
+        kind: "await_result",
+        label: "Wait for a recorded result",
+        description: "Waits until you record a result in the project with the chosen capability, then continues. Cyber Hub never runs that capability itself: you choose the file, and confirm anything that contacts a service.",
+        active: false,
+        retryable: false,
+        default_timeout: 3600,
+        max_timeout: 14_400,
+        params: &[ParamSpec { key: "source", label: "Result", kind: ParamKind::Select, required: true, help: "Results recorded since the run started count.", options: RESULT_SOURCES, min: 0, max: 0 }],
+    },
 ];
+
+/// What `await_result` can wait for: (setting, label).
+pub const RESULT_SOURCES: &[(&str, &str)] = &[
+    ("file_triage", "File triage, recorded from Security Utilities"),
+    ("log_triage", "Log or Windows event log triage, recorded from Security Utilities"),
+    ("pcap_triage", "Packet capture triage, recorded from Security Utilities"),
+    ("scan_import", "Imported scan results (Findings → Import)"),
+    ("sbom", "SBOM or lockfile (Components)"),
+    ("api_inventory", "API definition (APIs)"),
+    ("attack_layer", "ATT&CK Navigator layer (Investigation → ATT&CK)"),
+];
+
+/// The first result of `source` recorded in the project at or after `since` (a timestamp), as a
+/// short description; None while there is none.
+pub fn recorded_since(c: &Connection, project_id: i64, source: &str, since: &str) -> AppResult<Option<String>> {
+    // a utility recording is a utility timeline event that refers to evidence of that module
+    let utility = "SELECT t.title FROM timeline_events t JOIN evidence e ON e.id = t.ref_id
+                   WHERE t.project_id = ?1 AND t.type = 'utility' AND t.ref_kind = 'evidence' AND t.at >= ?2 AND e.source_module IN (?3, ?4) ORDER BY t.id LIMIT 1";
+    let found = match source {
+        "file_triage" => c.query_row(utility, params![project_id, since, "file_triage", "file_triage"], |r| r.get(0)),
+        "pcap_triage" => c.query_row(utility, params![project_id, since, "pcap_triage", "pcap_triage"], |r| r.get(0)),
+        "log_triage" => c.query_row(utility, params![project_id, since, "log_triage", "evtx_triage"], |r| r.get(0)),
+        "scan_import" => c.query_row("SELECT tool || ' results: ' || file_name FROM scan_imports WHERE project_id = ?1 AND created_at >= ?2 ORDER BY id LIMIT 1", params![project_id, since], |r| r.get(0)),
+        "sbom" => c.query_row("SELECT 'SBOM ' || name FROM sbom_docs WHERE project_id = ?1 AND imported_at >= ?2 ORDER BY id LIMIT 1", params![project_id, since], |r| r.get(0)),
+        "api_inventory" => c.query_row("SELECT 'API definition ' || name FROM api_specs WHERE project_id = ?1 AND imported_at >= ?2 ORDER BY id LIMIT 1", params![project_id, since], |r| r.get(0)),
+        "attack_layer" => c.query_row("SELECT 'ATT&CK layer ' || name FROM attack_layers WHERE project_id = ?1 AND imported_at >= ?2 ORDER BY id LIMIT 1", params![project_id, since], |r| r.get(0)),
+        other => return Err(validation(format!("Unknown result '{other}'"))),
+    };
+    Ok(found.optional()?)
+}
+
 
 pub fn node(kind: &str) -> Option<&'static NodeSpec> {
     NODES.iter().find(|n| n.kind == kind)
@@ -313,6 +374,74 @@ pub fn templates() -> Vec<Template> {
             name: "Service baseline",
             description: "A quick service scan of the given targets, then a saved report.",
             definition: Definition { steps: vec![step("service_scan", json!({ "targets": [], "profile": "quick" })), step("save_report", json!({}))] },
+        },
+        // investigation playbooks: the analyst does what needs a file or a confirmation, Cyber Hub
+        // waits for the result, then correlates, verifies and reports
+        Template {
+            id: "playbook-suspicious-file",
+            name: "Playbook: suspicious file",
+            description: "Triage the file in Security Utilities and record its results (the file and the analysis go to the evidence vault); then correlation, an integrity check and a saved report. Hash lookups stay your choice on the VirusTotal or Threat Intel page.",
+            definition: Definition {
+                steps: vec![
+                    Step { name: "Triage the file and record its results".into(), timeout_secs: 7200, ..step("await_result", json!({ "source": "file_triage" })) },
+                    step("correlate", json!({})),
+                    Step { continue_on_error: true, ..step("verify_evidence", json!({})) },
+                    step("save_report", json!({})),
+                ],
+            },
+        },
+        Template {
+            id: "playbook-incident-log",
+            name: "Playbook: incident logs",
+            description: "Triage the Windows event logs (EVTX) or web and SSH logs in Security Utilities and record the detections; then correlation, an integrity check and a saved report.",
+            definition: Definition {
+                steps: vec![
+                    Step { name: "Triage the logs and record the detections".into(), timeout_secs: 7200, ..step("await_result", json!({ "source": "log_triage" })) },
+                    step("correlate", json!({})),
+                    Step { continue_on_error: true, ..step("verify_evidence", json!({})) },
+                    step("save_report", json!({})),
+                ],
+            },
+        },
+        Template {
+            id: "playbook-vulnerable-dependency",
+            name: "Playbook: vulnerable dependency",
+            description: "Import the SBOM or lockfile in Components (and check it on OSV.dev there if you choose; that check asks first); then updated vulnerability scores, correlation and a saved report.",
+            definition: Definition {
+                steps: vec![
+                    Step { name: "Import the SBOM or lockfile".into(), timeout_secs: 7200, ..step("await_result", json!({ "source": "sbom" })) },
+                    Step { continue_on_error: true, ..step("update_vuln_scores", json!({})) },
+                    step("correlate", json!({})),
+                    step("save_report", json!({})),
+                ],
+            },
+        },
+        Template {
+            id: "playbook-web-application",
+            name: "Playbook: web application",
+            description: "Passive discovery and a check of the web services (confirmed when the run starts, within the scope), then waits for your web scanner's results (Nuclei, ZAP, Burp) to be imported; then correlation and a saved report.",
+            definition: Definition {
+                steps: vec![
+                    Step { retries: 1, continue_on_error: true, ..step("passive_discovery", json!({})) },
+                    step("web_check", json!({})),
+                    Step { name: "Import the web scanner's results".into(), timeout_secs: 14_400, ..step("await_result", json!({ "source": "scan_import" })) },
+                    step("correlate", json!({})),
+                    step("save_report", json!({})),
+                ],
+            },
+        },
+        Template {
+            id: "playbook-cloud",
+            name: "Playbook: cloud account",
+            description: "Import the cloud audit (Prowler OCSF) in Findings → Import; then correlation, an integrity check and a saved report. Rescans verify fixes as the import does.",
+            definition: Definition {
+                steps: vec![
+                    Step { name: "Import the cloud audit".into(), timeout_secs: 7200, ..step("await_result", json!({ "source": "scan_import" })) },
+                    step("correlate", json!({})),
+                    Step { continue_on_error: true, ..step("verify_evidence", json!({})) },
+                    step("save_report", json!({})),
+                ],
+            },
         },
     ]
 }
@@ -598,6 +727,49 @@ mod tests {
             assert_eq!(validate(&t.definition, false).is_ok(), t.id != "service-baseline", "{}: the baseline template needs targets first", t.id);
         }
         assert!(validate(&templates()[0].definition, true).is_ok(), "the passive template can be scheduled");
+    }
+
+    #[test]
+    fn playbooks_wait_for_results_the_analyst_records() {
+        // the playbook steps are predefined and validated like every other step
+        assert!(validate(&def(vec![json!({ "type": "await_result" })]), false).is_err(), "a result to wait for is required");
+        assert!(validate(&def(vec![json!({ "type": "await_result", "params": { "source": "shell" } })]), false).is_err());
+        assert!(validate(&def(vec![json!({ "type": "await_result", "params": { "source": "sbom" }, "retries": 1 })]), false).is_err(), "waiting is not retried");
+        assert!(validate(&def(vec![json!({ "type": "await_result", "params": { "source": "sbom" } }), json!({ "type": "correlate", "retries": 2 }), json!({ "type": "verify_evidence" })]), true).is_ok(), "local steps can be scheduled");
+        let books: Vec<Template> = templates().into_iter().filter(|t| t.id.starts_with("playbook-")).collect();
+        assert_eq!(books.len(), 5);
+        for t in &books {
+            assert!(t.definition.steps.iter().any(|s| s.kind == "correlate") && t.definition.steps.iter().any(|s| s.kind == "save_report"), "{}", t.id);
+            assert_eq!(t.definition.has_active(), t.id == "playbook-web-application", "{}: only the web playbook contacts targets (after its confirmation)", t.id);
+        }
+
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'IR', 'active', 't', 't'), (2, 'Other', 'active', 't', 't')", [])?;
+            let since = "2026-11-10T10:00:00Z";
+            for s in ["file_triage", "log_triage", "pcap_triage", "scan_import", "sbom", "api_inventory", "attack_layer"] {
+                assert_eq!(recorded_since(c, 1, s, since)?, None, "{s}");
+            }
+            assert!(recorded_since(c, 1, "anything", since).is_err());
+            // an EVTX triage recorded after the start counts for the logs; one recorded before does not
+            let ev = |module: &str, at: &str, project: i64| -> AppResult<()> {
+                c.execute("INSERT INTO evidence (project_id, kind, title, source, sha256, size, file_name, created_at, source_module) VALUES (?1, 'file', 'x', 'utility', ?2, 1, 'x', ?3, ?4)", params![project, format!("{module}{at}{project}"), at, module])?;
+                let id = c.last_insert_rowid();
+                c.execute("INSERT INTO timeline_events (project_id, type, title, detail, ref_kind, ref_id, at) VALUES (?1, 'utility', ?2, '', 'evidence', ?3, ?4)", params![project, format!("{module} recorded at {at}"), id, at])?;
+                Ok(())
+            };
+            ev("evtx_triage", "2026-11-10T09:59:59Z", 1)?;
+            assert_eq!(recorded_since(c, 1, "log_triage", since)?, None, "recorded before the run started");
+            ev("evtx_triage", "2026-11-10T10:05:00Z", 2)?;
+            assert_eq!(recorded_since(c, 1, "log_triage", since)?, None, "another project's result");
+            ev("evtx_triage", "2026-11-10T10:05:00Z", 1)?;
+            assert_eq!(recorded_since(c, 1, "log_triage", since)?.as_deref(), Some("evtx_triage recorded at 2026-11-10T10:05:00Z"));
+            assert_eq!(recorded_since(c, 1, "file_triage", since)?, None, "a log is not a file triage");
+            c.execute("INSERT INTO scan_imports (project_id, format, tool, file_name, sha256, created_at) VALUES (1, 'ocsf', 'Prowler', 'prowler.ocsf.json', 'aa', '2026-11-10T10:30:00Z')", [])?;
+            assert_eq!(recorded_since(c, 1, "scan_import", since)?.as_deref(), Some("Prowler results: prowler.ocsf.json"));
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
