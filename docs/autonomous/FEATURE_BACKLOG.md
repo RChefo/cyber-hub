@@ -117,3 +117,29 @@ Each criterion is rated from 1 to 5, where 5 is best: D demand (×3), U professi
 | 39 | Request collections, variables and authentication profiles in the repeater | 4 | 4 | 4 | 4 | 2 | 4 | 3 | 3 | 48 | Deferred: large interface work for the gain |
 | 40 | YARA matching | 4 | 4 | 5 | 4 | 1 | 3 | 4 | 2 | 48 | Deferred: the Rust engine (yara-x) brings a WebAssembly runtime; libyara needs a C toolchain |
 
+
+## Mission 3 (2026-11-09T20:10Z): the integration layer
+
+The brief's sections and what was built for each. "Done" means implemented, tested and checked in the real app.
+
+| Brief | Requirement | Status |
+|---|---|---|
+| §2, §5 | One model of relationships between records with provenance (observed, imported, derived, inferred, analyst, suggested), explainable suggestions, accept, reject, dismiss, mark reviewed, link and unlink by hand, decision history | **Done** (`7b1a842`) |
+| §3 | Correlation rules for file, API, cloud and supply-chain investigations: hashes, URLs and hosts, CVEs, package URLs, API paths, OSINT entities, shared evidence, duplicates | **Done** (`7b1a842`); cloud audits correlate through their findings and assets |
+| §4 | Investigation workspace: review queue, relationships, record panel, graph, ATT&CK, timeline, evidence, reports | **Done** (`7b1a842`, `e3eeeca`) |
+| §6 | Evidence provenance and integrity: module, record, tool and version, collection time, derived records, verification state; original files kept | **Done** (`7b1a842`, `24258c2`, `f08a6bb`) |
+| §7 | Timeline filters (type, record, text, dates), day grouping, record navigation, CSV and JSON export, collection time apart from event time | **Done** (`7b1a842`); severity is not a timeline attribute |
+| §8 | Graph on the OSINT engine: neighbourhood, shortest path, filters (origin, kind, confidence, pending and rejected, date), export with provenance | **Done** (`7b1a842`) |
+| §9 | Playbooks with progress, cancellation, time limits, retry, history, evidence and confirmations, on built-in steps only | **Done** (`6dc7f63`) |
+| §10 | ATT&CK matrix: findings' techniques, assessments, layers with gaps, import and export, version tracking | **Done** (`e3eeeca`) |
+| §11 | Findings across modules: duplicates (correlation rule), related findings (record panel), remediation groups with rescan verification | **Done** (`7b1a842`, `ab4a9db`); cross-project search through the palette and MCP |
+| §12 | MCP and assistant on retrieved data; suggestions labelled; approval for writes; nothing sent without the existing confirmation | **Done** (`f0ab1d5`) |
+| §13 | Global search across projects and techniques, archived projects only on request | **Done** (`7b1a842`, `3c761db`) |
+| §14 | A finding recorded from a utility is persisted with project, source and severity, linked to its evidence, on the timeline and in the investigation, and exported in reports | **Done** (`24258c2`, `f08a6bb`) |
+| §15 | Tests: correlation, wrong relationships, duplicates, provenance, integrity, timeline, deletion and archival, cancellation, migration, project isolation, MCP permissions, scale, concurrency | **Done**; see the commits' tests |
+
+### Deferred, with reasons
+
+* **A graph across projects.** Projects are the unit of authorization and scope; a cross-project graph needs its own rules for what may be shown together.
+* **Correlation by interpretation** (the same actor behind several hosts, renamed packages, redirects). Rules stay exact so every suggestion can be explained by matched values.
+* **OWASP ASVS 5.0 checklist** (candidate 33 of Mission 2). Still not started.

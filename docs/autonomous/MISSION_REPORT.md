@@ -672,3 +672,84 @@ Each capability was checked against primary sources before it was built: the RFC
 ### Assessment
 
 Each capability works in the real app, is covered by tests, and was checked against its specification or a reference implementation where one exists: python-evtx, pefile's import hash, ssh-keygen, Prowler's examples and the ATT&CK Navigator. Before a release that includes Mission 2, the RC0 checks need repeating for the new code, in particular the Linux suites and GUI checks.
+
+
+## Mission 3: unified investigation layer (2026-11-09)
+
+The owner's brief asked for the layer that connects the modules' results: one data model with provenance, a real correlation engine, an investigation workspace, explainable correlation with review, evidence provenance, a unified timeline, the graph, playbooks, ATT&CK, findings across modules, AI and MCP, and global search. No release work. Everything below is built on the existing records (the project is the investigation; findings, evidence, assets, the timeline, the OSINT graph engine and the workflow engine are reused, none duplicated).
+
+### Statistics
+
+| Item | Value |
+|---|---|
+| Time | 2026-11-09T20:10:11Z–22:35Z (about 2 h 25 min) |
+| Commits | 11: nine capabilities, a concurrency test (`54576dd`) and this report |
+| Schema | 21 → 23 (migration 22: relations, decisions, evidence provenance; migration 23: ATT&CK assessments and layers); each upgrade keeps a backup first |
+| Tests | Rust 459 → 482 (6 → 7 ignored); frontend 258 → 264 (45 → 47 files) |
+| New dependencies | none; the ATT&CK Enterprise 20.1 catalog is bundled as data (MITRE's notice in THIRD_PARTY_NOTICES.md) |
+| Real-app checks (Windows 11, disposable data) | 112 of 112 across 8 scripts |
+
+### New capabilities
+
+| Capability | Where | Commit | Verification |
+|---|---|---|---|
+| Relationships between records of every module, with origin, verification, review and every decision kept; 10 explainable correlation rules; review queue; record panel; manual links (ATT&CK IDs checked); investigation graph with neighbourhood, shortest path and JSON, SVG, PNG export; filtered and exportable timeline; evidence provenance and stored integrity results; record search | Projects → Investigation, Timeline, Evidence | `7b1a842` | 23 Rust tests (migration 21 → 22, rules, decisions, deletion, merges, archived projects, graph, search, provenance) and 3 frontend tests; app 22/22 and 7/7 |
+| Triage results recorded with their evidence: the analysed file and the analysis as evidence with provenance, findings linked to the file, one transaction, a changed file refused; analysed files as project indicators; the text-evidence viewer fixed | Security Utilities → file, capture, log triage, OAuth review | `24258c2` | 4 Rust tests; app 16/16 |
+| ATT&CK matrix per project: techniques named by findings (leads), analyst assessments (confirmed, hypothesis, ruled out) and imported Navigator layers (overlay, gaps), layer import (format 2.x–4.5, revoked IDs mapped, version differences reported) and export (format 4.5) | Projects → Investigation → ATT&CK | `e3eeeca` | 3 Rust and 3 frontend tests; app 17/17 |
+| Global search: the command palette finds the records of open projects and opens them | `Ctrl+K` | `3c761db` | app 7/7 |
+| MCP: record search, related records, relationships, the ATT&CK matrix; correlation and relationship proposals after approval, stored as suggestions; the assistant's relationships and ATT&CK section and AI-suggestion labels | MCP, Projects → Assistant | `f0ab1d5` | 3 Rust tests; the real `cyberhub-mcp` server 17/17 |
+| Investigation playbooks (suspicious file, incident logs, vulnerable dependency, web application, cloud account) as workflow templates, with new local steps: correlate, verify evidence, wait for a recorded result | Projects → Automation | `6dc7f63` | 1 Rust test; app 14/14 |
+| Evidence provenance in the reports' evidence register | Reports | `f08a6bb` | report tests extended |
+| Remediation groups: findings that one fix addresses (same CVE, package, check on several targets, remediation), with open, resolved and rescan-verified counts | Projects → Findings | `ab4a9db` | 1 Rust test; app 12/12 |
+
+### Correlation and confidence
+
+* **Rules compare exact or normalized values, never similarity:** URLs, web origins, hosts and addresses, CVE IDs (with OSV aliases), package URLs, file hashes (SHA-256, SHA-1, MD5) and API paths. Each suggestion names its rule, a one-sentence reason, the fields and values that matched and how (exact, normalized, alias), and a confidence (high for exact matches, medium for host-level, version-different or multi-endpoint matches). See DATA_MODEL.md, "Correlation".
+* **Suggestions stay suggestions.** Origin `derived`, verification `inferred`, review `pending`. Only the analyst's *Accept* makes a relationship `verified`; accepting a finding relationship creates the finding link that reports use, and rejecting or restoring removes exactly what accepting created. Rejected pairs are never suggested again. Nothing is merged: OSINT entity identities keep their own policy, and a merge only moves relationships.
+* **Bounded.** 50 pairs per group of findings that share something, 5 assets per finding, 5,000 pending suggestions per project.
+* **AI suggestions are labelled.** A relationship proposed through MCP is `suggested`, `inferred`, low confidence, with the client's name; the assistant is told to present conclusions as suggestions and every answer says so.
+
+### Evidence and provenance
+
+Evidence records keep the module and record they came from, the tool and its version, when the source collected them (apart from when Cyber Hub stored them), the record they were derived from, and the result of the last integrity check. Imports (scans, API definitions, SBOMs, ATT&CK layers) and recorded utility results fill them; provenance is never overwritten. A utility result keeps the original file and stores the analysis as a separate, derived record; the file must still have the SHA-256 that was analysed.
+
+### Security review
+
+* **Nothing new contacts a network.** Correlation, search, the graph, the matrix, layer import and playbooks read the database; the playbooks' only active step is the existing web check, which keeps its confirmation and scope check.
+* **The web view never names a file.** Utility files are named by a random token; layers and exports use native dialogs; exported SVG is checked to contain drawing elements only (no scripts, event handlers, links or external references).
+* **Archived projects are read-only** for correlation, decisions, assessments, layers and MCP writes, and are left out of search unless asked.
+* **MCP clients only propose.** Reads are allowed; correlation and proposals need the user's approval and are re-checked when carried out; clients cannot accept, reject, link or assess.
+* **Scans.** gitleaks over the mission's 9 commits found nothing; cargo audit 0 vulnerabilities (640 crates, the same 8 allowed warnings); npm audit 0.
+
+### Performance
+
+* Correlation of 10,000 findings and 20,000 assets: candidates in 158 ms, a full run with storage in 462 ms (release build; the pending cap of 5,000 applied).
+* Correlation, the graph, paths, search and remediation groups run on blocking threads. The deletion triggers and the related-records query use indexes (checked with `EXPLAIN QUERY PLAN` in a test); the API endpoint rule indexes endpoints by server and first path segment.
+* The graph is capped at 1,500 edges by default (5,000 at most) and says when it is cut; relationship lists are paged.
+
+### Defects found while building, fixed before their commits
+
+* Text evidence never opened in the viewer: the list never carried the content (since the evidence vault was built). Fixed with a separate read.
+* Finding links and the relationships that created them were drawn twice in the graph and listed twice in the record panel.
+* The deletion triggers and the foreign keys of `relation_events.relation_id` and `evidence.derived_from` would have scanned whole tables.
+* The API endpoint rule compared every finding with every endpoint and missed paths with capital letters.
+* Merging two related OSINT entities could leave a relationship from an entity to itself.
+* The ATT&CK view dropped a just-imported layer from the overlay (a race with the reload).
+* A failed provenance write after a committed scan import would have deleted the import's file.
+
+### Limitations
+
+* **Correlation** compares values; it does not find relationships that need interpretation (the same attacker behind two hosts, renamed packages, a URL behind a redirect).
+* **The ATT&CK catalog** is Enterprise only (no Mobile or ICS); its version is updated by rerunning `scripts/attack-catalog.mjs` with a newer MITRE bundle.
+* **Playbooks** wait for the analyst's own recording; they cannot run file-based tools themselves, by design.
+* **The graph** shows one project; there is no cross-project graph.
+* **Search** matches text; it does not rank by recency or severity.
+
+### Not verified
+
+* Linux (Ubuntu, Debian): neither the test suites nor the GUI checks were run for this mission.
+* Installers, signing, updates: not built or run (not authorized).
+
+### Assessment
+
+The integration layer works end to end in the real app: a file analysed in the utilities lands in the project with its evidence and provenance, is linked to its findings, appears on the timeline, in the indicators, the investigation panel, the graph and the report; correlation connects it to assets, vulnerabilities, components and OSINT entities as reviewed suggestions; the ATT&CK matrix keeps leads, assessments and coverage apart; MCP clients and the assistant read the same data and can only suggest. Before a release that includes Mission 3, the RC0 checks need repeating for the new code, in particular the Linux suites and GUI checks.

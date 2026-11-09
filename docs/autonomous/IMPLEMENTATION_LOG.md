@@ -897,3 +897,52 @@ The owner's brief asked for research-driven new capabilities in seven tracks (we
 * Windows: 459 Rust tests (6 ignored), `cargo clippy --all-targets -- -D warnings` and tsc clean, 258 frontend tests in 45 files, cargo audit 0 vulnerabilities in 640 crates (8 allowed warnings), npm audit 0, gitleaks over the mission's commits clean; `cargo +1.90.0 check --locked --all-targets` passes.
 * The real database was never opened: every real-app run checked its modification time (2026-11-05T15:58:24.853Z, unchanged).
 * Not run: the Linux suites and GUI checks. No installers were built and nothing was pushed or published.
+
+
+## Mission 3 (2026-11-09T20:10Z): unified investigation layer
+
+## 20:10–21:10Z: architecture, data model, correlation, review, graph, timeline, provenance (`7b1a842`)
+
+* Recovered the architecture first: findings, finding links, evidence, assets, vulnerabilities, OSINT investigations and their graph engine, the timeline query, scan imports, the workflow engine, MCP and the assistant. The project stays the investigation; nothing was duplicated.
+* Migration 22: `relations` (two `(kind, id, sub)` references, type, origin, verification, review, confidence, rules, reason, matched values), `relation_events`, deletion triggers, evidence provenance columns. Tested from a populated schema-21 database (data, defaults, triggers, foreign keys, integrity, query plans).
+* Correlation: 10 rules; suggestions merged per pair; decided pairs untouched; caps. The ATT&CK Enterprise 20.1 catalog was built from MITRE's STIX bundle (SHA-256 recorded) for technique validation and search.
+* The real-app check found finding links drawn twice next to the relationships that made them; verified relationships now stand for their links. A review before the commit found the deletion triggers would scan whole tables (indexes reordered, two foreign-key columns indexed), the endpoint rule's quadratic matching and case sensitivity, and self-relationships after an OSINT merge; all fixed with tests.
+* Real app: 22/22 (upgrade 21 → 22 with backup, correlation, accept and reject, record panel, record timeline, search, manual technique link, graph and its JSON, SVG and PNG export) and 7/7 (provenance and integrity in the vault).
+
+## 21:10–21:43Z: utility results with their evidence (`24258c2`)
+
+* `utility_record`: file, packet capture, log and event log triage and the OAuth review record findings with the analysed file and the analysis as evidence, in one transaction; files named by tokens and re-hashed; the same analysis kept once.
+* The real-app check found that text evidence never opened in the viewer (the list never carried the content); fixed with `evidence_text`.
+* Real app 16/16 (including a file changed after its analysis, refused; a pasted log linked to its analysis).
+
+## 21:43–21:59Z: ATT&CK matrix (`e3eeeca`)
+
+* Migration 23: assessments and layers. Matrix in the Investigation tab, assessment dialog, layer import and export.
+* The real-app check found the overlay dropping a just-imported layer (a reload race); fixed.
+* 3 Rust and 3 frontend tests; real app 17/17 (a layer made for ATT&CK v14 with a revoked and an unknown ID).
+
+## 21:59–22:02Z: global search (`3c761db`)
+
+* The palette searches records of open projects; deep links apply on the same project page. Real app 7/7.
+
+## 22:02–22:15Z: MCP and assistant (`f0ab1d5`)
+
+* Six MCP tools; proposals stored as low-confidence suggestions with the client's name; the assistant's optional relationships and ATT&CK section; answers labelled as AI suggestions.
+* The real `cyberhub-mcp` server against the debug app: 17/17, approvals given in the app, archived and cross-project requests refused before an approval.
+
+## 22:15–22:21Z: playbooks (`6dc7f63`)
+
+* Workflow steps `correlate`, `verify_evidence`, `await_result`; five playbook templates. Real app 14/14 (a run waits for a file triage done through the native dialog, then finishes; a second run is cancelled while waiting).
+
+## 22:21–22:31Z: reports and remediation groups (`f08a6bb`, `ab4a9db`)
+
+* The reports' evidence register shows each record's source.
+* Remediation groups by CVE, package, check and remediation, with rescan-verified counts. Real app 12/12.
+
+## 22:31–22:35Z: concurrency test and final checks (`54576dd`)
+
+* Four threads correlate while a fifth accepts suggestions: no duplicate rows, decisions kept, one finding link per acceptance.
+* Correlation at scale (release build): 10,000 findings and 20,000 assets in 158 ms (candidates), 462 ms with storage.
+* Windows: 482 Rust tests (7 ignored), `cargo clippy --all-targets -- -D warnings` and tsc clean, 264 frontend tests in 47 files, cargo audit 0 vulnerabilities in 640 crates (8 allowed warnings), npm audit 0, gitleaks over the mission's 9 commits clean; `cargo +1.90.0 check --locked --all-targets` passes.
+* The real database was never opened: every real-app run checked its modification time (2026-11-05T15:58:24.853Z, unchanged). Each check ran on a fresh copy of the disposable data folder.
+* Not run: the Linux suites and GUI checks. No installers were built and nothing was pushed or published.

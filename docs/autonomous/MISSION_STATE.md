@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | **Complete** (Mission 2, 2026-11-09T16:31:14Z–19:55Z: ten research-driven capabilities, schema unchanged at 21, see MISSION_REPORT.md "Mission 2". Feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
+| Current phase | **Complete** (Mission 3, 2026-11-09T20:10:11Z–22:35Z: the unified investigation layer, schema 21 → 23, see MISSION_REPORT.md "Mission 3". Mission 2, 2026-11-09T16:31:14Z–19:55Z: ten research-driven capabilities, schema unchanged at 21, see MISSION_REPORT.md "Mission 2". Feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -87,6 +87,15 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 51. ATT&CK Navigator layer export of the findings' techniques (`cd8b0b7`)
 52. SBOM and lockfile comparison between versions (`54d6534`)
 53. Cut-input tests for the lockfile and IaC readers (`a7b0368`)
+54. Investigation layer: relationships, correlation and review, record panel, graph, timeline filters and export, evidence provenance, record search (schema 22) (`7b1a842`)
+55. Utility results recorded with their evidence and provenance (`24258c2`)
+56. ATT&CK matrix with assessments and Navigator layers (schema 23) (`e3eeeca`)
+57. Record search in the command palette (`3c761db`)
+58. MCP tools for the investigation layer; assistant context and AI-suggestion labels (`f0ab1d5`)
+59. Investigation playbooks on the workflow engine (`6dc7f63`)
+60. Evidence provenance in reports (`f08a6bb`)
+61. Remediation groups (`ab4a9db`)
+62. Concurrency test of correlation and review (`54576dd`)
 
 ## Tests executed
 
@@ -94,7 +103,9 @@ See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md).
 
 ## Known failures
 
-None. At `a7b0368` (Mission 2, Windows 11): 459 Rust tests (6 ignored) and 258 frontend tests in 45 files; `cargo clippy --all-targets -- -D warnings`, tsc, cargo audit (0 vulnerabilities in 640 crates, 8 allowed warnings), npm audit (0) and gitleaks over the mission's commits are clean; `cargo +1.90.0 check --locked --all-targets` passes; every new capability passed its check in the real app (174 of 174). **Not run for Mission 2:** the Linux suites and Linux GUI checks.
+None. At `54576dd` (Mission 3, Windows 11): 482 Rust tests (7 ignored) and 264 frontend tests in 47 files; clippy, tsc, cargo audit (0 vulnerabilities in 640 crates, 8 allowed warnings), npm audit (0) and gitleaks over the mission's 9 commits are clean; `cargo +1.90.0 check --locked --all-targets` passes; every new capability passed its check in the real app (112 of 112). **Not run for Mission 3:** the Linux suites and Linux GUI checks.
+
+At `a7b0368` (Mission 2, Windows 11): 459 Rust tests (6 ignored) and 258 frontend tests in 45 files; `cargo clippy --all-targets -- -D warnings`, tsc, cargo audit (0 vulnerabilities in 640 crates, 8 allowed warnings), npm audit (0) and gitleaks over the mission's commits are clean; `cargo +1.90.0 check --locked --all-targets` passes; every new capability passed its check in the real app (174 of 174). **Not run for Mission 2:** the Linux suites and Linux GUI checks.
 
 At `914f50a` (feature expansion round, Windows 11): 405 Rust tests (3 ignored) and 243 frontend tests in 41 files; clippy, tsc, cargo audit (0 vulnerabilities, 8 allowed warnings), npm audit (0) and gitleaks over the round's 9 commits are clean; `cargo +1.90.0 check --locked --all-targets` passes with the declared minimum Rust version; every new capability passed its check in the real app (125 of 125). **Not run for this round:** the Linux suites and Linux GUI checks.
 
@@ -180,9 +191,22 @@ The final results at `d6a192e`:
 | `cd8b0b7` | feat(findings): export ATT&CK techniques as a Navigator layer |
 | `54d6534` | feat(sbom): compare two SBOM or lockfile versions |
 | `a7b0368` | test(parsers): feed cut and multibyte input to lockfile and IaC readers |
+| `7b1a842` | feat(investigation): correlate records across modules with reviewed relationships |
+| `24258c2` | feat(utilities): record triage results with their evidence and provenance |
+| `e3eeeca` | feat(attack): add a project ATT&CK matrix with assessments and layers |
+| `3c761db` | feat(search): find project records from the command palette |
+| `f0ab1d5` | feat(mcp): expose the investigation layer to MCP clients and the assistant |
+| `6dc7f63` | feat(workflows): add investigation playbooks built on workflow steps |
+| `f08a6bb` | feat(reports): show evidence provenance in the evidence register |
+| `ab4a9db` | feat(findings): group findings by the fix that addresses them |
+| `54576dd` | test(investigation): run correlation and reviews from several threads |
 | (this report) | docs(mission): report mission 2 |
 
 ## Next action
+
+**After Mission 3 (2026-11-09T22:35Z), the owner decides:**
+1. Review the investigation layer (MISSION_REPORT.md, "Mission 3"). It adds migrations 22 and 23 (backups are taken before each) and no dependency.
+2. A release that includes Missions 2 and 3 needs the RC0 checks repeated for the new code, above all the Linux suites and GUI checks, which were not run.
 
 **After Mission 2 (2026-11-09T19:55Z), the owner decides:**
 1. Review the ten new capabilities (MISSION_REPORT.md, "Mission 2"). They add three dependencies (`toml` 1, `hcl-rs` 0.20 with `kstring` pinned at 2.0.2, `goblin` 0.10) and no migration.
