@@ -168,6 +168,13 @@ export const api = {
   logAnalyzeText: (text: string) => call<T.LogReport>("log_analyze_text", { text }),
   logAnalyzePick: () => call<T.LogScan | null>("log_analyze_pick"),
   utilityRecord: (input: T.UtilityRecordInput) => call<T.UtilityRecorded>("utility_record", { input }),
+  attackCatalog: () => call<T.AttackCatalog>("attack_catalog"),
+  attackMatrix: (projectId: number) => call<T.AttackMatrix>("attack_matrix", { projectId }),
+  attackAssess: (projectId: number, technique: string, status: T.AttackStatus | null, confidence: string, note: string) =>
+    call<T.AttackAssessment | null>("attack_assess", { projectId, technique, status, confidence, note }),
+  attackLayerImport: (projectId: number) => call<T.AttackLayer | null>("attack_layer_import", { projectId }),
+  attackLayerDelete: (id: number) => call<void>("attack_layer_delete", { id }),
+  attackLayerExport: (projectId: number) => call<string | null>("attack_layer_export", { projectId }),
   findingTemplatesList: () => call<T.FindingTemplate[]>("finding_templates_list"),
   findingTemplateSave: (input: T.FindingTemplateInput) => call<T.FindingTemplate>("finding_template_save", { input }),
   findingTemplateDelete: (id: number) => call<void>("finding_template_delete", { id }),

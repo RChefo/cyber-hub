@@ -5,6 +5,7 @@
 pub mod analysis;
 pub mod apisec;
 pub mod attack;
+pub mod attack_matrix;
 pub mod assets;
 pub mod correlate;
 pub mod discovery;

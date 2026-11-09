@@ -982,6 +982,44 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     ALTER TABLE evidence ADD COLUMN verified_at TEXT;
     CREATE INDEX idx_evidence_derived ON evidence(derived_from);
     "#,
+    // 23 — ATT&CK matrix (docs/DATA_MODEL.md#attck-matrix-schema-23): the analyst's assessment of
+    // techniques in a project (confirmed, hypothesis, ruled out), kept apart from the techniques
+    // findings name, and imported ATT&CK Navigator layers (such as detection coverage), kept apart
+    // from both.
+    r#"
+    CREATE TABLE attack_assessments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        technique TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('confirmed','hypothesis','ruled_out')),
+        confidence TEXT NOT NULL DEFAULT 'medium' CHECK (confidence IN ('low','medium','high')),
+        note TEXT NOT NULL DEFAULT '',
+        attack_version TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (project_id, technique)
+    );
+    CREATE TABLE attack_layers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        file_name TEXT NOT NULL DEFAULT '',
+        sha256 TEXT NOT NULL,
+        evidence_id INTEGER REFERENCES evidence(id) ON DELETE SET NULL,
+        layer_version TEXT NOT NULL DEFAULT '',
+        attack_version TEXT NOT NULL DEFAULT '',
+        navigator_version TEXT NOT NULL DEFAULT '',
+        techniques TEXT NOT NULL DEFAULT '{}',
+        unknown TEXT NOT NULL DEFAULT '[]',
+        remapped TEXT NOT NULL DEFAULT '{}',
+        warnings TEXT NOT NULL DEFAULT '[]',
+        imported_at TEXT NOT NULL,
+        UNIQUE (project_id, sha256)
+    );
+    CREATE INDEX idx_attack_layers_evidence ON attack_layers(evidence_id);
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a

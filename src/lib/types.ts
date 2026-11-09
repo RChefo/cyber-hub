@@ -1982,3 +1982,104 @@ export interface LogReport {
   /** Windows event logs: the computers that wrote the events */
   computers?: string[];
 }
+
+/* ───────────── ATT&CK matrix (docs/DATA_MODEL.md#attck-matrix-schema-23) ───────────── */
+
+export interface AttackTactic {
+  id: string;
+  shortname: string;
+  name: string;
+}
+
+export interface AttackTechnique {
+  id: string;
+  name: string;
+  tactics: string[];
+  platforms: string[];
+  parent?: string;
+}
+
+export interface AttackCatalog {
+  version: string;
+  modified: string;
+  retrieved: string;
+  url: string;
+  notice: string;
+  tactics: AttackTactic[];
+  techniques: AttackTechnique[];
+}
+
+export type AttackIdState = { state: "current" } | { state: "revoked"; by: string } | { state: "deprecated" } | { state: "unknown" };
+
+export type AttackStatus = "confirmed" | "hypothesis" | "ruled_out";
+
+export interface AttackObserved {
+  findingId: number;
+  title: string;
+  severity: Severity;
+  status: string;
+  confidence: string;
+  evidence: number;
+}
+
+export interface AttackAssessment {
+  status: AttackStatus;
+  confidence: "low" | "medium" | "high";
+  note: string;
+  attackVersion: string;
+  createdBy: string;
+  updatedAt: string;
+}
+
+export interface AttackLayerMark {
+  layerId: number;
+  score: number | null;
+  color: string;
+  comment: string;
+  enabled: boolean;
+}
+
+export interface AttackLinked {
+  relationId: number;
+  label: string;
+  key: string;
+  verification: RelationVerification;
+  origin: RelationOrigin;
+}
+
+export interface AttackEntry {
+  id: string;
+  name: string;
+  tactics: string[];
+  parent: string | null;
+  state: AttackIdState;
+  observed: AttackObserved[];
+  linked: AttackLinked[];
+  assessment: AttackAssessment | null;
+  layers: AttackLayerMark[];
+}
+
+export interface AttackLayer {
+  id: number;
+  name: string;
+  description: string;
+  fileName: string;
+  evidenceId: number | null;
+  layerVersion: string;
+  attackVersion: string;
+  navigatorVersion: string;
+  techniques: number;
+  unknown: string[];
+  remapped: Record<string, string>;
+  warnings: string[];
+  importedAt: string;
+}
+
+export interface AttackMatrix {
+  attackVersion: string;
+  attackModified: string;
+  attackRetrieved: string;
+  entries: AttackEntry[];
+  layers: AttackLayer[];
+  counts: { observed: number; confirmed: number; hypothesis: number; ruledOut: number; findings: number };
+}

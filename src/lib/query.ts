@@ -9,6 +9,7 @@ import { errorMessage } from "./ipc";
 export type Tag =
   | "activity"
   | "apis"
+  | "attack"
   | "sboms"
   | "prefs"
   | "favorites"
