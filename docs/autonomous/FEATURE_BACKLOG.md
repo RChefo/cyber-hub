@@ -32,6 +32,8 @@ Deferred or rejected items say why.
 | 7 | Findings export: CSV and JSON | 2 | 3 | 5 | 5 | 5 | 5 | 37 | **Done** (`0337e18`) |
 | 8 | Bulk edit of tags and assignee on findings | 2 | 3 | 5 | 5 | 5 | 5 | 37 | **Done** (`0337e18`) |
 | 9 | Methodology checklists (OWASP WSTG) with coverage per project | 3 | 4 | 3 | 5 | 3 | 4 | 35 | **Done** (`9c4ee92`) |
+| 13 | More import formats (competitor trackers: CSV mapping, Qualys, Nmap greppable) | 3 | 3 | 5 | 4 | 3 | 5 | 38 | **Done** for CSV with a column mapping (`53dac93`), which covers Qualys, Nessus and Greenbone CSV exports and spreadsheets |
+| 14 | MCP access to the new features (CVSS, library, checklist) | 2 | 3 | 5 | 4 | 4 | 5 | 34 | **Done** (`aaa7d0a`) |
 | 10 | Notes on assets and vulnerabilities | 3 | 3 | 3 | 5 | 3 | 4 | 33 | Deferred: finding history notes and project notes cover part of it |
 | 11 | Path-level scope rules | 4 | 3 | 3 | 3 | 2 | 4 | 33 | Deferred: changes the security-critical scope engine; needs its own design and review |
 | 12 | User-facing database backup and restore | 2 | 3 | 4 | 3 | 3 | 4 | 30 | **Done**: on-demand checked backup (`4a320a8`); restore in the app with a restart-time swap that keeps the previous database and its evidence (`2eb4209`) |

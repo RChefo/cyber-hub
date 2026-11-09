@@ -348,3 +348,54 @@ There are 5 frontend tests for the summary and notice texts.
 3. A postponed restore was simulated and cancelled in Settings.
 
 The first run's screenshot showed no notice; the outcome had been taken. The second run polled for the notice and found it 1.3 s after the restart.
+
+## 2026-11-09T07:26–07:36Z: MCP tools for the assessment features (`aaa7d0a`)
+
+**What:** five MCP tools and two new `cyberhub_create_finding` arguments:
+* `cyberhub_score_cvss` (read): validates and scores a CVSS 4.0, 3.1 or 3.0 vector; stores and sends nothing.
+* `cyberhub_list_finding_templates` and `cyberhub_get_finding_template` (read): the user's finding library, so an assistant reuses vetted write-ups.
+* `cyberhub_get_checklist` (read): a project's WSTG coverage and the status of every test.
+* `cyberhub_set_checklist_item` (local write, asks for approval).
+* `cvss_vector` and `remediation` on `cyberhub_create_finding`.
+
+**Before the approval:** an invalid vector, an unknown test or a finding of another project is refused before any approval reaches the user. The approval shows the canonical vector with its score, or the test name. A note that is not given keeps the existing note. The catalog now has 49 tools. The web-assessment and report prompts mention the new tools.
+
+**Tests:**
+* 3 unit tests in `mcp/assessment.rs` (functions over the database);
+* the catalog tests (count, sensitive-tool categories, groups) were updated.
+
+**Live (Windows, QA data, the real `cyberhub-mcp` sidecar and bridge):**
+* The sidecar listed 49 tools.
+* The reads returned the expected data.
+* The invalid vector and the unknown test were refused with no approval shown.
+* Two approvals were decided in the app: the checklist change, and a finding with a CVSS 4.0 vector (shown as 9.3 critical). The finding was stored with its vector, score and remediation.
+* The MCP page lists the new tools under their groups with the right badges.
+* MCP was turned off again afterwards.
+
+## 2026-11-09T07:38–07:45Z: Linux verification, now with clippy (`7fb4008`)
+
+The Linux images now install clippy (`rustup component add clippy`). Results at `aaa7d0a`:
+* Ubuntu 24.04.5 and Debian 12: tsc clean, vitest 36 files passed, cargo test 313 passed.
+* Clippy 0.1.99 (Rust 1.99.1 in the images; Windows has 1.94.1) reported three lints in older OSINT code: a sort that can use `sort_by_key`, and two redundant references in `format!` arguments. They were fixed in `7fb4008`; clippy is clean on both versions, and the OSINT tests pass.
+
+## 2026-11-09T07:45–07:52Z: CSV findings import with a column mapping (`53dac93`)
+
+**What:**
+* Any CSV file with a header row (a spreadsheet, or a Nessus, Qualys or Greenbone CSV export) imports through the same preview, scope checks, redaction and deduplication as the other formats.
+* The parser follows RFC 4180: quoted delimiters, `""` escapes, line breaks and BOM. It is bounded at 200 columns and 50,000 characters per cell. A file that ends inside quotes is marked incomplete.
+* The delimiter is detected from the first line.
+* Eleven fields are suggested from the header names. The preview shows each column with its first value and reads the file again when one is changed (`scan_import_remap`).
+* Severity is read per column: as words, as levels 1 to 5 (Qualys), or as CVSS scores, and the preview says which. Without a severity column, the CVSS value decides; otherwise the finding is informational, with a warning.
+* A CSV file never verifies fixes, because exports are often filtered. Templates do not apply.
+
+**Tests:**
+* 3 parser unit tests: quoting, delimiters, limits, suggestions for Nessus and Qualys headers, severity scales;
+* 3 integration tests: scope, merge, redaction (including the preview sample), formula text kept as text, a re-import seen again, a filtered later export never listed as fixed, remapping, levels, a missing title column, invalid mappings, cut and multibyte input;
+* 2 frontend tests for the column options.
+
+**GUI (Windows, QA data):**
+* A Qualys-style CSV was chosen through the real open dialog.
+* All columns were suggested correctly, and severity was read as levels.
+* The private host was listed as outside the scope.
+* Changing *Target* from IP to DNS refreshed the preview; the out-of-scope host became `intranet.local`.
+* Importing created 3 findings with `host:port` targets and CVEs. A password in two copied columns was masked.

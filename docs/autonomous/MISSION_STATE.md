@@ -47,6 +47,9 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 11. Security review fixes (`c3f26af`, `da545e8`, `bd6d73e`)
 12. CVSS 3.0 scoring fixed after a 709,160-vector comparison with FIRST's calculators (`b46a075`)
 13. Database restore in the app (`2eb4209`)
+14. MCP tools for CVSS, the finding library and the checklist (`aaa7d0a`)
+15. Clippy 0.1.99 lints fixed (`7fb4008`)
+16. CSV findings import with a column mapping (`53dac93`)
 
 ## Tests executed
 
@@ -82,14 +85,20 @@ None. The final results: Windows 302 Rust (306 with provisioning) and 217 fronte
 | `2afa5bd` | docs(mission): add the mission report and final verification results |
 | `b46a075` | fix(cvss): score CVSS 3.0 vectors with the 3.0 equations |
 | `2eb4209` | feat(settings): restore a database backup in the app |
+| `3602269` | docs(mission): record the CVSS comparison and the database restore |
+| `aaa7d0a` | feat(mcp): expose CVSS scoring, the finding library and the WSTG checklist |
+| `7fb4008` | fix(osint): resolve the lints reported by clippy 0.1.99 |
+| `53dac93` | feat(findings): import findings from CSV files with a column mapping |
 
 ## Next action
 
 Second segment (from 2026-11-09T06:32Z), in this order:
 1. ~~Verify CVSS scoring against FIRST's reference calculators~~: done (`b46a075`); it found and fixed CVSS 3.0 scoring.
 2. ~~Restore from a backup inside the app~~: done (`2eb4209`); backlog item 12 is complete.
-3. Expose the new capabilities through MCP (CVSS, finding library, checklist). **Next.**
-4. More import formats, then notes, as time allows.
+3. ~~Expose the new capabilities through MCP~~: done (`aaa7d0a`), 49 tools.
+4. ~~More import formats~~: generic CSV import with a column mapping done (`53dac93`).
+5. ~~Clippy on Linux~~: done; three lints from clippy 0.1.99 fixed (`7fb4008`).
+6. **Next:** independent review of `aaa7d0a`, `53dac93` and `b46a075` (running), performance at volume, final regression on Windows and Linux, report.
 
 Release steps (installers, signing) need the owner's authorization.
 
