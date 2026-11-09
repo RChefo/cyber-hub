@@ -158,7 +158,30 @@ A URL entry is a path-level authorization:
   * a URL that cannot be parsed refuses the run instead of being skipped.
 * **Host headers.** In the HTTP request builder, a `Host` header is checked as the same path on that virtual host. In a raw request file, the `Host` header and the request path must be authorized under both HTTPS and HTTP, because the file does not say which the tool will use. Otherwise, pass the URL itself.
 * **Exclusions.** An out-of-scope URL excludes its path on every scheme and port of its host, also in the forms servers commonly treat as the same path: other case, percent-encoding, `;parameters`, `//`, and a `.` suffix (`/admin.json` is inside an excluded `/admin`). Because a host-level operation could reach that path, it also refuses host-level operations on that host. Passive lookups about the host (DNS, certificate transparency) do not reach paths and are not affected, and passive discovery records such names.
-* **Tools decide further paths.** Cyber Hub checks the URLs on a tool's command line, but the tool decides which further paths it requests (wordlist entries, templates, crawling) and whether it follows redirects. When only URL entries authorize a run's URLs, the preview warns about this. The HTTP request builder is the way to stay inside a path with every request and redirect checked.
+* **Tools decide further paths.** Cyber Hub checks the URLs on a tool's command line, but the tool decides which further paths it requests (wordlist entries, templates, crawling). When only URL entries authorize a run's URLs, the preview warns about this. The HTTP request builder is the way to stay inside a path with every request and redirect checked.
+* **Redirects of external tools need host-level authorization.** A run is refused when it would follow HTTP redirects and one of its URLs is either:
+  * authorized only by path, or
+  * on a host that has an excluded path.
+
+  The reason: a redirect can lead outside the authorized paths, or into the excluded one, and Cyber Hub cannot see where an external tool's redirects go. The refusal names the option that enables redirects, explains that the host itself must be authorized (a domain, wildcard or address entry, without excluded paths), and says how to run the tool without redirects. Cyber Hub never changes the analyst's options.
+
+  The options and defaults come from each tool's help text or source (`src-tauri/src/redirects.rs`):
+
+  | Tool | Behaviour |
+  |---|---|
+  | ffuf | follows with `-r` |
+  | gobuster | follows with `-r` / `--follow-redirect` |
+  | feroxbuster | follows with `-r` / `--redirects`, also bundled as in `-kr` |
+  | httpx | follows with `-fr` / `-fhr` and their long forms |
+  | dalfox | follows with `-F` / `--follow-redirects` |
+  | nikto | follows with `-followredirects` and its prefixes such as `-f` |
+  | nuclei | its templates may follow; refused unless `-dr` / `-disable-redirects` is given |
+  | katana | follows by default; refused unless `-dr` is given |
+  | sqlmap | follows by default; refused unless `--ignore-redirects` is given |
+  | whatweb | follows by default; refused unless `--follow-redirect=never` is given |
+  | wpscan, CeWL | always follow; refused on such URLs |
+
+  Explicitly authorized hosts keep the normal behaviour. Tools without an entry keep the warning. Configuration files that a tool reads on its own (for example a ffuf or nuclei config) are not parsed for redirect settings: see the accepted risks.
 * **Service scans** (and workflow service-scan steps) refuse URLs before the scope check: they work on hosts, addresses and networks.
 * **Inventory.** A web service whose origin has authorized URLs may be recorded as an asset by a scan import. Every operation on it is checked on its own.
 * **Passive discovery** derives its root domains only from domain and wildcard entries. A URL entry is never a root, and names are recorded only when the scope covers them as hosts.
@@ -211,7 +234,7 @@ Tests: `src-tauri/src/scope.rs` and `src-tauri/src/targets.rs` (target files, ex
 | Risk | Status / mitigation |
 |---|---|
 | **Single-word arguments** (`intranet`, `dir`, `smb`) cannot be told apart from sub-commands without per-tool knowledge, so they are not scope-checked when they appear as bare arguments. | The preview shows a warning listing them; target files reject them; URLs and `host:port` forms are checked. Use fully-qualified names or IPs. |
-| **Indirect inputs not visible on the command line** — configuration files, resume/state files, environment variables, tool-internal crawling, recursion, redirects and template-defined hosts. | Files named in arguments are inspected (a config or resume file that names endpoints is treated as a target list and must be fully in scope). Crawl/recursion behavior is the tool's; keep depth and rate limits conservative. stdin is closed. |
+| **Indirect inputs not visible on the command line** — configuration files, resume/state files, environment variables, tool-internal crawling, recursion, redirects and template-defined hosts. Redirect options on the command line are enforced for the tools listed under "Redirects of external tools"; redirect settings inside a tool's own configuration file are not read. | Files named in arguments are inspected (a config or resume file that names endpoints is treated as a target list and must be fully in scope). Crawl/recursion behavior is the tool's; keep depth and rate limits conservative. stdin is closed. |
 | **Tool features that execute code** (custom scripts, plugins) are part of many security tools. | Every run requires the native OS confirmation showing the full command; there is no shell and no automatic execution. |
 | **DNS-based scope**: names are checked, not the addresses they resolve to. Alternative IP spellings as bare arguments (`2130706433`, `127.1`) are not recognised as targets. | Prefer IPs/CIDRs for internal ranges; exclusions still apply by name. Every run still needs the native confirmation, which shows the full command. |
 | **Tools that are not target-based scanners** (OpenSSL, hashcat, tshark, Responder and others marked as not needing a scope in the catalog) are not scope-checked, also when an MCP client asks for them. | The MCP approval shows a warning and the native confirmation says that Cyber Hub does not check targets for the tool. Runs requested through MCP still need your approval and the native confirmation. |

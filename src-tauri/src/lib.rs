@@ -18,6 +18,7 @@ mod process;
 #[cfg(feature = "provisioning")]
 pub mod provision;
 mod redact;
+mod redirects;
 mod restore;
 mod scope;
 mod sectools;

@@ -60,6 +60,10 @@ pub struct Resolution {
     pub warnings: Vec<String>,
     /// informational notes for the preview
     pub notes: Vec<String>,
+    /// URL targets authorized only by URL entries (their host is not authorized as a host)
+    pub path_only: Vec<String>,
+    /// URL targets on a host that has an excluded URL path
+    pub near_exclusions: Vec<String>,
 }
 
 /// The data part of an argument: whole token for positionals, the part after `=` for
@@ -323,9 +327,11 @@ pub fn resolve(args: &[String], explicit: &[String], entries: &[ScopeEntry], sna
     }
     // URLs authorized by path only: the tool decides which further paths it requests
     let path_only: Vec<String> = found.iter().filter(|t| scope::path_level_only(entries, t)).map(scope::target_label).take(5).collect();
+    res.path_only = found.iter().filter(|t| scope::path_level_only(entries, t)).map(scope::target_label).collect();
+    res.near_exclusions = found.iter().filter(|t| scope::near_excluded_path(entries, t)).map(scope::target_label).collect();
     if !path_only.is_empty() {
         res.warnings.push(format!(
-            "Only URL entries authorize {}: Cyber Hub checks the URLs on the command line, but the tool decides which further paths it requests and whether it follows redirects. Keep its options inside the authorized paths; the HTTP request tool checks every redirect before following it.",
+            "Only URL entries authorize {}: Cyber Hub checks the URLs on the command line, but the tool decides which further paths it requests (wordlists, templates, crawling). Runs that would follow redirects are refused for the tools whose options Cyber Hub knows; for other tools, make sure they do not follow redirects. The HTTP request tool checks every redirect before following it.",
             path_only.join(", ")
         ));
     }

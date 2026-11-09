@@ -357,6 +357,7 @@ fn validate_exec(db: &Db, req: &ExecRequest, snapshot_dir: Option<&std::path::Pa
             return Err(AppError::Scope("The project has no in-scope targets defined".into()));
         }
         let res = targets::resolve(&req.args, &req.targets, &entries, snapshot_dir).map_err(AppError::Scope)?;
+        check_redirects(&tool.name, &tool.id, &req.args, &res).map_err(AppError::Scope)?;
         args = res.args;
         info.checked_targets = res.checked;
         info.file_targets = res.file_targets;
@@ -372,6 +373,49 @@ fn validate_exec(db: &Db, req: &ExecRequest, snapshot_dir: Option<&std::path::Pa
 #[tauri::command]
 pub async fn exec_validate(db: State<'_, Db>, request: ExecRequest) -> AppResult<ExecValidation> {
     preview_execution(&db, &request)
+}
+
+/// Refuses a run that would follow redirects when one of its URLs is authorized only by path or sits
+/// on a host with an excluded path: a redirect can leave the authorized paths, or reach the excluded
+/// one, and Cyber Hub cannot check where an external tool's redirects go. The options are not changed.
+pub(crate) fn check_redirects(name: &str, tool_id: &str, args: &[String], res: &targets::Resolution) -> Result<(), String> {
+    if res.path_only.is_empty() && res.near_exclusions.is_empty() {
+        return Ok(());
+    }
+    match crate::redirects::follows(tool_id, args) {
+        Some(why) => Err(redirect_refusal(name, tool_id, &why, &res.path_only, &res.near_exclusions)),
+        None => Ok(()),
+    }
+}
+
+/// Why a run that would follow redirects is refused, and what the analyst can do.
+fn redirect_refusal(name: &str, tool_id: &str, why: &str, path_only: &[String], near: &[String]) -> String {
+    let list = |v: &[String]| {
+        let shown: Vec<&str> = v.iter().take(3).map(String::as_str).collect();
+        let more = if v.len() > 3 { format!(" and {} more", v.len() - 3) } else { String::new() };
+        format!("{}{more}", shown.join(", "))
+    };
+    let mut reasons = Vec::new();
+    if !path_only.is_empty() {
+        reasons.push(format!(
+            "{} {} authorized only by path (URL scope entries), and a redirect can lead outside the authorized paths",
+            list(path_only),
+            if path_only.len() == 1 { "is" } else { "are" }
+        ));
+    }
+    if !near.is_empty() {
+        reasons.push(format!("{} {} on a host with an excluded path, which a redirect can reach", list(near), if near.len() == 1 { "is" } else { "are" }));
+    }
+    let stop = crate::redirects::how_to_stop(tool_id);
+    let fix = if stop.is_empty() {
+        format!("{name} cannot be run on these URLs: authorize the host itself (a domain, wildcard or address entry) without excluded paths")
+    } else {
+        format!("Run it without following redirects ({stop}), or authorize the host itself (a domain, wildcard or address entry) without excluded paths")
+    };
+    format!(
+        "{name} was not started: {why}. {}. Cyber Hub cannot check where an external tool's redirects lead, so redirects need explicit host-level authorization. {fix}. The options you set were not changed.",
+        reasons.join("; ")
+    )
 }
 
 /// Dry-run validation shared by the GUI preview and MCP `cyberhub_preview_run`.
@@ -615,6 +659,55 @@ pub fn clear_history(c: &Connection, running: &[i64]) -> AppResult<HistoryCleare
 pub async fn exec_history_clear(db: State<'_, Db>, pm: State<'_, ProcessManager>) -> AppResult<HistoryCleared> {
     let running = pm.running_ids();
     db.with(|c| clear_history(c, &running))
+}
+
+#[cfg(test)]
+mod redirect_tests {
+    use super::*;
+    use crate::scope::ScopeEntry;
+
+    fn e(value: &str, in_scope: bool) -> ScopeEntry {
+        let (v, kind) = crate::scope::classify(value).unwrap();
+        ScopeEntry { value: v, kind: kind.to_string(), in_scope }
+    }
+    fn run(tool: &str, args: &[&str], scope: &[ScopeEntry]) -> Result<(), String> {
+        let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        let res = targets::resolve(&args, &[], scope, None)?;
+        check_redirects(tool, tool, &args, &res)
+    }
+
+    #[test]
+    fn redirects_need_host_level_authorization() {
+        let path = vec![e("https://app.example.com/api/", true)];
+        let host = vec![e("*.example.com", true)];
+        let excluded = vec![e("*.example.com", true), e("https://app.example.com/admin", false)];
+        // path-only authorization: a run that follows redirects is refused, with what to do
+        let err = run("ffuf", &["-u", "https://app.example.com/api/FUZZ", "-w", "words.txt", "-r"], &path).unwrap_err();
+        assert!(err.contains("authorized only by path") && err.contains("leave out -r") && err.contains("host-level authorization"), "{err}");
+        assert!(err.contains("were not changed"), "{err}");
+        assert!(run("ffuf", &["-uhttps://app.example.com/api/FUZZ", "-r"], &path).is_err(), "an attached URL is read too");
+        // the same run without following redirects is allowed
+        assert!(run("ffuf", &["-u", "https://app.example.com/api/FUZZ", "-w", "words.txt"], &path).is_ok());
+        // tools that follow unless told not to need the option that stops it
+        let err = run("katana", &["-u", "https://app.example.com/api/"], &path).unwrap_err();
+        assert!(err.contains("add -dr"), "{err}");
+        assert!(run("katana", &["-u", "https://app.example.com/api/", "-dr"], &path).is_ok());
+        assert!(run("sqlmap", &["-u", "https://app.example.com/api/item?id=1", "--batch"], &path).is_err());
+        assert!(run("sqlmap", &["-u", "https://app.example.com/api/item?id=1", "--batch", "--ignore-redirects"], &path).is_ok());
+        // tools that always follow cannot run on path-only URLs
+        let err = run("wpscan", &["--url", "https://app.example.com/api/"], &path).unwrap_err();
+        assert!(err.contains("cannot be run on these URLs"), "{err}");
+        // an explicitly authorized host keeps the normal behaviour
+        assert!(run("ffuf", &["-u", "https://app.example.com/FUZZ", "-r"], &host).is_ok());
+        assert!(run("wpscan", &["--url", "https://app.example.com/"], &host).is_ok());
+        // a host with an excluded path: a redirect could reach the excluded path
+        let err = run("ffuf", &["-u", "https://app.example.com/FUZZ", "-r"], &excluded).unwrap_err();
+        assert!(err.contains("excluded path"), "{err}");
+        assert!(run("ffuf", &["-u", "https://www.example.com/FUZZ", "-r"], &excluded).is_ok(), "other hosts are not affected");
+        // exclusions and path checks still apply before any redirect question
+        assert!(run("ffuf", &["-u", "https://app.example.com/admin/FUZZ"], &excluded).unwrap_err().contains("excluded"));
+        assert!(run("ffuf", &["-u", "https://app.example.com/other/FUZZ"], &path).unwrap_err().contains("outside the authorized URLs"));
+    }
 }
 
 #[cfg(test)]

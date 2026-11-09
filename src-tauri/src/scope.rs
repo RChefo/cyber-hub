@@ -451,6 +451,11 @@ pub fn check_target(entries: &[ScopeEntry], t: &Target) -> Result<(), String> {
     check_target_with(entries, t, true)
 }
 
+/// Whether a URL is on a host that has an excluded URL path (a redirect could lead there).
+pub fn near_excluded_path(entries: &[ScopeEntry], t: &Target) -> bool {
+    matches!(t, Target::Url(w) if entries.iter().filter(|e| !e.in_scope).filter_map(url_entry).any(|u| u.host == w.host))
+}
+
 /// Whether a URL is authorized by URL entries only (its host is not authorized as a host): the tool
 /// that receives it decides which further paths it requests.
 pub fn path_level_only(entries: &[ScopeEntry], t: &Target) -> bool {
