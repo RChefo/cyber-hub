@@ -865,6 +865,44 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     "#,
 ];
 
+/// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a
+/// column's constraints in place, so such a migration copies the table into a new one, drops the old
+/// one and renames the copy. With foreign keys on, dropping the old table would first delete, through
+/// `ON DELETE CASCADE`, every row that refers to it (finding history, links, fingerprints…). These
+/// migrations therefore run through [`run_rebuild`]. None is needed so far: migration 9 rebuilt
+/// `findings` when no table referred to it yet. A test fails when a migration drops a table that
+/// another table refers to without being listed here.
+const REBUILD_MIGRATIONS: &[i64] = &[];
+
+/// Runs one migration that rebuilds a referenced table, as SQLite documents it (the "12 steps").
+/// * `PRAGMA foreign_keys` has no effect inside a transaction, so enforcement is turned off before
+///   the transaction and turned back on after it, whatever happens: ordinary operation never runs
+///   without foreign keys.
+/// * The migration commits only when `PRAGMA foreign_key_check` finds no broken reference; otherwise
+///   it is rolled back and the database is unchanged.
+/// * An interruption (crash, power loss) leaves the transaction uncommitted: SQLite rolls it back at
+///   the next open, and every connection Cyber Hub opens turns foreign keys on again.
+fn run_rebuild(conn: &Connection, version: i64, sql: &str) -> AppResult<()> {
+    conn.execute_batch("PRAGMA foreign_keys = OFF;")?;
+    let result = (|| -> AppResult<()> {
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch(sql)?;
+        let broken: i64 = tx.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r.get(0))?;
+        if broken > 0 {
+            return Err(AppError::Internal(format!(
+                "Migration {version} would leave {broken} broken references between tables, so it was not applied and the database is unchanged."
+            )));
+        }
+        tx.execute_batch(&format!("PRAGMA user_version = {version}"))?;
+        tx.commit()?;
+        Ok(())
+    })();
+    let restored = conn.execute_batch("PRAGMA foreign_keys = ON;");
+    result?;
+    restored?;
+    Ok(())
+}
+
 /// Schema 19: a URL exclusion recorded before URL entries became path-level excluded its whole host.
 /// Its host is excluded too (an in-scope entry with that exact value becomes an exclusion), and the
 /// scope history says why, so nothing that was excluded becomes allowed.
@@ -1059,6 +1097,10 @@ impl Db {
             for (idx, sql) in MIGRATIONS.iter().enumerate() {
                 let version = (idx + 1) as i64;
                 if version > current {
+                    if REBUILD_MIGRATIONS.contains(&version) {
+                        run_rebuild(conn, version, sql)?;
+                        continue;
+                    }
                     let tx = conn.unchecked_transaction()?;
                     tx.execute_batch(sql)?;
                     if version == 19 {
@@ -1088,6 +1130,132 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Tables that other tables refer to through a foreign key.
+    fn referenced_tables(c: &Connection) -> std::collections::BTreeSet<String> {
+        let tables: Vec<String> = c.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
+        let mut out = std::collections::BTreeSet::new();
+        for t in &tables {
+            let mut st = c.prepare("SELECT \"table\" FROM pragma_foreign_key_list(?1)").unwrap();
+            for parent in st.query_map([t], |r| r.get::<_, String>(0)).unwrap().map(Result::unwrap) {
+                if parent != *t {
+                    out.insert(parent.to_ascii_lowercase());
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn no_migration_drops_a_referenced_table_outside_the_rebuild_mode() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        let drop = regex::Regex::new(r"(?i)DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)").unwrap();
+        for (i, sql) in MIGRATIONS.iter().enumerate() {
+            let version = (i + 1) as i64;
+            let referenced = referenced_tables(&conn);
+            for cap in drop.captures_iter(sql) {
+                let table = cap[1].to_ascii_lowercase();
+                assert!(
+                    !referenced.contains(&table) || REBUILD_MIGRATIONS.contains(&version),
+                    "migration {version} drops {table}, which other tables refer to: list it in REBUILD_MIGRATIONS so it runs with foreign keys off"
+                );
+            }
+            conn.execute_batch(sql).unwrap();
+            conn.execute_batch(&format!("PRAGMA user_version = {version}")).unwrap();
+        }
+        // today `findings` is referenced, so a rebuild like migration 9 would need the mode
+        assert!(referenced_tables(&conn).contains("findings"));
+    }
+
+    /// A parent table with a CHECK constraint, and children that refer to it.
+    fn parent_and_children(c: &Connection) {
+        c.execute_batch(
+            "CREATE TABLE parent (id INTEGER PRIMARY KEY, status TEXT NOT NULL CHECK (status IN ('new','done')));
+             CREATE TABLE child (id INTEGER PRIMARY KEY, parent_id INTEGER NOT NULL REFERENCES parent(id) ON DELETE CASCADE, note TEXT);
+             INSERT INTO parent VALUES (1, 'new'), (2, 'done');
+             INSERT INTO child VALUES (10, 1, 'history of 1'), (11, 2, 'history of 2'), (12, 2, 'more history of 2');",
+        )
+        .unwrap();
+    }
+
+    /// Allows a third status, the way SQLite documents it: copy, drop, rename.
+    const WIDEN_STATUS: &str = "CREATE TABLE parent_new (id INTEGER PRIMARY KEY, status TEXT NOT NULL CHECK (status IN ('new','done','archived')));
+         INSERT INTO parent_new SELECT id, status FROM parent;
+         DROP TABLE parent;
+         ALTER TABLE parent_new RENAME TO parent;";
+
+    #[test]
+    fn a_rebuild_keeps_the_rows_that_refer_to_the_table() {
+        // the same rebuild with foreign keys on (the ordinary migration path) deletes the history
+        let plain = Connection::open_in_memory().unwrap();
+        plain.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        parent_and_children(&plain);
+        let tx = plain.unchecked_transaction().unwrap();
+        tx.execute_batch(WIDEN_STATUS).unwrap();
+        tx.commit().unwrap();
+        assert_eq!(count(&plain, "SELECT COUNT(*) FROM child"), 0, "dropping the parent cascaded to its children");
+
+        // the rebuild mode keeps every row, and foreign keys are on again afterwards
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        parent_and_children(&conn);
+        run_rebuild(&conn, 42, WIDEN_STATUS).unwrap();
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM child"), 3);
+        assert_eq!(count(&conn, "PRAGMA foreign_keys"), 1);
+        assert_eq!(count(&conn, "PRAGMA user_version"), 42);
+        conn.execute("UPDATE parent SET status = 'archived' WHERE id = 1", []).unwrap();
+        assert!(conn.execute("INSERT INTO child VALUES (13, 99, 'x')", []).is_err(), "references are enforced again");
+        let ok: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).unwrap();
+        assert_eq!(ok, "ok");
+    }
+
+    #[test]
+    fn a_failed_or_harmful_rebuild_changes_nothing() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA user_version = 41;").unwrap();
+        parent_and_children(&conn);
+        // an error halfway (the copy breaks the new constraint): rolled back
+        let failing = "CREATE TABLE parent_new (id INTEGER PRIMARY KEY, status TEXT NOT NULL CHECK (status IN ('open')));
+             INSERT INTO parent_new SELECT id, status FROM parent;
+             DROP TABLE parent;
+             ALTER TABLE parent_new RENAME TO parent;";
+        assert!(run_rebuild(&conn, 42, failing).is_err());
+        // a rebuild that would leave references pointing at nothing: refused before it commits
+        let lossy = "CREATE TABLE parent_new (id INTEGER PRIMARY KEY, status TEXT NOT NULL CHECK (status IN ('new','done')));
+             INSERT INTO parent_new SELECT id, status FROM parent WHERE id = 1;
+             DROP TABLE parent;
+             ALTER TABLE parent_new RENAME TO parent;";
+        let err = run_rebuild(&conn, 42, lossy).unwrap_err().to_string();
+        assert!(err.contains("2 broken references") && err.contains("unchanged"), "{err}");
+        // either way: unchanged, at the old version, with foreign keys on
+        assert_eq!((count(&conn, "SELECT COUNT(*) FROM parent"), count(&conn, "SELECT COUNT(*) FROM child")), (2, 3));
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'parent_new'"), 0);
+        assert_eq!((count(&conn, "PRAGMA user_version"), count(&conn, "PRAGMA foreign_keys")), (41, 1));
+    }
+
+    #[test]
+    fn an_interrupted_rebuild_is_rolled_back_at_the_next_open() {
+        let dir = std::env::temp_dir().join(format!("cyberhub-rebuild-{}-{}", std::process::id(), crate::util::now().replace(':', "")));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("db.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;").unwrap();
+            parent_and_children(&conn);
+            // the steps of a rebuild up to the drop, then the process ends without committing
+            conn.execute_batch("PRAGMA foreign_keys = OFF; BEGIN;").unwrap();
+            conn.execute_batch("CREATE TABLE parent_new (id INTEGER PRIMARY KEY, status TEXT); INSERT INTO parent_new SELECT id, status FROM parent; DROP TABLE parent;").unwrap();
+            // dropping the connection without COMMIT, as a crash would
+        }
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        assert_eq!((count(&conn, "SELECT COUNT(*) FROM parent"), count(&conn, "SELECT COUNT(*) FROM child")), (2, 3), "nothing of the rebuild was kept");
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'parent_new'"), 0);
+        assert_eq!(count(&conn, "PRAGMA foreign_keys"), 1);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn the_bundled_sqlite_has_the_wal_page_size_fix() {

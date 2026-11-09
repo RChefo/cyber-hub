@@ -42,6 +42,13 @@ Development databases already at schema 18 are treated the same way, because the
 2. **A database written by a newer version is refused.** Cyber Hub stops with a message instead of opening it. It does not change the file and does not try to downgrade it.
 3. **Before any upgrade, Cyber Hub makes a complete copy of the database** with SQLite's `VACUUM INTO`. The copy goes to `backups/cyberhub-schema<old version>-<UTC time>.db` in the data folder (mode 0700 on Linux). It is written as `….db.partial` and renamed only when complete, so a half-written copy is never mistaken for a backup. Leftover `.partial` files are removed at the next start. The three newest backups are kept. If the copy cannot be made (for example the disk is full), **Cyber Hub stops and changes nothing**.
 4. Each migration runs in its own transaction, together with the version bump. A crash, power loss or forced exit during a migration rolls that migration back completely. The database stays at the last completed version, and the next start continues from there.
+
+   **Rebuilds of referenced tables.** SQLite cannot change a column's constraints in place, so such a change copies the table, drops the old one and renames the copy. With foreign keys on, dropping a table that other tables refer to would first delete the referring rows, for example finding history, links and fingerprints through `ON DELETE CASCADE`. A migration that does this must therefore be listed in `REBUILD_MIGRATIONS` (`src-tauri/src/db.rs`), and it then runs in a rebuild mode:
+   * foreign-key enforcement is turned off only around that migration's transaction (inside a transaction SQLite ignores the setting), and turned back on afterwards whatever happens;
+   * the migration commits only if `PRAGMA foreign_key_check` finds no broken reference; otherwise it is rolled back and the database stays as it was;
+   * an interruption leaves the transaction uncommitted, so SQLite rolls it back at the next open, where enforcement is on again.
+
+   No migration needs this so far. Migration 9 rebuilt `findings` at a time when no table referred to it. A test fails if a future migration drops a referenced table without the rebuild mode. Ordinary operation never runs with foreign keys off.
 5. A database that is already current is opened as is. No backup is made and nothing is rewritten.
 
 Credentials (API keys) are not in the database. They stay in the operating system's credential store and are not affected by upgrades or by restoring a backup. Evidence files in `evidence/` are not part of the database backup.
