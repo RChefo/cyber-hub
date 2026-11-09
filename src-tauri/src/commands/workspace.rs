@@ -348,8 +348,9 @@ pub async fn scan_import_pick(app: AppHandle, project_id: i64, options: Option<I
         if bytes.len() > scan_import::MAX_FILE_BYTES {
             return Err(crate::error::validation("The file grew while it was read"));
         }
-        let text = String::from_utf8_lossy(&bytes).into_owned();
-        let parsed = scan_import::parse(&text).map_err(AppError::Validation)?;
+        let (text, note) = scan_import::decode_text(&bytes);
+        let mut parsed = scan_import::parse(&text).map_err(AppError::Validation)?;
+        parsed.warnings.splice(0..0, note);
         let preview = handle.state::<Db>().with(|c| scan_import::preview(c, project_id, &parsed, opts))?;
         let sha256 = {
             use sha2::Digest;
@@ -383,8 +384,10 @@ pub async fn scan_import_preview(db: State<'_, Db>, imports: State<'_, ScanImpor
 pub async fn scan_import_remap(db: State<'_, Db>, imports: State<'_, ScanImports>, token: String, mapping: scan_import::csv::CsvMapping, options: ImportOptions) -> AppResult<Preview> {
     let mut m = imports.0.lock().map_err(|_| AppError::Internal("scan import state poisoned".into()))?;
     let p = m.get_mut(&token).ok_or_else(|| crate::error::validation("This preview has expired; choose the file again"))?;
-    let text = String::from_utf8_lossy(&p.bytes).into_owned();
-    p.parsed = scan_import::parse_csv_with(&text, &mapping).map_err(AppError::Validation)?;
+    let (text, note) = scan_import::decode_text(&p.bytes);
+    let mut parsed = scan_import::parse_csv_with(&text, &mapping).map_err(AppError::Validation)?;
+    parsed.warnings.splice(0..0, note);
+    p.parsed = parsed;
     db.with(|c| scan_import::preview(c, p.project_id, &p.parsed, options))
 }
 

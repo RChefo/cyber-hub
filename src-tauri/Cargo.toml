@@ -44,6 +44,8 @@ chrono = { version = "0.4.45", features = ["serde"] }
 dirs = "7.0.0"
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 getrandom = "0.3.4"
+# decoding imported files saved as UTF-16 or Windows-1252 (already in the dependency tree)
+encoding_rs = "0.8"
 hickory-resolver = "0.26"
 hmac = "0.12.1"
 ipnet = "2.12.2"

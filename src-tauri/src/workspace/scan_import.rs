@@ -491,6 +491,32 @@ fn xml_root(xml: &str) -> Option<String> {
     None
 }
 
+/// The text of an imported file, and a note when it was not plain UTF-8:
+/// * a byte-order mark decides (UTF-8, UTF-16LE or UTF-16BE; Excel's "Unicode text" is UTF-16);
+/// * valid UTF-8 is used as it is;
+/// * UTF-16 without a mark is recognized by its NUL bytes;
+/// * anything else is read as Windows-1252, the encoding of CSV files Excel saves on Western
+///   Windows systems. Every byte has a meaning there, so no character is replaced.
+pub fn decode_text(bytes: &[u8]) -> (String, Option<String>) {
+    if let Some((enc, bom)) = encoding_rs::Encoding::for_bom(bytes) {
+        let (text, _) = enc.decode_without_bom_handling(&bytes[bom..]);
+        let note = (enc != encoding_rs::UTF_8).then(|| format!("The file was read as {} (it starts with a byte-order mark)", enc.name()));
+        return (text.into_owned(), note);
+    }
+    if let Ok(s) = std::str::from_utf8(bytes) {
+        return (s.to_string(), None);
+    }
+    let head = &bytes[..bytes.len().min(4096)];
+    let (even, odd) = head.iter().enumerate().filter(|(_, b)| **b == 0).fold((0, 0), |(e, o), (i, _)| if i % 2 == 0 { (e + 1, o) } else { (e, o + 1) });
+    if (even + odd) * 4 > head.len() {
+        let enc = if odd >= even { encoding_rs::UTF_16LE } else { encoding_rs::UTF_16BE };
+        let (text, _) = enc.decode_without_bom_handling(bytes);
+        return (text.into_owned(), Some(format!("The file has no byte-order mark and was read as {}", enc.name())));
+    }
+    let (text, _) = encoding_rs::WINDOWS_1252.decode_without_bom_handling(bytes);
+    (text.into_owned(), Some("The file is not valid UTF-8 and was read as Windows-1252, the encoding Excel uses for CSV files on Western Windows systems".into()))
+}
+
 /// Reads a file: detects the format and parses it. A CSV file is read with the columns its
 /// headers suggest.
 pub fn parse(text: &str) -> Result<Parsed, String> {

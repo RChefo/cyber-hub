@@ -772,3 +772,35 @@ fn path_scoped_projects_import_findings_on_authorized_urls_only() {
     })
     .unwrap();
 }
+
+#[test]
+fn files_saved_by_excel_are_read_in_their_encoding() {
+    let csv = "Name,Risk,Host\nCafé – unsicher €,High,app.example.com\n";
+    // UTF-16LE with a byte-order mark (Excel's "Unicode text"), and big-endian
+    let mut le = vec![0xFF, 0xFE];
+    le.extend(csv.encode_utf16().flat_map(u16::to_le_bytes));
+    let mut be = vec![0xFE, 0xFF];
+    be.extend(csv.encode_utf16().flat_map(u16::to_be_bytes));
+    for (bytes, name) in [(le.clone(), "UTF-16LE"), (be, "UTF-16BE")] {
+        let (text, note) = decode_text(&bytes);
+        assert_eq!(text, csv);
+        assert!(note.unwrap().contains(name));
+        assert_eq!(parse(&text).unwrap().findings[0].title, "Café – unsicher €");
+    }
+    // UTF-16 without a mark
+    let (text, note) = decode_text(&le[2..]);
+    assert_eq!((text.as_str(), note.unwrap().contains("no byte-order mark")), (csv, true));
+    // Windows-1252, as Excel saves CSV on Western Windows: é, the en dash and the euro sign
+    let cp1252: Vec<u8> = b"Name,Risk,Host\nCaf\xe9 \x96 unsicher \x80,High,app.example.com\n".to_vec();
+    let (text, note) = decode_text(&cp1252);
+    assert_eq!(text, csv, "no character is replaced");
+    assert!(note.unwrap().contains("Windows-1252"));
+    // UTF-8 with or without a BOM needs no note
+    assert_eq!(decode_text(csv.as_bytes()), (csv.to_string(), None));
+    let mut bom = vec![0xEF, 0xBB, 0xBF];
+    bom.extend(csv.as_bytes());
+    assert_eq!(decode_text(&bom), (csv.to_string(), None));
+    // malformed bytes never panic: invalid UTF-8 inside an XML file is read, not refused
+    let (text, _) = decode_text(b"<nmaprun>\xff\xfe\x00 stray</nmaprun>");
+    assert!(text.starts_with("<nmaprun>"));
+}
