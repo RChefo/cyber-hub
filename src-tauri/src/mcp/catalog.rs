@@ -180,16 +180,34 @@ pub static TOOLS: &[ToolSpec] = &[
         description: "Findings, optionally for one project.",
         schema: || obj(json!({ "project_id": project_id() }), &[]) },
     ToolSpec { name: "cyberhub_create_finding", title: "Create finding", group: "projects", category: Category::LocalWrite,
-        description: "Create a finding in a project. Requires the user's approval in Cyber Hub.",
+        description: "Create a finding in a project. Requires the user's approval in Cyber Hub. To reuse a vetted write-up, read a template with cyberhub_get_finding_template and adapt it; score the vector with cyberhub_score_cvss first.",
         schema: || obj(json!({
             "project_id": project_id(),
             "title": { "type": "string", "minLength": 1, "maxLength": 300 },
             "severity": { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] },
             "status": { "type": "string", "enum": ["new", "under_review", "confirmed", "accepted_risk", "in_remediation", "resolved", "reopened", "false_positive"], "description": "Defaults to new. The names open and reported of earlier versions are still accepted (as new and confirmed)." },
             "description": { "type": "string", "maxLength": 20000 },
+            "remediation": { "type": "string", "maxLength": 20000 },
             "affected_target": { "type": "string", "maxLength": 500 },
-            "cve": { "type": "string", "maxLength": 32 }
+            "cve": { "type": "string", "maxLength": 32 },
+            "cvss_vector": { "type": "string", "maxLength": 400, "description": "A CVSS 4.0, 3.1 or 3.0 vector (CVSS:4.0/…). Cyber Hub validates it and computes the score; an invalid vector refuses the request." }
         }), &["project_id", "title", "severity"]) },
+    ToolSpec { name: "cyberhub_get_checklist", title: "Testing checklist", group: "projects", category: Category::Read,
+        description: "A project's OWASP WSTG testing checklist: coverage, and every test with its status (not_started, in_progress, passed, failed, not_applicable), note and linked finding. Optionally one category (for example WSTG-ATHZ) or one status.",
+        schema: || obj(json!({
+            "project_id": project_id(),
+            "category": { "type": "string", "pattern": "^WSTG-[A-Z]{4}$", "description": "Only this category, for example WSTG-INPV" },
+            "status": { "type": "string", "enum": ["not_started", "in_progress", "passed", "failed", "not_applicable"] }
+        }), &["project_id"]) },
+    ToolSpec { name: "cyberhub_set_checklist_item", title: "Update the testing checklist", group: "projects", category: Category::LocalWrite,
+        description: "Set the status of one WSTG test in a project's checklist, with an optional note and a finding of the same project that the test led to. A note that is not given keeps the existing note. Requires the user's approval in Cyber Hub.",
+        schema: || obj(json!({
+            "project_id": project_id(),
+            "test_id": { "type": "string", "pattern": "^WSTG-[A-Z]{4}-[0-9]{2}$", "description": "Test ID from cyberhub_get_checklist, for example WSTG-ATHZ-04" },
+            "status": { "type": "string", "enum": ["not_started", "in_progress", "passed", "failed", "not_applicable"] },
+            "note": { "type": "string", "maxLength": 2000 },
+            "finding_id": { "type": "integer", "minimum": 1, "description": "A finding of the same project (from cyberhub_list_findings)" }
+        }), &["project_id", "test_id", "status"]) },
     // ── execution
     ToolSpec { name: "cyberhub_preview_run", title: "Preview a tool run", group: "execution", category: Category::Read,
         description: "Validate a planned run without starting anything: resolved program, arguments (credentials redacted), every target found in the arguments and target files checked against the project scope, warnings and notes.",
@@ -245,6 +263,20 @@ pub static TOOLS: &[ToolSpec] = &[
     ToolSpec { name: "cyberhub_get_vulnerability_details", title: "Vulnerability details", group: "vulnerabilities", category: Category::Read,
         description: "Full cached record of a CVE: CVSS vectors, CWEs, affected products, references and the CISA KEV flag.",
         schema: || obj(json!({ "cve_id": { "type": "string", "pattern": "^(?i)CVE-[0-9]{4}-[0-9]{4,}$" } }), &["cve_id"]) },
+    ToolSpec { name: "cyberhub_score_cvss", title: "Score a CVSS vector", group: "vulnerabilities", category: Category::Read,
+        description: "Validate a CVSS 4.0, 3.1 or 3.0 vector and compute its score as FIRST's calculators do: canonical vector, score, base score, qualitative rating and what the score covers (for example CVSS-BT or Environmental). Nothing is stored or sent.",
+        schema: || obj(json!({ "vector": { "type": "string", "minLength": 9, "maxLength": 400, "description": "For example CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" } }), &["vector"]) },
+    // ── finding library
+    ToolSpec { name: "cyberhub_list_finding_templates", title: "List finding templates", group: "library", category: Category::Read,
+        description: "Templates of the user's finding library (vetted write-ups), most used first: title, severity, category, tags, scanner import rules and a summary. Optionally filtered by text (title, category, description, tags, rules) and severity.",
+        schema: || obj(json!({
+            "query": { "type": "string", "maxLength": 200 },
+            "severity": { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 200, "description": "Defaults to 50" }
+        }), &[]) },
+    ToolSpec { name: "cyberhub_get_finding_template", title: "Get a finding template", group: "library", category: Category::Read,
+        description: "One finding template with its full description, remediation, references, tags and import rules.",
+        schema: || obj(json!({ "template_id": { "type": "integer", "minimum": 1, "description": "Template ID from cyberhub_list_finding_templates" } }), &["template_id"]) },
     // ── reports and history
     ToolSpec { name: "cyberhub_generate_report", title: "Generate project report", group: "reports", category: Category::Read,
         description: "Markdown assessment report for a project (scope, findings, notes), generated from local data and returned as text.",
@@ -366,6 +398,7 @@ pub const GROUPS: &[(&str, &str)] = &[
     ("virustotal", "VirusTotal"),
     ("threat_intel", "Threat Intelligence"),
     ("vulnerabilities", "Vulnerability Intelligence"),
+    ("library", "Finding Library"),
     ("osint", "OSINT Workspace"),
     ("reports", "Reports & History"),
     ("approvals", "Approvals"),
@@ -402,7 +435,7 @@ mod tests {
                 assert!(s["properties"].get(r.as_str().unwrap()).is_some(), "{} requires an undefined property", t.name);
             }
         }
-        assert_eq!(TOOLS.len(), 44);
+        assert_eq!(TOOLS.len(), 49);
     }
 
     #[test]
@@ -411,6 +444,7 @@ mod tests {
             ("cyberhub_run_tool", Category::RunTools),
             ("cyberhub_vt_upload_file", Category::FileUpload),
             ("cyberhub_create_finding", Category::LocalWrite),
+            ("cyberhub_set_checklist_item", Category::LocalWrite),
             ("cyberhub_save_indicator", Category::LocalWrite),
             ("cyberhub_export_report", Category::Export),
             ("cyberhub_threat_intel_lookup", Category::ExternalLookup),

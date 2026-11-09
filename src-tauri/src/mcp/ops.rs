@@ -18,6 +18,7 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::approvals::{ApprovalStatus, Decision, Detail, NewRequest};
+use super::assessment;
 use super::bridge::{Bridge, ConnCtx, DispatchFuture, Dispatcher};
 use super::catalog::{self, Category, Policy};
 use super::proto::ErrorBody;
@@ -194,8 +195,10 @@ struct CreateFinding {
     severity: String,
     status: Option<String>,
     description: Option<String>,
+    remediation: Option<String>,
     affected_target: Option<String>,
     cve: Option<String>,
+    cvss_vector: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -782,20 +785,35 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
         "cyberhub_create_finding" => {
             let a: CreateFinding = parse(args)?;
             check_project(&db, a.project_id)?;
-            let desc = a.description.unwrap_or_default();
-            let preview = if desc.chars().count() > 600 { format!("{}… ({} characters in total)", desc.chars().take(600).collect::<String>(), desc.chars().count()) } else { desc };
+            let long = |text: String| if text.chars().count() > 600 { format!("{}… ({} characters in total)", text.chars().take(600).collect::<String>(), text.chars().count()) } else { text };
+            let mut checks = vec!["Arguments valid".into(), format!("Project #{} exists", a.project_id)];
+            let mut details = vec![
+                d("Title", a.title.chars().take(300).collect::<String>()),
+                d("Severity", a.severity),
+                d("Status", a.status.as_deref().and_then(crate::workspace::findings::canonical_status).unwrap_or("new").to_string()),
+                d("Affected target", a.affected_target.unwrap_or_default()),
+                d("CVE", a.cve.unwrap_or_default()),
+            ];
+            // an invalid vector would refuse the finding: refused before it reaches the user
+            if let Some(v) = a.cvss_vector.as_deref().filter(|v| !v.trim().is_empty()) {
+                let c = crate::cvss::parse(v).map_err(|e| err("validation", format!("cvss_vector: {e}")))?;
+                details.push(d("CVSS", format!("{} ({} {})", c.vector, c.score, c.rating)));
+                checks.push("CVSS vector valid; the score is computed by Cyber Hub".into());
+            }
+            details.push(d("Description", long(a.description.unwrap_or_default())));
+            if let Some(r) = a.remediation {
+                details.push(d("Remediation", long(r)));
+            }
+            Ok((format!("Create a finding in {}", project_name(&db, a.project_id)), details, Some(a.project_id), checks))
+        }
+        "cyberhub_set_checklist_item" => {
+            let a: assessment::ChecklistSet = parse(args)?;
+            let (project, details) = db.with(|c| assessment::describe_checklist_set(c, &a)).map_err(app_err)?;
             Ok((
-                format!("Create a finding in {}", project_name(&db, a.project_id)),
-                vec![
-                    d("Title", a.title.chars().take(300).collect::<String>()),
-                    d("Severity", a.severity),
-                    d("Status", a.status.as_deref().and_then(crate::workspace::findings::canonical_status).unwrap_or("new").to_string()),
-                    d("Affected target", a.affected_target.unwrap_or_default()),
-                    d("CVE", a.cve.unwrap_or_default()),
-                    d("Description", preview),
-                ],
+                format!("Update the testing checklist of {project}"),
+                details.into_iter().map(|(k, v)| d(&k, v)).collect(),
                 Some(a.project_id),
-                vec!["Arguments valid".into(), format!("Project #{} exists", a.project_id)],
+                vec!["The test is in the bundled OWASP WSTG checklist".into(), "A linked finding belongs to the same project".into()],
             ))
         }
         "cyberhub_save_indicator" => {
@@ -1021,12 +1039,34 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
                 severity: a.severity,
                 status: a.status.unwrap_or_else(|| "new".into()),
                 description: a.description.unwrap_or_default(),
+                remediation: a.remediation.unwrap_or_default(),
                 affected_target: a.affected_target.unwrap_or_default(),
                 cve: a.cve.unwrap_or_default(),
+                cvss_vector: a.cvss_vector.unwrap_or_default(),
                 ..Default::default()
             };
             let id = app.state::<Db>().with(|c| projects::finding_save(c, &input, "mcp")).map_err(app_err)?;
             Ok(json!({ "findingId": id, "projectId": a.project_id }))
+        }
+        "cyberhub_get_checklist" => {
+            let a: assessment::ChecklistQuery = parse(args)?;
+            db.with(|c| assessment::checklist(c, &a)).map_err(app_err)
+        }
+        "cyberhub_set_checklist_item" => {
+            let a: assessment::ChecklistSet = parse(args)?;
+            db.with(|c| assessment::set_checklist(c, &a)).map_err(app_err)
+        }
+        "cyberhub_score_cvss" => {
+            let a: assessment::CvssArg = parse(args)?;
+            assessment::score_cvss(&a).map_err(|e| err("validation", e))
+        }
+        "cyberhub_list_finding_templates" => {
+            let a: assessment::TemplateQuery = opt_obj(args)?;
+            db.with(|c| assessment::list_templates(c, &a)).map_err(app_err)
+        }
+        "cyberhub_get_finding_template" => {
+            let a: assessment::TemplateArg = parse(args)?;
+            db.with(|c| assessment::get_template(c, a.template_id)).map_err(app_err)
         }
         "cyberhub_preview_run" => {
             let a: ExecArgs = parse(args)?;

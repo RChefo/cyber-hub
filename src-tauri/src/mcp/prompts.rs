@@ -38,7 +38,9 @@ Steps: 1) cyberhub_get_project_scope and summarize what is in scope and excluded
         template: "Assess the web application {url} for Cyber Hub project {project_id}.\n\n\
 First confirm {url} is in scope with cyberhub_validate_target. Check which web tools are installed (cyberhub_list_tools, category web). \
 Start with passive and low-impact checks (headers, technology fingerprinting, content discovery with small wordlists and low rates). \
-Preview each run, explain it, and only then request it. Record confirmed issues as findings with evidence references.\n\n{rules}",
+Preview each run, explain it, and only then request it. Record confirmed issues as findings with evidence references: \
+look for a matching write-up with cyberhub_list_finding_templates, score CVSS vectors with cyberhub_score_cvss, and keep the \
+project's OWASP WSTG checklist current (cyberhub_get_checklist, cyberhub_set_checklist_item).\n\n{rules}",
     },
     PromptSpec {
         name: "threat_intelligence_investigation",
@@ -77,7 +79,8 @@ Prioritize by CVSS and the CISA KEV flag, and state clearly when a version match
         description: "Draft an assessment report from a project's scope, findings and runs.",
         arguments: &[("project_id", "Cyber Hub project ID", true)],
         template: "Prepare a security assessment report for Cyber Hub project {project_id}.\n\n\
-Use cyberhub_generate_report for the base report, cyberhub_list_findings for details and cyberhub_list_runs / cyberhub_get_run_details for evidence. \
+Use cyberhub_generate_report for the base report, cyberhub_list_findings for details, cyberhub_list_runs / cyberhub_get_run_details for evidence \
+and cyberhub_get_checklist for the testing coverage. \
 Write an executive summary, a findings table sorted by severity, and remediation guidance. Only state facts supported by Cyber Hub data. \
 Saving the report to a file (cyberhub_export_report) asks the user to approve and choose a location.
 

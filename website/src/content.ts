@@ -20,7 +20,7 @@ export const facts = [
   { value: 70, label: "tools in the library, across 14 categories" },
   { value: 7, label: "command builders with structured, validated arguments" },
   { value: 7, label: "threat-intelligence sources in one lookup" },
-  { value: 44, label: "MCP tools for Claude and other clients, behind your approval" },
+  { value: 49, label: "MCP tools for Claude and other clients, behind your approval" },
 ];
 
 export const modules: { title: string; body: string }[] = [

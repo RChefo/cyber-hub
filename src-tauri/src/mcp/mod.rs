@@ -7,6 +7,7 @@
 //!   are shared definitions.
 
 pub mod approvals;
+pub mod assessment;
 pub mod bridge;
 pub mod catalog;
 pub mod client;

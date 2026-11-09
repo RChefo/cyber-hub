@@ -30,7 +30,7 @@ MCP has its own page in the sidebar (Integrations → MCP). The switch at the to
 | Overview | Server state, transport (STDIO), local bridge address, connected clients, catalog size, waiting approvals, recent activity |
 | Approvals | The Approval Center: every waiting request with the client, action, project, target, the checks Cyber Hub ran, and time left; Approve and Decline; recent decisions from the audit log |
 | Clients | Connected clients (from the running bridge) and clients seen before (from the audit log), with self-reported name and version, last activity, request counts and the latest result |
-| Tools | All 44 tools from the server catalog, grouped as below, with permission category, whether they ask you under the current policy, availability and parameters |
+| Tools | All 49 tools from the server catalog, grouped as below, with permission category, whether they ask you under the current policy, availability and parameters |
 | Resources & prompts | The resources, the scope template and the prompts, with their parameters |
 | Permissions | The policy for each category (below) |
 | Activity | The audit log, filterable by client, permission category and status, with redacted arguments per entry |
@@ -38,13 +38,13 @@ MCP has its own page in the sidebar (Integrations → MCP). The switch at the to
 
 The page reads everything from the app: the catalog comes from the same definitions `cyberhub-mcp` advertises, and clients and activity come from the bridge and the `mcp_audit` table. MCP settings are no longer in Settings.
 
-## Tools (44)
+## Tools (49)
 
 | Group | Tools | Permission category |
 |---|---|---|
 | Discovery | `cyberhub_get_status`, `cyberhub_list_modules`, `cyberhub_list_tools`, `cyberhub_get_tool_details`, `cyberhub_list_supported_providers` | read |
-| Projects and scope | `cyberhub_list_projects`, `cyberhub_get_project`, `cyberhub_get_project_scope`, `cyberhub_validate_target`, `cyberhub_list_findings` | read |
-| | `cyberhub_create_finding` | local write |
+| Projects and scope | `cyberhub_list_projects`, `cyberhub_get_project`, `cyberhub_get_project_scope`, `cyberhub_validate_target`, `cyberhub_list_findings`, `cyberhub_get_checklist` | read |
+| | `cyberhub_create_finding` (optionally with a CVSS vector and remediation), `cyberhub_set_checklist_item` | local write |
 | Execution | `cyberhub_preview_run`, `cyberhub_get_run_status`, `cyberhub_get_run_output`, `cyberhub_cancel_run`, `cyberhub_list_runs` | read |
 | | `cyberhub_run_tool` | run tools |
 | VirusTotal | `cyberhub_vt_lookup`, `cyberhub_vt_lookup_hash`, `cyberhub_vt_get_analysis` | external lookup |
@@ -53,7 +53,8 @@ The page reads everything from the app: the catalog comes from the same definiti
 | Threat intelligence | `cyberhub_threat_intel_lookup`, `cyberhub_threat_intel_compare` | external lookup |
 | | `cyberhub_get_saved_indicators` | read |
 | | `cyberhub_save_indicator` | local write |
-| Vulnerability intelligence | `cyberhub_lookup_cve`, `cyberhub_search_vulnerabilities` (external lookup with `live: true`), `cyberhub_get_vulnerability_details` | read |
+| Vulnerability intelligence | `cyberhub_lookup_cve`, `cyberhub_search_vulnerabilities` (external lookup with `live: true`), `cyberhub_get_vulnerability_details`, `cyberhub_score_cvss` | read |
+| Finding library | `cyberhub_list_finding_templates`, `cyberhub_get_finding_template` | read |
 | OSINT workspace | `cyberhub_osint_list_investigations`, `cyberhub_osint_get_investigation`, `cyberhub_osint_search_entities`, `cyberhub_osint_get_entity`, `cyberhub_osint_list_relationships`, `cyberhub_osint_find_path`, `cyberhub_osint_get_operation`, `cyberhub_osint_generate_report` | read |
 | | `cyberhub_osint_discover` (results wait for the user's review; clients cannot import them) | external lookup |
 | | `cyberhub_osint_propose_relationship` (stored as an unverified suggestion with low confidence) | local write |
@@ -62,6 +63,13 @@ The OSINT tools were exercised with Claude Code 2.1.318 on Windows: all eight re
 | Reports and history | `cyberhub_generate_report`, `cyberhub_get_activity`, `cyberhub_get_run_details` | read |
 | | `cyberhub_export_report` | export |
 | Approvals | `cyberhub_get_approval_status` | read |
+
+The assessment tools (added in November 2026) work as follows:
+* `cyberhub_score_cvss` validates a CVSS 4.0, 3.1 or 3.0 vector and scores it the way FIRST's calculators do. It stores and sends nothing.
+* `cyberhub_create_finding` validates a `cvss_vector` before the approval is shown. The approval lists the canonical vector with its score, and Cyber Hub computes the stored score itself.
+* `cyberhub_list_finding_templates` and `cyberhub_get_finding_template` return the user's own write-ups, so an assistant can reuse vetted text instead of writing its own.
+* `cyberhub_get_checklist` returns a project's WSTG coverage and the status of every test.
+* `cyberhub_set_checklist_item` changes one test, after the same checks as the Checklist tab: the test exists, the status is valid, and a linked finding belongs to the project. An invalid request is refused before an approval is shown. A note that is not given keeps the existing note.
 
 Arguments are JSON objects with strict schemas; unknown fields are rejected, and every value is validated again in Rust. `cyberhub_run_tool` takes a catalog tool ID, a project and an argument list. No shell is involved (pipes and redirection have no effect), and the program is always the detected catalog executable. Arguments that refer to local files (target lists such as `-iL`, wordlists, request or configuration files) are refused for MCP clients; pass targets directly, or start file-based runs in Cyber Hub. `cyberhub_cancel_run` stops only runs started through MCP. Threat-intelligence results keep each provider's own verdict and scores; there is no combined score.
 
