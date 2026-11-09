@@ -201,6 +201,18 @@ struct CreateFinding {
     cvss_vector: Option<String>,
 }
 
+/// Findings of the project with the same title and affected target (case and surrounding spaces
+/// ignored): what an approval of a new finding warns about.
+fn similar_findings(db: &Db, project_id: i64, title: &str, target: &str) -> crate::error::AppResult<Vec<(i64, String)>> {
+    db.with(|c| {
+        let mut st = c.prepare(
+            "SELECT id, status FROM findings WHERE project_id = ?1 AND lower(trim(title)) = lower(trim(?2)) AND lower(trim(affected_target)) = lower(trim(?3)) ORDER BY id LIMIT 5",
+        )?;
+        let rows = st.query_map(rusqlite::params![project_id, title, target], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    })
+}
+
 impl CreateFinding {
     /// The finding as the app saves it (used for the approval's checks and for the write).
     fn input(&self) -> projects::FindingInput {
@@ -806,6 +818,7 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
             // everything the save checks (lengths, severity, status, control characters, the CVSS
             // vector): a finding that would be refused never reaches the user
             projects::validate_finding(&a.input()).map_err(app_err)?;
+            let duplicates = similar_findings(&db, a.project_id, &a.title, a.affected_target.as_deref().unwrap_or("")).map_err(app_err)?;
             let long = |text: String| if text.chars().count() > 600 { format!("{}… ({} characters in total)", text.chars().take(600).collect::<String>(), text.chars().count()) } else { text };
             let mut checks = vec!["Arguments valid".into(), format!("Project #{} exists", a.project_id)];
             let mut details = vec![
@@ -824,6 +837,10 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
             details.push(d("Description", long(a.description.unwrap_or_default())));
             if let Some(r) = a.remediation {
                 details.push(d("Remediation", long(r)));
+            }
+            if !duplicates.is_empty() {
+                let list = duplicates.iter().map(|(id, status)| format!("#{id} ({})", status.replace('_', " "))).collect::<Vec<_>>().join(", ");
+                details.push(d("Warning", format!("Possible duplicate: the project already has a finding with this title and affected target: {list}. Approving records another one.")));
             }
             Ok((format!("Create a finding in {}", project_name(&db, a.project_id)), details, Some(a.project_id), checks))
         }
@@ -1569,5 +1586,25 @@ mod tests {
         assert_eq!(b.len(), LIVE_LINES);
         assert_eq!(b.back().unwrap(), "[stderr] oops");
         assert_eq!(tail_text("a\nb\nc", 2), (vec!["b".to_string(), "c".to_string()], 3));
+    }
+
+    #[test]
+    fn approvals_of_new_findings_name_possible_duplicates() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'P', 'active', 't', 't'), (2, 'Q', 'active', 't', 't')", [])?;
+            c.execute(
+                "INSERT INTO findings (id, project_id, title, severity, status, affected_target, created_at, updated_at) VALUES
+                   (4, 1, 'Reflected XSS', 'high', 'confirmed', 'https://app.example.com/search', 't', 't'),
+                   (5, 1, 'Reflected XSS', 'high', 'new', 'https://app.example.com/other', 't', 't'),
+                   (6, 2, 'Reflected XSS', 'high', 'new', 'https://app.example.com/search', 't', 't')",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(similar_findings(&db, 1, "  reflected xss ", "HTTPS://app.example.com/search").unwrap(), vec![(4, "confirmed".to_string())]);
+        assert!(similar_findings(&db, 1, "Stored XSS", "https://app.example.com/search").unwrap().is_empty());
+        assert!(similar_findings(&db, 1, "Reflected XSS", "").unwrap().is_empty(), "another target is another finding");
     }
 }

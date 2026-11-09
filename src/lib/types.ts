@@ -800,6 +800,13 @@ export interface DnsIntelReport {
   errors: string[];
 }
 
+/** The result of checking a project's evidence against the recorded SHA-256 values. */
+export interface EvidenceIntegrity {
+  checked: number;
+  references: number;
+  problems: { id: number; title: string; problem: string }[];
+}
+
 /** What clearing the run history did: runs that other records refer to are kept. */
 export interface HistoryCleared {
   removed: number;

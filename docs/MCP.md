@@ -66,7 +66,7 @@ The OSINT tools were exercised with Claude Code 2.1.318 on Windows: all eight re
 
 The assessment tools (added in November 2026) work as follows:
 * `cyberhub_score_cvss` validates a CVSS 4.0, 3.1 or 3.0 vector and scores it the way FIRST's calculators do. It stores and sends nothing.
-* `cyberhub_create_finding` validates a `cvss_vector` before the approval is shown. The approval lists the canonical vector with its score, and Cyber Hub computes the stored score itself.
+* `cyberhub_create_finding` validates a `cvss_vector` before the approval is shown. The approval lists the canonical vector with its score, and Cyber Hub computes the stored score itself. When the project already has a finding with the same title and affected target (case and surrounding spaces ignored), the approval warns with their numbers and statuses.
 * `cyberhub_list_finding_templates` and `cyberhub_get_finding_template` return the user's own write-ups, so an assistant can reuse vetted text instead of writing its own.
 * `cyberhub_get_checklist` returns a project's WSTG coverage and the status of every test.
 * `cyberhub_set_checklist_item` changes one test, after the same checks as the Checklist tab: the test exists, the status is valid, and a linked finding belongs to the project. An invalid request is refused before an approval is shown. A note that is not given keeps the existing note.

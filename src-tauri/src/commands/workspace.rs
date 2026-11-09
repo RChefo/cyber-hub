@@ -203,29 +203,39 @@ pub async fn evidence_add_file(app: AppHandle, project_id: i64, title: Option<St
     Ok(Some(rec))
 }
 
-/// Save a copy of a stored evidence file (native dialog). Returns the file name, or None if cancelled.
+/// Save a copy of a stored evidence file (native dialog), checked against its SHA-256 while it is
+/// copied. Returns the file name, or None if cancelled.
 #[tauri::command]
 pub async fn evidence_export(app: AppHandle, id: i64) -> AppResult<Option<String>> {
-    let (rec, src) = {
+    let rec = {
         let db = app.state::<Db>();
         let store = app.state::<Arc<EvidenceStore>>();
         let rec = db.with(|c| evidence::get(c, id))?;
         let src = store.file_path(&rec).ok_or_else(|| crate::error::validation("Only file evidence can be saved as a file"))?;
-        (rec, src)
+        if !src.is_file() {
+            return Err(AppError::NotFound("The stored file is missing from the evidence folder".into()));
+        }
+        rec
     };
-    if !src.is_file() {
-        return Err(AppError::NotFound("The stored file is missing from the evidence folder".into()));
-    }
     let (tx, rx) = tokio::sync::oneshot::channel();
     main_window_dialog(&app, "Save evidence file").set_file_name(rec.file_name.clone().unwrap_or_else(|| "evidence".into())).save_file(move |f| {
         let _ = tx.send(f.and_then(|f| f.into_path().ok()));
     });
     let Some(dest) = rx.await.ok().flatten() else { return Ok(None) };
-    tauri::async_runtime::spawn_blocking(move || std::fs::copy(&src, &dest).map(|_| dest))
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || handle.state::<Arc<EvidenceStore>>().export_file(&rec, &dest).map(|_| dest))
         .await
         .map_err(|e| AppError::Internal(format!("evidence export failed: {e}")))?
         .map(|dest| Some(dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()))
-        .map_err(|e| AppError::Internal(format!("Could not save the file: {e}")))
+}
+
+/// Checks every evidence record of a project against the SHA-256 recorded when it was added.
+#[tauri::command]
+pub async fn evidence_verify(app: AppHandle, project_id: i64) -> AppResult<evidence::IntegrityReport> {
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || handle.state::<Arc<EvidenceStore>>().verify_project(&handle.state::<Db>(), project_id))
+        .await
+        .map_err(|e| AppError::Internal(format!("evidence check failed: {e}")))?
 }
 
 #[tauri::command]

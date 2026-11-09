@@ -1,5 +1,5 @@
 import { Button, Dropdown } from "@heroui/react";
-import { ChevronDown, Download, FilePlus2, FileText, History, Link2, NotebookPen, Printer, Save, Trash2, Upload } from "lucide-react";
+import { ChevronDown, Download, FilePlus2, FileText, History, Link2, NotebookPen, Printer, Save, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/app/store";
 import { ToneChip } from "@/components/ui/Badges";
@@ -13,7 +13,7 @@ import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { EvidenceRecord, Finding, Project, ReportOptions, Severity, TimelineEventType } from "@/lib/types";
 import { useShowMore } from "@/lib/showMore";
-import { cn, formatDateTime, formatNumber, formatRelative } from "@/lib/utils";
+import { cn, formatDateTime, formatNumber, formatRelative, pluralize } from "@/lib/utils";
 
 /* ───────────────────────── scope history and tester ───────────────────────── */
 
@@ -109,6 +109,31 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
         description="Files are copied into Cyber Hub's private evidence folder and identified by SHA-256; tool runs and OSINT evidence are referenced, not copied."
         actions={
           <>
+            <Button
+              size="sm"
+              variant="tertiary"
+              isDisabled={!list.data?.length}
+              isPending={busy === "verify"}
+              onPress={() =>
+                void act("verify", async () => {
+                  const r = await api.evidenceVerify(project.id);
+                  if (r.problems.length === 0)
+                    notify.success("Evidence verified", `${pluralize(r.checked, "stored record")} ${r.checked === 1 ? "matches its" : "match their"} SHA-256.`);
+                  else
+                    notify.warning(
+                      `${pluralize(r.problems.length, "record")} ${r.problems.length === 1 ? "does" : "do"} not match`,
+                      r.problems
+                        .slice(0, 3)
+                        .map((p) => `#${p.id} ${p.title}: ${p.problem}`)
+                        .join("; "),
+                    );
+                  return null;
+                })
+              }
+            >
+              <ShieldCheck className="size-3.5" />
+              Verify
+            </Button>
             <Button size="sm" variant="tertiary" onPress={() => setNote({ title: "", content: "" })}>
               <NotebookPen className="size-3.5" />
               Add note

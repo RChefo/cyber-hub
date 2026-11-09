@@ -238,6 +238,7 @@ pub fn run() {
             workspace_commands::evidence_link_execution,
             workspace_commands::evidence_link_osint,
             workspace_commands::evidence_export,
+            workspace_commands::evidence_verify,
             workspace_commands::evidence_delete,
             workspace_commands::scan_import_pick,
             workspace_commands::scan_import_preview,

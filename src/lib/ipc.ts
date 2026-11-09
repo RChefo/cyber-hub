@@ -129,6 +129,7 @@ export const api = {
     call<T.EvidenceRecord>("evidence_link_execution", { projectId, executionId, title: title ?? null }),
   evidenceLinkOsint: (projectId: number, osintEvidenceId: number) => call<T.EvidenceRecord>("evidence_link_osint", { projectId, osintEvidenceId }),
   evidenceExport: (id: number) => call<string | null>("evidence_export", { id }),
+  evidenceVerify: (projectId: number) => call<T.EvidenceIntegrity>("evidence_verify", { projectId }),
   evidenceDelete: (id: number) => call<void>("evidence_delete", { id }),
   scanImportPick: (projectId: number, options: T.ScanImportOptions) => call<T.ScanImportPending | null>("scan_import_pick", { projectId, options }),
   scanImportPreview: (token: string, options: T.ScanImportOptions) => call<T.ScanImportPreview>("scan_import_preview", { token, options }),

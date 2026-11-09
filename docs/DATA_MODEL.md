@@ -151,7 +151,9 @@ Projects → *Findings* provides:
 * **Evidence vault.** The Evidence tab manages the evidence registry:
   * add files (native dialog), text notes and tool runs;
   * view notes, save copies of files, delete;
-  * link evidence to findings.
+  * link evidence to findings;
+  * *Verify* checks every stored file and text against the SHA-256 recorded when it was added, and records the result on the timeline.
+* **Tool runs as evidence** are named after their tool and run number when no title is given.
 
   The free-form references kept in findings are listed below the vault.
 * **Timeline tab.** The project timeline is grouped by day, can be filtered by event type, and pages back through older events.
@@ -312,7 +314,12 @@ The project assistant is described in [ASSISTANT.md](ASSISTANT.md).
 
 References are never duplicated: there are unique indexes per project for the file hash, the run and the OSINT evidence.
 
-**Store.** Files are content-addressed under `<app data>/evidence/<first two hex digits>/<sha256>`. The backend opens the native file dialog (the web view never supplies a path). It streams the file into `evidence/incoming` while hashing it, enforces the 256 MB limit while reading, and then renames it into place. The original file name is only a label: it never becomes part of a path. Folders that are symbolic links are refused; on Unix the folders are `0700`. A stored file is removed when the last record that refers to it is deleted. At startup, `incoming` and files that no record refers to are removed (this covers interrupted copies and deleted projects). Files are exported through a native save dialog.
+**Store.** Files are content-addressed under `<app data>/evidence/<first two hex digits>/<sha256>`. The backend opens the native file dialog (the web view never supplies a path). It streams the file into `evidence/incoming` while hashing it, enforces the 256 MB limit while reading, and then renames it into place. The original file name is only a label: it never becomes part of a path. Folders that are symbolic links are refused; on Unix the folders are `0700`. A stored file is removed when the last record that refers to it is deleted. At startup, `incoming` and files that no record refers to are removed (this covers interrupted copies and deleted projects). A file is placed and registered, and a deleted record's file removed, while the database is locked, so a deletion and a new record of the same content cannot interleave.
+
+**Integrity.**
+* `text` records keep the SHA-256 and size of their content.
+* A file is exported through a native save dialog. The copy is hashed while it is written, and a copy that does not match the recorded SHA-256 is removed and refused.
+* *Verify* (Evidence tab) reports stored files that are missing, unreadable or changed, and text whose content no longer matches. References (runs, OSINT evidence) hold no copy and are counted separately. Each check is recorded on the project timeline, and so is each deletion.
 
 ## Timeline
 

@@ -162,6 +162,55 @@ pub struct EvidenceStore {
     root: PathBuf,
 }
 
+/// An evidence record whose stored copy does not match what was recorded.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct IntegrityProblem {
+    pub id: i64,
+    pub title: String,
+    pub problem: String,
+}
+
+/// The result of checking a project's evidence.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IntegrityReport {
+    /// stored files and text records checked
+    pub checked: usize,
+    /// references (tool runs, OSINT evidence), which hold no copy to check
+    pub references: usize,
+    pub problems: Vec<IntegrityProblem>,
+}
+
+/// SHA-256 and size of a file, read in pieces.
+fn hash_file(path: &Path) -> std::io::Result<(String, u64)> {
+    let mut input = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 256 * 1024];
+    let mut size: u64 = 0;
+    loop {
+        let n = input.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        size += n as u64;
+        hasher.update(&buf[..n]);
+    }
+    Ok((hex(&hasher.finalize()), size))
+}
+
+/// Why a stored text no longer matches its record, if it does not.
+fn text_problem(content: Option<&str>, sha: Option<&str>, size: Option<i64>) -> Option<String> {
+    let content = content.unwrap_or("");
+    let actual = hex(&Sha256::digest(content.as_bytes()));
+    match sha {
+        None => Some("no SHA-256 was recorded".into()),
+        Some(s) if s != actual => Some(format!("the text's SHA-256 is now {actual}, not the recorded {s}")),
+        _ if size.is_some_and(|n| n != content.len() as i64) => Some(format!("the text is now {} bytes, not the recorded {}", content.len(), size.unwrap_or(0))),
+        _ => None,
+    }
+}
+
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -194,6 +243,98 @@ impl EvidenceStore {
     pub fn file_path(&self, record: &EvidenceRecord) -> Option<PathBuf> {
         let sha = record.sha256.as_deref()?;
         (record.kind == "file" && sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit())).then(|| self.blob(sha))
+    }
+
+    /// Why a file record's stored copy does not match it (missing, unreadable, other SHA-256 or
+    /// size), if it does not.
+    pub fn file_problem(&self, record: &EvidenceRecord) -> Option<String> {
+        let Some(path) = self.file_path(record) else { return Some("the record has no valid SHA-256".into()) };
+        match hash_file(&path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some("the stored file is missing from the evidence folder".into()),
+            Err(e) => Some(format!("the stored file cannot be read: {e}")),
+            Ok((sha, _)) if Some(sha.as_str()) != record.sha256.as_deref() => Some(format!("the stored file's SHA-256 is now {sha}, not the recorded {}", record.sha256.as_deref().unwrap_or(""))),
+            Ok((_, size)) if record.size.is_some_and(|n| n != size as i64) => Some(format!("the stored file is now {size} bytes, not the recorded {}", record.size.unwrap_or(0))),
+            Ok(_) => None,
+        }
+    }
+
+    /// Checks every evidence record of a project: stored files against their SHA-256 and size, text
+    /// against the SHA-256 recorded when it was added. The result is recorded on the timeline.
+    pub fn verify_project(&self, db: &Db, project_id: i64) -> AppResult<IntegrityReport> {
+        let (records, texts) = db.with(|c| {
+            require_project(c, project_id)?;
+            let mut st = c.prepare("SELECT id, content, sha256, size FROM evidence WHERE project_id = ?1 AND kind = 'text'")?;
+            let texts = st.query_map(params![project_id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, Option<String>>(2)?, r.get::<_, Option<i64>>(3)?)))?.collect::<Result<Vec<_>, _>>()?;
+            Ok((list(c, project_id)?, texts))
+        })?;
+        let mut report = IntegrityReport { checked: 0, references: 0, problems: Vec::new() };
+        let title = |id: i64| records.iter().find(|r| r.id == id).map(|r| r.title.clone()).unwrap_or_default();
+        for r in &records {
+            match r.kind.as_str() {
+                "file" => {
+                    report.checked += 1;
+                    if let Some(problem) = self.file_problem(r) {
+                        report.problems.push(IntegrityProblem { id: r.id, title: r.title.clone(), problem });
+                    }
+                }
+                "text" => {}
+                _ => report.references += 1,
+            }
+        }
+        for (id, content, sha, size) in texts {
+            report.checked += 1;
+            if let Some(problem) = text_problem(content.as_deref(), sha.as_deref(), size) {
+                report.problems.push(IntegrityProblem { id, title: title(id), problem });
+            }
+        }
+        report.problems.sort_by_key(|p| p.id);
+        let summary = if report.problems.is_empty() {
+            format!("{} stored records match their SHA-256", report.checked)
+        } else {
+            format!("{} of {} stored records do not match: {}", report.problems.len(), report.checked, report.problems.iter().take(10).map(|p| format!("#{} {}", p.id, p.problem)).collect::<Vec<_>>().join("; "))
+        };
+        db.with(|c| crate::workspace::timeline::record(c, project_id, "evidence", "Evidence verified", &summary, None, None))?;
+        Ok(report)
+    }
+
+    /// Copies a stored file to `dest`, checking its SHA-256 on the way: a copy that does not match
+    /// the record is removed and refused.
+    pub fn export_file(&self, record: &EvidenceRecord, dest: &Path) -> AppResult<()> {
+        let src = self.file_path(record).ok_or_else(|| validation("Only file evidence can be saved as a file"))?;
+        let mut input = File::open(&src).map_err(|e| if e.kind() == std::io::ErrorKind::NotFound { AppError::NotFound("The stored file is missing from the evidence folder".into()) } else { e.into() })?;
+        let partial = dest.with_file_name(format!("{}.partial", dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "evidence".into())));
+        let copied = (|| -> AppResult<String> {
+            let mut out = File::create(&partial)?;
+            let mut hasher = Sha256::new();
+            let mut buf = vec![0u8; 256 * 1024];
+            loop {
+                let n = input.read(&mut buf)?;
+                if n == 0 {
+                    break;
+                }
+                hasher.update(&buf[..n]);
+                out.write_all(&buf[..n])?;
+            }
+            out.sync_all()?;
+            Ok(hex(&hasher.finalize()))
+        })();
+        match copied {
+            Ok(sha) if Some(sha.as_str()) == record.sha256.as_deref() => {
+                fs::rename(&partial, dest)?;
+                Ok(())
+            }
+            Ok(sha) => {
+                let _ = fs::remove_file(&partial);
+                Err(AppError::Validation(format!(
+                    "The stored file no longer matches its record (SHA-256 {sha}, recorded {}), so it was not saved. Check the evidence folder and the project's evidence (Verify).",
+                    record.sha256.as_deref().unwrap_or("")
+                )))
+            }
+            Err(e) => {
+                let _ = fs::remove_file(&partial);
+                Err(e)
+            }
+        }
     }
 
     /// Copies a user-chosen file into the store (hashing while copying) and registers it.
@@ -277,20 +418,22 @@ impl EvidenceStore {
     fn register(&self, db: &Db, project_id: i64, tmp: &Path, (sha, size): (&str, u64), (name, title, description): (&str, &str, &str), source: &str) -> AppResult<EvidenceRecord> {
         let sha = sha.to_string();
         let dest = self.blob(&sha);
-        let placed = (|| -> AppResult<()> {
-            safe_dir(dest.parent().expect("blob has a parent"))?;
-            if dest.exists() {
-                fs::remove_file(tmp)?;
-            } else {
-                fs::rename(tmp, &dest)?;
-            }
-            Ok(())
-        })();
-        if let Err(e) = placed {
-            let _ = fs::remove_file(tmp);
-            return Err(e);
-        }
+        // the file is placed and registered under the database lock, so a deletion of the same
+        // content cannot remove it in between
         db.with(|c| {
+            let placed = (|| -> AppResult<()> {
+                safe_dir(dest.parent().expect("blob has a parent"))?;
+                if dest.exists() {
+                    fs::remove_file(tmp)?;
+                } else {
+                    fs::rename(tmp, &dest)?;
+                }
+                Ok(())
+            })();
+            if let Err(e) = placed {
+                let _ = fs::remove_file(tmp);
+                return Err(e);
+            }
             if let Some(id) = c.query_row("SELECT id FROM evidence WHERE project_id = ?1 AND kind = 'file' AND sha256 = ?2", params![project_id, sha], |r| r.get(0)).optional()? {
                 return get(c, id);
             }
@@ -305,7 +448,7 @@ impl EvidenceStore {
     /// Deletes an evidence record; a stored file is removed once no record refers to it.
     /// Referenced runs and OSINT evidence are never touched.
     pub fn delete(&self, db: &Db, id: i64) -> AppResult<()> {
-        let removed = db.with(|c| {
+        db.with(|c| {
             let rec = get(c, id)?;
             let tx = c.unchecked_transaction()?;
             tx.execute("DELETE FROM finding_links WHERE kind = 'evidence' AND ref_id = ?1", params![id])?;
@@ -314,13 +457,15 @@ impl EvidenceStore {
                 Some(sha) if rec.kind == "file" => tx.query_row("SELECT COUNT(*) FROM evidence WHERE kind = 'file' AND sha256 = ?1", params![sha], |r| r.get(0))?,
                 _ => 1,
             };
+            crate::workspace::timeline::record(&tx, rec.project_id, "evidence", &format!("Evidence removed: {}", rec.title), &rec.kind, None, None)?;
             tx.commit()?;
-            Ok(if still_used == 0 { self.file_path(&rec) } else { None })
-        })?;
-        if let Some(p) = removed {
-            let _ = fs::remove_file(p);
-        }
-        Ok(())
+            // still under the database lock: a new record of the same content cannot be placed in
+            // between and lose its file
+            if let (0, Some(p)) = (still_used, self.file_path(&rec)) {
+                let _ = fs::remove_file(p);
+            }
+            Ok(())
+        })
     }
 
     /// Removes files in the store that no record refers to (after a crash between copy and insert).
@@ -471,6 +616,48 @@ mod tests {
         fs::write(&orphan, b"orphan").unwrap();
         assert_eq!(store.sweep(&db).unwrap(), 1);
         assert!(!orphan.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stored_evidence_is_verified_against_its_sha256() {
+        let dir = tmpdir("verify");
+        let store = EvidenceStore::new(dir.join("evidence"));
+        let db = Db::open_in_memory().unwrap();
+        let p = project(&db);
+        let (a_src, b_src) = (dir.join("a.txt"), dir.join("b.txt"));
+        fs::write(&a_src, b"request and response").unwrap();
+        fs::write(&b_src, b"screenshot bytes").unwrap();
+        let a = store.add_file(&db, p, &a_src, "Request", "", "user").unwrap();
+        let b = store.add_file(&db, p, &b_src, "Screenshot", "", "user").unwrap();
+        let note = db.with(|c| add_text(c, p, "Banner", "Server: nginx", "", "user")).unwrap();
+        db.with(|c| {
+            c.execute("INSERT INTO executions (tool_id, kind, program, args, project_id, status, started_at) VALUES ('nmap','run','nmap','[]',?1,'succeeded','t')", params![p])?;
+            link_execution(c, p, c.last_insert_rowid(), "")
+        })
+        .unwrap();
+        let ok = store.verify_project(&db, p).unwrap();
+        assert_eq!((ok.checked, ok.references, ok.problems.len()), (3, 1, 0));
+        // an exported copy is the stored file, checked on the way
+        let out = dir.join("out").join("request.txt");
+        fs::create_dir_all(out.parent().unwrap()).unwrap();
+        store.export_file(&a, &out).unwrap();
+        assert_eq!(fs::read(&out).unwrap(), b"request and response");
+        // a changed file, a missing file and changed text are each reported
+        fs::write(store.file_path(&a).unwrap(), b"request and responsE").unwrap();
+        fs::remove_file(store.file_path(&b).unwrap()).unwrap();
+        db.with(|c| Ok(c.execute("UPDATE evidence SET content = 'Server: apache' WHERE id = ?1", params![note.id])?)).unwrap();
+        let bad = store.verify_project(&db, p).unwrap();
+        let problems: Vec<(i64, bool)> = bad.problems.iter().map(|x| (x.id, x.problem.contains("SHA-256") || x.problem.contains("missing"))).collect();
+        assert_eq!(problems, vec![(a.id, true), (b.id, true), (note.id, true)], "{:?}", bad.problems);
+        assert!(bad.problems[1].problem.contains("missing"));
+        // a changed file is not exported, and no partial copy is left
+        let refused = dir.join("out").join("changed.txt");
+        let err = store.export_file(&a, &refused).unwrap_err().to_string();
+        assert!(err.contains("no longer matches"), "{err}");
+        assert!(!refused.exists() && fs::read_dir(dir.join("out")).unwrap().count() == 1);
+        let noted: i64 = db.with(|c| Ok(c.query_row("SELECT COUNT(*) FROM timeline_events WHERE project_id = ?1 AND title = 'Evidence verified'", params![p], |r| r.get(0))?)).unwrap();
+        assert_eq!(noted, 2, "each check is on the timeline");
         let _ = fs::remove_dir_all(&dir);
     }
 }
