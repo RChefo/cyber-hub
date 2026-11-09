@@ -545,3 +545,130 @@ FEATURE_BACKLOG.md records the evidence: the OWASP API Security Top 10 and HAR e
 ### Assessment
 
 The six named areas each have a working, tested capability in the app, and interoperability now goes both ways: findings leave Cyber Hub as SARIF and come back without duplicates or revived false positives. Before a release that includes this round, the RC0 checks need repeating for schema 21 and the new modules (MISSION_STATE.md, "Next action").
+
+## Mission 2: research-driven expansion (2026-11-09)
+
+The owner's brief asked for new capabilities chosen from research in seven tracks, implemented, tested and committed one by one, with no release work. Ten capabilities were added. They are listed below with where they live and how each was verified. FEATURE_BACKLOG.md ("Mission 2") holds the sources, the scoring model and the ranked candidates.
+
+### Statistics
+
+| Item | Value |
+|---|---|
+| Time | 2026-11-09T16:31:14Z–20:05Z (about 3 h 35 min) |
+| Commits | 12: the research and ranking (`c3a79c1`), ten capabilities and a parser robustness test (`a7b0368`), plus this report |
+| Schema | unchanged (21); no migration |
+| Tests | Rust 405 → 459 (3 → 6 ignored); frontend 243 → 258 (41 → 45 files) |
+| New dependencies | `toml` 1, `hcl-rs` 0.20 (with `kstring` pinned at 2.0.2 for Rust 1.90), `goblin` 0.10 (PE and ELF only) |
+| Real-app checks (Windows 11) | 174 of 174 |
+
+### New capabilities
+
+| Capability | Where | Commit | Verification |
+|---|---|---|---|
+| Dependency lockfiles (13 formats) read as SBOMs, with supply-chain checks and the OSV.dev check | Projects → Components | `4835950` | 8 Rust tests; app 21/21 |
+| Windows event log (EVTX) triage: own MS-EVEN6 reader, 35 ATT&CK-mapped detections | Security Utilities → Log triage | `4d78bfd` | 8 Rust tests; python-evtx comparison on 174 sample and 59,907 local events; app 14/14 |
+| Cloud and IaC checks: Terraform, CloudFormation, AWS IAM policies and account exports, 28 privilege-escalation methods | Security Utilities → Cloud & IaC checks | `b35fafa` | 10 Rust tests; app 16/16 |
+| PE and ELF triage without running the file: hashes, import hash, sections, hardening, capabilities with ATT&CK, strings | Security Utilities → File triage | `f9d7594` | 6 Rust tests; app 18/18 |
+| API definition comparison: endpoint changes, lost authentication, new anonymous endpoints | Projects → APIs | `25bb7a2` | 4 Rust and 1 frontend test; app 14/14 |
+| OAuth and OpenID Connect review of server metadata against RFC 9700, pasted or fetched within scope | Security Utilities → OAuth & OpenID Connect review | `b77ddd2` | 5 frontend tests; app 29/29 against a local provider |
+| Prowler (OCSF) import, with passing checks resolving earlier findings | Projects → Findings → Import results | `afd290c` | 4 Rust tests; Prowler's 4 example outputs; app 15/15 |
+| Linux persistence triage of an image or UAC collection, read-only and confined to it | Security Utilities → Linux persistence triage | `2116f34` | 6 Rust and 1 frontend test; app 21/21 |
+| ATT&CK Navigator layer of the techniques findings name | Projects → Findings → Export | `cd8b0b7` | 2 Rust tests; app 9/9; loaded in ATT&CK Navigator 5.3.2 |
+| SBOM and lockfile comparison between versions | Projects → Components → Compare versions | `54d6534` | 4 Rust and 1 frontend test; app 17/17 |
+
+The capabilities feed each other: the EVTX, file, Linux and Prowler results carry ATT&CK technique IDs, which the Navigator layer collects; lockfiles reach the SBOM comparison and the OSV.dev check; Prowler and SARIF results join the same import, deduplication and rescan logic.
+
+### How the needs were established
+
+The sources are listed in FEATURE_BACKLOG.md with the numbers read on 2026-11-09. In short:
+* Event logs: Chainsaw, Hayabusa and DeepBlueCLI.
+* IaC: Checkov, tfsec and KICS.
+* IAM: the Rhino Security Labs escalation catalog.
+* Lockfiles: OSV-Scanner.
+* Binary triage: Detect It Easy and capa.
+* Standards: OWASP ASVS 5.0, RFC 9700, MITRE ATT&CK v20.1 and the Navigator layer format 4.5.
+* Linux artifacts: UAC.
+* Cloud audits: Prowler's documented OCSF output.
+
+Each capability was checked against primary sources before it was built: the RFCs, ATT&CK technique pages, the Navigator specification, the Prowler source and examples, and PortSwigger's research on OAuth attack vectors. A Reddit search returned mostly vendor content and was not counted as evidence.
+
+### Ranked candidates
+
+* Done: 27–32 and 34–37.
+* Done in part: 38 (layer export; no matrix inside Cyber Hub).
+* Not started: 33, the OWASP ASVS 5.0 checklist (score 53). It needs the requirement catalog (CC BY-SA 4.0, like the bundled WSTG) and per-project storage, which means a schema migration. That was too risky to start at the end of the mission.
+* Deferred with reasons: 39 (request collections in the repeater) and 40 (YARA, which needs a WebAssembly runtime or a C toolchain).
+
+### Defects found while testing, all fixed before their commits
+
+* **Lockfiles:** wording and singular forms; the VEX switch is hidden for lockfiles.
+* **EVTX:** timestamp conversion; log clearing counted only from its provider; zero-padded access masks; WMI parents.
+* **IaC:** unresolved references reported as weak settings.
+* **Binary triage:** joined UTF-16 strings.
+* **API comparison:** renamed path parameters counted as changes.
+* **Linux triage:**
+  * an absolute link inside an image could have led the scan into the analyst's own files;
+  * a helper turned `-c` into `c`;
+  * the PAM program was taken from the wrong argument.
+* **SBOM comparison:**
+  * packages that moved to a URL source were not matched;
+  * "0 new, 0 gone" read as an all-clear without lookups.
+* **Scan import:** a project without scope was warned about hosts even for files without network targets (SARIF code results, cloud audits).
+
+### Test-harness incidents (no product impact)
+
+* Two GUI expectations were wrong and were corrected without changing the product:
+  * the out-of-scope refusal's wording (the provider received nothing);
+  * the SBOM panel's vulnerability wording, which did change, see above.
+* A shell heredoc mangled backslashes in two test scripts; those scripts were then edited directly.
+* The real database was never opened (modification time checked in every run).
+
+### Security review
+
+* **Offline by default.** Everything new reads local data offline except the OAuth fetch. That fetch uses the scope-checked HTTP command: active scope gate, address pinning against DNS rebinding, redirects checked per hop. It never sends an authorization or token request.
+* **Read-only file access.** Files and folders are chosen in native dialogs opened by the backend. Nothing is executed (PE/ELF, Linux artifacts). The Linux triage does not follow links and refuses paths whose canonical form leaves the chosen file system.
+* **Evidence and redaction.**
+  * Hashes are kept for evidence (file triage, Linux triage, imports).
+  * Copied text goes through the existing redaction.
+  * Shadow hashes are never shown.
+  * Imports keep their limits.
+  * Every parser added in this mission is fed damaged, cut or multibyte input in a test; the lockfile and IaC tests were added at the end (`a7b0368`) and passed without a change.
+* **Accurate claims.**
+  * Leads are labelled as leads: OAuth tests, capabilities, persistence patterns.
+  * Detections name their sources.
+  * ATT&CK IDs were checked on attack.mitre.org.
+* **Scans.** gitleaks over the mission's commits found nothing. cargo audit found 0 vulnerabilities (640 crates, 8 allowed warnings in transitive Linux GTK crates). npm audit found 0.
+
+### Performance
+
+* EVTX: a 21 MB System log (37,542 events) in 4.7–4.8 s in the debug app; 59,907 events read and written as JSON in about 13 s in a release build.
+* The other new parsers ran within the GUI waits on their test inputs. Each runs on a blocking thread, so the window stays responsive. Their limits:
+  * lockfiles and imports: 50 MB;
+  * binaries: 256 MB;
+  * Linux files: 1 MB each, 5,000 per scan;
+  * EVTX: chunk by chunk.
+
+### Limitations
+
+* **EVTX:** the detections are Cyber Hub's own rules, not Sigma.
+* **IAM and IaC:**
+  * IAM policies are judged one document at a time; effective permissions across policies, boundaries and SCPs are not computed.
+  * IaC references and variables are not resolved.
+* **File triage:** Authenticode signatures are reported as present or not, never verified.
+* **OAuth:** the review sees only what the metadata advertises, not each client's configuration.
+* **Prowler:** OCSF 1.0 files (Prowler 3) are refused with advice.
+* **Linux triage:**
+  * its patterns are leads;
+  * vendor units are checked for patterns only;
+  * the symbolic-link test runs on Unix only (Windows uses a junction test).
+* **ATT&CK layer:** export only, with no matrix inside the app.
+* **SBOM comparison:** vulnerabilities are compared only when both sides were checked on OSV.dev, or neither was.
+
+### Not verified
+
+* Linux (Ubuntu, Debian): neither the test suites nor the GUI checks were run for this mission.
+* Installers, signing, updates: not built or run (not authorized).
+
+### Assessment
+
+Each capability works in the real app, is covered by tests, and was checked against its specification or a reference implementation where one exists: python-evtx, pefile's import hash, ssh-keygen, Prowler's examples and the ATT&CK Navigator. Before a release that includes Mission 2, the RC0 checks need repeating for the new code, in particular the Linux suites and GUI checks.

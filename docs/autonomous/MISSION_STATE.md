@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | **Complete** (feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
+| Current phase | **Complete** (Mission 2, 2026-11-09T16:31:14Z–20:05Z: ten research-driven capabilities, schema unchanged at 21, see MISSION_REPORT.md "Mission 2". Feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -76,6 +76,17 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 40. SARIF import skips suppressed results (`d776c58`)
 41. Findings filters in their own row (`31615cc`)
 42. Kubernetes RBAC escalation paths, with bindings resolved across files (`914f50a`)
+43. Dependency lockfiles (13 formats) as SBOMs, with supply-chain checks (`4835950`)
+44. Windows event log (EVTX) triage with 35 ATT&CK-mapped detections (`4d78bfd`)
+45. Cloud and IaC checks: Terraform, CloudFormation, AWS IAM policies and escalation methods (`b35fafa`)
+46. PE and ELF file triage without running the file (`f9d7594`)
+47. API definition comparison (`25bb7a2`)
+48. OAuth and OpenID Connect metadata review against RFC 9700 (`b77ddd2`)
+49. Prowler (OCSF) import, with passing checks resolving earlier findings (`afd290c`)
+50. Linux persistence triage of images and UAC collections (`2116f34`)
+51. ATT&CK Navigator layer export of the findings' techniques (`cd8b0b7`)
+52. SBOM and lockfile comparison between versions (`54d6534`)
+53. Cut-input tests for the lockfile and IaC readers (`a7b0368`)
 
 ## Tests executed
 
@@ -83,7 +94,9 @@ See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md).
 
 ## Known failures
 
-None. At `914f50a` (feature expansion round, Windows 11): 405 Rust tests (3 ignored) and 243 frontend tests in 41 files; clippy, tsc, cargo audit (0 vulnerabilities, 8 allowed warnings), npm audit (0) and gitleaks over the round's 9 commits are clean; `cargo +1.90.0 check --locked --all-targets` passes with the declared minimum Rust version; every new capability passed its check in the real app (125 of 125). **Not run for this round:** the Linux suites and Linux GUI checks.
+None. At `a7b0368` (Mission 2, Windows 11): 459 Rust tests (6 ignored) and 258 frontend tests in 45 files; `cargo clippy --all-targets -- -D warnings`, tsc, cargo audit (0 vulnerabilities in 640 crates, 8 allowed warnings), npm audit (0) and gitleaks over the mission's commits are clean; `cargo +1.90.0 check --locked --all-targets` passes; every new capability passed its check in the real app (174 of 174). **Not run for Mission 2:** the Linux suites and Linux GUI checks.
+
+At `914f50a` (feature expansion round, Windows 11): 405 Rust tests (3 ignored) and 243 frontend tests in 41 files; clippy, tsc, cargo audit (0 vulnerabilities, 8 allowed warnings), npm audit (0) and gitleaks over the round's 9 commits are clean; `cargo +1.90.0 check --locked --all-targets` passes with the declared minimum Rust version; every new capability passed its check in the real app (125 of 125). **Not run for this round:** the Linux suites and Linux GUI checks.
 
 The final results at `d6a192e`:
 * **Windows:** 362 Rust tests (366 with provisioning) and 224 frontend tests.
@@ -154,9 +167,27 @@ The final results at `d6a192e`:
 | `d776c58` | fix(import): skip suppressed SARIF results |
 | `31615cc` | fix(findings): give the findings filters their own row |
 | `914f50a` | feat(utilities): find Kubernetes RBAC escalation paths |
-| (this report) | docs(mission): report the feature expansion round |
+| `7d17b22` | docs(mission): report the feature expansion round |
+| `c3a79c1` | docs(mission): research and rank the mission 2 candidates |
+| `4835950` | feat(sbom): analyze dependency lockfiles with supply-chain checks |
+| `4d78bfd` | feat(utilities): triage Windows event logs with ATT&CK-mapped detections |
+| `b35fafa` | feat(utilities): check cloud infrastructure as code and IAM policies |
+| `f9d7594` | feat(utilities): triage PE and ELF files without running them |
+| `25bb7a2` | feat(api): compare API definitions to find endpoint changes |
+| `b77ddd2` | feat(utilities): review OAuth and OpenID Connect server metadata |
+| `afd290c` | feat(import): import Prowler cloud audits as OCSF findings |
+| `2116f34` | feat(utilities): triage Linux persistence in images and collections |
+| `cd8b0b7` | feat(findings): export ATT&CK techniques as a Navigator layer |
+| `54d6534` | feat(sbom): compare two SBOM or lockfile versions |
+| `a7b0368` | test(parsers): feed cut and multibyte input to lockfile and IaC readers |
+| (this report) | docs(mission): report mission 2 |
 
 ## Next action
+
+**After Mission 2 (2026-11-09T20:05Z), the owner decides:**
+1. Review the ten new capabilities (MISSION_REPORT.md, "Mission 2"). They add three dependencies (`toml` 1, `hcl-rs` 0.20 with `kstring` pinned at 2.0.2, `goblin` 0.10) and no migration.
+2. A release that includes Mission 2 needs the RC0 checks repeated for the new code, above all the Linux suites and GUI checks, which were not run.
+3. Next candidates (FEATURE_BACKLOG.md): 33, the OWASP ASVS 5.0 checklist next to WSTG. It needs the CC BY-SA requirement catalog with attribution, a schema migration for per-project status (to be rehearsed on a disposable copy) and the checklist UI generalized to two catalogs. Also an ATT&CK matrix view inside Cyber Hub (the rest of 38), and 39 and 40 as deferred.
 
 **After the feature expansion round (2026-11-09T16:30Z), the owner decides:**
 1. Review the seven new capabilities (MISSION_REPORT.md, "Feature expansion round"). They add schemas 20 and 21 and one dependency (yaml-rust2 0.13).

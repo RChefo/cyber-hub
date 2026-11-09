@@ -828,3 +828,72 @@ The owner pointed out that the RC0 segment had implemented no new features and a
 * Windows: 405 Rust tests (3 ignored), clippy and tsc clean, 243 frontend tests in 41 files, cargo audit 0 vulnerabilities (8 allowed warnings), npm audit 0, gitleaks over the round's 9 commits clean; `cargo +1.90.0 check --locked --all-targets` passes with the declared minimum Rust version.
 * The real database was never opened: every real-app run checked its modification time (2026-11-05T15:58:24.853Z, unchanged).
 * Not run: the Linux suites and GUI checks. No installers were built and nothing was pushed or published.
+
+## 2026-11-09T16:31Z: Mission 2 starts
+
+The owner's brief asked for research-driven new capabilities in seven tracks (web and API, cloud, DFIR, malware and threat intelligence, supply chain, pentest productivity, standards) and ruled out release work. The code was searched first: 26 Security Utilities and 16 project tabs, none of the candidates present. Sources, findings and the ranking of candidates 27–40 are in FEATURE_BACKLOG.md, "Mission 2" (`c3a79c1`).
+
+## 16:55Z: dependency lockfiles (`4835950`)
+
+* 13 lockfile formats (npm, Yarn classic and Berry, pnpm, Cargo, Poetry, uv, Pipfile, pinned requirements.txt, Composer, Bundler, go.mod, NuGet, Gradle) read into the SBOM model, so the OSV.dev check, licenses and findings work on them. New dependency: `toml` 1.
+* Supply-chain checks: plain-HTTP downloads, missing integrity hashes, Git and URL dependencies, pip's `--extra-index-url`, several registries. The NTIA completeness checks are not applied to lockfiles.
+* 8 Rust tests (the repository's own `Cargo.lock` and `package-lock.json` among them) and frontend tests; the real app 21/21.
+
+## 17:46Z: Windows event logs (`4d78bfd`)
+
+* The `evtx` crate needs serde_json's `preserve_order` in every version, which would change JSON key order in the whole app, so the EVTX binary XML format (MS-EVEN6) is read by an own parser. It matches python-evtx on all 174 events of the EVTX-ATTACK-SAMPLES files used and, on 59,907 events of this machine's logs, differs only in presentation.
+* 35 detections with MITRE ATT&CK techniques. Testing on the machine's own logs found a driver service installed from a Temp folder (HWiNFO); it became the medium rule EVT-SERVICE-WRITABLE-FOLDER.
+* Expectations corrected while testing: FILETIME conversion, log clearing counted only from the Eventlog provider, zero-padded LSASS access masks compared as numbers, WMI parents resolved through the creator process ID.
+* 8 Rust tests (2 more read local folders on request); the real app 14/14.
+
+## 18:08Z: cloud and IaC checks (`b35fafa`)
+
+* Terraform (HCL through hcl-rs 0.20, JSON, `terraform show -json` plans), CloudFormation, single IAM policies and `get-account-authorization-details`; the 28 privilege-escalation methods catalogued by Rhino Security Labs. `kstring` is pinned at 2.0.2 because 2.0.3 needs Rust 1.96, above the declared minimum.
+* Values written as references or variables are not resolved; a first version reported them as weak settings, which a four-state setting model replaced.
+* 10 Rust tests and frontend tests; the real app 16/16.
+
+## 18:23Z: PE and ELF file triage (`f9d7594`)
+
+* goblin 0.10 with PE and ELF only; hashes, the import hash as pefile computes it, sections and entropy, hardening flags, capabilities from imports with ATT&CK techniques, strings and indicators. The file is never run.
+* A UTF-16 string ran into the next one; the test data showed it and the reader was fixed.
+* 6 Rust tests; the real app 18/18 (an inert test program and notepad.exe).
+
+## 18:33Z: API definition comparison (`25bb7a2`)
+
+* Endpoints added, removed and changed between two imports; lost authentication, new anonymous endpoints, new plain-HTTP servers and removed endpoints become recordable issues. Renamed path parameters showed as changes in the first version; path parameters are now ignored.
+* 4 Rust tests and 1 frontend test; the real app 14/14.
+
+## 18:51Z: OAuth and OpenID Connect review (`b77ddd2`)
+
+* A Security Utility reviews authorization-server metadata, pasted, opened or fetched through the scope-checked HTTP command (the OpenID Connect address, then RFC 8414's). The RFC 9700, RFC 8725, RFC 8628 and OpenID Connect Discovery sections were read before they were cited; one reference was corrected (RFC 8725 treats `none` in section 3.2).
+* 5 frontend tests; the real app 29/29 against a local provider in scope. The out-of-scope check first failed on its expected wording: the refusal came from the address check ("was not sent") instead of the scope check, and the provider received nothing either way.
+
+## 19:08Z: Prowler import (`afd290c`)
+
+* OCSF detection findings (Prowler's JSON) in the scan import: one finding per failed check and resource; passing checks resolve the findings of an earlier import on request; MANUAL and muted results skipped; an interrupted file read as far as it goes.
+* Prowler's four published example outputs (AWS, Azure, Google Cloud, Kubernetes) parse; they showed that ATT&CK techniques sit in the `MITRE-ATTACK` compliance entries, which are now read too. The no-scope warning now appears only for files with network targets.
+* 4 Rust tests (one more reads a folder on request); the real app 15/15.
+
+## 19:26Z: Linux persistence triage (`2116f34`)
+
+* Cron, systemd, rc and MOTD scripts, ld.so.preload, shell start-up files, authorized_keys, passwd and shadow, sudoers, PAM, autostart and udev, each with its ATT&CK technique (IDs checked on attack.mitre.org, ATT&CK v20.1).
+* Review before the commit found that an absolute link in an image could make the scan read the analyst's own files; reads are now confined to the chosen file system by their canonical path. It also fixed a helper that turned `-c` into `c` and took the PAM program from the wrong argument.
+* 6 Rust tests (a junction test on Windows; the symbolic-link variant runs on Unix only) and 1 frontend test; SSH fingerprints checked against `ssh-keygen -l`; the real app 21/21 with the collection unchanged afterwards.
+
+## 19:34Z: ATT&CK Navigator layer (`cd8b0b7`)
+
+* The Findings export menu writes a layer (format 4.5) of the techniques the findings name, colored by the highest severity; false positives are left out.
+* 2 Rust tests; the real app 9/9. The exported file loaded in the ATT&CK Navigator 5.3.2 (the hosted page reads uploaded layers in the browser; the file held test data only), with the expected colors and without the false positive's technique.
+
+## 19:46Z: SBOM comparison (`54d6534`)
+
+* Components added, removed, upgraded and downgraded between two SBOMs or lockfiles; vulnerabilities compared only when both sides have the same kind of data; supply-chain issues for a new package source, the same version with other hashes, downgrades and stricter licenses.
+* The tests found that packages moved to a URL source lost their ecosystem and could not be matched; they now match by name. The real-app check showed that "0 new, 0 gone" read as an all-clear when nothing was looked up; the panel now names the data it compared.
+* 4 Rust tests and 1 frontend test; the real app 17/17.
+
+## 19:46–20:05Z: final checks
+
+* Several lockfile formats are read line by line by Cyber Hub's own code, and the lockfile and IaC readers had no test with cut input, as every other parser has; one was added for each (`a7b0368`). Both passed without a change.
+* Windows: 459 Rust tests (6 ignored), `cargo clippy --all-targets -- -D warnings` and tsc clean, 258 frontend tests in 45 files, cargo audit 0 vulnerabilities in 640 crates (8 allowed warnings), npm audit 0, gitleaks over the mission's commits clean; `cargo +1.90.0 check --locked --all-targets` passes.
+* The real database was never opened: every real-app run checked its modification time (2026-11-05T15:58:24.853Z, unchanged).
+* Not run: the Linux suites and GUI checks. No installers were built and nothing was pushed or published.
