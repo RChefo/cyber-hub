@@ -108,14 +108,14 @@ Each criterion is rated from 1 to 5, where 5 is best: D demand (×3), U professi
 | 30 | Infrastructure-as-code checks: Terraform (HCL and plan JSON) and CloudFormation | 5 | 5 | 5 | 5 | 3 | 4 | 4 | 3 | 59 | **Done** (Mission 2) |
 | 31 | Static PE and ELF triage: imports as capabilities, sections and entropy, strings and indicators | 4 | 4 | 5 | 4 | 4 | 4 | 4 | 4 | 54 | **Done** (Mission 2) |
 | 32 | Prowler results (OCSF JSON) import | 4 | 4 | 4 | 5 | 4 | 5 | 4 | 3 | 54 | **Done** (Mission 2) |
-| 33 | OWASP ASVS 5.0 checklist next to WSTG | 4 | 4 | 4 | 5 | 3 | 5 | 4 | 3 | 53 | Candidate |
+| 33 | OWASP ASVS 5.0 checklist next to WSTG | 4 | 4 | 4 | 5 | 3 | 5 | 4 | 3 | 53 | **Done** in Mission 4 as 43 (`8150748`) |
 | 34 | API definition comparison: new, removed and changed endpoints, lost authentication | 3 | 4 | 4 | 4 | 5 | 5 | 5 | 5 | 53 | **Done** (Mission 2) |
 | 35 | Linux persistence triage from collected files | 3 | 4 | 5 | 4 | 4 | 5 | 5 | 4 | 53 | **Done** (Mission 2) |
 | 36 | OAuth 2.0 and OpenID Connect configuration review (RFC 9700) | 3 | 4 | 5 | 3 | 5 | 5 | 5 | 4 | 52 | **Done** (Mission 2) |
 | 37 | SBOM comparison between versions | 3 | 3 | 4 | 4 | 5 | 5 | 5 | 5 | 51 | **Done** (Mission 2) |
 | 38 | ATT&CK technique view and Navigator layer per project | 3 | 4 | 4 | 5 | 3 | 5 | 4 | 3 | 50 | **Done** in part (Mission 2): Navigator layer export of the listed findings; no matrix view inside Cyber Hub |
 | 39 | Request collections, variables and authentication profiles in the repeater | 4 | 4 | 4 | 4 | 2 | 4 | 3 | 3 | 48 | Deferred: large interface work for the gain |
-| 40 | YARA matching | 4 | 4 | 5 | 4 | 1 | 3 | 4 | 2 | 48 | Deferred: the Rust engine (yara-x) brings a WebAssembly runtime; libyara needs a C toolchain |
+| 40 | YARA matching | 4 | 4 | 5 | 4 | 1 | 3 | 4 | 2 | 48 | **Done** in Mission 4 as 42 (`4fa4a1a`): boreal, a YARA engine in Rust without JIT or C, removed the obstacle |
 
 
 ## Mission 3 (2026-11-09T20:10Z): the integration layer
@@ -143,3 +143,61 @@ The brief's sections and what was built for each. "Done" means implemented, test
 * **A graph across projects.** Projects are the unit of authorization and scope; a cross-project graph needs its own rules for what may be shown together.
 * **Correlation by interpretation** (the same actor behind several hosts, renamed packages, redirects). Rules stay exact so every suggestion can be explained by matched values.
 * **OWASP ASVS 5.0 checklist** (candidate 33 of Mission 2). Still not started.
+
+## Mission 4 (2026-11-09T23:21Z): detection engineering, threat hunting and compliance
+
+### Sources consulted during the mission
+
+Every source below was read during this mission, through a fetch, a search or a public API call. Repository numbers are from GitHub's API on 2026-11-09 (stars, forks, last push, licence).
+
+* **Sigma.** SigmaHQ's rules specification (v2.1.0, 2025-08-02) and its modifier appendix, read from the `sigma-specification` repository: the rule format, the condition grammar, and the modifier semantics the engine follows (`detection/sigma.rs`). Repository signals:
+
+  | Repository | Stars | Forks | Last push | Licence |
+  |---|---|---|---|---|
+  | SigmaHQ/sigma | 11,452 | 2,931 | 2026-11-09 | Detection Rule License |
+  | SigmaHQ/pySigma | 606 | 163 | 2026-11-09 | LGPL-2.1 |
+  | SigmaHQ/sigma-cli | 221 | 55 | 2026-10-28 | LGPL-2.1 |
+  | wagga40/Zircolite (Sigma on EVTX, JSON) | 875 | 121 | 2026-11-02 | |
+  | Yamato-Security/hayabusa (Sigma-based EVTX triage) | 3,448 | 305 | 2026-11-09 | AGPL-3.0 |
+
+  The base64offset offsets and the Windows log-source mappings follow pySigma's behaviour as known before this mission; its code was not fetched again.
+* **YARA.** The YARA documentation ("Writing YARA rules") for the language. Repository signals:
+
+  | Repository | Stars | Forks | Last push | Licence |
+  |---|---|---|---|---|
+  | VirusTotal/yara | 10,016 | 1,595 | 2026-10-27 | BSD-3-Clause |
+  | VirusTotal/yara-x | 1,358 | 163 | 2026-11-09 | BSD-3-Clause |
+  | Neo23x0/signature-base | 3,064 | 683 | 2026-11-06 | Detection Rule License |
+  | YARAHQ/yara-forge | 353 | 37 | 2026-11-08 | GPL-3.0 |
+
+  * **boreal (chosen engine):** checked on crates.io (1.4.0 of 2026-10-16, MIT OR Apache-2.0, MSRV 1.85, 67,577 downloads with 17,872 recent, regular releases) and in its README (claims compatibility with YARA 4.5.5 and protection against untrusted rules and inputs).
+  * **boreal's documentation (docs.rs):** `CompilerParams` (`disable_includes`, condition depth, strings per rule), `ScanParams` (timeout, matches per string, match length), `Compiler` and `Scanner`.
+  * **boreal's code:** its source was read before use. There is no build script; its file reads are only for includes and `scan_file`, neither used; the memory-map and process scanners are behind features left off; its `unsafe` blocks were reviewed.
+* **YARA compatibility corpora** (downloaded for local tests only, not bundled): Neo23x0's signature-base (753 rule files) and Yara-Rules/rules (566).
+* **ASVS.** OWASP ASVS 5.0.0's GitHub release (`v5.0.0_release`) through the API and its assets. The official JSON is bundled unmodified (SHA-256 recorded in THIRD_PARTY_NOTICES.md), under CC BY-SA 4.0. OWASP/ASVS: 3,773 stars, 851 forks, last push 2026-11-04. The 5.0.0 JSON maps no requirement to CWE or NIST, so mappings are the analyst's.
+* **ATT&CK.** mitre-attack/attack-navigator: 2,506 stars, last push 2026-11-04. The bundled Enterprise 20.1 catalog (Mission 3) supplied revocations such as T1070.001 → T1685.005.
+* **Test data reused from Mission 2:** EVTX-ATTACK-SAMPLES files for the Sigma tests on real logs.
+* **Known without a fetch in this mission**, and named as such:
+  * the STIX 2.1 indicator properties (`confidence`, `valid_until` later than `valid_from`, `revoked`);
+  * the Admiralty source-reliability scale;
+  * the beacon and DNS-tunnel heuristics, which are Cyber Hub's own, documented with their thresholds in docs/UTILITIES.md.
+* **Not counted as evidence:** WithSecureLabs/chainsaw and mitre/d3fend-ontology returned no data from the API.
+
+### Candidates and ranking
+
+The Mission 2 scoring model: D demand (×3), U professional usefulness (×2), N novelty for Cyber Hub (×2), I integration (×2), F feasibility, R security risk (5 = low), T testability, M maintenance; maximum 65. Demand for 44 to 52 is the brief's own request and the practice it names, not a measured signal, so D stays at 3 or below for them.
+
+| # | Candidate | D | U | N | I | F | R | T | M | Score | Status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 41 | Sigma detection engineering: library, validation, versions, collections, tests with expectations, project runs, explanations, ATT&CK coverage | 5 | 5 | 5 | 5 | 3 | 4 | 5 | 3 | 60 | **Done** (`e4a3987`) |
+| 42 | YARA rules for files: library, tests on file samples, project runs, File Triage scan | 5 | 5 | 5 | 5 | 3 | 3 | 4 | 3 | 58 | **Done** (`4fa4a1a`) |
+| 43 | OWASP ASVS 5.0 assessments: levels, statuses only the analyst sets, evidence and finding links, history, analyst mappings, report | 4 | 4 | 4 | 5 | 4 | 5 | 5 | 4 | 56 | **Done** (`8150748`) |
+| 44 | Network hunting leads in captures: beacon-like timing, DNS tunneling, TXT volume, generated domains | 3 | 4 | 4 | 4 | 5 | 5 | 5 | 5 | 53 | **Done** (`ef862c3`) |
+| 45 | Indicator lifecycle: source and reliability, confidence, validity, revoked and false positive, history, STIX fields | 3 | 4 | 4 | 4 | 5 | 5 | 5 | 5 | 53 | **Done** (`d8c8cbb`) |
+| 46 | MCP tools for detections, hits and ASVS, with approvals | 3 | 4 | 3 | 5 | 5 | 4 | 5 | 4 | 51 | **Done** (`285e439`) |
+| 47 | Risk acceptance records and exceptions for findings (justification, approver, expiry) | 3 | 4 | 3 | 5 | 3 | 5 | 4 | 3 | 48 | Deferred: every path that sets a finding's status (editor, bulk change, MCP, imports, reports) would have to require and show the record |
+| 48 | Host hunting analytics beyond rules (process chains, logon anomalies, Linux authentication) | 3 | 4 | 3 | 4 | 2 | 5 | 3 | 3 | 44 | Partly covered by Sigma rules on logs and the existing EVTX, Linux and SSH triage; dedicated analytics deferred |
+| 49 | Sigma correlation rules and aggregations (counts and time windows) | 3 | 4 | 4 | 4 | 2 | 4 | 3 | 2 | 44 | Deferred: needs a time-window engine; refused with the reason today |
+| 50 | Assessment comparison and remediation metrics | 3 | 3 | 3 | 4 | 3 | 5 | 4 | 3 | 44 | Deferred |
+| 51 | TAXII 2.1 feeds and indicator import | 3 | 3 | 4 | 3 | 2 | 2 | 3 | 2 | 38 | Deferred: network feeds need their own confirmation and provenance design |
+| 52 | ATT&CK Mobile and ICS matrices | 2 | 2 | 3 | 2 | 2 | 5 | 3 | 2 | 32 | Deferred: the brief asks for proper data and tests first |

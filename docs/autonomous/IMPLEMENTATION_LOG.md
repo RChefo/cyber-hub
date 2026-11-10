@@ -946,3 +946,78 @@ The owner's brief asked for research-driven new capabilities in seven tracks (we
 * Windows: 482 Rust tests (7 ignored), `cargo clippy --all-targets -- -D warnings` and tsc clean, 264 frontend tests in 47 files, cargo audit 0 vulnerabilities in 640 crates (8 allowed warnings), npm audit 0, gitleaks over the mission's 9 commits clean; `cargo +1.90.0 check --locked --all-targets` passes.
 * The real database was never opened: every real-app run checked its modification time (2026-11-05T15:58:24.853Z, unchanged). Each check ran on a fresh copy of the disposable data folder.
 * Not run: the Linux suites and GUI checks. No installers were built and nothing was pushed or published.
+
+## Mission 4 (2026-11-09T23:21Z): detection engineering, threat hunting and compliance
+
+## 23:21–23:23Z: research
+
+* Read SigmaHQ's specification v2.1.0 and its modifier appendix and the YARA language documentation. Found OWASP ASVS 5.0.0's release assets through the GitHub API. Read 13 repositories' adoption signals. Sources and numbers are in FEATURE_BACKLOG.md, "Mission 4".
+
+## 23:23–23:59Z: Sigma detection engineering (`e4a3987`)
+
+* The engine (`detection/sigma.rs`): specification v2.1.0 with errors, unsupported features and warnings reported, the modifier appendix, conditions, Windows log sources, and explanations per field.
+* Events (`detection/events.rs`): EVTX, JSON, JSON Lines and text logs, bounded.
+* Migration 24: the rule library with versions, collections, samples kept by content hash, tests with expectations, feedback, and project hits.
+* ATT&CK coverage overlay with gaps and a Navigator layer export.
+* Tests include environment-driven runs of SigmaHQ rules on EVTX-ATTACK-SAMPLES files (8 cases pass).
+* Real app: 19/19.
+
+## 23:59–00:25Z: OWASP ASVS 5.0.0 (`8150748`) and a flaky test (`2d26fa2`)
+
+* Migration 25:
+  * assessments at a level;
+  * statuses only the analyst sets;
+  * links to findings and evidence of the same project, removed by triggers when those are deleted;
+  * the analyst's mappings and a history of status changes.
+* The project tab and a Markdown report with the CC BY-SA attribution.
+* Real app 28/28. The script's own mistakes were fixed: the confirmation is an alert dialog, and HeroUI's Switch ignores a synthetic click. Listing all 345 requirements renders in about 1.0 s in the development build (measured in the page).
+* Mission 3's concurrency test failed once under full-suite load: the reviewing thread could finish before correlation had suggested anything. It now reviews until it accepts something, within 30 s; four repeated full runs passed.
+
+## 00:25–01:13Z: YARA rules (`4fa4a1a`)
+
+* boreal 1.4 was vetted on crates.io, in its documentation and in its code, with default features off (no process scanning, memory maps or signature verification).
+* **A crafted rule crashed the process** (`STATUS_STACK_OVERFLOW`). Probing each shape in a separate process found boreal's parser recursing without a limit on:
+  * nested calls and indexes, fatal at 300 levels;
+  * chains of `not`, `defined`, `~` and `-`, and arithmetic, bitwise and comparison chains, fatal at 5,000.
+
+  Fixed with a lexical nesting estimate that refuses conditions deeper than 64 before boreal reads them, and compilation on a 16 MB stack. A regression test covers every shape.
+* Compatibility, one file at a time:
+  * signature-base: 736 of 753 files (5,257 rules);
+  * Yara-Rules: 496 of 566 (5,182 rules);
+  * no real rule was refused for nesting.
+* Two defects in the earlier Sigma work, fixed:
+  * a hit was looked up through the first page of 500, so later hits could not be reviewed;
+  * binary files were read as text logs.
+* Library, tests on file samples, project runs (all YARA files in one pass), File Triage scan with the SHA-256 checked again, and promotion. Real app 25/25.
+
+## 01:13–01:26Z: hunting leads in captures (`ef862c3`)
+
+* Beacon-like schedules (TCP by SYN, UDP by exchange) and DNS patterns (tunneling, long labels, TXT volume, NXDOMAIN bursts), each with its benign explanations. They are kept apart from the issues and recorded only as findings under review, without ATT&CK tags.
+* The real-app run found a 60-second beacon reported as 63 s with 0% jitter: alternating gaps (57 s, 63 s) put the median on one mode and the median deviation at zero. The interval is now the mean of the gaps near the median, and the jitter their mean deviation (60 s, 5%). Real app 15/15.
+
+## 01:26–01:40Z: indicator lifecycle (`d8c8cbb`)
+
+* Migration 26 adds to saved indicators:
+  * source and reliability (A–F);
+  * confidence (0–100);
+  * validity, with expiry computed when read;
+  * status (active, revoked, false positive);
+  * history.
+* STIX gets `confidence`, `valid_until`, `revoked` and an external reference for the source. An indicator whose validity ended before it was saved is left out with the reason.
+* The real-app run showed a provider's cached verdict still flagging an indicator the analyst had marked a false positive; the analyst's decision now outweighs it, and the verdict stays visible. Real app 16/16, including the migration of an indicator saved before it.
+
+## 01:40–01:50Z: MCP tools (`285e439`)
+
+* Six tools: rules, one rule, hits (redacted), ASVS assessments, a hit's review and an ASVS status. Writes wait for approval, and a client can never set *compliant*.
+* The real `cyberhub-mcp` server against the debug app: 18/18. The script reads truncated results by their visible text, since the client keeps 1,500 characters.
+
+## 01:50–01:56Z: final checks
+
+* Windows:
+  * 522 Rust tests (10 ignored); `cargo clippy --all-targets -- -D warnings` and tsc clean;
+  * 276 frontend tests in 49 files;
+  * `cargo +1.90.0 check --all-targets` passed;
+  * cargo audit: 0 vulnerabilities in 651 crates (the same 8 allowed warnings); npm audit 0;
+  * gitleaks over the mission's 7 commits clean.
+* The real database was never opened: every real-app run checked its modification time (2026-11-05T15:58:24.853Z, unchanged), and each ran on a fresh copy of a disposable data folder.
+* Not run: the Linux suites and GUI checks, and release-build performance. No installers were built, and nothing was pushed or published.

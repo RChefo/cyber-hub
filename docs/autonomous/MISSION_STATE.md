@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | **Complete** (Mission 3, 2026-11-09T20:10:11Z–22:35Z: the unified investigation layer, schema 21 → 23, see MISSION_REPORT.md "Mission 3". Mission 2, 2026-11-09T16:31:14Z–19:55Z: ten research-driven capabilities, schema unchanged at 21, see MISSION_REPORT.md "Mission 2". Feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
+| Current phase | **Complete** (Mission 4, 2026-11-09T23:21:37Z–2026-11-10T01:56Z: detection engineering (Sigma, YARA), hunting leads, ASVS 5.0.0, indicator lifecycle and MCP tools, schema 23 → 26, see MISSION_REPORT.md "Mission 4". Mission 3, 2026-11-09T20:10:11Z–22:35Z: the unified investigation layer, schema 21 → 23, see MISSION_REPORT.md "Mission 3". Mission 2, 2026-11-09T16:31:14Z–19:55Z: ten research-driven capabilities, schema unchanged at 21, see MISSION_REPORT.md "Mission 2". Feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -96,6 +96,13 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 60. Evidence provenance in reports (`f08a6bb`)
 61. Remediation groups (`ab4a9db`)
 62. Concurrency test of correlation and review (`54576dd`)
+63. Sigma detection engineering: library, tests, project hits, ATT&CK coverage (`e4a3987`)
+64. The concurrency test made reliable under full-suite load (`2d26fa2`)
+65. OWASP ASVS 5.0.0 assessments (`8150748`)
+66. YARA rules on boreal, in the library, project runs and File Triage (`4fa4a1a`)
+67. Hunting leads in packet captures (`ef862c3`)
+68. Indicator lifecycle (`d8c8cbb`)
+69. MCP tools for detections and ASVS (`285e439`)
 
 ## Tests executed
 
@@ -103,7 +110,9 @@ See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md).
 
 ## Known failures
 
-None. At `54576dd` (Mission 3, Windows 11): 482 Rust tests (7 ignored) and 264 frontend tests in 47 files; clippy, tsc, cargo audit (0 vulnerabilities in 640 crates, 8 allowed warnings), npm audit (0) and gitleaks over the mission's 9 commits are clean; `cargo +1.90.0 check --locked --all-targets` passes; every new capability passed its check in the real app (112 of 112). **Not run for Mission 3:** the Linux suites and Linux GUI checks.
+None. At `285e439` (Mission 4, Windows 11): 522 Rust tests (10 ignored) and 276 frontend tests in 49 files; clippy, tsc, cargo audit (0 vulnerabilities in 651 crates, 8 allowed warnings), npm audit (0) and gitleaks over the mission's 7 commits are clean; `cargo +1.90.0 check --all-targets` passes; every new capability passed its check in the real app (121 of 121). **Not run for Mission 4:** the Linux suites and Linux GUI checks.
+
+At `54576dd` (Mission 3, Windows 11): 482 Rust tests (7 ignored) and 264 frontend tests in 47 files; clippy, tsc, cargo audit (0 vulnerabilities in 640 crates, 8 allowed warnings), npm audit (0) and gitleaks over the mission's 9 commits are clean; `cargo +1.90.0 check --locked --all-targets` passes; every new capability passed its check in the real app (112 of 112). **Not run for Mission 3:** the Linux suites and Linux GUI checks.
 
 At `a7b0368` (Mission 2, Windows 11): 459 Rust tests (6 ignored) and 258 frontend tests in 45 files; `cargo clippy --all-targets -- -D warnings`, tsc, cargo audit (0 vulnerabilities in 640 crates, 8 allowed warnings), npm audit (0) and gitleaks over the mission's commits are clean; `cargo +1.90.0 check --locked --all-targets` passes; every new capability passed its check in the real app (174 of 174). **Not run for Mission 2:** the Linux suites and Linux GUI checks.
 
@@ -191,6 +200,8 @@ The final results at `d6a192e`:
 | `cd8b0b7` | feat(findings): export ATT&CK techniques as a Navigator layer |
 | `54d6534` | feat(sbom): compare two SBOM or lockfile versions |
 | `a7b0368` | test(parsers): feed cut and multibyte input to lockfile and IaC readers |
+| `9abfbad` | docs(mission): report mission 2 |
+| `8b99a05` | docs(mission): correct the mission 2 end time |
 | `7b1a842` | feat(investigation): correlate records across modules with reviewed relationships |
 | `24258c2` | feat(utilities): record triage results with their evidence and provenance |
 | `e3eeeca` | feat(attack): add a project ATT&CK matrix with assessments and layers |
@@ -200,9 +211,22 @@ The final results at `d6a192e`:
 | `f08a6bb` | feat(reports): show evidence provenance in the evidence register |
 | `ab4a9db` | feat(findings): group findings by the fix that addresses them |
 | `54576dd` | test(investigation): run correlation and reviews from several threads |
-| (this report) | docs(mission): report mission 2 |
+| `2d23aba` | docs(mission): report mission 3 |
+| `ddaac03` | docs(mission): correct the mission 3 commit count |
+| `e4a3987` | feat(detections): add a Sigma detection engineering workspace |
+| `2d26fa2` | test(investigation): keep reviewing until correlation has suggested something |
+| `8150748` | feat(asvs): assess projects against OWASP ASVS 5.0.0 |
+| `4fa4a1a` | feat(detections): run YARA rules on files with boreal |
+| `ef862c3` | feat(hunting): report beacon-like timing and DNS patterns in captures |
+| `d8c8cbb` | feat(intel): track saved indicators' source, confidence and validity |
+| `285e439` | feat(mcp): expose detections and ASVS assessments to MCP clients |
 
 ## Next action
+
+**After Mission 4 (2026-11-10T01:56Z), the owner decides:**
+1. Review the six capabilities (MISSION_REPORT.md, "Mission 4"). They add migrations 24–26 (backups are taken before each) and one dependency, `boreal` 1.4.0 with its crates.
+2. A release that includes Missions 2–4 needs the RC0 checks repeated for the new code, above all the Linux suites and GUI checks, which were not run.
+3. Next candidates (FEATURE_BACKLOG.md, "Mission 4"): 47 risk acceptance records, then 48 host hunting analytics and 49 Sigma aggregations.
 
 **After Mission 3 (2026-11-09T22:35Z), the owner decides:**
 1. Review the investigation layer (MISSION_REPORT.md, "Mission 3"). It adds migrations 22 and 23 (backups are taken before each) and no dependency.

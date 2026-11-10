@@ -753,3 +753,156 @@ Evidence records keep the module and record they came from, the tool and its ver
 ### Assessment
 
 The integration layer works end to end in the real app: a file analysed in the utilities lands in the project with its evidence and provenance, is linked to its findings, appears on the timeline, in the indicators, the investigation panel, the graph and the report; correlation connects it to assets, vulnerabilities, components and OSINT entities as reviewed suggestions; the ATT&CK matrix keeps leads, assessments and coverage apart; MCP clients and the assistant read the same data and can only suggest. Before a release that includes Mission 3, the RC0 checks need repeating for the new code, in particular the Linux suites and GUI checks.
+
+## Mission 4: detection engineering, threat hunting and compliance (2026-11-09/10)
+
+The owner's brief asked for detection engineering (Sigma, YARA), threat hunting, OWASP ASVS 5.0 assessments, ATT&CK, threat-intelligence and remediation improvements, cross-module workflows, and MCP and assistant extensions, without executing untrusted content or overstating confidence.
+
+### Statistics
+
+| Item | Value |
+|---|---|
+| Time | 2026-11-09T23:21:37Z–2026-11-10T01:56Z (about 2 h 35 min) |
+| Commits | 8: six capabilities, a test fix (`2d26fa2`) and this report |
+| Schema | 23 → 26 (24 detection library and hits, 25 ASVS assessments, 26 indicator lifecycle); each upgrade keeps a backup first |
+| Tests | Rust 482 → 522 (7 → 10 ignored); frontend 264 → 276 (47 → 49 files) |
+| New dependency | `boreal` 1.4.0, MIT or Apache-2.0, without default features. It adds `boreal-parser`, `nom` 8, `object` 0.40, `tlsh2`, `der`, `der_derive`, `const-oid`, `codespan-reporting`, `termcolor` and `unicode-width` |
+| Bundled data | OWASP ASVS 5.0.0 JSON, unmodified, CC BY-SA 4.0 (THIRD_PARTY_NOTICES.md) |
+| Real-app checks (Windows 11, disposable data) | 121 of 121 in the final run of each of 6 scripts |
+
+### Fully implemented
+
+| Capability | Commit | Verification |
+|---|---|---|
+| Sigma library: validation that names errors, unsupported features and warnings; versions with a line diff; collections; export; tests on EVTX, JSON and text samples with expectations and regression re-tests; explanations per field; project runs whose matches stay hits until promoted or marked false positives; ATT&CK coverage with gaps and layer export | `e4a3987` | Rust tests incl. SigmaHQ rules on EVTX-ATTACK-SAMPLES; app 19/19 |
+| OWASP ASVS 5.0.0 assessments: levels 1–3, five statuses that only the analyst sets, notes, evidence and finding links in the project, the analyst's mappings, history, progress, finding recording, Markdown report with attribution | `8150748` | 3 Rust and 3 frontend tests; app 28/28 |
+| YARA rule files on boreal: library entries per file, versions, collections, tests on file samples, project runs, File Triage scan and recording, hit promotion, coverage | `4fa4a1a` | 11 engine tests, library tests, 2 corpora; app 25/25 |
+| Hunting leads in packet captures: regular schedules and DNS patterns, each with what else it can be | `ef862c3` | 5 Rust and 2 frontend tests; app 15/15 |
+| Indicator lifecycle: source and reliability, confidence, validity, status, history; STIX lifecycle fields; standing in the Analysis tab | `d8c8cbb` | 4 Rust and 2 frontend tests; app 16/16 |
+| MCP: six detection and compliance tools with approvals | `285e439` | 3 Rust tests; real server 18/18 |
+
+### Partially implemented
+
+* **Threat hunting on hosts.** The tools are Sigma rules on Windows and JSON logs, together with the existing EVTX, Linux persistence and SSH triage. There are no dedicated analytics for process chains or logon anomalies.
+* **ATT&CK.** Done: rule coverage, gaps, hits per technique and the coverage layer export, next to Mission 3's assessments and layers. Not done: technique history, comparison of several layers, and confidence beyond the assessments.
+* **Threat intelligence.** Done: the lifecycle, STIX and false-positive handling. Not done: TAXII, feeds and report import.
+* **Assistant.** It reaches the new data through MCP. The in-app assistant's context was not extended.
+
+### Deferred
+
+* Risk acceptance records and exceptions for findings. Every path that sets a finding's status would need to require and show them.
+* Sigma correlation rules and aggregations.
+* Assessment comparison and remediation metrics.
+* TAXII feeds.
+* ATT&CK Mobile and ICS.
+
+The reasons are in FEATURE_BACKLOG.md, "Mission 4".
+
+### Sigma: support and limitations
+
+* **Support:**
+  * specification v2.1.0 with the full modifier appendix (including base64offset, windash, cidr, fieldref and numeric comparisons);
+  * `1 of`, `all of`, `N of` and `them` conditions;
+  * Windows services and categories mapped to channels and event IDs (process creation from Sysmon 1 and Security 4688);
+  * EVTX, JSON, JSON Lines and text events.
+* **Refused with the reason:** placeholders, time modifiers, aggregations, correlation rules, rule collections with actions, look-around and back-references.
+* **Evaluation:** a rule runs on one event at a time. Other log sources run against every event, and the result says so.
+
+### YARA: support and limitations
+
+* **Support:** boreal 1.4 (YARA 4.5) with text, hex and regular-expression strings and their modifiers, private and global rules, and the modules time, math, string, hash, pe, elf, macho, dotnet and dex.
+* **Refused or absent:**
+  * `include`, refused twice over (boreal's setting and a refusing include callback);
+  * external variables (LOKI's and THOR's `filename` and `filepath` would mislead path-based rules on copied files);
+  * the console, magic and cuckoo modules;
+  * Authenticode verification (left off to avoid `rsa` and its advisory).
+* **Limits:**
+  * rule files of 2 MB, 1,000 strings per rule, conditions 64 levels deep (Cyber Hub) and 40 (boreal);
+  * scans of 256 MB, stopped after 30 s;
+  * 1,000 matches counted per string and 10 kept.
+* **Compatibility:** 97.7% of signature-base and 87.6% of Yara-Rules files compile one file at a time. Failures are external variables, other modules, index files of includes and empty files.
+
+### Threat hunting
+
+* **Packet captures:**
+  * connections on a regular schedule, marked "regular" or "jittered", with services that keep schedules by design named;
+  * many long or random-looking names under one domain;
+  * very long labels and TXT, NULL or ANY volume;
+  * NXDOMAIN bursts across many domains.
+* **Logs:** Sigma rules on logs, and YARA rules on any evidence file.
+* Leads are hypotheses. They say what else they can be, become findings under review only when recorded, and carry no ATT&CK tag.
+
+### ASVS
+
+* Complete for the brief's list:
+  * catalogue and version;
+  * chapters and levels;
+  * per-project assessments with statuses, evidence, notes, findings and history;
+  * progress and an exportable report.
+* No requirement is ever marked compliant automatically or by a client. The 5.0.0 data has no mappings, so mappings are the analyst's and say so.
+* Exception management and assessment comparison are not done.
+
+### ATT&CK and threat intelligence
+
+* **ATT&CK:** detection coverage (Sigma, and YARA files whose metadata names techniques) is an overlay, never an observation. Gaps are techniques named or assessed without a rule, and hits are counted per technique as leads.
+* **Indicators:** they keep their source and collection time, and are not presented as current once expired, revoked or rejected. A false positive overrides a provider's flag.
+
+### Cross-module workflows
+
+* **Sigma:** import, validate, map techniques, test on samples, run on evidence, review hits, promote to a finding linked to the evidence, then coverage, timeline and report.
+* **YARA:**
+  1. import and validate;
+  2. analyse a file in File Triage and scan it;
+  3. record matches as findings with the file and the analysis as evidence (indicators, correlation, the graph and the timeline follow from Mission 3's layer);
+  4. or run on project evidence as hits.
+* **ASVS:** create, choose a level, review requirements, link evidence and findings, record findings for failed requirements, then report.
+* **Hunting:** open a capture, review the leads, record hypotheses, then correlate and build the timeline.
+
+### MCP and assistant
+
+* Six tools. The reads are rules, one rule, hits with redacted values, and ASVS assessments. The writes, after approval, are a hit's review and an ASVS status other than compliant.
+* Results say that coverage is not evidence and that a hit is a lead.
+* Other projects and archived projects are refused before an approval.
+
+### Security review
+
+* **Nothing new contacts a network.** Rules and files are data, and nothing in a rule, sample or capture is executed. Files are chosen in native dialogs or named by tokens.
+* **A denial-of-service in YARA parsing** was found and fixed before release (see Mission 4 in IMPLEMENTATION_LOG.md). boreal's `unsafe` code that the chosen features compile was read.
+* **Archived projects** are refused for every new write.
+* **Values from logs and files** are redacted before an MCP client receives them.
+* **Scans:**
+  * gitleaks over the 7 commits: clean;
+  * cargo audit: 0 vulnerabilities (651 crates, the same 8 allowed warnings);
+  * npm audit: 0.
+
+### Performance (development build unless stated)
+
+* **ASVS:** 345 requirement rows render in about 1.0 s; 70 by default.
+* **YARA:** compiling signature-base one file at a time takes 101.5 s, slowest 884 ms. Yara-Rules takes 28.9 s.
+* **Not measured:** release-build timing, and large captures with the hunting accumulators (bounded at 100,000 flows of 2,000 events and 50,000 domains).
+
+### Database changes
+
+* **24:** `detection_rules`, `detection_rule_versions`, `detection_collections`, `detection_collection_rules`, `detection_samples`, `detection_rule_samples`, `detection_tests`, `detection_feedback`, `detection_hits`.
+* **25:** `asvs_assessments`, `asvs_results`, `asvs_links`, `asvs_mappings`, `asvs_history`, and two triggers.
+* **26:** `ti_saved` gains source, reliability, confidence, status, valid_until and updated_at, and `ti_saved_events` is added.
+
+All three only add data. Each was exercised by the real app on a copy, after the automatic backup.
+
+### Commits
+
+`e4a3987`, `2d26fa2`, `8150748`, `4fa4a1a`, `ef862c3`, `d8c8cbb`, `285e439`, and this report.
+
+### Remaining technical debt
+
+* Risk acceptance records; Sigma aggregations and correlation; TAXII.
+* A shared stack guard: other parsers could be checked for unbounded recursion the way boreal's was.
+* YARA performance on large rule sets in the release build.
+* The ASVS list renders all rows at once (about 1 s for 345 in development); it could be virtualized.
+* The MCP client used for checks keeps 1,500 characters of each result, so long results were checked by their visible text.
+* Linux runs of the suites and GUI checks for Missions 2–4, and the release-candidate checks again before any release.
+
+### Not verified
+
+* Linux (Ubuntu, Debian): neither the suites nor the GUI checks.
+* Installers, signing and updates: not built or run (not authorized).
