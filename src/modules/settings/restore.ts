@@ -27,7 +27,11 @@ export function restoreSummary(info: BackupInfo): string[] {
 export function restoreNotice(o: RestoreOutcome): { tone: "success" | "warning" | "danger"; title: string; description: string } {
   if (o.retry) return { tone: "warning", title: "The backup is not restored yet", description: o.error ?? "It is restored at the next start." };
   if (!o.ok) return { tone: "danger", title: "The backup was not restored", description: o.error ?? "The current database was kept." };
-  const mcp = o.mcpTurnedOff ? " The MCP bridge was turned off; turn it on again on the MCP page if you use it." : "";
+  const mcp =
+    (o.mcpTurnedOff ? " The MCP bridge was turned off; turn it on again on the MCP page if you use it." : "") +
+    (o.wordlistsDropped > 0
+      ? ` ${pluralize(o.wordlistsDropped, "wordlist")} indexed by reference ${o.wordlistsDropped === 1 ? "was" : "were"} removed with the extra wordlist folder: they name files on the computer the backup came from. Add them again in Wordlists.`
+      : "");
   if (o.error) return { tone: "warning", title: "Database restored with a warning", description: o.error + mcp };
   const parts = [`${o.source} is now in use. The previous database is kept in ${o.keptIn ?? "the backups folder"}`];
   if (o.evidenceKept > 0) parts[0] += `, with ${pluralize(o.evidenceKept, "evidence file")} only it refers to`;

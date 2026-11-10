@@ -610,7 +610,8 @@ pub fn scan_path(root: &Path) -> ScanResult {
         if !candidate || meta.len() > MAX_FILE_BYTES {
             continue;
         }
-        let Ok(bytes) = std::fs::read(&p) else { continue };
+        // a pipe or device in the tree is skipped, never read (Mission 7)
+        let Ok(bytes) = crate::util::read_regular(&p, MAX_FILE_BYTES) else { continue };
         if bytes.iter().take(8192).any(|b| *b == 0) {
             continue;
         }

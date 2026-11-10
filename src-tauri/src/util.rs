@@ -152,6 +152,50 @@ pub fn dialog_text(text: &str) -> String {
     out
 }
 
+fn not_regular() -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidInput, "not a regular file (a folder, pipe, device or socket)")
+}
+
+/// Opens a file for reading only when it is a regular file (Mission 7). A pipe with no writer would
+/// block the open or the read forever, and a device has no end, so folders, pipes, devices and
+/// sockets are refused: first by their metadata (a special file is never opened), then on the open
+/// file itself, so nothing can be swapped in between. On Unix the open does not block.
+pub fn open_regular(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+    if !std::fs::metadata(path)?.is_file() {
+        return Err(not_regular());
+    }
+    let mut opts = std::fs::OpenOptions::new();
+    opts.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = opts.open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(not_regular());
+    }
+    Ok(file)
+}
+
+/// Reads a whole regular file (see `open_regular`) of at most `max` bytes. The read stops after
+/// `max + 1` bytes whatever the metadata said, so a file that grows is refused too.
+pub fn read_regular(path: &std::path::Path, max: u64) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let file = open_regular(path)?;
+    let too_large = || std::io::Error::new(std::io::ErrorKind::InvalidData, format!("the file is larger than {max} bytes"));
+    let len = file.metadata()?.len();
+    if len > max {
+        return Err(too_large());
+    }
+    let mut buf = Vec::with_capacity(len as usize);
+    file.take(max + 1).read_to_end(&mut buf)?;
+    if buf.len() as u64 > max {
+        return Err(too_large());
+    }
+    Ok(buf)
+}
+
 /// One word of a command line that an analyst pastes into a shell (Mission 7): POSIX shells and
 /// PowerShell both read it back as exactly this word and run nothing else. Plain words (ASCII
 /// letters, digits and `_ + = : . / -`) stay as they are; anything else is single-quoted, and a
@@ -191,4 +235,60 @@ pub fn commonmark_markup(md: &str) -> Vec<String> {
             _ => None,
         })
         .collect()
+}
+
+/// Mission 7: special files are refused without blocking; regular files are read within a bound.
+#[cfg(test)]
+mod special_file_tests {
+    use super::*;
+
+    fn tmpdir(name: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("cyberhub-special-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// Runs `f` on another thread and fails if it has not finished after 10 seconds (a blocked open
+    /// or read of a pipe never finishes).
+    #[cfg(unix)]
+    fn within_10s<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(f());
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(10)).expect("blocked on a special file")
+    }
+
+    #[test]
+    fn regular_files_are_read_within_their_bound() {
+        let d = tmpdir("regular");
+        let f = d.join("a.txt");
+        std::fs::write(&f, b"0123456789").unwrap();
+        assert_eq!(read_regular(&f, 10).unwrap(), b"0123456789");
+        assert!(read_regular(&f, 9).unwrap_err().to_string().contains("larger"));
+        assert!(open_regular(&d).is_err(), "a folder is not a regular file");
+        assert!(open_regular(&d.join("missing")).is_err());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pipes_and_devices_are_refused_without_blocking() {
+        let d = tmpdir("fifo");
+        let fifo = d.join("hang.fifo");
+        let c = std::ffi::CString::new(fifo.to_string_lossy().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o600) }, 0, "mkfifo");
+        let f2 = fifo.clone();
+        assert!(within_10s(move || open_regular(&f2).is_err()), "a pipe is refused");
+        let f3 = fifo.clone();
+        assert!(within_10s(move || read_regular(&f3, 1024).is_err()));
+        assert!(within_10s(|| read_regular(std::path::Path::new("/dev/zero"), 1024).is_err()), "a device is refused");
+        // a folder scan skips the pipe and still reads the regular file next to it
+        std::fs::write(d.join("config.env"), b"AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n").unwrap();
+        let root = d.clone();
+        let res = within_10s(move || crate::sectools::secrets::scan_path(&root));
+        assert_eq!((res.files_scanned, res.files_skipped), (1, 1), "the pipe is skipped");
+        let _ = std::fs::remove_dir_all(&d);
+    }
 }

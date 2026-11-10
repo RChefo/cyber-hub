@@ -1,7 +1,6 @@
 //! Wordlist management. Files are indexed by reference (large lists stay where they
 //! are) or copied into the managed directory inside the app data folder.
 
-use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
@@ -40,12 +39,38 @@ pub fn managed_dir(app: &AppHandle) -> AppResult<PathBuf> {
     Ok(dir)
 }
 
+/// Whether Cyber Hub may touch an indexed path (Mission 7). On Windows, never a network or device
+/// path: even checking that it exists makes Windows connect to the host with the user's
+/// credentials, and a restored database could name one.
+fn touchable(path: &str) -> bool {
+    !(cfg!(windows) && crate::util::is_network_or_device_path(path))
+}
+
+/// The file of an indexed wordlist, when it may be read (Mission 7): a touchable path, and for a
+/// managed copy, a file still inside the managed folder (checked on the canonical path, so a link
+/// cannot lead out of it).
+fn readable_path(app: &AppHandle, path: &str, managed: bool) -> AppResult<PathBuf> {
+    if !touchable(path) {
+        return Err(validation("Network and device paths are not opened"));
+    }
+    let p = PathBuf::from(path);
+    if managed {
+        let dir = managed_dir(app)?.canonicalize()?;
+        let canon = p.canonicalize()?;
+        if !canon.starts_with(&dir) {
+            return Err(validation("This wordlist is marked as a managed copy but is not in the managed folder"));
+        }
+        return Ok(canon);
+    }
+    Ok(p)
+}
+
 fn count_lines(path: &Path) -> Option<i64> {
     let meta = std::fs::metadata(path).ok()?;
     if meta.len() > MAX_COUNT_BYTES {
         return None;
     }
-    let mut reader = BufReader::with_capacity(1 << 20, File::open(path).ok()?);
+    let mut reader = BufReader::with_capacity(1 << 20, crate::util::open_regular(path).ok()?);
     let mut buf = vec![0u8; 1 << 20];
     let mut count = 0i64;
     let mut last = b'\n';
@@ -126,7 +151,7 @@ pub async fn wordlists_list(db: State<'_, Db>) -> AppResult<Vec<Wordlist>> {
                 Ok(Wordlist {
                     id: r.get(0)?,
                     name: r.get(1)?,
-                    exists: Path::new(&path).is_file(),
+                    exists: touchable(&path) && Path::new(&path).is_file(),
                     path,
                     category: r.get(3)?,
                     size_bytes: r.get(4)?,
@@ -339,20 +364,18 @@ pub struct WordlistPreview {
 
 /// Preview lines (optionally filtered by a substring). Reads at most 64 MB.
 #[tauri::command]
-pub async fn wordlist_preview(db: State<'_, Db>, id: i64, filter: Option<String>, limit: Option<usize>) -> AppResult<WordlistPreview> {
-    let path: String = db.with(|c| {
-        c.query_row("SELECT path FROM wordlists WHERE id=?1", params![id], |r| r.get(0))
+pub async fn wordlist_preview(app: AppHandle, db: State<'_, Db>, id: i64, filter: Option<String>, limit: Option<usize>) -> AppResult<WordlistPreview> {
+    let (path, managed): (String, bool) = db.with(|c| {
+        c.query_row("SELECT path, managed FROM wordlists WHERE id=?1", params![id], |r| Ok((r.get(0)?, r.get::<_, i64>(1)? != 0)))
             .optional()?
             .ok_or_else(|| AppError::NotFound(format!("wordlist {id}")))
     })?;
+    let path = readable_path(&app, &path, managed)?;
     let limit = limit.unwrap_or(500).clamp(1, 5000);
     let filter = filter.map(|f| f.to_lowercase()).filter(|f| !f.is_empty());
     tauri::async_runtime::spawn_blocking(move || -> AppResult<WordlistPreview> {
-        let file = File::open(&path)?;
         // the indexed path may have been replaced by a pipe or device since: never block on it
-        if !file.metadata()?.is_file() {
-            return Err(validation("The wordlist is no longer a regular file"));
-        }
+        let file = crate::util::open_regular(&path).map_err(|_| validation("The wordlist is no longer a regular file"))?;
         let reader = BufReader::new(file.take(64 * 1024 * 1024));
         let mut lines = Vec::new();
         let mut scanned = 0i64;
@@ -380,12 +403,12 @@ pub async fn wordlist_preview(db: State<'_, Db>, id: i64, filter: Option<String>
 /// Returns the number of bytes written, or None when the dialog was cancelled.
 #[tauri::command]
 pub async fn wordlist_export(app: AppHandle, db: State<'_, Db>, id: i64) -> AppResult<Option<u64>> {
-    let (path, name): (String, String) = db.with(|c| {
-        c.query_row("SELECT path, name FROM wordlists WHERE id=?1", params![id], |r| Ok((r.get(0)?, r.get(1)?)))
+    let (path, name, managed): (String, String, bool) = db.with(|c| {
+        c.query_row("SELECT path, name, managed FROM wordlists WHERE id=?1", params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? != 0)))
             .optional()?
             .ok_or_else(|| AppError::NotFound(format!("wordlist {id}")))
     })?;
-    let src = PathBuf::from(&path);
+    let src = readable_path(&app, &path, managed)?;
     if !src.is_file() {
         return Err(validation(format!("{} no longer exists", src.display())));
     }
@@ -407,4 +430,16 @@ pub async fn wordlist_export(app: AppHandle, db: State<'_, Db>, id: i64) -> AppR
 #[tauri::command]
 pub async fn wordlists_dir(app: AppHandle) -> AppResult<String> {
     Ok(managed_dir(&app)?.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod path_tests {
+    /// Mission 7: on Windows, a wordlist's network or device path is never touched, not even to
+    /// check that it exists.
+    #[test]
+    fn network_paths_are_never_touched_on_windows() {
+        assert!(super::touchable("/usr/share/wordlists/rockyou.txt") && super::touchable(r"C:\lists\a.txt"));
+        assert_eq!(super::touchable(r"\\203.0.113.5\share\a.txt"), !cfg!(windows));
+        assert_eq!(super::touchable("//203.0.113.5/share/a.txt"), !cfg!(windows));
+    }
 }

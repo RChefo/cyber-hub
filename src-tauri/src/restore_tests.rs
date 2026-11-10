@@ -287,3 +287,24 @@ fn a_database_still_in_use_postpones_the_restore() {
     assert!(outcome.ok && outcome.error.is_none(), "{outcome:?}");
     assert_eq!(project_names(&dir.join(DB_NAME)), ["Old"]);
 }
+
+/// Mission 7: a restored database cannot make Cyber Hub read files the analyst never chose on this
+/// computer: wordlists indexed by reference and the extra wordlist folder are dropped; managed copies
+/// stay (they are checked to be inside the managed folder whenever they are read).
+#[test]
+fn restored_wordlist_paths_are_not_trusted() {
+    let db = crate::db::Db::open_in_memory().unwrap();
+    db.with(|c| {
+        for (name, path, managed) in [("keys", "/home/u/.ssh/id_rsa", 0), ("share", r"\\203.0.113.5\x\list.txt", 0), ("copy", "/data/wordlists/rockyou.txt", 1)] {
+            c.execute("INSERT INTO wordlists (name, path, category, size_bytes, line_count, managed, added_at, modified_at) VALUES (?1, ?2, '', 1, 1, ?3, 't', 't')", rusqlite::params![name, path, managed])?;
+        }
+        c.execute("INSERT INTO user_preferences (key, value, updated_at) VALUES ('wordlists.directory', '\"/home/u/.ssh\"', 't')", [])?;
+        assert_eq!(crate::restore::untrust_paths(c)?, 2);
+        let left: Vec<String> = c.prepare("SELECT name FROM wordlists")?.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
+        assert_eq!(left, vec!["copy".to_string()]);
+        let pref: i64 = c.query_row("SELECT COUNT(*) FROM user_preferences WHERE key = 'wordlists.directory'", [], |r| r.get(0))?;
+        assert_eq!(pref, 0);
+        Ok(())
+    })
+    .unwrap();
+}

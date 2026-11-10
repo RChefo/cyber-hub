@@ -292,6 +292,8 @@ export interface RestoreOutcome {
   evidenceRestored: number;
   /** the restored database had the MCP bridge on; it was turned off */
   mcpTurnedOff: boolean;
+  /** wordlists indexed by reference in the restored database, dropped with its extra wordlist folder (Mission 7) */
+  wordlistsDropped: number;
   /** the backup waits for the next start (the database was still in use) */
   retry: boolean;
   error: string | null;

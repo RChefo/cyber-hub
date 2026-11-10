@@ -183,7 +183,7 @@ pub async fn sbom_import(app: AppHandle, project_id: i64) -> AppResult<Option<Sb
         if meta.len() as usize > sbom::MAX_FILE_BYTES {
             return Err(validation(format!("The file is larger than {} MB", sbom::MAX_FILE_BYTES / 1024 / 1024)));
         }
-        let bytes = std::fs::read(&path)?;
+        let bytes = crate::util::read_regular(&path, sbom::MAX_FILE_BYTES as u64)?;
         if bytes.len() > sbom::MAX_FILE_BYTES {
             return Err(validation("The file grew while it was read"));
         }

@@ -132,11 +132,21 @@ pub fn run() {
                 s.outcome_mut().mcp_turned_off = database
                     .with(|c| Ok(c.execute("UPDATE user_preferences SET value = 'false' WHERE key = ?1 AND value = 'true'", [mcp::ops::ENABLED_PREF])?))
                     .is_ok_and(|n| n > 0);
+                // nor makes Cyber Hub read files the analyst never chose on this computer
+                s.outcome_mut().wordlists_dropped = database.with(|c| Ok(restore::untrust_paths(c)?)).unwrap_or(0);
                 restore::finish(&dir, s)
             });
             if let Some(o) = &restored {
                 let (title, detail) = match (&o.error, o.ok) {
-                    (None, _) => ("Database restored", format!("{}; the previous database is kept in {}", o.source, o.kept_in.as_deref().unwrap_or("backups"))),
+                    (None, _) => (
+                        "Database restored",
+                        format!(
+                            "{}; the previous database is kept in {}{}",
+                            o.source,
+                            o.kept_in.as_deref().unwrap_or("backups"),
+                            if o.wordlists_dropped > 0 { format!("; {} wordlists indexed by reference were removed with the extra wordlist folder", o.wordlists_dropped) } else { String::new() }
+                        ),
+                    ),
                     (Some(e), true) => ("Database restored with a warning", e.clone()),
                     (Some(e), false) => (if o.retry { "Database restore postponed" } else { "Database restore failed" }, e.clone()),
                 };

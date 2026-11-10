@@ -393,7 +393,7 @@ pub async fn scan_import_pick(app: AppHandle, project_id: i64, options: Option<I
         if meta.len() as usize > scan_import::MAX_FILE_BYTES {
             return Err(crate::error::validation(format!("The file is larger than {} MB", scan_import::MAX_FILE_BYTES / 1024 / 1024)));
         }
-        let bytes = std::fs::read(&path)?;
+        let bytes = crate::util::read_regular(&path, scan_import::MAX_FILE_BYTES as u64)?;
         if bytes.len() > scan_import::MAX_FILE_BYTES {
             return Err(crate::error::validation("The file grew while it was read"));
         }
@@ -554,7 +554,8 @@ pub async fn finding_templates_import(app: AppHandle) -> AppResult<Option<Librar
     if meta.len() as usize > templates::MAX_LIBRARY_FILE {
         return Err(crate::error::validation("The library file is larger than 5 MB"));
     }
-    let text = std::fs::read_to_string(&path).map_err(|_| crate::error::validation("The file is not UTF-8 text"))?;
+    let bytes = crate::util::read_regular(&path, templates::MAX_LIBRARY_FILE as u64)?;
+    let text = String::from_utf8(bytes).map_err(|_| crate::error::validation("The file is not UTF-8 text"))?;
     Ok(Some(app.state::<Db>().with(|c| templates::import_json(c, &text))?))
 }
 

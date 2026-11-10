@@ -151,7 +151,8 @@ pub fn scan_path(root: &Path) -> ScanResult {
             res.files_skipped += 1;
             continue;
         }
-        let Ok(bytes) = std::fs::read(&p) else {
+        // a pipe or device in the tree is skipped, never read (Mission 7)
+        let Ok(bytes) = crate::util::read_regular(&p, MAX_FILE_BYTES) else {
             res.files_skipped += 1;
             continue;
         };

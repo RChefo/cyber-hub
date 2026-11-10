@@ -365,7 +365,7 @@ fn open_limited(path: &std::path::Path, max: u64) -> AppResult<std::io::BufReade
     if meta.len() > max {
         return Err(validation(format!("The file is larger than {} MB", max / 1024 / 1024)));
     }
-    Ok(std::io::BufReader::with_capacity(1 << 20, std::fs::File::open(path)?))
+    Ok(std::io::BufReader::with_capacity(1 << 20, crate::util::open_regular(path)?))
 }
 
 #[derive(Debug, Serialize)]
@@ -421,7 +421,7 @@ pub async fn log_analyze_pick(app: AppHandle) -> AppResult<Option<LogScan>> {
     let (report, sha) = tauri::async_runtime::spawn_blocking(move || -> AppResult<(logs::Report, Option<String>)> {
         // a Windows event log is recognised by its signature, whatever its name
         let mut magic = [0u8; 8];
-        let evtx = std::io::Read::read_exact(&mut std::fs::File::open(&read)?, &mut magic).is_ok() && &magic == b"ElfFile\0";
+        let evtx = std::io::Read::read_exact(&mut crate::util::open_regular(&read)?, &mut magic).is_ok() && &magic == b"ElfFile\0";
         let report = if evtx {
             crate::sectools::winevents::analyze(open_limited(&read, logs::MAX_FILE_BYTES)?).map_err(AppError::Validation)?
         } else {

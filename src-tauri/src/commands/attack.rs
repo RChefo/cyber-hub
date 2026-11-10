@@ -103,7 +103,7 @@ pub async fn attack_layer_import(app: AppHandle, project_id: i64) -> AppResult<O
         if std::fs::metadata(&path)?.len() > matrix::MAX_LAYER_BYTES as u64 {
             return Err(validation("The layer is larger than 10 MB"));
         }
-        let bytes = std::fs::read(&path)?;
+        let bytes = crate::util::read_regular(&path, matrix::MAX_LAYER_BYTES as u64)?;
         let parsed = matrix::parse_layer(&bytes).map_err(validation)?;
         let sha: String = Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect();
         let file_name = evidence::display_name(&path.to_string_lossy());

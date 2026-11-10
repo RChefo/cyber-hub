@@ -203,7 +203,7 @@ fn read_limited(p: &Path, max: u64) -> AppResult<String> {
         return Err(validation(format!("The file is larger than {} KB", max / 1024)));
     }
     let mut s = String::new();
-    std::fs::File::open(p)?.take(max).read_to_string(&mut s).map_err(|_| validation("The file is not UTF-8 text"))?;
+    crate::util::open_regular(p)?.take(max).read_to_string(&mut s).map_err(|_| validation("The file is not UTF-8 text"))?;
     Ok(match s.strip_prefix('\u{feff}') {
         Some(rest) => rest.to_string(),
         None => s,
@@ -217,7 +217,7 @@ fn read_bytes(p: &Path, max: u64) -> AppResult<Vec<u8>> {
         return Err(validation(format!("YARA rules scan files of at most {} MB", max / 1024 / 1024)));
     }
     let mut data = Vec::with_capacity(meta.len() as usize);
-    std::fs::File::open(p)?.take(max + 1).read_to_end(&mut data)?;
+    crate::util::open_regular(p)?.take(max + 1).read_to_end(&mut data)?;
     if data.len() as u64 > max {
         return Err(validation("The file grew past the size limit while it was read"));
     }
@@ -321,7 +321,7 @@ fn store_sample(dir: &Path, src: &Path) -> AppResult<(String, u64)> {
     let _ = getrandom::fill(&mut nonce);
     let tmp = dir.join(format!("incoming-{}", nonce.iter().map(|b| format!("{b:02x}")).collect::<String>()));
     let copied = (|| -> AppResult<(String, u64)> {
-        let mut input = std::fs::File::open(src)?;
+        let mut input = crate::util::open_regular(src)?;
         let mut out = std::fs::File::create(&tmp)?;
         let mut hasher = Sha256::new();
         let mut buf = vec![0u8; 256 * 1024];
@@ -358,7 +358,7 @@ fn store_sample(dir: &Path, src: &Path) -> AppResult<(String, u64)> {
 }
 
 fn read_sample(path: &Path) -> AppResult<Sample> {
-    events::read(std::io::BufReader::with_capacity(1 << 20, std::fs::File::open(path)?)).map_err(validation)
+    events::read(std::io::BufReader::with_capacity(1 << 20, crate::util::open_regular(path)?)).map_err(validation)
 }
 
 fn kind_name(k: events::Kind) -> &'static str {

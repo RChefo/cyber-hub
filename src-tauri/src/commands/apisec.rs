@@ -199,7 +199,7 @@ pub async fn api_spec_import(app: AppHandle, project_id: i64) -> AppResult<Optio
         if meta.len() as usize > apisec::MAX_FILE_BYTES {
             return Err(validation(format!("The file is larger than {} MB", apisec::MAX_FILE_BYTES / 1024 / 1024)));
         }
-        let bytes = std::fs::read(&path)?;
+        let bytes = crate::util::read_regular(&path, apisec::MAX_FILE_BYTES as u64)?;
         if bytes.len() > apisec::MAX_FILE_BYTES {
             return Err(validation("The file grew while it was read"));
         }

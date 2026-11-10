@@ -82,9 +82,23 @@ pub struct Outcome {
     pub evidence_restored: usize,
     /// the MCP bridge was on in the restored database and was turned off
     pub mcp_turned_off: bool,
+    /// wordlists indexed by reference in the restored database, dropped with its extra wordlist
+    /// folder: their paths were picked on the computer the backup came from (Mission 7)
+    pub wordlists_dropped: usize,
     /// the staged copy waits for the next start
     pub retry: bool,
     pub error: Option<String>,
+}
+
+/// Paths that a restored database names but the analyst never chose on this computer (Mission 7):
+/// wordlists indexed by reference, and the extra wordlist folder. They are dropped, because
+/// Cyber Hub would read those files (a wordlist preview shows its lines) or, on Windows, touch a
+/// network path with the user's credentials. Copies in the managed folder stay; they are checked
+/// to be inside it whenever they are read. Returns the number of wordlists dropped.
+pub fn untrust_paths(c: &rusqlite::Connection) -> rusqlite::Result<usize> {
+    let dropped = c.execute("DELETE FROM wordlists WHERE managed = 0", [])?;
+    c.execute("DELETE FROM user_preferences WHERE key = 'wordlists.directory'", [])?;
+    Ok(dropped)
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]

@@ -24,7 +24,7 @@ describe("restore summary", () => {
 });
 
 describe("restore notice", () => {
-  const ok: RestoreOutcome = { ok: true, source: "b.db", keptIn: "backups/before-restore-20261109T070000Z", evidenceKept: 0, evidenceRestored: 0, mcpTurnedOff: false, retry: false, error: null };
+  const ok: RestoreOutcome = { ok: true, source: "b.db", keptIn: "backups/before-restore-20261109T070000Z", evidenceKept: 0, evidenceRestored: 0, mcpTurnedOff: false, wordlistsDropped: 0, retry: false, error: null };
   it("says where the previous database is", () => {
     expect(restoreNotice(ok)).toEqual({ tone: "success", title: "Database restored", description: "b.db is now in use. The previous database is kept in backups/before-restore-20261109T070000Z." });
     expect(restoreNotice({ ...ok, evidenceKept: 2, evidenceRestored: 1 }).description).toBe(
@@ -38,5 +38,8 @@ describe("restore notice", () => {
   });
   it("says when the MCP bridge was turned off", () => {
     expect(restoreNotice({ ...ok, mcpTurnedOff: true }).description).toContain("The MCP bridge was turned off");
+    // Mission 7: wordlists the restored database names by reference are dropped, and the notice says so
+    expect(restoreNotice({ ...ok, wordlistsDropped: 2 }).description).toContain("2 wordlists indexed by reference were removed");
+    expect(restoreNotice(ok).description).not.toContain("wordlist");
   });
 });

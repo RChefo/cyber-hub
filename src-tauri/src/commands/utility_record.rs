@@ -83,7 +83,7 @@ pub fn file_sha256(path: &Path) -> AppResult<Option<String>> {
     if std::fs::metadata(path)?.len() > evidence::MAX_FILE {
         return Ok(None);
     }
-    let mut f = std::fs::File::open(path)?;
+    let mut f = crate::util::open_regular(path)?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 256 * 1024];
     let mut size = 0u64;
