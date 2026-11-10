@@ -1399,3 +1399,319 @@ Schema 32. Opening an existing database upgrades it through 30–32, and a backu
   * full desktop sessions on real hardware;
   * the Windows credential dialog with a person typing.
 * **Conclusion:** the code is ready for the owner to run CI on GitHub and to authorize a signed release-candidate build. **It is not release-ready** until that build passes the installer, upgrade and manual checks above.
+
+## Mission 7: final hardening and release preparation (2026-11-10/11)
+
+**Started** at `09c43a0` (2026-11-10T18:40Z), schema 32, clean tree. **Ended** at the commit that adds this report, on top of `d21c76e`. 34 commits, all on `release/v0.1.0` and none pushed. No installer, package or release binary was built, and the real database was never opened.
+
+**Verdict.** Engineering is in good shape:
+
+* every automated check passes on Windows 11, Ubuntu 24.04 and Debian 12;
+* every finding of a full security review is fixed with a test, or recorded as an accepted risk;
+* the measured performance problem is fixed.
+
+**The product is not release-ready.** Ten manual or owner items remain, and eight of them block the release, three of those only on Linux (section 13). The automated tests passing does not change that.
+
+### 1. Starting and ending hashes
+
+* Start: `09c43a0` (Mission 6's report).
+* Last code commit: `d21c76e`. The report commit only adds documentation.
+
+### 2. Fixes, with their commits
+
+| Commit | Change |
+|---|---|
+| `e9b5da1` | Window sized to the monitor's work area; minimum 800 × 480 (was 1100 × 700); compact sidebar below 1024 px |
+| `bac82fe` | Restore: only SQLite's own schema objects are exempt from the comparison (High) |
+| `a1c4ba9` | Native confirmations: Cancel by default, approve disabled for 1 s, one at a time (High) |
+| `ab337f9` | Internal addresses in a scope, and removed exclusions, confirmed natively; local-use NAT64 is internal (High) |
+| `5185c4a` | TAXII credentials bound to origin, authentication and header; collections only on the server's origin |
+| `5bc31b0` | Argument validation repeats no file content; network paths refused on Windows; terminal without a directory |
+| `98b4fbc` | Project and evidence deletion, clearing the activity log, MCP audit log and run history: native confirmation |
+| `d3e8391` | Arguments and dialog text cannot hide characters; MCP client names cleaned |
+| `488b075` | Markdown reports escaped by CommonMark's rules, checked with a CommonMark parser |
+| `4ccc8f6` | Copied commands quoted for POSIX shells and PowerShell |
+| `68be193` | MCP redaction masks values whose names mark them as credentials |
+| `bd84971` | Request builder: credential headers stay with their origin, routing headers checked; OSINT client without proxy; probe port |
+| `304c00d` | OSINT SVG exports checked for active content |
+| `96f28d7` | Only regular files are read; restored wordlist paths dropped |
+| `f19f258` | MCP: web fingerprint needs approval; no client contacts; attached option files; cancellations per connection |
+| `88cf533` | Two accepted risks recorded |
+| `4ac9eba` | TAXII: one synchronization per collection, visible after leaving the page; truthful toasts |
+| `47d7a95` | Toast tones follow outcomes; declined dialogs are information |
+| `a18c157` | ATT&CK: per-matrix counts (#62), state words in cells |
+| `b135d5b` | One record bar for a log's detections and chains (#63) |
+| `b43d3ee` | Saved indicators: search, stepped list |
+| `2b8ce1a` | Focus moves to the page on navigation; skip link; Retry on a failed page |
+| `ab17d66` | Readable network errors; NVD cache fallback on every network error |
+| `c090836` | Markdown export with the Report tab's options |
+| `dd6ca10` | Finding links and history show errors; evidence hashes can be copied |
+| `8ca17b9` | Synthetic approve clicks during the delay are refused (found in live testing) |
+| `74127e1` | Release workflow builds and signs only in a manual run; no expressions in run scripts |
+| `1e5d4dd` | Windows TAXII credential test procedure and its local test server |
+| `12108f6` | A start that fails says why in a native message box |
+| `67d14b4` | Two made-up fixture values marked for the secret scan |
+| `6f190d1` | Saved indicators sent one page at a time (28.7 MB → 29 KB per refresh at 100,000) |
+| `0dd3dc0` | Test-only pulldown-cmark 0.13.4 → 0.13.6 (two advisories) |
+| `d21c76e` | TAXII credentials stored and deleted one change at a time: a removal right after the dialog's Store no longer leaves the credential behind (found while investigating a Debian test failure) |
+
+### 3. Remaining security risks
+
+* **Accepted risks** in SECURITY.md, including the two added now:
+  * GUI tools, a terminal and version probes start without a native dialog, though nothing can be passed to them;
+  * a compromised page can reactivate a completed project, whose scope was authorized when it was added.
+* **Copied commands in PowerShell.** A word with a quote character arrives split, and Windows PowerShell 5.1 may split an argument that contains a double quote. Pasting never runs another command; this was checked with PowerShell's own parser.
+* **The release workflow has never run on GitHub,** and signing is not set up.
+* **Two features are not exercised in a real environment:** the Windows credential dialog (manual) and Linux desktop portals.
+
+### 4. High-DPI results
+
+| Check | Where | Result |
+|---|---|---|
+| Every page, every project tab and the finding form at 100/125/150/200 % and 800 × 480: no overflow, nothing unreachable | Windows, DevTools device emulation (`scripts/qa/layout-probe.mjs`) | PASS (emulated) |
+| First window: 1354 × 900, centred in a 1440 × 2512 work area | Windows, real window | PASS |
+| `GDK_SCALE=2`, 1920 × 1080 screen: device scale 2, 960 × 540 logical, maximized, minimum 1600 × 960 device pixels, dialog fits, text 14 px | Ubuntu 24.04, Debian 12 (Xvfb) | PASS (virtual) |
+| Minimum 800 × 480 enforced; at 800 × 480 Dashboard, Projects, Threat Intel and Settings fit with the 60 px sidebar | Ubuntu, Debian (Openbox) | PASS (virtual) |
+| A physical HiDPI screen | none | NOT TESTED (checklist M4) |
+
+Only emulated and virtual scaling was tested. No physical high-DPI validation is claimed.
+
+### 5. GNOME and KDE results
+
+* **Compositors in containers:**
+  * Mutter (GNOME) Wayland: 5/5.
+  * KWin (KDE) Wayland: 5/5.
+  * KWin with XWayland: 7/7, including the GTK credential dialog and file chooser.
+* **The Mission 6 KWin XWayland crash** is Xwayland's glamor (GPU) path crashing on KWin's GPU-less virtual output: a segmentation fault before any client connected, even `xdpyinfo`. That is the environment, not Cyber Hub. With `XWAYLAND_NO_GLAMOR=1` everything works.
+* **Not tested:** full GNOME Shell and Plasma sessions, desktop portals, a keyring unlocked by the login, a GPU (checklist M2, M3, M6, M7).
+
+### 6. TAXII credential dialog
+
+* **Linux, automated, on both distributions:**
+  * the GTK dialog: store, rotate, cancel by Escape and by the window manager, forget, deletion on origin, authentication and header changes, an API key in its header;
+  * the keyring entry `taxii_<n>_<fingerprint>`;
+  * no copy of any test value in the data folder, logs, caches, reports, diagnostics or the page.
+* **A race found and fixed:** removing a server right after the dialog's Store could leave the new credential in the Secret Service (section 8, `d21c76e`). After the fix, removals swept from 10 to 405 ms after Store left nothing behind: 0 of 17 on each distribution.
+* **Windows:** typing into CredUI cannot be automated (UIPI). The procedure (`docs/release/TAXII_CREDENTIAL_TEST.md`) and its test server are ready; the test has not been performed (checklist M1, blocks).
+
+### 7. Usability findings and fixes
+
+The review reported 15 findings, and the two deferred items from Mission 6 were added to them.
+
+* **Done:**
+  * #62, #63;
+  * saved indicators at scale;
+  * toast tones;
+  * focus on navigation and a skip link;
+  * ATT&CK state words;
+  * errors with Retry and the NVD cache;
+  * Markdown export options.
+* **Partly done:**
+  * a finding's links and history show errors, and evidence hashes can be copied; opening linked records is deferred;
+  * TAXII synchronization is guarded and visible after leaving the page; cancelling it is deferred.
+* **Deferred with reasons** (FEATURE_BACKLOG.md, items 68–75):
+  * back navigation;
+  * links from sightings to their sources;
+  * "Open" focusing the record;
+  * runs linked to projects;
+  * keyboard selection in the graph;
+  * tab order;
+  * global search for more records;
+  * Arabic and right-to-left (not supported: no i18n).
+
+### 8. Security review
+
+Five read-only reviews reported 30 findings, **25 distinct** once overlaps are merged. Two more were found in live testing. Every High and Medium is fixed, every Low is fixed or accepted, and each fix has a regression test. "Old code" below means the new test was run against the previous code before the fix and failed there.
+
+| Severity | Finding | Fix | Regression test (reproduction) |
+|---|---|---|---|
+| High | The native confirmation's default button was approve (keystrokes could approve) | `a1c4ba9` | Live: Cancel default and approve disabled at 5 ms on Windows; on Linux, Return cancels and an early click is ignored |
+| High | A page could add internal addresses to a scope and read them through the request builder | `ab337f9` | `non_public_coverage_is_recognized`, guard `widening_the_scope_is_confirmed_outside_the_page`; live dialog on Windows and Linux |
+| High | Restore ignored any object named `sqlite` plus one character (LIKE wildcard) | `bac82fe` | Refused cases in `restore_tests.rs` (failed on the old filter) |
+| Medium | TAXII credential sent to an old or restored API root | `5185c4a` | `a_credential_only_goes_to_the_servers_own_origin` (old code sent it), `a_credential_is_bound_to_where_and_how_it_is_sent` |
+| Medium | `exec_validate` repeated part of any file | `5bc31b0` | `target_file_errors_never_repeat_the_files_content` (old code failed) |
+| Medium | UNC paths make Windows authenticate to a host | `5bc31b0` | `network_paths_in_arguments_are_refused_on_windows` (old code accepted), `network_and_device_paths_are_recognized` |
+| Medium | Deletions and clearing logs had no native confirmation | `98b4fbc` | `destructive_commands_confirm_natively` (0 confirmations in the old bodies), `clearing_the_audit_log_keeps_approved_actions`; live on Windows and Linux |
+| Medium | Arguments and dialog text could hide characters | `d3e8391` | `arguments_cannot_disguise_the_confirmation`, `dialog_text_shows_hidden_characters`, `client_names_are_shown_without_hidden_characters` |
+| Medium | Project Markdown report let HTML and images through | `488b075` | `markdown_text_never_becomes_markup` with pulldown-cmark (the old code let the reviewer's payload through) |
+| Medium | OSINT Markdown fields raw | `488b075` | `imported_fields_never_become_markup` (6 markup items on the old code, 0 now) |
+| Medium | History lines unquoted (paste ran a second command) | `4ccc8f6` | `history_lines_paste_back_as_the_same_words` (old rendering: `;` outside quotes); PowerShell parser: old forms 3 statements, new 1 |
+| Medium | POSIX-only quoting in PowerShell | `4ccc8f6` | `shellQuote.test.ts`, `repeater.test.ts` |
+| Medium | Detection-hit fields bypassed MCP redaction | `68be193` | `values_named_like_credentials_are_masked` (old redactor left all values) |
+| Low | FIFOs and devices hung or exhausted scans | `96f28d7` | `pipes_and_devices_are_refused_without_blocking` (Linux), `regular_files_are_read_within_their_bound` |
+| Low | Restored wordlist paths trusted | `96f28d7` | `restored_wordlist_paths_are_not_trusted`, `network_paths_are_never_touched_on_windows` |
+| Low | Process starts without confirmation | `5bc31b0` (terminal), `88cf533` (accepted) | `the_terminal_takes_no_directory_from_the_page` |
+| Low | OSINT SVG export unchecked; references and escapes | `304c00d` | `graph_svg_exports_are_checked_for_active_content`, `only_drawings_are_saved_as_svg` |
+| Low | Credential headers across origins | `bd84971` | `credential_headers_stay_with_their_origin` (old code sent X-Api-Key) |
+| Low | Routing headers and comma Host | `bd84971` | `routing_headers_are_scope_checked` (old code accepted) |
+| Low | OSINT client used a system proxy | `bd84971` | `the_public_source_client_uses_no_proxy` |
+| Low | Local-use NAT64 judged public | `ab337f9` | `the_local_use_nat64_prefix_is_not_public` |
+| Low | Web fingerprint allowed under "External lookups" | `f19f258` | catalog test (`RunTools` for a source that contacts the target) |
+| Low | MCP `get_project` returned contacts | `f19f258` | `projects_reach_clients_without_their_contacts` |
+| Low | Attached short-option file names | `f19f258` | `attached_short_option_files_are_refused` |
+| Low | Cancellation memory global and permanent | `f19f258` | `cancellations_are_remembered_per_connection` |
+| Found live | A click message to the task dialog approved during the delay | `8ca17b9` | `an_early_click_on_approve_keeps_the_dialog_open`; live: a click at 333 ms left the dialog open |
+| Found live (Low) | Removing a TAXII server 150–200 ms after the credential dialog's Store left the new credential in the Secret Service: the removal found nothing to delete, then the write landed. Debian, 2 of 10 timed attempts. A person cannot do this through the UI; a compromised page can. The value never reaches the page and stays bound to its origin | `d21c76e` | `credential_changes_never_interleave` (fails without the fix: the removal does not wait); live, after the fix: 0 left behind in 17 removals from 10 to 405 ms after Store on each distribution, where 2 of 10 had been left before |
+
+### 9. Release workflow validation
+
+* **Static checks:**
+  * every action is pinned by commit;
+  * least privilege (`permissions: {}` at the top, `contents: read` except for publishing);
+  * secrets only in the protected `release` environment;
+  * no `pull_request` trigger;
+  * no caches;
+  * since `74127e1`, build and sign only in a manual run with `RELEASE_PUBLISHING` enabled (a tag push validates only);
+  * no expression inside a run script.
+
+  `ci_tests.rs` checks all of it (2 tests, pass).
+* **Not run:**
+  * actionlint locally: the container was not allowed in this session; CI runs it on every push;
+  * zizmor: not installed;
+  * the workflows on GitHub: no push, as the brief requires (checklist M8).
+
+### 10. Regression
+
+Windows commands:
+
+```
+npx tsc -b --noEmit · npx vitest run · cargo clippy --offline --all-targets -- -D warnings
+cargo test --offline · cargo audit · npm audit
+```
+
+| Environment | Commit | tsc | vitest | clippy | cargo test | ignored | audits |
+|---|---|---|---|---|---|---|---|
+| Windows 11 Pro 10.0.26200, rustc 1.94.1, Node 24.19.0 | `d21c76e` | OK | 299 in 55 files | OK | 633 passed | 28 | cargo audit 0 (652 crates, 8 allowed warnings); npm audit 0 |
+| Ubuntu 24.04.5, rustc 1.99.1, Node 22.12.0, WebKitGTK 2.52.6 (container) | `d21c76e` | OK | 55 files | OK | 632 passed | 28 | npm audit 0 |
+| Debian 12, rustc 1.99.1, Node 22.12.0, WebKitGTK 2.50.6 (container) | `d21c76e` | OK | 55 files | OK | 632 passed | 28 | npm audit 0 |
+
+* **The same regression ran at `0dd3dc0`, before the fix.** Everything passed on Windows (632 Rust tests) and Ubuntu (631). Debian passed everything except one TAXII check (explained below).
+* **Linux commands** (`scratchpad/linuxgui/suites5.sh`, `msrv.sh`): `npx tsc -b --noEmit`, `npx vitest run`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked --no-fail-fast`, `npm audit`.
+* **MSRV 1.90.0:** passed on Ubuntu and Debian at `d21c76e` (`cargo +1.90.0 check --locked --all-targets`).
+* **The 28 ignored tests:**
+  * 10 timing and volume tests (7 in `perf_tests.rs`, import limits, correlation at scale, volume);
+  * 10 amplification tests;
+  * 8 that need samples or reference data kept outside the repository: EVTX samples and folders (5), an OCSF folder, CVSS reference output, a YARA corpus.
+
+  The 20 timing, volume and amplification tests were run in an optimized build on Windows: 20/20 pass (section 11).
+* **The Windows-only and Unix-only tests** account for 633 against 632.
+* **Malformed input** is part of the default suites above, which pass on all three systems:
+  * `hostile_tests.rs`: import, detection, capture and log, infrastructure, and command-line and protocol parsers;
+  * expansion bombs and deep nesting (`yaml.rs`), crafted PCAP frames, truncated XML, hostile API specifications.
+
+  The 10 amplification tests run in the optimized build (section 11).
+* **GUI, Linux, at `d21c76e`** (the real app; no network):
+
+  | Phase | Ubuntu | Debian |
+  |---|---|---|
+  | Mission 7 dialogs | 7/7 | 7/7 |
+  | Minimum window | 3/3 | 3/3 |
+  | HiDPI | 5/5 | 5/5 |
+  | Start with a newer database | PASS | PASS |
+  | Mission 6 TAXII (with the leak check) | 16/16 | 16/16 |
+  | Mission 6 main | 11/11 | 11/11 |
+  | Segment 3 (scope, imports, findings, workflows, MCP, backup, restore and restart, SIGKILL recovery) | 63/63, 6/6, 3/3 | 63/63, 6/6, 3/3 |
+  | Compositors (KWin with XWayland, Mutter, KWin) | 7/7, 5/5, 5/5 | (not run) |
+  | A server removed 10–405 ms after the credential dialog's Store (17 times) | none left behind | none left behind |
+
+* **Failures that came from the QA scripts, not the product.** They were investigated and fixed in the scripts, which live outside the repository:
+  * the Mission 6 scripts clicked "Mobile" and "ICS" by their exact text, and #62 added counts to those labels. The scripts now accept a label that contains the word. Ubuntu's first Mission 7 run failed there; the Windows script was changed before its run;
+  * the TAXII and desktop phases looked up the old keyring entry `taxii_<id>`. They now search by prefix, because `5185c4a` binds the entry name to the server;
+  * Debian's final run at `0dd3dc0` failed one TAXII check, "server and credential gone": nothing was stored before the removal, and its confirmation did not mention a credential. Ubuntu passed the same check, and an instrumented rerun on Debian passed it too. The cause was measured, not guessed:
+    * on Debian the keyring write ends 340–398 ms after Return and the page shows it 418–483 ms after;
+    * the step looked at about 540 ms without waiting for either, and its wait matched "No credential stored yet" at once;
+    * its button helper also ignored a missing button.
+
+    The step now waits for the stored state, and a missing button is an error. The investigation also found a product race, fixed in `d21c76e` (section 8).
+
+* **GUI, Windows** (isolated debug app):
+  * every new native dialog through Win32 (Cancel, approve after the delay, an early click ignored);
+  * the Scope tab's decline shown as information;
+  * the Report tab's Markdown buttons;
+  * the matrix counts;
+  * focus on navigation;
+  * the saved-indicator list at 100,000;
+  * the newer-schema message box;
+  * the Mission 6 end-to-end script on a new data folder, 23/23 at `0dd3dc0` and again at `d21c76e`: a WSTG exception, process chains and logons from EVTX files chosen in the native Open dialog, the ATT&CK Mobile and ICS matrices with a layer saved through the native Save dialog, a Prowler import, no page errors;
+  * at `d21c76e`, the TAXII commands through IPC: a server created, moved to another origin and kind of authentication, then removed while another call listed the servers, with no stall (29 ms in all).
+* **MCP:**
+  * the MCP tests (55 in the `mcp` modules) are part of the suites above and pass on the three systems;
+  * in the real app, segment 3's MCP checks pass on both distributions: tools listed, a CVSS score, path-level validation, refusals before approval, a duplicate-finding warning, an archived project refused, an approved write read back.
+
+### 11. Performance and stability
+
+These were measured, and code was changed only where a measurement showed a cost.
+
+* **Optimized test build on Windows: 20/20 within budget.** Examples:
+  * Sigma: 50 rules × 100,000 events in 5.2 s;
+  * correlation: 500,000 events in 245 ms;
+  * a 1,000,000-line auth log in 2.3 s;
+  * PCAP: 200,000 packets in 210 ms;
+  * SBOM: 20,000 components in 127 ms;
+  * 50,000 findings: listed in 144 ms, Markdown report in 428 ms;
+  * the largest scan files: 42 MB Nessus parsed in 557 ms and committed in 1.9 s;
+  * YARA: 64 MB in 25 ms.
+* **Saved indicators at 100,000:** 1.7 s and 28.7 MB of JSON per refresh, measured live. Fixed in `6f190d1`: 63 ms and 29 KB, and 152–241 ms for a search.
+* **Repeated cancellation:**
+  * 25 sequential start-and-cancel cycles of a workflow: all cancelled, 262–280 ms each;
+  * 5 concurrent runs cancelled together: all cancelled;
+  * afterwards the app answered in 3 ms; memory 52.3 → 52.8 MB.
+* **Shutdown during work:**
+  * a graceful close during a run: the process ended within 20 s with nothing left, and the run was marked failed (interrupted) at the next start;
+  * SIGKILL during a run (Linux, segment 3): marked interrupted, database intact.
+* No leaks, queues or freezes were observed in these runs.
+
+### 12. Migration and restore
+
+* **Every earlier schema** upgrades to 32 with all rows and a usable backup taken first: `every_schema_version_upgrades_to_the_latest_with_all_its_rows_and_a_usable_backup`.
+* **Failed and interrupted upgrades:**
+  * `a_failed_upgrade_leaves_the_previous_database_untouched_and_can_be_retried`;
+  * `an_interrupted_rebuild_is_rolled_back_at_the_next_open`;
+  * `upgrade_child_process` (a killed upgrade).
+* **A newer database is refused** and left unchanged, and since `12108f6` a release build says so in a native message box with the data folder. Previously it closed silently. Live on Windows, and in the GTK build on Ubuntu and Debian.
+* **Restore keeps IDs, relationships and evidence** (`restore_tests.rs`; the GUI cycle on both distributions). The schema check is now exact (`bac82fe`), and restored wordlist paths are dropped (`96f28d7`).
+* No migration was added in this mission (schema 32).
+
+### 13. Manual release checklist and exact blockers
+
+See `docs/release/RELEASE_READINESS.md`. Its status column is empty because none of these items was performed.
+
+| # | Item | Blocks |
+|---|---|---|
+| M1 | Windows TAXII credential dialog (procedure written) | **Yes** |
+| M2 | Full GNOME Shell session | **Yes** for Linux |
+| M3 | Full KDE Plasma session | **Yes** for Linux |
+| M4 | Physical HiDPI on Windows and Linux | **Yes** |
+| M5 | Minimum window on a real screen | No |
+| M6 | Desktop portals | No, unless sandboxed packaging |
+| M7 | A real login keyring (GNOME Keyring, KWallet) | **Yes** for Linux |
+| M8 | First GitHub Actions run | **Yes** (needs the owner's push) |
+| M9 | Code signing | **Yes** (owner's keys) |
+| M10 | Installers: install, upgrade a copy of a real database, uninstall | **Yes** (final stage, with authorization) |
+
+### 14. Dependency audit and secret scan
+
+* **cargo audit 0.22.2** on 652 crates:
+  * 0 vulnerabilities after updating the test-only pulldown-cmark (RUSTSEC-2026-0414, -0433; wiki-links, not enabled by the tests);
+  * 8 allowed warnings: unmaintained `proc-macro-error`, `zbus_names`, `zvariant` and `zvariant_derive`, and the unsound `glib` 0.18.5, all transitive through Tauri, GTK or D-Bus.
+* **npm audit:** 0 on Windows and Linux.
+* **gitleaks 8.30.1:** two made-up fixture values were marked (`67d14b4`). After that, no leaks in the whole history: 180 commits at `67d14b4`, 182 at `0dd3dc0` and 183 at `d21c76e`. The documents this report commit adds were also scanned, with no leaks.
+
+### 15. Engineering readiness assessment
+
+| Requirement | Status |
+|---|---|
+| Automated tests, typecheck, lints on the three systems | PASS |
+| MSRV 1.90 | PASS |
+| Dependency audits and secret scan | PASS |
+| Security review fixed and regression-tested | PASS (code); accepted risks recorded |
+| Database upgrades, failures, newer databases, restore | PASS |
+| Performance and stability | PASS (measured) |
+| High-DPI and minimum window | PARTIAL (emulated and virtual only) |
+| Linux desktops | PARTIAL (compositors; no full sessions, portals or login keyring) |
+| TAXII dialog on Windows | NOT TESTED (needs a person) |
+| Release workflow | PARTIAL (static); first run BLOCKED (push) |
+| Code signing | BLOCKED (owner) |
+| Installers | BLOCKED (final stage, authorization) |
+
+The code is ready for a release-candidate build once the owner authorizes one. **The product is not ready for release:** M1–M4 and M7–M10 must pass first.

@@ -1195,3 +1195,84 @@ The owner's brief asked for research-driven new capabilities in seven tracks (we
 * Windows at `2a60d9f`: 593 Rust tests (27 ignored); clippy, also with `fuzzing`; tsc; 291 frontend tests in 53 files; cargo audit (0 vulnerabilities in 651 crates, the same 8 allowed warnings); npm audit (0).
 * gitleaks 8.30.1 found the made-up AWS key ID of the redaction test twice; the lines are marked and `.gitleaksignore` covers the commit (`b002e0e`). Then 149 commits, no leaks.
 * Linux results are in MISSION_REPORT.md, "Mission 6".
+
+## Mission 7 (2026-11-10T18:40Z): final hardening and release preparation
+
+## 18:40–19:09Z: baseline, window size and the restore schema check (`e9b5da1`, `bac82fe`)
+
+* Baseline: `release/v0.1.0` at `09c43a0`, clean tree, schema 32. The real database's modification time was checked before any work and left alone throughout.
+* Window: the minimum is now 800 × 480 logical pixels (it was 1100 × 700, larger than a 1920 × 1080 screen at 150 % or 200 %). The window opens hidden and is sized to the work area of its monitor (`window_fit.rs`), and the sidebar shows icons only below 1024 px. `scripts/qa/layout-probe.mjs` checked every page at 100–200 % by DevTools device emulation.
+* Five read-only reviews ran in parallel: IPC and file system, outbound network, rendering and exports, MCP and secrets and restore, and usability. Together they reported 30 security findings, 25 distinct once overlaps between reviews are merged (3 High, 10 Medium, 12 Low), plus 15 usability findings.
+* The first High: the restore check filtered schema objects with `NOT LIKE 'sqlite_%'`, where `_` is a wildcard, so a crafted backup could carry a trigger named `sqliteX`. The check now exempts only SQLite's own objects, by exact name.
+
+## 19:09–21:01Z: the security findings (`a1c4ba9` … `88cf533`)
+
+* High:
+  * native confirmations now default to Cancel, keep the approving button disabled for one second and show one at a time (`a1c4ba9`);
+  * widening a scope toward internal addresses, or removing an exclusion, is confirmed natively (`ab337f9`).
+* Medium:
+  * TAXII credentials are bound to their server's origin, kind of authentication and header (`5185c4a`);
+  * argument validation no longer repeats file content, and Windows network paths are refused (`5bc31b0`);
+  * irreversible deletions ask natively (`98b4fbc`);
+  * arguments and dialog text cannot hide characters (`d3e8391`);
+  * the Markdown reports are escaped by CommonMark's own rules, checked with pulldown-cmark (`488b075`);
+  * copied commands are quoted for POSIX shells and PowerShell (`4ccc8f6`);
+  * MCP redaction is key-aware (`68be193`).
+* Low:
+  * the request builder: credential headers, routing headers, proxy and port (`bd84971`);
+  * SVG exports (`304c00d`);
+  * special files and restored wordlist paths (`96f28d7`);
+  * MCP categories, contacts, attached option files and cancellation memory (`f19f258`);
+  * two accepted risks (`88cf533`).
+* Each fix has a regression test. Where the test could run against the old code, it was run there first and failed. Live checks on Windows used the isolated debug app, with the native task dialog read and pressed through Win32 (`TDM_CLICK_BUTTON`).
+
+## 21:01–21:40Z: usability, a dialog guard and the release workflow (`4ac9eba` … `8ca17b9`, `74127e1`, `1e5d4dd`)
+
+* Implemented the two items deferred from Mission 6: per-matrix counts (#62) and one record bar (#63). Also from the usability review:
+  * toast tones that follow the outcome, and declined dialogs shown as information;
+  * one TAXII synchronization per collection, visible after leaving the page;
+  * a searchable, stepped saved-indicator list;
+  * focus moves to the page on navigation, with a skip link;
+  * Retry on failed pages and NVD errors, with the local cache offered;
+  * Markdown export with the Report tab's options;
+  * error states on a finding's links and history, and a button to copy evidence hashes.
+* The live check found that a click message sent to the task dialog (`TDM_CLICK_BUTTON`) approved during the one-second delay. The callback now refuses it (`8ca17b9`); a click at 333 ms left the dialog open.
+* `release.yml` builds and signs only in a manual run (`74127e1`). The guard test now also refuses expressions inside run scripts. actionlint could not run locally (its container was not allowed in this session); CI runs it.
+* `docs/release/TAXII_CREDENTIAL_TEST.md` and `scripts/qa/taxii-mock.mjs` cover the Windows credential dialog, which needs a person (`1e5d4dd`).
+
+## 21:40–22:18Z: start errors, the secret scan, measurements and the dependency audit (`12108f6`, `67d14b4`, `6f190d1`, `0dd3dc0`)
+
+* A database from a newer version made Tauri panic in setup, and a release build closed without a word. Setup errors now end in a native message box with the reason and the data folder (`12108f6`). Windows, schema 99: the box appeared, the exit code was 1 and the file was unchanged.
+* gitleaks found two made-up values in Mission 7 test fixtures; they are marked as in earlier missions (`67d14b4`). After that: 180 commits, no leaks.
+* At 100,000 saved indicators the page received 28.7 MB of JSON per refresh, about 1.7 s live. The list now comes one page at a time: about 63 ms and 29 KB (`6f190d1`).
+* Repeated cancellation (25 sequential, 5 concurrent), a graceful close during a run, and the optimized timing and amplification tests: all within budget, memory flat.
+* cargo audit flagged the test-only pulldown-cmark 0.13.4 (two advisories in the wiki-link extension, which the tests do not enable); updated to 0.13.6 (`0dd3dc0`).
+* Linux (Ubuntu 24.04, Debian 12):
+  * the Mission 7 GUI phases (dialogs, minimum window, HiDPI at `GDK_SCALE=2`) and the Mission 6 and segment 3 regression passed;
+  * the KWin XWayland crash is Xwayland's glamor on a GPU-less virtual output, not the app; with software rendering, 7 of 7 desktop checks passed under XWayland.
+
+  Final results are in MISSION_REPORT.md, "Mission 7".
+
+## 22:14–22:42Z: final regression at `0dd3dc0`
+
+* Windows 11:
+  * tsc; vitest, 299 tests in 55 files; clippy; cargo test, 632 passed and 28 ignored; cargo audit 0 and npm audit 0;
+  * the Mission 6 end-to-end script on a new data folder: 23 of 23.
+* Ubuntu 24.04: every phase passed:
+  * the suites and MSRV 1.90;
+  * a newer database refused with the GTK message;
+  * the Mission 7 GUI phases, the Mission 6 phases and segment 3;
+  * the compositors.
+* Debian 12: the same, except one TAXII check, "server and credential gone", which found nothing stored before the removal.
+* gitleaks: 182 commits and the documentation drafts, no leaks.
+
+## 22:42–23:27Z: the Debian TAXII failure, a credential race (`d21c76e`), and the regression again
+
+* The failure was investigated, not rerun until it passed:
+  * An instrumented rerun passed. Measured from Return, the keyring write ends after 340–398 ms and the page shows it after 418–483 ms; the step looked at about 540 ms without waiting, and its wait matched "No credential stored yet" at once.
+  * The step now waits for the stored state, and its button helper fails when a button is missing.
+* **The investigation found a product race (Low).** The dialog checks the server again after the analyst answers, then writes the credential store. Removals sent 0–400 ms after Return left the new credential in the Secret Service for a server that no longer existed in 2 of 10 attempts, at 154 and 205 ms. A save that moves the server, or Forget, can do the same.
+* **The fix:** storing, saving, removing and forgetting now take one lock while they check the server and change the store (`d21c76e`). `credential_changes_never_interleave` fails without the lock and passes with it.
+* **At `d21c76e`:**
+  * Windows: 633 Rust tests pass; the Windows end-to-end script 23 of 23; the TAXII commands smoke-tested through IPC.
+  * Ubuntu and Debian: every phase passed: 632 Rust tests, MSRV 1.90, the newer-database start, the Mission 7 and Mission 6 GUI phases, segment 3, and on Ubuntu the compositors. 17 removals from 10 to 405 ms after Store left nothing behind on each.

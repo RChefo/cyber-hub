@@ -43,7 +43,7 @@ Cyber Hub is under active development. It is not released or distributed, and no
 
   Native dialogs were not driven under native Wayland, because xdotool needs X11.
 * **Mission 6, the compositors of GNOME and KDE** (Ubuntu 24.04 container with the distribution's packages, the app as a native Wayland client, software rendering): Mutter 46.2 in headless mode and KWin 5.27.11 with a virtual output, 5/5 each: rendering and navigation, Ctrl+K and Escape, the window's size, maximize and restore, the display scale, no runtime errors, and a clean quit. These are the compositors without GNOME Shell or Plasma. KWin's XWayland crashed in the container, so the app was not run through it there.
-* **Mission 6, HiDPI** (`GDK_SCALE=2`, Xvfb and Openbox): 7/7. The web view renders at a device pixel ratio of 2; a GTK credential dialog stores into GNOME Keyring and a GTK file chooser opens a file. The window's minimum size (1100 × 700 logical pixels) is larger than a 1920 × 1080 screen at 150 % or 200 % scaling, so on such a screen part of the window is off-screen.
+* **Mission 6, HiDPI** (`GDK_SCALE=2`, Xvfb and Openbox): 7/7. The web view renders at a device pixel ratio of 2; a GTK credential dialog stores into GNOME Keyring and a GTK file chooser opens a file. The window's minimum size then (1100 × 700 logical pixels) was larger than a 1920 × 1080 screen at 150 % or 200 % scaling; Mission 7 lowered it to 800 × 480 and sizes the window to the screen (see "Display scaling and window size").
 * **Mission 6 features on a virtual display**, both distributions: TAXII credentials typed into the GTK dialog (store, connection test, rotation, cancel by Escape and by the window manager, forget, deletion when the server moves or is removed) 14/14; a WSTG exception and the question before a result ends it, process chains and logons from EVTX files chosen in the GTK file chooser, the ICS matrix and a layer saved through the GTK save dialog, and cloud resources from a Prowler file, 11/11.
 * **Still untested:** full GNOME Shell and Plasma sessions, desktop portals (the app uses GTK's own dialogs), a GPU (every container rendered in software), a physical HiDPI screen, and a real login keyring.
 
@@ -165,6 +165,27 @@ sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-
 * The window is created hidden and sized for the work area of the monitor it opens on (`src-tauri/src/window_fit.rs`): the configured 1440 × 900 window when it fits, otherwise 94 % of the work area, maximized below 1024 × 640 logical pixels. The minimum is 800 × 480 logical pixels, which fits a 1920 × 1080 screen at 200 % under the Windows taskbar and the GNOME and KDE panels; a smaller screen lowers it to the screen.
 * Below 1024 logical pixels the sidebar shows icons only, whatever the collapse preference (`src/lib/viewport.ts`).
 * Checked with `scripts/qa/layout-probe.mjs` (DevTools device emulation in the Windows development build): every page, every project tab and the finding form at 1920 × 1040 (100 %), 1536 × 826 (125 %), 1280 × 688 (150 %), 960 × 516 and 960 × 496 (200 %) and 800 × 480, with no horizontal overflow and no unreachable content. This is emulated scaling; a physical HiDPI screen is on the release checklist (docs/release/).
+* On Linux, in the real WebKitGTK app on Ubuntu 24.04 and Debian 12 (virtual X screens, not physical monitors):
+  * with `GDK_SCALE=2` on a 1920 × 1080 screen, the page ran at device scale 2 (960 × 540 logical) and the window opened maximized. The minimum hint was 1600 × 960 device pixels, a dialog fitted, and text kept its 14 px;
+  * at scale 1, the window manager (Openbox) refused sizes below 800 × 480. At 800 × 480, Dashboard, Projects, Threat Intel and Settings fitted, with the 60 px sidebar.
+* Windows ignores the minimum when a program resizes the window itself (`MoveWindow`). Resizing with the mouse respects it; that was not exercised here.
+
+### Linux desktops and compositors (Mission 7)
+
+* **KWin with XWayland.** In the containers, KWin's virtual output has no GPU, and Xwayland's GPU path (glamor) crashed with a segmentation fault before any client connected, even a plain `xdpyinfo` (`kwin-xw-diag.sh`, Mission 7). This is the environment, not Cyber Hub. With `XWAYLAND_NO_GLAMOR=1` (software rendering), the X11 clients and Cyber Hub ran normally, and the desktop checks passed 7 of 7 through XWayland:
+  * pages;
+  * the command palette;
+  * maximize and restore;
+  * the GTK credential dialog storing into the Secret Service;
+  * the GTK file chooser.
+
+  Mutter and KWin as native Wayland compositors passed 5 of 5 each; native dialogs are not drivable there.
+* **What was not tested:**
+  * full GNOME Shell and Plasma sessions (panels, desktop portals, a keyring unlocked by the login);
+  * a GPU;
+  * a physical HiDPI screen.
+
+  These are on the release checklist (`docs/release/RELEASE_READINESS.md`).
 
 ### Unsupported or limited functionality
 

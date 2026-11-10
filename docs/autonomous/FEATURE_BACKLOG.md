@@ -272,3 +272,37 @@ The brief named the work itself (parser performance, WSTG exceptions, TAXII cred
 | 65 | GNOME Shell and Plasma sessions, desktop portals, a GPU, a physical HiDPI screen | Not tested: containers ran the compositors (Mutter, KWin) without the shells; needs a VM or hardware |
 | 66 | Typing into Windows' credential dialog | Manual check: the dialog runs at a higher integrity level, which blocks synthetic input (MISSION_REPORT.md, "Mission 6") |
 | 67 | A smaller minimum window size for scaled screens | Open: the minimum (1100 × 700 logical pixels) is larger than a 1920 × 1080 screen at 150 % or 200 % scaling (found in the HiDPI run). The layout below that width needs design and testing first |
+
+## Mission 7 (2026-11-10): final hardening and release preparation
+
+The brief named the work: high-DPI and the minimum window, Linux desktops, the Windows TAXII credential dialog, the two deferred usability items and a product-wide usability review, a full security review, release-workflow validation, regression, performance, upgrade safety, a manual release checklist and documentation. No new capability was ranked.
+
+### Status of earlier items
+
+| # | Item | Status |
+|---|---|---|
+| 62 | Per-matrix counts in the ATT&CK switch | **Done** (`a18c157`), with state words in the cells |
+| 63 | One "record as findings" bar for a log's detections and chains | **Done** (`b135d5b`) |
+| 65 | GNOME Shell and Plasma sessions, portals, a GPU, a physical HiDPI screen | **Partly**: KWin with XWayland now works in the containers (Xwayland's glamor crashed on the GPU-less output; software rendering works). HiDPI and the minimum window were checked on virtual screens. The full sessions, portals, a login keyring and a physical screen are on the release checklist (`docs/release/RELEASE_READINESS.md`, M2–M7) |
+| 66 | Typing into Windows' credential dialog | **Procedure written** (`docs/release/TAXII_CREDENTIAL_TEST.md`, `1e5d4dd`); needs a person (release checklist M1) |
+| 67 | A smaller minimum window size for scaled screens | **Done** (`e9b5da1`): 800 × 480, sized to the monitor's work area |
+
+### Deferred from the Mission 7 usability review
+
+Each is larger than a focused fix, and none puts data at risk.
+
+| # | Item | Why deferred |
+|---|---|---|
+| 68 | Back navigation (a route stack, a Back control, Alt+Left), and work that survives a pivot (the IOC extractor's text, a triage result) | Needs a navigation model across all pages |
+| 69 | Sightings and exposure-path nodes that open their records and look indicators up | Each record kind needs its target; the types already carry `refKind` and `refId` |
+| 70 | "Open" lands on the record itself (asset, evidence, vulnerability, API, component, ATT&CK technique), Open for OSINT entities, the linked project in an OSINT investigation | A focus parameter per tab, as findings already have |
+| 71 | A run's project and outputs on the Runs page, and project run rows that open the run | A `run` route parameter and related-records links |
+| 72 | Selecting a graph node by keyboard | Graph interaction design |
+| 73 | Project tabs in workflow order, and triage tools named where they are found | Information architecture; affects every project |
+| 74 | Global search for OSINT investigations, detection rules and saved indicators, its errors shown, and activity items that open their records | Search index and navigation targets |
+| 75 | Arabic and right-to-left layout | Not supported: strings are not externalized (no i18n library) and about 150 places use left/right utilities |
+
+### Recorded as limitations (SECURITY.md)
+
+* Process starts without a native dialog (GUI tools, a terminal, version probes) and a project's status changed by a compromised page: accepted risks.
+* Copied command lines are exact in POSIX shells; in PowerShell a word with a quote character arrives split. A platform-specific copy would need the history to keep the argument list.
