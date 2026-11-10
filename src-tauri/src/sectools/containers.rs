@@ -197,10 +197,8 @@ pub fn dockerfile(text: &str) -> Vec<Issue> {
                     }
                 }
             }
-            "EXPOSE" => {
-                if args.split_whitespace().any(|p| p.split('/').next() == Some("22")) {
-                    issue(&mut out, "DF-SSH", "medium", "SSH port exposed", at, "Port 22 suggests an SSH server in the container: one more service and set of credentials to protect.".into(), "Use docker exec or kubectl exec for access instead of SSH inside containers.", "CIS Docker Benchmark: Ensure sshd is not run within containers");
-                }
+            "EXPOSE" if args.split_whitespace().any(|p| p.split('/').next() == Some("22")) => {
+                issue(&mut out, "DF-SSH", "medium", "SSH port exposed", at, "Port 22 suggests an SSH server in the container: one more service and set of credentials to protect.".into(), "Use docker exec or kubectl exec for access instead of SSH inside containers.", "CIS Docker Benchmark: Ensure sshd is not run within containers");
             }
             _ => {}
         }

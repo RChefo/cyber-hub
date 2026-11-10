@@ -277,7 +277,7 @@ impl Hunt {
             });
         }
         // regular before jittered, unexplained before services that keep a schedule, then the most connections
-        out.beacons.sort_by(|a, b| (a.regularity != "regular", a.note.is_some(), std::cmp::Reverse(a.connections)).cmp(&(b.regularity != "regular", b.note.is_some(), std::cmp::Reverse(b.connections))));
+        out.beacons.sort_by_key(|b| (b.regularity != "regular", b.note.is_some(), std::cmp::Reverse(b.connections)));
         out.beacons.truncate(MAX_LEADS);
 
         let mut leads = Vec::new();
