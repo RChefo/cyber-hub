@@ -1134,3 +1134,64 @@ The owner's brief asked for research-driven new capabilities in seven tracks (we
   * The cause was not determined.
 * `cargo +1.90.0 check --all-targets` at `91b064a`: passed.
 * gitleaks over 132 commits and the changed documents: no leaks.
+
+## Mission 6 (2026-11-10T14:05Z): product completion and release readiness
+
+## 14:05–14:32Z: baseline and the release workflow (`9d89831`)
+
+* Baseline: `release/v0.1.0` at `f8c49ac` (Mission 5's report on top of `91b064a`), clean tree, schema 29. The real database's modification time was checked before any work and left alone throughout.
+* `release.yml`:
+  * pinned like `ci.yml`: Rust 1.99.1, Node 22.12.0, cargo-audit 0.22.2, actions by commit (each SHA checked with `git ls-remote`);
+  * the build and publish jobs run only when the repository variable `RELEASE_PUBLISHING` is `enabled`;
+  * a tag push stops at a draft; publishing needs a manual dispatch with `draft: false` and a `confirm` input equal to the tag;
+  * job timeouts; the uploaded file list is compared with the expected one.
+* `ci.yml`: runners pinned (`windows-2022`, `ubuntu-24.04`), job timeouts, actionlint 1.7.7 with its checksum.
+* `ci_tests.rs` checks all of it; removing the publish gate made the test fail. actionlint ran clean in a container.
+
+## 14:32–14:42Z: exceptions for failed WSTG tests (`c270a1e`)
+
+* Migration 30 rebuilds `risk_acceptance_items` (rows kept by rowid) to allow the kind `wstg`.
+* An exception covers a test only while it is failed: every path that changes the result (the checklist, MCP's `cyberhub_set_checklist_item`, internal services) goes through `methodology::set`, which releases the exception and records why. An expired exception is flagged and changes nothing. MCP can still only read the register.
+* Reports gained the "Risk acceptances and exceptions" section; the checklist line counts excepted tests.
+
+## 14:42–15:22Z: parser amplifications (`1f64034`)
+
+* `amplification_tests.rs`: a fixture and an ignored timing test per open amplification, run "before" on an export of `c270a1e` and "after" in an optimized build in the Ubuntu container, plus regression tests with a 20 s budget through the hostile-input harness.
+* Root causes fixed: host values copied into every item (Nessus, Burp, OpenVAS), SARIF rule texts re-read per result, OCSF products and ATT&CK lists repeated, OSINT evidence IDs per entity, SBOM duplicate references, Postman query names, indicator and event key handling, and CSP matching in the frontend. Timings are in MISSION_REPORT.md.
+
+## 15:22–15:51Z: process chains (`b5c845d`), ATT&CK Mobile and ICS (`020ad01`), cloud resources (`d0e706e`)
+
+* Process chains from 4688 and Sysmon 1 with six patterns, and logons per account. The ignored sample test, run on the public EVTX-ATTACK-SAMPLES, finds the PsExec service shell and the comsvcs dump started through WMI, and nothing in the other samples.
+* ATT&CK 20.1 Mobile (125 techniques) and ICS (104 techniques) from the official STIX bundles; `scripts/attack-catalog.mjs` regenerated Enterprise byte for byte. Migration 31 adds the domain to assessments, layers and snapshots; comparisons across domains are refused.
+* Cloud resources: migration 32 rebuilds `assets` for the type `cloud_resource` through `run_rebuild` (foreign keys off, `foreign_key_check` before commit), with the upgrade tests' failure hook. A new upgrade test checks ids and every reference after the rebuild.
+* Rust 587 passed (27 ignored); frontend 288 in 52 files.
+
+## 15:51–16:38Z: TAXII credentials (`2eb6185`)
+
+* `native_prompt.rs`: Windows' credential dialog (CredUI) and a GTK dialog on Linux; two commands that take only the server's number.
+* While testing, a stored credential could follow its server to another address or kind of authentication: it is now deleted then, and on removal.
+* Windows, isolated data folder: the dialog appeared, owned by the window, with the server and host. Typing into it could not be automated: it runs in `CredentialUIBroker` at integrity level 0x200A, above the app and the test shell (0x2000), so UI Automation and synthetic keys are blocked. With a throwaway credential stored by `cyberhub-keys` under a new entry, the rest passed: Discover sent the credential only to the mock server (Basic, then an API key header), Forget deleted it after the native confirmation, and changing the address or the kind of authentication or removing the server deleted it. No `taxii` entry was left in Credential Manager.
+* Linux (Ubuntu 24.04, Xvfb, GNOME Keyring): the whole flow through the GTK dialog, 14/14.
+* Rust 589 passed; frontend 290 in 53 files.
+
+## 16:38–17:01Z: a real MCP client (`ea60e88`, `57d3c48`)
+
+* Claude Code 2.1.319 on Windows, against the isolated app with MCP on (`--strict-mcp-config`, the sidecar pointed at the isolated data folder):
+  * discovery: 62 tools, 6 resources; reads; `not_found` errors; the risk register read-only; no tool that approves or accepts risk;
+  * it reported that `cyberhub_list_findings` returned a finding's `Authorization: Bearer …` and `password=…` text verbatim: fixed in `57d3c48`;
+  * reading rmcp 3.9.0 showed that a cancelled call kept its approval waiting: fixed in `ea60e88`.
+* After the fixes: a denied and an approved finding; a call cancelled by the client's 8 s tool timeout, whose approval left the app at that moment; a client killed while its request waited, whose approval was cancelled within 0.6 s; one session across MCP off and on, with the same sidecar process recovering.
+* A scripted client against the real `cyberhub-mcp`: 18/18 (negotiation, requests before `initialize`, malformed and 17 MB lines, unknown methods and tools, strict arguments, 256 KiB limit, 30 concurrent calls, raw cancellation, clean exit, a forged bridge handshake).
+* Rust 592 passed.
+
+## 17:01–17:41Z: integration review and Windows end-to-end (`c8b0bdc`, `05500c5`, `92100da`, `1a93038`, `bfa6107`, `2a60d9f`)
+
+* A read-only review of the Mission 6 screens reported 15 findings; 13 and a TAXII nit were fixed, 2 deferred (FEATURE_BACKLOG.md, items 62 and 63).
+* The Windows end-to-end run caught a defect in the first fix: the confirmation that guards an exception was never rendered, so the change waited forever. Fixed in `2a60d9f`.
+* Windows end-to-end at the end: 23/23.
+
+## 17:41Z–: regression, Linux desktops and the secret scan (`b002e0e`)
+
+* Windows at `2a60d9f`: 593 Rust tests (27 ignored); clippy, also with `fuzzing`; tsc; 291 frontend tests in 53 files; cargo audit (0 vulnerabilities in 651 crates, the same 8 allowed warnings); npm audit (0).
+* gitleaks 8.30.1 found the made-up AWS key ID of the redaction test twice; the lines are marked and `.gitleaksignore` covers the commit (`b002e0e`). Then 149 commits, no leaks.
+* Linux results are in MISSION_REPORT.md, "Mission 6".

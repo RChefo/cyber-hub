@@ -1192,3 +1192,210 @@ All three only add data.
 * GitHub Actions runs.
 * GNOME or KDE desktops, HiDPI, desktop portals and a GPU on Linux.
 * Installers, signing and updates: not built or run (not authorized). No release build of the app was made: the timings come from optimized `cargo test` builds.
+
+## Mission 6: product completion and release readiness (2026-11-10)
+
+The owner's brief asked for:
+* the parser issues left open by Mission 5;
+* exceptions for failed WSTG tests;
+* TAXII credentials entered in the app;
+* ATT&CK Mobile and ICS;
+* host hunting analytics and a cloud-resource asset type;
+* validation with a real MCP client;
+* Linux desktops;
+* a release workflow that cannot publish by accident;
+* an integration review, full regression and the mission documents.
+
+It ruled out installers, release packages, signing, publishing, pushing, deployments, the real database, production credentials and testing systems without authorization.
+
+### Statistics
+
+| Item | Value |
+|---|---|
+| Time | 2026-11-10T14:05Z–18:31Z (about 4 h 26 min) |
+| Hashes | Start `f8c49ac`. Last code change `b002e0e`; this report is the commit after it |
+| Commits | 17: five capabilities (`c270a1e`, `b5c845d`, `020ad01`, `d0e706e`, `2eb6185`), one performance fix (`1f64034`), the release workflow (`9d89831`), eight fixes (`ea60e88`, `57d3c48`, `c8b0bdc`, `05500c5`, `92100da`, `1a93038`, `bfa6107`, `2a60d9f`), a test marker (`b002e0e`) and this report |
+| Schema | 29 → 32 (30 WSTG exceptions, 31 ATT&CK domains, 32 cloud resources). Each upgrade keeps a backup first, and the tests upgrade every earlier version |
+| Tests | Rust 568 → 593, and 16 → 27 ignored (10 amplification timings and the EVTX-sample chain test). Frontend 281 → 291 (50 → 53 files) |
+| Dependencies | No new crate in `Cargo.lock`. `gtk` 0.18 (Linux) and `zeroize` 1.9 were already in the tree and are now direct; `windows-sys` gained the credential-UI features |
+| Real-app checks | Windows 23/23 end-to-end, plus the TAXII and MCP checks below. Ubuntu 24.04 and Debian 12: Mission 6 features 25/25 each and the 71-check regression on each. On Ubuntu 24.04: Mutter 5/5, KWin 5/5, HiDPI 7/7 |
+
+### Classification
+
+| Feature | Status | Commits | Evidence |
+|---|---|---|---|
+| Parser amplifications (§1) | **Complete and verified** | `1f64034` | Before and after timings in an optimized build; regression tests with a time budget; the hostile-input sweep |
+| Exceptions for failed WSTG tests, in the register and reports (§2) | **Complete and verified** | `c270a1e`, `c8b0bdc`, `2a60d9f` | Rust tests over every path (checklist, MCP, expiry, revocation, report options); Windows end-to-end; Linux GUI on both distributions |
+| TAXII credentials typed into a native dialog (§3) | **Implemented but partially verified** | `2eb6185`, `bfa6107` | Linux: the whole flow through the GTK dialog, 14/14 on each distribution. Windows: the dialog, connection test, deletion and the origin rule were checked, but typing into Windows' dialog could not be automated (below) |
+| ATT&CK Mobile and ICS (§4) | **Complete and verified** | `020ad01`, `92100da` | Official 20.1 data; catalog, migration and comparison tests; the ICS layer exported through native save dialogs on Windows and Linux |
+| Host hunting: process chains and logons per account, Windows event logs (§5) | **Complete and verified** | `b5c845d`, `05500c5` | Tests; 17 files of the public EVTX-ATTACK-SAMPLES (the PsExec service shell and the comsvcs dump started through WMI found, nothing in the others; run again at the end); Windows and Linux GUI |
+| Host hunting on Linux telemetry (§5) | **Deferred** | — | auditd names a parent's process ID but not its program |
+| Cloud-resource assets (§6) | **Complete and verified** | `d0e706e`, `1a93038` | Import, provider and rebuild tests; Windows and Linux GUI with a Prowler file |
+| MCP with a real client (§7) | **Complete and verified on Windows**; Linux with a scripted client only | `ea60e88`, `57d3c48`, `b002e0e` | Claude Code 2.1.319 and a scripted edge-case suite (below) |
+| Linux desktops (§8) | **Implemented but partially verified** | — | X11 fully; the compositors of GNOME and KDE and HiDPI in smoke runs; no full desktop sessions, portals, GPU or physical HiDPI screen |
+| Release workflow (§9) | **Implemented but partially verified**; the GitHub run is **blocked** on the owner | `9d89831` | `ci_tests.rs` and actionlint locally. Never run on GitHub: nothing may be pushed |
+| Integration review (§10) | **Complete and verified**, two small items deferred | `c8b0bdc`–`2a60d9f` | 13 of 15 findings and one nit fixed; Windows and Linux end-to-end afterwards |
+| Regression (§11) | **Complete for the available platforms** | — | Below |
+
+### Partially implemented and deferred
+
+* **TAXII:** typing into Windows' credential dialog needs a person (manual check before release). macOS is not supported; the developer tool `cyberhub-keys taxii-set` still works everywhere.
+* **ATT&CK:** the domain switch does not show how many techniques each matrix holds (FEATURE_BACKLOG.md, item 62).
+* **Event log triage:** a log's detections and chains are recorded through two bars (item 63).
+* **Linux process chains** (item 64).
+* **Linux desktops:** GNOME Shell and Plasma sessions, portals, a GPU and a physical HiDPI screen (item 65).
+* **HiDPI:** the minimum window size does not fit a 1920 × 1080 screen at 150 % or 200 % (item 67).
+
+### Security findings and fixes
+
+| Finding | Severity | Fix |
+|---|---|---|
+| **MCP:** a call the client cancelled (`notifications/cancelled`, sent by Claude Code when a tool times out) kept its approval waiting in the Approval Center, and approving it later still ran it. rmcp cancels the request's token, but the handler did not watch it | Medium | `ea60e88`: the sidecar sends the app a bridge `cancel`, answered ahead of the in-flight limit; the approval queue cancels only that request and remembers it, so a call cancelled before its approval existed is refused |
+| **MCP:** tool results carried credential-like values verbatim (a finding's `Authorization: Bearer …`, `password=…`) to clients, which pass them to their model provider | Medium | `57d3c48`: every result and error message is masked with the run-output rules at the dispatcher; only the read-only indicator lookups return exact values (a test pins that list) |
+| **TAXII:** a stored credential would have followed its server to another address or kind of authentication after an edit | Medium | `2eb6185`: the credential is deleted when the origin or the kind of authentication changes, or the server is removed, and the dialog stores nothing if the server changed while it was open. The edit form warns first |
+| **Release workflow:** a floating toolchain, and a tag push could publish | Medium | `9d89831`: pinned versions; publishing needs the `RELEASE_PUBLISHING` variable, a manual dispatch, `draft: false` and the tag typed again |
+| **Parsers:** crafted import files could make imports quadratic in time or memory | Low (files the analyst chooses) | `1f64034` |
+| **Exceptions:** changing a failed test's result ended its exception without a word | Low | `c8b0bdc`, `2a60d9f` |
+| **Secret scan:** gitleaks flagged a made-up AWS key ID in a redaction test | False positive | `b002e0e`: marked inline and in `.gitleaksignore` |
+
+Observed and left as is: Windows' credential dialog runs in `CredentialUIBroker` at integrity level 0x200A, above the app and the test shell (0x2000). UI Automation and synthetic input from ordinary processes cannot reach it, which protects the typed value from other programs.
+
+### Parser performance (optimized build, Ubuntu 24.04 container, AMD Ryzen 7 5700X)
+
+"Before" ran on an export of `c270a1e` with the same fixtures.
+
+| Case | Before | After |
+|---|---|---|
+| Normal Nessus file, 10,000 items, 1.6 MB | 113 ms, 37 MB | 130 ms, 37 MB |
+| Nessus, a 100 KB host name × 2,000 items, 516 KB | 553 ms, 212 MB | 27 ms, 16 MB |
+| Burp, 20 KB host names, 40 MB | 917 ms, 252 MB | 523 ms, 93 MB |
+| Greenbone, 20 KB host names, 40 MB | 238 ms, 334 MB, 2,000 findings | 18 ms, 133 MB, 0 findings (no usable host) |
+| SARIF, 256 KB rule texts × 2,000 results, 1.6 MB | 8,260 ms | 838 ms |
+| OCSF, a long product name, 673 KB | 604 ms | 29 ms |
+| OCSF, 30,000 ATT&CK entries | 1,309 ms | 163 ms |
+| OSINT, 1,000 records with 3,000 unknown evidence IDs, 121 KB | 1,410 ms, 4,007 events | 117 ms, 1,008 events |
+| SBOM with duplicate references, 5 MB | 673 ms, 60,000 links | 269 ms, 20,000 |
+| Postman, 30,000 query names | 911 ms | 2 ms |
+| OSINT indicators, 3.3 MB | 2,393 ms | 82 ms |
+| Wide JSON events, 30 MB | 5,202 ms | 1,283 ms |
+| CSP header check in the frontend (Node), 200 KB | 2,333 ms | 3.0 ms (6.5 ms at 400 KB) |
+
+At the largest accepted files, after: Nessus 42 MB parsed in 493 ms (10,000 findings committed in 2,074 ms), SARIF 41 MB in 546 ms, OCSF 42 MB in 452 ms. The normal Nessus case is within noise. Costs that remain proportional to the input are listed in SECURITY.md.
+
+### MCP with a real client
+
+* **Client:** Claude Code 2.1.319 (Windows 11), with `--strict-mcp-config` and only the `cyberhub` server, started against the debug app with an isolated data folder and MCP on.
+* **Run 1** (14 turns):
+  * initialization and discovery: 62 tools and 6 resources;
+  * reads of projects, findings, the risk register and the checklist;
+  * `not_found` errors; an unknown tool refused by the client;
+  * the risk register read-only, with no tool to approve or accept anything;
+  * it reported the unmasked credentials, fixed in `57d3c48`.
+* **Run 2:** the description came back as `Authorization: ••••••`. A finding request declined in the app returned "The user declined this request in Cyber Hub. (denied)"; an approved one created the finding.
+* **Cancellation:** with an 8 s tool timeout the client gave up, sent `notifications/cancelled`, and the waiting approval left the app at that moment (audited `cancelled`, nothing created).
+* **Disconnect:** a client process tree killed while its request waited: the approval was cancelled within 0.6 s, and no sidecar was left.
+* **Reconnection:** one stream-json session over three turns. While MCP was off, the same sidecar process answered "Cyber Hub is not running or MCP is turned off… (unavailable)"; after MCP was turned on again it reconnected with the new session key.
+* **Scripted client against the real `cyberhub-mcp`:** 18/18:
+  * protocol versions 2025-06-18 and 2024-11-05 echoed, and 2099-01-01 answered with 2025-11-25;
+  * a request before `initialize` refused (-32602);
+  * malformed lines and a 17 MB line dropped without ending the session;
+  * -32601 for an unknown method; unknown tools, wrong types and unknown arguments refused with the reason; arguments over 256 KiB refused;
+  * 30 concurrent calls in 25 ms;
+  * a raw `notifications/cancelled` removing the waiting approval;
+  * a clean exit with nothing but JSON on stdout;
+  * a forged bridge handshake answered `ok: false` and closed, with real clients unaffected.
+* **Not tested:** Claude Code on Linux, Claude Desktop and other clients.
+
+### Linux environments actually used
+
+| Environment | What ran | Result |
+|---|---|---|
+| Ubuntu 24.04.5 container: Xvfb, Openbox, D-Bus, GNOME Keyring; WebKitGTK 2.52.6, GTK 3.24.41 | Suites; the Mission 6 features (TAXII 14, main 11); the earlier GUI regression (scope, imports, findings, workflows, evidence, OSINT, MCP, settings, backup, a restore that restarts the app, recovery after SIGKILL) | All passed: 25/25 and 71/71 |
+| Debian 12 container, the same setup; WebKitGTK 2.50.6, GTK 3.24.38 | The same | All passed: 25/25 and 71/71 |
+| GNOME's compositor: Mutter 46.2, headless, the app as a native Wayland client | Rendering, navigation, keyboard, window size, scale, errors, quit | 5/5 |
+| KDE's compositor: KWin 5.27.11, virtual output, the app as a native Wayland client | The same | 5/5. KWin needed a copy of its binary without the file capability the container cannot grant, and its XWayland crashed in the container, so the app was not run through XWayland under KWin |
+| HiDPI: `GDK_SCALE=2` on Xvfb and Openbox | The same, plus a GTK credential dialog into GNOME Keyring and a GTK file chooser | 7/7, and the minimum-size finding |
+
+* **Applies to every Linux run:** each GUI run was offline, in a fresh container, as an unprivileged user. In the compositor and HiDPI runs the app started in about a second and left no process after quitting.
+* **Not available or not used:** full GNOME Shell and Plasma sessions, desktop portals (the app uses GTK's own dialogs), a GPU, a physical HiDPI screen, a login keyring of a real session, WSLg (used in Mission 5, not repeated).
+
+### Migration and restore
+
+* **Schema 30:** `risk_acceptance_items` rebuilt with its rows (by rowid) to allow `wstg` items; triggers recreated.
+* **Schema 31:** a `domain` column on assessments, layers and snapshots; existing rows are Enterprise.
+* **Schema 32:** `assets` rebuilt for `cloud_resource` through `run_rebuild`: foreign keys off around the transaction, every row copied with its id, index and trigger recreated, committed only if `foreign_key_check` is clean.
+* **Tests:** on Windows, Ubuntu and Debian, every earlier schema upgrades to 32 with all its rows and a usable backup. A failure injected at any migration, including the rebuild, keeps the last complete version, and a retry finishes. A process killed during a migration leaves the previous version. After the assets rebuild, ids, observations, vulnerability links and the relationship trigger still work.
+* **Restore:** the GUI regression backs up, restores (the app restarts) and recovers after SIGKILL on both distributions: 6/6 and 3/3 each. Restore was not repeated on Windows in this mission.
+
+### Test counts
+
+| Platform | Rust (passed / ignored) | Frontend | Static checks |
+|---|---|---|---|
+| Windows 11 (Rust 1.94.1, Node 24.19.0), at `2a60d9f` (`b002e0e` changed only comments and `.gitleaksignore`) | 593 / 27 | 291 tests, 53 files | clippy `-D warnings` (also with `fuzzing`), tsc |
+| Ubuntu 24.04.5 (Rust 1.99.1, Node 22.12.0), at `b002e0e` | 593 / 27 | 53 files | clippy, tsc; `cargo +1.90.0 check --all-targets` passes |
+| Debian 12 (Rust 1.99.1, Node 22.12.0), at `b002e0e` | 593 / 27 | 53 files | clippy, tsc |
+
+The 27 ignored tests need external data or long runs:
+* 10 amplification timings (run in an optimized build in this mission) and 6 timing tests from Mission 5;
+* five that need the EVTX sample corpus (Mission 6's chain test was run with it);
+* the scan-import limits, correlation at scale, a volume test, the exhaustive CVSS comparison, a folder read and the YARA corpus.
+
+### Audits and secret scan
+
+* **cargo audit 0.22.2:** 0 vulnerabilities in 651 crates, and the same 8 allowed warnings as before. They are unmaintained or unsound crates in the Linux GTK and D-Bus stack that Tauri brings: `proc-macro-error`, `zbus_names`, `zvariant`, `zvariant_derive`, `glib`.
+* **npm audit:** 0 on Windows, Ubuntu and Debian.
+* **gitleaks 8.30.1** over the whole history (149 commits): the first run found 2 matches, the made-up key ID of the new redaction test; after `b002e0e`, no leaks.
+
+### End-to-end results
+
+* **Windows 11, debug app, isolated data folder, native dialogs: 23/23.**
+  * a WSTG exception recorded in the checklist and listed as a WSTG test in the register and the report;
+  * changing the result asks first, then ends the exception, with the history kept;
+  * process chains and logons from public EVTX files chosen in the native Open dialog;
+  * Enterprise, Mobile and ICS, with the full ICS matrix and an ICS layer saved through the Save dialog naming its matrix and version;
+  * a Prowler file imported with four cloud resources (provider, account, region, exposure only from the failed public-access check) and three findings;
+  * no runtime errors.
+* **TAXII on Windows:** described under "Classification".
+* **Linux:** described under "Linux environments actually used".
+
+### Unexpected failures and their investigation
+
+* **Windows' credential dialog ignored synthetic keys.** Integrity levels showed the broker above the test shell. This is a Windows protection, not a defect; the remaining steps were checked with a throwaway credential stored by the developer tool, and the Linux run covers typing.
+* **First Windows end-to-end runs (10/18, then 13/15):**
+  * the scripts assumed tactic headers in an empty matrix, and waited on a description that already named Prowler;
+  * UI Automation shows the save dialog's title without the `&` of "ATT&CK" (the real caption has it);
+  * a project created through IPC was clicked before the list refreshed.
+
+  These were all script problems, fixed in the scripts.
+* **A leftover approver from an earlier run** approved the first cancellation test's request. It was stopped, and the test was repeated with a watcher only.
+* **"Nothing to click: Log triage":** the dev server had cached an empty module, because a patch script truncated the file at the moment Vite read it. Touching the file fixed it; the product was not involved.
+* **My own defect in `c8b0bdc`:** the new confirmation's element was never rendered, so a status change waited forever. The Windows end-to-end run found it, and `2a60d9f` fixed it.
+* **Linux "main" at 10/11 on both distributions:** WebKitGTK's `innerText` begins with whitespace, so the script's `startsWith` failed. With the check relaxed, it passed 11/11 on both.
+* **KWin would not start, then crashed through XWayland.** The causes were a file capability, a missing `/tmp/.X11-unix` and an XWayland crash in the container. A diagnostic showed the app runs under KWin without XWayland.
+* **A TAXII test** still expected the old error text: my search for it had been cut off by `head`.
+
+### Schema and backup implications
+
+Schema 32. Opening an existing database upgrades it through 30–32, and a backup is taken first. The assets rebuild copies every row and keeps ids; a failure leaves the previous version. An older build cannot open a schema-32 database, as with every earlier upgrade; restoring the backup taken before the upgrade is the way back. No migration deletes data.
+
+### Release blockers
+
+1. **Signing:** not set up, and the brief forbids it until the owner authorizes the release.
+2. **Installers:** never built. The release candidate must be built and validated once, at the final stage, with the owner's authorization (install, upgrade from a copy of a real database, uninstall, updates).
+3. **CI:** neither workflow has run on GitHub. A push needs the owner. `RELEASE_PUBLISHING` is unset by design.
+4. **Manual checks:** typing into Windows' credential dialog; a GNOME and a Plasma session and a physical HiDPI screen; a review of the minimum window size on scaled screens.
+
+### Engineering readiness assessment
+
+* **What the evidence shows:** the brief's features are implemented, and every check run here passed:
+  * Windows 11 and containers of Ubuntu 24.04 and Debian 12;
+  * a real MCP client;
+  * the compositors of GNOME and KDE.
+
+  The two security gaps the real client exposed are fixed, as is the defect the end-to-end run found in a review fix.
+* **What it does not show:**
+  * installed builds, signing and updates;
+  * a GitHub run;
+  * full desktop sessions on real hardware;
+  * the Windows credential dialog with a person typing.
+* **Conclusion:** the code is ready for the owner to run CI on GitHub and to authorize a signed release-candidate build. **It is not release-ready** until that build passes the installer, upgrade and manual checks above.

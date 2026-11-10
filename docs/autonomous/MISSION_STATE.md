@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | **Complete** (Mission 5, 2026-11-10T10:14:43Z–2026-11-10T14:08Z: Linux compatibility on Ubuntu 24.04 and Debian 12 including a real Wayland compositor, parser hardening with a hostile-input sweep and fuzzing, upgrade validation from every schema, Sigma correlation rules, risk acceptance, TAXII 2.1, ASVS gaps and comparison, ATT&CK history and comparison, release-profile timings and a pinned CI workflow, schema 26 → 29, see MISSION_REPORT.md "Mission 5". Mission 4, 2026-11-09T23:21:37Z–2026-11-10T01:56Z: detection engineering (Sigma, YARA), hunting leads, ASVS 5.0.0, indicator lifecycle and MCP tools, schema 23 → 26, see MISSION_REPORT.md "Mission 4". Mission 3, 2026-11-09T20:10:11Z–22:35Z: the unified investigation layer, schema 21 → 23, see MISSION_REPORT.md "Mission 3". Mission 2, 2026-11-09T16:31:14Z–19:55Z: ten research-driven capabilities, schema unchanged at 21, see MISSION_REPORT.md "Mission 2". Feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
+| Current phase | **Complete** (Mission 6, 2026-11-10T14:05Z–18:31Z: exceptions for failed WSTG tests, the remaining parser amplifications, TAXII credentials typed into a native dialog, ATT&CK Mobile and ICS, process chains and logons, cloud-resource assets, validation with Claude Code as an MCP client and the two MCP fixes it led to, the compositors of GNOME and KDE and HiDPI on Linux, a release workflow that publishes only on explicit conditions, and an integration review, schema 29 → 32, see MISSION_REPORT.md "Mission 6". Mission 5, 2026-11-10T10:14:43Z–2026-11-10T14:08Z: Linux compatibility on Ubuntu 24.04 and Debian 12 including a real Wayland compositor, parser hardening with a hostile-input sweep and fuzzing, upgrade validation from every schema, Sigma correlation rules, risk acceptance, TAXII 2.1, ASVS gaps and comparison, ATT&CK history and comparison, release-profile timings and a pinned CI workflow, schema 26 → 29, see MISSION_REPORT.md "Mission 5". Mission 4, 2026-11-09T23:21:37Z–2026-11-10T01:56Z: detection engineering (Sigma, YARA), hunting leads, ASVS 5.0.0, indicator lifecycle and MCP tools, schema 23 → 26, see MISSION_REPORT.md "Mission 4". Mission 3, 2026-11-09T20:10:11Z–22:35Z: the unified investigation layer, schema 21 → 23, see MISSION_REPORT.md "Mission 3". Mission 2, 2026-11-09T16:31:14Z–19:55Z: ten research-driven capabilities, schema unchanged at 21, see MISSION_REPORT.md "Mission 2". Feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -113,6 +113,16 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 77. ATT&CK technique history, comparison and coverage snapshots (`24045f0`)
 78. Timing tests for an optimized build (`d23ddf3`)
 79. A pinned CI workflow with clippy, Debian 12, audits and secret scanning (`7206810`)
+80. A pinned release workflow that publishes only on explicit conditions (`9d89831`)
+81. Exceptions for failed WSTG tests, and acceptances in reports (`c270a1e`)
+82. The remaining parser amplifications (`1f64034`)
+83. Process chains and logons per account in Windows event logs (`b5c845d`)
+84. ATT&CK Mobile and ICS matrices (`020ad01`)
+85. Cloud-resource assets from configuration audits (`d0e706e`)
+86. TAXII credentials typed into a native OS dialog (`2eb6185`)
+87. MCP: client cancellations reach the app (`ea60e88`); credentials masked in results (`57d3c48`)
+88. Integration review fixes (`c8b0bdc`, `05500c5`, `92100da`, `1a93038`, `bfa6107`, `2a60d9f`)
+89. The secret scan's fixture marker (`b002e0e`)
 
 ## Tests executed
 
@@ -120,7 +130,13 @@ See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md).
 
 ## Known failures
 
-None. At `91b064a` (Mission 5):
+None. At the end of Mission 6:
+* **Windows 11** (at `2a60d9f`; `b002e0e` changed only comments): 593 Rust tests (27 ignored) and 291 frontend tests in 53 files; clippy, also with `fuzzing`, and tsc clean; cargo audit 0 vulnerabilities in 651 crates (the same 8 allowed warnings); npm audit 0; gitleaks over 149 commits: no leaks.
+* **Ubuntu 24.04.5 and Debian 12** (at `b002e0e`): tsc, 53 frontend test files, clippy, 593 Rust tests (27 ignored) and npm audit pass; `cargo +1.90.0 check --all-targets` passes on Ubuntu.
+* **Real app:** Windows end-to-end 23/23; Claude Code and a scripted MCP client 18/18; on each distribution the Mission 6 features 25/25 and the GUI regression 71/71; on Ubuntu, Mutter 5/5, KWin 5/5 and HiDPI 7/7.
+* **Not run:** GitHub Actions (nothing pushed), installers, signing, a release build; typing into Windows' credential dialog (needs a person).
+
+At `91b064a` (Mission 5):
 * **Windows 11:**
   * 568 Rust tests (16 ignored, six of them the timing tests) and 281 frontend tests in 50 files;
   * clippy, also with the `fuzzing` feature, and tsc are clean;
@@ -255,8 +271,33 @@ The final results at `d6a192e`:
 | `d23ddf3` | test(perf): time the heavy paths on generated data |
 | `7206810` | ci: pin the verification workflow and add clippy, audits, Debian and secret scanning |
 | `91b064a` | fix(detections): import a chain's inner correlations disabled too |
+| `9d89831` | ci: pin the release workflow and publish only on explicit conditions |
+| `c270a1e` | feat(risk): record exceptions for failed WSTG tests and list acceptances in reports |
+| `1f64034` | perf(import): remove the amplifications left open by the parser review |
+| `b5c845d` | feat(hunting): link process creations into chains and summarize logons per account |
+| `020ad01` | feat(attack): add the ATT&CK Mobile and ICS matrices |
+| `d0e706e` | feat(assets): record cloud resources from configuration audits |
+| `2eb6185` | feat(intel): store TAXII credentials typed into a native OS dialog |
+| `ea60e88` | fix(mcp): cancel a waiting approval when the client cancels its call |
+| `57d3c48` | fix(mcp): mask credential-like values in what clients receive |
+| `c8b0bdc` | fix(risk): ask before a result ends an exception and fit the register to the report options |
+| `05500c5` | fix(hunting): keep flagged chains visible and distinct in event log triage |
+| `92100da` | fix(attack): keep each matrix's layers, snapshots and exports apart in the UI |
+| `1a93038` | fix(assets): show where a cloud resource is and what relates to it |
+| `bfa6107` | fix(intel): say when a kept TAXII password was typed for another user name |
+| `2a60d9f` | fix(risk): render the confirmation that guards an exception |
+| `b002e0e` | test(mcp): mark the made-up key ID in the redaction test for the secret scan |
 
 ## Next action
+
+**After Mission 6 (2026-11-10T18:31Z), the owner decides:**
+1. Review the work (MISSION_REPORT.md, "Mission 6"). It adds migrations 30–32; a backup is taken before each, every earlier schema is upgraded in the tests, and 32 rebuilds `assets` keeping every row and id. No crate is added to `Cargo.lock`.
+2. Push a branch so that `ci.yml` runs on GitHub for the first time (PLATFORMS.md, "First run of the workflows"). Only the owner can authorize this. `release.yml` publishes nothing until `RELEASE_PUBLISHING` is `enabled` and a manual dispatch confirms the tag.
+3. Before any release:
+   * set up signing;
+   * authorize and validate one release-candidate build (installers, upgrade from a copy of a real database, uninstall, updates);
+   * do the manual checks: typing into Windows' credential dialog, a GNOME and a Plasma session, a physical HiDPI screen.
+4. Next candidates (FEATURE_BACKLOG.md, "Mission 6"): items 62–64 and 67.
 
 **After Mission 5 (2026-11-10T14:08Z), the owner decides:**
 1. Review the capabilities and fixes (MISSION_REPORT.md, "Mission 5"). They add migrations 27–29, which only add data; backups are taken before each, and every earlier schema version is upgraded in the tests. No application dependency is added.

@@ -240,3 +240,35 @@ The brief set the order itself: Linux first, then parser security, database migr
 | 56 | CI: pinned toolchains and actions, clippy, Debian 12, audits, secret scanning | **Done** (`7206810`). Not run on GitHub, because the repository has not been pushed |
 | 57 | TAXII credentials entered in the app, not only provisioned | Deferred. Credentials are stored only with `cyberhub-keys taxii-set`, so the web view never handles them |
 | 58 | A cloud-resource asset type for cloud findings | Deferred. The cloud workflow used a domain asset (MISSION_REPORT.md, "Mission 5") |
+
+## Mission 6 (2026-11-10T14:05Z): product completion and release readiness
+
+The brief named the work itself (parser performance, WSTG exceptions, TAXII credentials, ATT&CK Mobile and ICS, host hunting, cloud resources, a real MCP client, Linux desktops, CI and release, an integration review, regression and documentation). No new ranking was made; the table records where each item ended.
+
+### Sources consulted during the mission
+
+* **MITRE ATT&CK STIX data**, release 20.1, from the `mitre-attack/attack-stix-data` repository: `mobile-attack-20.1.json` and `ics-attack-20.1.json` retrieved 2026-11-10 (SHA-256 beginning `632e2ec40848394f` and `3f6448369f9135ad`); `enterprise-attack-20.1.json` (retrieved 2026-11-09) was fetched again and matched (`539a843a7b53ed97…`). Licence: the ATT&CK Terms of Use (THIRD_PARTY_NOTICES.md).
+* **ATT&CK Navigator layer format 4.5** (the `domain` and `versions` fields), already implemented in Mission 3.
+* **rmcp 3.9.0 source** (`service.rs`): a `notifications/cancelled` cancels the request's token and drops its answer, but stops nothing the handler does not watch. This is how the MCP cancellation gap was found.
+* **Claude Code 2.1.319** as a genuine MCP client: its tool timeout (`MCP_TOOL_TIMEOUT`) sends `notifications/cancelled`, and its stream-json input keeps one session over several turns.
+* **Known without a fetch in this mission**, and named as such: the Win32 credential UI (`CredUIPromptForWindowsCredentialsW`, `CredPackAuthenticationBufferW`, `CredUnPackAuthenticationBufferW`), GTK 3 dialogs, Windows logon types (4624), the OCSF 1.x Detection Finding fields that Prowler writes, and GitHub Actions' pinning and permissions model. The action SHAs were checked with `git ls-remote`.
+* **EVTX-ATTACK-SAMPLES**, the public sample corpus already used in Mission 2, for the process-chain patterns.
+
+### Status
+
+| # | Item | Status |
+|---|---|---|
+| 48 | Host hunting analytics beyond rules | **Done for Windows event logs** (`b5c845d`, `05500c5`): process chains (six patterns) and logons per account. Linux chains deferred (item 64) |
+| 52 | ATT&CK Mobile and ICS matrices | **Done** (`020ad01`, `92100da`) from the official 20.1 data |
+| 54 | The smaller parser amplifications | **Done** (`1f64034`): host duplication in Nessus, Burp and OpenVAS, SARIF, OCSF, OSINT evidence IDs, CSP matching and five more |
+| 57 | TAXII credentials entered in the app | **Done** (`2eb6185`, `bfa6107`): typed into a native OS dialog, never into the web view. Typing into Windows' dialog could not be automated (item 66) |
+| 58 | A cloud-resource asset type | **Done** (`d0e706e`, `1a93038`) |
+| 59 | Exceptions for failed WSTG tests, and acceptances in reports | **Done** (`c270a1e`, `c8b0bdc`, `2a60d9f`) |
+| 60 | A pinned release workflow that publishes only on explicit conditions | **Done** (`9d89831`). Never run on GitHub |
+| 61 | MCP: client cancellations reach the app; credentials masked in results | **Done** (`ea60e88`, `57d3c48`), found with Claude Code |
+| 62 | Per-matrix counts in the ATT&CK switch (review finding 11) | Deferred: needs counts per domain from the backend; small |
+| 63 | One "record as findings" bar for a log's detections and chains (review finding 15) | Deferred: small, no data at risk |
+| 64 | Process chains from Linux audit logs | Deferred: auditd records name a parent's process ID but not its program, so a parent started before the log cannot be recognised |
+| 65 | GNOME Shell and Plasma sessions, desktop portals, a GPU, a physical HiDPI screen | Not tested: containers ran the compositors (Mutter, KWin) without the shells; needs a VM or hardware |
+| 66 | Typing into Windows' credential dialog | Manual check: the dialog runs at a higher integrity level, which blocks synthetic input (MISSION_REPORT.md, "Mission 6") |
+| 67 | A smaller minimum window size for scaled screens | Open: the minimum (1100 × 700 logical pixels) is larger than a 1920 × 1080 screen at 150 % or 200 % scaling (found in the HiDPI run). The layout below that width needs design and testing first |
