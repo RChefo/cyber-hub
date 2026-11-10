@@ -151,3 +151,17 @@ pub fn dialog_text(text: &str) -> String {
     }
     out
 }
+
+/// Every raw HTML or image that a CommonMark parser (pulldown-cmark) finds in `md`: the tests of
+/// the Markdown reports check that collected or imported text never becomes markup (Mission 7).
+#[cfg(test)]
+pub fn commonmark_markup(md: &str) -> Vec<String> {
+    use pulldown_cmark::{Event, Parser, Tag};
+    Parser::new(md)
+        .filter_map(|e| match e {
+            Event::Html(h) | Event::InlineHtml(h) => Some(format!("html {h}")),
+            Event::Start(Tag::Image { dest_url, .. }) => Some(format!("image {dest_url}")),
+            _ => None,
+        })
+        .collect()
+}

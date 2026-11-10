@@ -675,81 +675,86 @@ fn md_code(v: &str) -> String {
     format!("`{}`", t.trim())
 }
 
-/// Free text as written (paragraphs, lists, emphasis, code), except that outside code a `<` that
-/// could open an HTML tag, comment or declaration is escaped: imported text (scanner output, for
-/// example) cannot become markup in a Markdown viewer. Code spans follow CommonMark: a backtick run
-/// closed by a run of the same length on the line, not escaped by a backslash.
-fn md_text(t: &str) -> String {
-    let mut out = String::new();
-    let mut fenced = false;
-    for (n, line) in t.trim().lines().enumerate() {
-        if n > 0 {
-            out.push('\n');
-        }
-        let start = line.trim_start();
-        if start.starts_with("```") || start.starts_with("~~~") {
-            fenced = !fenced;
-            out.push_str(line);
+/// A line that CommonMark could read as a code fence: its character (`` ` `` or `~`), the length
+/// of its run, its indentation in spaces (at most 3) and what follows the run.
+fn fence_line(line: &str) -> Option<(char, usize, usize, &str)> {
+    let indent = line.len() - line.trim_start_matches(' ').len();
+    if indent > 3 {
+        return None;
+    }
+    let rest = &line[indent..];
+    let ch = rest.chars().next().filter(|c| matches!(c, '`' | '~'))?;
+    let run = rest.chars().take_while(|c| *c == ch).count();
+    (run >= 3).then(|| (ch, run, indent, &rest[run..]))
+}
+
+/// Free text as written (paragraphs, lists, emphasis, code blocks), except that it can never become
+/// markup in a Markdown viewer (imported scanner output, for example). Mission 7, after a review
+/// found ways through the earlier rules:
+/// * a `<` that could open an HTML tag, comment or declaration is escaped everywhere outside a
+///   code block, code spans included (CommonMark pairs backticks across lines, so a code span
+///   cannot be trusted to contain it; inside a span the escape shows as `&lt;`);
+/// * `![` is escaped, so an image never loads when the report is opened;
+/// * the only code blocks are fences that start a line with no indentation, read exactly as
+///   CommonMark reads them; any other line that a viewer could read as a fence (indented, or inside
+///   a list item, whose end would close the fence early) is escaped so that it is not one, a fence
+///   left open is closed at the end of the text, and a lone carriage return ends a line as it does
+///   in CommonMark.
+pub(crate) fn md_text(t: &str) -> String {
+    let normalized = t.replace("\r\n", "\n").replace('\r', "\n");
+    let mut out: Vec<String> = Vec::new();
+    // the open fence: its character and the length of its run
+    let mut fence: Option<(char, usize)> = None;
+    for line in normalized.trim().split('\n') {
+        if let Some((fch, frun)) = fence {
+            // inside a fence: the line is code, until a closing fence (the same character, a run
+            // at least as long, at most three spaces of indentation, nothing after it but blanks)
+            if fence_line(line).is_some_and(|(ch, run, _, after)| ch == fch && run >= frun && after.chars().all(|c| c == ' ' || c == '\t')) {
+                fence = None;
+            }
+            out.push(line.to_string());
             continue;
         }
-        if fenced {
-            out.push_str(line);
+        if let Some((ch, run, indent, info)) = fence_line(line) {
+            if indent == 0 && (ch == '~' || !info.contains('`')) {
+                fence = Some((ch, run));
+                out.push(line.to_string());
+            } else {
+                // could be a fence for some reader: a backslash makes it plain text for every one
+                out.push(format!("{}\\{}", &line[..indent], &line[indent..]));
+            }
             continue;
         }
         let chars: Vec<char> = line.chars().collect();
+        let mut l = String::with_capacity(line.len());
         let mut i = 0;
         while i < chars.len() {
             let ch = chars[i];
             if ch == '\\' && i + 1 < chars.len() {
-                // a backslash escape: the next character is literal (a `<` after it shows as `<`,
-                // a backtick after it opens no code span)
-                out.push(ch);
-                out.push(chars[i + 1]);
+                // a backslash escape: the next character is literal (a `<` after it shows as `<`;
+                // inside a code span both are code)
+                l.push(ch);
+                l.push(chars[i + 1]);
                 i += 2;
                 continue;
             }
-            if ch == '`' {
-                let run = chars[i..].iter().take_while(|c| **c == '`').count();
-                // the closing run: the same length, not part of a longer run
-                let mut j = i + run;
-                let mut close = None;
-                while j < chars.len() {
-                    if chars[j] == '`' {
-                        let r = chars[j..].iter().take_while(|c| **c == '`').count();
-                        if r == run {
-                            close = Some(j);
-                            break;
-                        }
-                        j += r;
-                    } else {
-                        j += 1;
-                    }
-                }
-                match close {
-                    Some(end) => {
-                        out.extend(&chars[i..end + run]);
-                        i = end + run;
-                    }
-                    None => {
-                        out.extend(&chars[i..i + run]);
-                        i += run;
-                    }
-                }
-                continue;
-            }
             if ch == '<' && chars.get(i + 1).is_some_and(|c| c.is_ascii_alphabetic() || matches!(c, '/' | '!' | '?')) {
-                out.push_str("&lt;");
+                l.push_str("&lt;");
             } else if ch == '!' && chars.get(i + 1) == Some(&'[') {
                 // an image would make the viewer request its URL when the report is opened; it
                 // stays a link, which needs a click
-                out.push_str("\\!");
+                l.push_str("\\!");
             } else {
-                out.push(ch);
+                l.push(ch);
             }
             i += 1;
         }
+        out.push(l);
     }
-    out
+    if let Some((ch, run)) = fence {
+        out.push(ch.to_string().repeat(run));
+    }
+    out.join("\n")
 }
 
 fn md_table(l: &mut Vec<String>, head: &[&str], rows: &[Vec<String>]) {
@@ -1058,6 +1063,40 @@ mod tests {
         .unwrap();
     }
 
+    use crate::util::commonmark_markup as markup_in;
+
+    /// Mission 7: free text never becomes markup in a Markdown viewer, whatever a CommonMark
+    /// parser makes of its backticks and fences: code spans across lines, lines that look like
+    /// fences but are not, fences that a list item's end or a lone carriage return closes, fences
+    /// left open, and images.
+    #[test]
+    fn markdown_text_never_becomes_markup() {
+        let img = "<img src=https://x.example/p.png>";
+        let cases = [
+            format!("`a\nb` {img} `c`"),
+            format!("x\n    ```\n{img}"),
+            format!("```a`\n{img}\n```"),
+            format!("```\n```x\n```\n{img}"),
+            format!("1. x\n   ```\n{img}\n   ```"),
+            format!("- x\n\n  ```\n{img}\n  ```"),
+            format!("> ```\n{img}"),
+            format!("   ```\nx\n```\n{img}\n```"),
+            format!("```\nx\r```\r{img}"),
+            format!("~~~\nx\n~~~~\n{img}\n~~~"),
+            format!("````\n```\n{img}"),
+            "![x](https://x.example/i.png) and ![y][r]\n\n[r]: https://x.example/j.png".to_string(),
+            format!("\\\\{img}"),
+            "<!-- x --> <?php ?> <![CDATA[ x ]]> </p> <https://x.example/auto>".to_string(),
+        ];
+        for text in &cases {
+            let md = md_text(text);
+            assert_eq!(markup_in(&md), Vec::<String>::new(), "{text:?} -> {md:?}");
+        }
+        // a fence left open is closed at the end of the text, so what follows is not code
+        assert_eq!(md_text("```\n<b>"), "```\n<b>\n```");
+        assert_eq!(md_text("````\n```\n<b>"), "````\n```\n<b>\n````");
+    }
+
     #[test]
     fn markdown_reports_are_inert_and_keep_their_formatting() {
         let db = Db::open_in_memory().unwrap();
@@ -1070,32 +1109,21 @@ mod tests {
                 [],
             )?;
             let md = markdown(c, 1, &ReportOptions::default(), "2026-11-09")?;
-            // no tag can open outside code (fenced blocks and code spans)
-            let mut fenced = false;
-            for line in md.lines() {
-                if line.starts_with("```") {
-                    fenced = !fenced;
-                    continue;
-                }
-                if fenced {
-                    continue;
-                }
-                let outside: String = line.split('`').step_by(2).collect();
-                assert!(!outside.contains("<img") && !outside.contains("<script") && !outside.contains("<b>"), "{line}");
-            }
+            // a CommonMark parser finds no raw HTML and no image anywhere in the report
+            assert_eq!(markup_in(&md), Vec::<String>::new(), "{md}");
             assert!(md.contains("&lt;img src=x onerror=alert(1)>"), "{md}");
             assert!(md.contains("\\`&lt;img src=y>\\`"), "an escaped backtick opens no code span: {md}");
             // code stays code, and tables stay tables
             assert!(md.contains("```\n<script>alert(1)</script>\n```"), "{md}");
-            assert!(md.contains("Then `<b>` appears."), "{md}");
+            assert!(md.contains("Then `&lt;b>` appears."), "a code span cannot be trusted to contain a tag (Mission 7): {md}");
             assert!(md.contains("| a\\|b |"), "{md}");
             assert!(md.contains("`x'<img src=z>`"), "a backtick cannot end the code span: {md}");
             assert!(md.contains("# Acme | &lt;b> assessment report"));
             Ok(())
         })
         .unwrap();
-        assert_eq!(md_text("a <b>c</b> `<i>` \\<u> <3 x<y"), "a &lt;b>c&lt;/b> `<i>` \\<u> <3 x&lt;y");
-        assert_eq!(md_text("``a ` <b>`` <i>"), "``a ` <b>`` &lt;i>");
+        assert_eq!(md_text("a <b>c</b> `<i>` \\<u> <3 x<y"), "a &lt;b>c&lt;/b> `&lt;i>` \\<u> <3 x&lt;y");
+        assert_eq!(md_text("``a ` <b>`` <i>"), "``a ` &lt;b>`` &lt;i>");
         assert_eq!(md_text("` <b> unclosed"), "` &lt;b> unclosed");
     }
 

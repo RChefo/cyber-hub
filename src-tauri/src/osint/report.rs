@@ -36,6 +36,12 @@ pub fn cell(v: &str) -> String {
     }
 }
 
+/// A reference shown as a link: an http(s) URL with nothing that could end the link or the table
+/// cell, or start other markup.
+fn plain_url(r: &str) -> bool {
+    (r.starts_with("https://") || r.starts_with("http://")) && !r.chars().any(|c| c.is_whitespace() || c.is_control() || matches!(c, '<' | '>' | '`' | '|' | '\\' | '"'))
+}
+
 fn type_label(t: &str) -> &'static str {
     EntityType::parse(t).map(|t| t.label()).unwrap_or("Other")
 }
@@ -199,7 +205,8 @@ pub fn markdown(c: &Connection, inv: i64, generated: &str) -> AppResult<String> 
     };
     let evidence = store::evidence_list(c, inv, MAX_EVIDENCE_ROWS)?;
     let mut l: Vec<String> = vec![];
-    l.push(format!("# OSINT investigation: {}", i.name.trim().replace('<', "&lt;").replace('[', "\\[")));
+    let one_line = |v: &str| v.chars().map(|c| if c.is_control() { ' ' } else { c }).collect::<String>();
+    l.push(format!("# OSINT investigation: {}", one_line(i.name.trim()).replace('<', "&lt;").replace('[', "\\[")));
     l.push(String::new());
     l.push(format!("Generated {generated} by Cyber Hub from locally stored data. Status: {}.", i.status));
     l.push(String::new());
@@ -207,7 +214,7 @@ pub fn markdown(c: &Connection, inv: i64, generated: &str) -> AppResult<String> 
     // overview
     l.push("## Overview".into());
     l.push(String::new());
-    l.push(format!("- **Target:** {} `{}`", type_label(&i.target_type), i.target_value.replace('`', "'")));
+    l.push(format!("- **Target:** {} `{}`", type_label(&i.target_type), one_line(&i.target_value).replace('`', "'")));
     if let Some(p) = &i.project_name {
         l.push(format!("- **Linked project:** {}", cell(p)));
     }
@@ -220,8 +227,8 @@ pub fn markdown(c: &Connection, inv: i64, generated: &str) -> AppResult<String> 
     }
     if !i.description.trim().is_empty() {
         l.push(String::new());
-        // the description as written, except that an image would make the viewer request its URL
-        l.push(i.description.trim().replace("![", "!\\["));
+        // the description as written, but never markup: an imported graph sets it (Mission 7)
+        l.push(crate::workspace::report::md_text(&i.description));
     }
     l.push(String::new());
 
@@ -289,7 +296,8 @@ pub fn markdown(c: &Connection, inv: i64, generated: &str) -> AppResult<String> 
     } else {
         for (s, n) in &sources {
             let detail = providers::info(s).map(|p| format!(" — {} ({})", p.name, p.source_url)).unwrap_or_default();
-            l.push(format!("- `{s}`{detail}: {}", plural(*n, "evidence record", "evidence records")));
+            // an imported graph sets the source: shown as escaped text (Mission 7)
+            l.push(format!("- {}{detail}: {}", cell(s), plural(*n, "evidence record", "evidence records")));
         }
         if i.counts.evidence as usize > evidence.len() {
             l.push(format!("- Counts cover the {} most recent of {} evidence records.", evidence.len(), i.counts.evidence));
@@ -403,7 +411,8 @@ pub fn markdown(c: &Connection, inv: i64, generated: &str) -> AppResult<String> 
         l.push("| Collected | Source | Strength | Summary | Reference |".into());
         l.push("| --- | --- | --- | --- | --- |".into());
         for e in &evidence {
-            let reference = e.reference.as_deref().filter(|r| r.starts_with("https://") || r.starts_with("http://")).map(|r| format!("<{}>", r.replace(['<', '>', ' ', '|'], ""))).unwrap_or_else(|| e.reference.as_deref().map(cell).unwrap_or_else(|| "—".into()));
+            // a link only when the whole reference is a plain URL; anything else is escaped text (Mission 7)
+            let reference = e.reference.as_deref().map_or_else(|| "—".into(), |r| if plain_url(r) { format!("<{r}>") } else { cell(r) });
             l.push(format!("| {} | {} | {} | {} | {} |", e.collected_at.get(..16).unwrap_or(&e.collected_at).replace('T', " "), cell(&e.source), e.strength, cell(&e.summary), reference));
         }
     }
@@ -451,7 +460,8 @@ pub fn markdown(c: &Connection, inv: i64, generated: &str) -> AppResult<String> 
         l.push(String::new());
         l.push("## Analyst notes".into());
         l.push(String::new());
-        l.push(i.notes.trim().to_string());
+        // as written, but never markup: an imported graph sets them too (Mission 7)
+        l.push(crate::workspace::report::md_text(&i.notes));
     }
     l.push(String::new());
     Ok(l.join("\n"))
@@ -479,6 +489,34 @@ mod tests {
         o.relationships[0].origin = Origin::Inferred;
         run(&db, inv, &o);
         (db, inv)
+    }
+
+    /// Mission 7: fields an imported graph sets (the description, the notes, the target, an
+    /// evidence record's source and reference) never become markup: a CommonMark parser finds no
+    /// raw HTML and no image in the report.
+    #[test]
+    fn imported_fields_never_become_markup() {
+        let (db, inv) = setup();
+        db.with(|c| {
+            c.execute(
+                "UPDATE osint_investigations SET name = ?2, description = ?3, notes = ?4, target_value = ?5 WHERE id = ?1",
+                rusqlite::params![
+                    inv,
+                    "Acme\n\n<img src=https://x.example/h.png>",
+                    "\n\n<img src=https://x.example/d.png>",
+                    "`a\nb` <img src=https://x.example/n.png> `c`\n\n![n](https://x.example/n2.png)",
+                    "example.com\n\n<img src=https://x.example/t.png>"
+                ],
+            )?;
+            c.execute("UPDATE osint_evidence SET source = 'a` <img src=https://x.example/s.png> `', reference = ?2 WHERE investigation_id = ?1 AND summary = 'note'", rusqlite::params![inv, "https://ok.example/\n![x](https://x.example/r.png)"])?;
+            c.execute("UPDATE osint_evidence SET reference = 'https://ok.example/a`b<img src=https://x.example/q.png>' WHERE investigation_id = ?1 AND summary <> 'note'", [inv])?;
+            Ok(())
+        })
+        .unwrap();
+        let md = db.with(|c| markdown(c, inv, "2026-11-05")).unwrap();
+        assert_eq!(crate::util::commonmark_markup(&md), Vec::<String>::new(), "{md}");
+        // a plain URL stays a link
+        assert!(plain_url("https://urlhaus.abuse.ch/host/x/") && !plain_url("https://a.example/\n![x](y)") && !plain_url("javascript:alert(1)"));
     }
 
     #[test]
