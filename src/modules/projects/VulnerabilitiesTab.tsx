@@ -59,7 +59,7 @@ function AddVulnModal({ isOpen, onOpenChange, project }: { isOpen: boolean; onOp
     () => [
       { id: "none", label: "No specific asset" },
       ...(assets.data ?? [])
-        .filter((a) => ["service", "ip", "http_service", "domain", "subdomain", "endpoint", "technology"].includes(a.type))
+        .filter((a) => ["service", "ip", "http_service", "domain", "subdomain", "endpoint", "technology", "cloud_resource"].includes(a.type))
         .slice(0, 500)
         .map((a) => ({ id: String(a.id), label: `${a.value} (${ASSET_TYPE_LABEL[a.type]})` })),
     ],

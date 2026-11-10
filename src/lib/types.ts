@@ -323,7 +323,7 @@ export interface FindingLink {
   createdAt: string;
 }
 
-export type AssetType = "domain" | "subdomain" | "ip" | "dns_record" | "service" | "http_service" | "certificate" | "technology" | "endpoint";
+export type AssetType = "domain" | "subdomain" | "ip" | "dns_record" | "service" | "http_service" | "certificate" | "technology" | "endpoint" | "cloud_resource";
 export type AssetStatus = "active" | "not_observed" | "retired";
 
 export interface Asset {

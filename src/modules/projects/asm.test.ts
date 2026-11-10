@@ -64,6 +64,11 @@ describe("asset descriptions", () => {
     const { describeAsset } = await import("./asm");
     expect(describeAsset(asset(1, "http_service", "https://a.example.com", "active", { status: 200, title: "Sign in", tlsTrusted: false }))).toBe("HTTP 200 · Sign in · certificate not trusted");
     expect(describeAsset(asset(2, "ip", "192.0.2.1", "active", { names: ["a", "b", "c", "d"], inScope: false }))).toBe("a, b, c +1 · outside the authorized scope");
+    // a cloud resource from a configuration audit (Mission 6)
+    expect(
+      describeAsset(asset(3, "cloud_resource", "arn:aws:s3:::logs", "active", { provider: "aws", account: "123456789012", accountName: "production", region: "eu-west-1", resourceType: "AwsS3Bucket", owner: "data-team", exposure: { level: "public", basis: "Prowler check s3_bucket_public_access failed" } })),
+    ).toBe("AWS · account 123456789012 (production) · eu-west-1 · AwsS3Bucket · owner data-team · public: Prowler check s3_bucket_public_access failed");
+    expect(describeAsset(asset(4, "cloud_resource", "projects/p/zones/z/instances/i", "active", { provider: "gcp", service: "compute" }))).toBe("Google Cloud · compute");
     expect(describeAsset(asset(3, "service", "192.0.2.1:22/tcp", "active", { service: "ssh", product: "OpenSSH", version: "9.6" }))).toBe("ssh · OpenSSH 9.6");
     expect(describeAsset(asset(4, "endpoint", "https://a.example.com/x", "active", null))).toBe("");
   });

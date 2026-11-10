@@ -11,6 +11,7 @@ export const ASSET_TYPE_LABEL: Record<AssetType, string> = {
   certificate: "Certificate",
   technology: "Technology",
   endpoint: "Endpoint",
+  cloud_resource: "Cloud resource",
 };
 
 export const ASSET_STATUS_META: Record<AssetStatus, { label: string; tone: Tone }> = {
@@ -104,6 +105,18 @@ export function describeAsset(a: Asset): string {
     case "technology":
       parts.push(Array.isArray(d.versions) && d.versions.length ? d.versions.join(", ") : null, Array.isArray(d.seenOn) ? `on ${d.seenOn.length} service${d.seenOn.length === 1 ? "" : "s"}` : null);
       break;
+    case "cloud_resource": {
+      // provider-neutral details from a configuration audit (Mission 6)
+      const exposure = (d.exposure ?? null) as { level?: string; basis?: string } | null;
+      const provider = str(d.provider);
+      parts.push(
+        [provider ? (provider === "gcp" ? "Google Cloud" : provider === "aws" ? "AWS" : provider === "azure" ? "Azure" : provider) : null, str(d.account) ? `account ${str(d.account)}${str(d.accountName) ? ` (${str(d.accountName)})` : ""}` : null, str(d.region)].filter(Boolean).join(" · ") || null,
+        str(d.resourceType) ?? str(d.service),
+        str(d.owner) ? `owner ${str(d.owner)}` : null,
+        exposure?.level === "public" ? `public: ${exposure.basis ?? "reported"}` : null,
+      );
+      break;
+    }
     default:
       break;
   }
@@ -120,6 +133,7 @@ const COUNT_NOUN: Record<AssetType, [string, string]> = {
   certificate: ["certificate", "certificates"],
   technology: ["technology", "technologies"],
   endpoint: ["endpoint", "endpoints"],
+  cloud_resource: ["cloud resource", "cloud resources"],
 };
 
 /** "1 subdomain", "4 subdomains". */

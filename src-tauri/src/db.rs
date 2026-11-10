@@ -1375,16 +1375,48 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     ALTER TABLE attack_layers ADD COLUMN domain TEXT NOT NULL DEFAULT 'enterprise-attack' CHECK (domain IN ('enterprise-attack','mobile-attack','ics-attack'));
     ALTER TABLE attack_coverage_snapshots ADD COLUMN domain TEXT NOT NULL DEFAULT 'enterprise-attack' CHECK (domain IN ('enterprise-attack','mobile-attack','ics-attack'));
     "#,
+    // 32 — cloud resources as assets (docs/DATA_MODEL.md#assets): the type `cloud_resource`, with
+    // provider-neutral details in `data`. SQLite cannot widen a CHECK in place, and other tables
+    // refer to `assets` (observations, vulnerabilities), so the table is rebuilt with foreign keys
+    // off (REBUILD_MIGRATIONS): every row is copied with its id, and the index and the trigger on it
+    // are recreated. Nothing else changes.
+    r#"
+    CREATE TABLE assets_v32 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('domain','subdomain','ip','dns_record','service','http_service','certificate','technology','endpoint','cloud_resource')),
+        value TEXT NOT NULL,
+        key TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','not_observed','retired')),
+        confidence TEXT NOT NULL DEFAULT 'medium' CHECK (confidence IN ('low','medium','high')),
+        source TEXT NOT NULL,
+        osint_entity_id INTEGER REFERENCES osint_entities(id) ON DELETE SET NULL,
+        data TEXT NOT NULL DEFAULT '{}',
+        first_seen TEXT NOT NULL,
+        last_seen TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (project_id, type, key)
+    );
+    INSERT INTO assets_v32 (id, project_id, type, value, key, status, confidence, source, osint_entity_id, data, first_seen, last_seen, created_at, updated_at)
+        SELECT id, project_id, type, value, key, status, confidence, source, osint_entity_id, data, first_seen, last_seen, created_at, updated_at FROM assets;
+    DROP TABLE assets;
+    ALTER TABLE assets_v32 RENAME TO assets;
+    CREATE INDEX idx_assets_project ON assets(project_id, type, status);
+    CREATE TRIGGER relations_assets_deleted AFTER DELETE ON assets BEGIN
+        DELETE FROM relations WHERE (a_kind = 'asset' AND a_id = OLD.id) OR (b_kind = 'asset' AND b_id = OLD.id);
+    END;
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a
 /// column's constraints in place, so such a migration copies the table into a new one, drops the old
 /// one and renames the copy. With foreign keys on, dropping the old table would first delete, through
 /// `ON DELETE CASCADE`, every row that refers to it (finding history, links, fingerprints…). These
-/// migrations therefore run through [`run_rebuild`]. None is needed so far: migration 9 rebuilt
-/// `findings` when no table referred to it yet. A test fails when a migration drops a table that
-/// another table refers to without being listed here.
-const REBUILD_MIGRATIONS: &[i64] = &[];
+/// migrations therefore run through [`run_rebuild`]. Migration 9 rebuilt `findings` when no table
+/// referred to it yet; migration 32 rebuilds `assets` (Mission 6). A test fails when a migration
+/// drops a table that another table refers to without being listed here.
+const REBUILD_MIGRATIONS: &[i64] = &[32];
 
 /// Runs one migration that rebuilds a referenced table, as SQLite documents it (the "12 steps").
 /// * `PRAGMA foreign_keys` has no effect inside a transaction, so enforcement is turned off before
@@ -1405,6 +1437,9 @@ fn run_rebuild(conn: &Connection, version: i64, sql: &str) -> AppResult<()> {
                 "Migration {version} would leave {broken} broken references between tables, so it was not applied and the database is unchanged."
             )));
         }
+        // the upgrade tests fail or kill a rebuild here too
+        #[cfg(test)]
+        upgrade_tests::before_commit(version)?;
         tx.execute_batch(&format!("PRAGMA user_version = {version}"))?;
         tx.commit()?;
         Ok(())

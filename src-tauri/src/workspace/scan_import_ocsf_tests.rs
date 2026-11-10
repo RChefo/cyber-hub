@@ -205,3 +205,66 @@ fn files_of_a_folder_are_read() {
         }
     }
 }
+
+/// Mission 6: every checked resource joins the project's inventory as a cloud resource, with
+/// provider-neutral details, tags bounded and redacted, its exposure only when a failed check says
+/// so, and the findings linked to it. No scope entry is needed: it is not a network target.
+#[test]
+fn checked_resources_become_cloud_assets_linked_to_their_findings() {
+    let mut tagged = aws("s3_bucket_public_access", "FAIL", "public-bucket", 5);
+    tagged["resources"][0]["labels"] = json!(["Owner=data-team", "env:prod", "deploy=password=hunter2"]);
+    let text = file(&[tagged, aws("s3_bucket_default_encryption", "FAIL", "public-bucket", 3), aws("s3_bucket_public_access", "PASS", "private-bucket", 5)]);
+    let p = parse(&text).unwrap();
+    assert_eq!(p.assets.iter().filter(|a| a.kind == "cloud_resource").count(), 3, "one per checked item, merged per resource at import");
+    assert_eq!(p.findings[0].asset, Some(("cloud_resource", "arn:aws:s3:::public-bucket".to_string())));
+
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'Cloud audit', 'active', 't', 't')", [])?;
+        let pv = preview(c, 1, &p, Options::default())?;
+        assert!(!pv.warnings.iter().any(|w| w.contains("no scope entries")), "a cloud audit needs no host scope: {:?}", pv.warnings);
+        let r = import(c, 1, &p, Options::default(), &FileInfo { file_name: "prowler.ocsf.json", sha256: "00", evidence_id: None })?;
+        assert_eq!((r.created, r.assets_new), (2, 2));
+        let assets = crate::workspace::assets::list(c, 1, Some("cloud_resource"), None, 50, 0)?;
+        assert_eq!(assets.iter().map(|a| a.value.as_str()).collect::<Vec<_>>(), ["arn:aws:s3:::private-bucket", "arn:aws:s3:::public-bucket"]);
+        let public = &assets[1].data;
+        for (k, v) in [("provider", "aws"), ("account", "123456789012"), ("accountName", "production"), ("region", "eu-west-1"), ("service", "s3"), ("resourceType", "AwsS3Bucket"), ("name", "public-bucket"), ("owner", "data-team")] {
+            assert_eq!(public[k], v, "{k}");
+        }
+        assert_eq!(public["tags"]["env"], "prod");
+        assert!(!public.to_string().contains("hunter2"), "tag values are redacted: {public}");
+        assert_eq!(public["exposure"], json!({ "level": "public", "basis": "Prowler check s3_bucket_public_access failed" }));
+        assert_eq!(public["sources"].as_array().unwrap().len(), 2, "both checks that reported it");
+        assert!(assets[0].data.get("exposure").is_none(), "a passed check says nothing about exposure");
+        // the findings are about the resource
+        let fid: i64 = c.query_row("SELECT id FROM findings WHERE title LIKE 'Ensure there are no S3 buckets%'", [], |r| r.get(0))?;
+        let linked: i64 = c.query_row("SELECT ref_id FROM finding_links WHERE finding_id = ?1 AND kind = 'asset'", [fid], |r| r.get(0))?;
+        assert_eq!(linked, assets[1].id);
+        // the report lists the resource with the project's other assets
+        let md = crate::workspace::report::markdown(c, 1, &crate::workspace::report::ReportOptions::default(), "2026-11-10")?;
+        assert!(md.contains("arn:aws:s3:::public-bucket"), "{md}");
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn cloud_identifiers_keep_their_provider_and_case_rules() {
+    use crate::workspace::assets::{cloud_provider, normalize_asset};
+    assert_eq!(normalize_asset("cloud_resource", " arn:aws:s3:::Logs-Bucket ").unwrap(), ("arn:aws:s3:::Logs-Bucket".into(), "arn:aws:s3:::Logs-Bucket".into()), "AWS names are case-sensitive");
+    let azure = "/subscriptions/0f0f0f0f-0000-4000-8000-000000000000/resourceGroups/RG-Prod/providers/Microsoft.Storage/storageAccounts/acmelogs";
+    let (shown, key) = normalize_asset("cloud_resource", azure).unwrap();
+    assert_eq!((shown.as_str(), key), (azure, azure.to_ascii_lowercase()), "Azure resource IDs are case-insensitive");
+    assert!(normalize_asset("cloud_resource", "my bucket").is_err());
+    for (id, p) in [
+        ("arn:aws:ec2:eu-west-1:123456789012:instance/i-0abc", "aws"),
+        ("arn:aws-us-gov:s3:::b", "aws"),
+        (azure, "azure"),
+        ("//storage.googleapis.com/projects/_/buckets/acme", "gcp"),
+        ("projects/acme/zones/europe-west1-b/instances/vm-1", "gcp"),
+        ("k8s://prod/deployment/web", "kubernetes"),
+        ("ocid1.bucket.oc1..aaaa", "other"),
+    ] {
+        assert_eq!(cloud_provider(id), p, "{id}");
+    }
+}

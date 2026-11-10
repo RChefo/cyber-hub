@@ -271,6 +271,41 @@ fn backups(dir: &Path) -> Vec<PathBuf> {
     v
 }
 
+/// Mission 6: migration 32 rebuilds `assets`, which other tables refer to. Run with foreign keys
+/// off, it keeps every id, and afterwards the references behave as before: deleting an asset
+/// still removes its observations, clears vulnerabilities' link to it and drops its relationships.
+#[test]
+fn the_assets_rebuild_keeps_ids_and_every_reference_working() {
+    let dir = tmpdir("assets32");
+    let path = dir.join("cyberhub.db");
+    let c = Connection::open(&path).unwrap();
+    c.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;").unwrap();
+    migrate_to(&c, 31).unwrap();
+    c.execute_batch(
+        "INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'P', 'active', 't', 't');
+         INSERT INTO assets (id, project_id, type, value, key, source, first_seen, last_seen, created_at, updated_at) VALUES (7, 1, 'ip', '10.0.0.7', '10.0.0.7', 'nmap', 't', 't', 't', 't'), (9, 1, 'domain', 'acme.test', 'acme.test', 'dns', 't', 't', 't', 't');
+         INSERT INTO asset_observations (asset_id, observed_at, source, fingerprint) VALUES (7, 't', 'nmap', 'f1'), (9, 't', 'dns', 'f2');
+         INSERT INTO vulnerabilities (id, project_id, cve_id, asset_id, status, priority, priority_score, created_at, updated_at) VALUES (3, 1, 'CVE-2024-3094', 7, 'open', 'p1', 9.0, 't', 't');
+         INSERT INTO relations (project_id, a_kind, a_id, b_kind, b_id, type, origin, verification, created_by, created_at, updated_at) VALUES (1, 'asset', 7, 'vulnerability', 3, 'affects', 'manual', 'verified', 'user', 't', 't');",
+    )
+    .unwrap();
+    migrate_to(&c, 32).unwrap();
+    let n = |sql: &str| c.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();
+    assert_eq!(n("PRAGMA user_version"), 32);
+    assert_eq!(n("SELECT COUNT(*) FROM assets WHERE id IN (7, 9)"), 2, "ids kept");
+    assert_eq!(n("SELECT COUNT(*) FROM pragma_foreign_key_check"), 0);
+    assert_eq!(n("PRAGMA foreign_keys"), 1, "enforcement is back on after the rebuild");
+    c.execute("INSERT INTO assets (project_id, type, value, key, source, first_seen, last_seen, created_at, updated_at) VALUES (1, 'cloud_resource', 'arn:aws:s3:::b', 'arn:aws:s3:::b', 'import', 't', 't', 't', 't')", []).unwrap();
+    assert!(n("SELECT MAX(id) FROM assets") > 9, "new ids continue after the copied ones");
+    c.execute("DELETE FROM assets WHERE id = 7", []).unwrap();
+    assert_eq!(n("SELECT COUNT(*) FROM asset_observations WHERE asset_id = 7"), 0, "observations cascade");
+    assert_eq!(n("SELECT COUNT(*) FROM vulnerabilities WHERE id = 3 AND asset_id IS NULL"), 1, "the vulnerability's link is cleared");
+    assert_eq!(n("SELECT COUNT(*) FROM relations"), 0, "the trigger drops the relationship");
+    assert_eq!(n("SELECT COUNT(*) FROM asset_observations WHERE asset_id = 9"), 1);
+    drop(c);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn the_seeder_reads_checks_from_the_schema() {
     let sql = "CREATE TABLE t (status TEXT NOT NULL CHECK (status IN ('new','done')), reliability TEXT NOT NULL DEFAULT '' CHECK (reliability IN ('','A','B')), level INTEGER CHECK (level BETWEEN 1 AND 3), confidence INTEGER CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 100), sub_status TEXT, quote TEXT CHECK (quote IN ('it''s')))";

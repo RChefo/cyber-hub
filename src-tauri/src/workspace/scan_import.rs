@@ -1809,7 +1809,10 @@ fn asset_batch(entries: &[ScopeEntry], items: &[AssetItem]) -> (Batch, usize, BT
     for it in items {
         // a web service whose origin has authorized URLs is part of the inventory; its host is not
         let web_origin = it.kind == "http_service" && crate::scope::origin_has_authorized_paths(entries, &it.value);
-        if !web_origin && !in_scope(entries, &it.host) {
+        // a cloud resource from a configuration audit is not a network target: the scope's hosts
+        // and addresses do not apply to it (Mission 6)
+        let cloud = it.kind == "cloud_resource";
+        if !cloud && !web_origin && !in_scope(entries, &it.host) {
             left_out += 1;
             if hosts.len() < 20 {
                 hosts.insert(it.host.clone());
@@ -1851,7 +1854,7 @@ pub fn preview(c: &Connection, project_id: i64, parsed: &Parsed, opts: Options) 
         pv.warnings.push("The file was not read completely, so findings it does not report are not listed as fixed".into());
     }
     // files without network targets (source code, cloud resources) need no scope
-    if !pv.has_scope && (!parsed.assets.is_empty() || parsed.findings.iter().any(|f| f.network || f.host.is_some())) {
+    if !pv.has_scope && (parsed.assets.iter().any(|a| a.kind != "cloud_resource") || parsed.findings.iter().any(|f| f.network || f.host.is_some())) {
         pv.warnings.push("The project has no scope entries, so every host in the file is outside the scope. Add the scope first.".into());
     }
     let mut out_hosts: BTreeSet<String> = BTreeSet::new();
@@ -1967,7 +1970,7 @@ pub fn not_reported(c: &Connection, project_id: i64, parsed: &Parsed) -> AppResu
 fn count_new_assets(c: &Connection, project_id: i64, items: &[AssetItem], entries: &[ScopeEntry]) -> AppResult<usize> {
     let roots: BTreeSet<String> = entries.iter().filter(|e| e.in_scope && e.kind == "domain").map(|e| e.value.trim().trim_start_matches("*.").to_lowercase()).collect();
     let mut keys: BTreeSet<(&'static str, String)> = BTreeSet::new();
-    for it in items.iter().filter(|i| in_scope(entries, &i.host)) {
+    for it in items.iter().filter(|i| i.kind == "cloud_resource" || in_scope(entries, &i.host)) {
         let kind = if it.kind == "name" { if roots.contains(&it.value.to_lowercase()) { "domain" } else { "subdomain" } } else { it.kind };
         if let Ok((_, key)) = assets::normalize_asset(kind, &it.value) {
             keys.insert((kind, key));

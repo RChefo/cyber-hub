@@ -12,7 +12,7 @@
 //! * Prowler leaves the array without its closing bracket when a scan is interrupted; such a file is
 //!   read as far as it goes and marked incomplete.
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use super::{fingerprint, s, severity_word, strings, tool_tags, trunc, Format, ImportedFinding, Parsed};
 
@@ -103,6 +103,54 @@ fn attacks(x: &Value) -> Vec<(String, String)> {
     out
 }
 
+/// The provider-neutral description of a checked resource, as an asset's data (Mission 6): the
+/// provider, account, region, service, type, name, tags (bounded, values redacted), an owner
+/// named by a tag, its exposure when a failed check is about public access, and the check that
+/// reported it. Nothing else of the resource (its raw data, secrets a misconfiguration exposed) is
+/// kept.
+fn cloud_data(x: &Value, res: &Value, product: &str, check: &str, failed: bool) -> Value {
+    let uid = s(res, "uid");
+    let provider = match s(&x["cloud"], "provider").to_ascii_lowercase().as_str() {
+        "" => crate::workspace::assets::cloud_provider(&uid).to_string(),
+        p => trunc(p, 20),
+    };
+    let mut tags = serde_json::Map::new();
+    for label in strings(res.get("labels")).into_iter().take(50) {
+        let (k, v) = label.split_once(['=', ':']).unwrap_or((label.as_str(), ""));
+        if !k.trim().is_empty() {
+            tags.insert(trunc(k, 128), Value::String(crate::redact::redact_text(&trunc(v, 256))));
+        }
+    }
+    if let Some(o) = res.get("tags").and_then(Value::as_object) {
+        for (k, v) in o.iter().take(50usize.saturating_sub(tags.len())) {
+            tags.insert(trunc(k, 128), Value::String(crate::redact::redact_text(&trunc(&v.as_str().map(String::from).unwrap_or_else(|| v.to_string()), 256))));
+        }
+    }
+    let owner = ["owner", "Owner", "team", "Team", "owner_email", "Contact"].iter().find_map(|k| tags.get(*k).and_then(Value::as_str).filter(|v| !v.is_empty()).map(String::from));
+    let mut d = json!({
+        "provider": provider,
+        "account": trunc(&s(&x["cloud"]["account"], "uid"), 200),
+        "accountName": trunc(&s(&x["cloud"]["account"], "name"), 200),
+        "region": trunc(&[s(res, "region"), s(&x["cloud"], "region")].into_iter().find(|r| !r.is_empty()).unwrap_or_default(), 100),
+        "namespace": trunc(&s(res, "namespace"), 200),
+        "service": trunc(&s(&res["group"], "name"), 100),
+        "resourceType": trunc(&s(res, "type"), 200),
+        "name": trunc(&s(res, "name"), 300),
+        "sources": [format!("{} {}", trunc(product, 60), trunc(check, 120))],
+    });
+    // only what the item says: another check of the same resource without tags must not erase them
+    if !tags.is_empty() {
+        d["tags"] = Value::Object(tags);
+    }
+    if let Some(o) = owner {
+        d["owner"] = json!(o);
+    }
+    if failed && check.to_ascii_lowercase().contains("public") {
+        d["exposure"] = json!({ "level": "public", "basis": format!("{} check {} failed", trunc(product, 60), trunc(check, 120)) });
+    }
+    d
+}
+
 pub(super) fn parse(text: &str) -> Result<Parsed, String> {
     let (v, repaired) = match serde_json::from_str::<Value>(text) {
         Ok(v) => (v, false),
@@ -143,6 +191,13 @@ pub(super) fn parse(text: &str) -> Result<Parsed, String> {
         let fp = fingerprint(&["ocsf", &product, &check, &account, &region, &resource]);
         let code = s(x, "status_code").to_ascii_uppercase();
         let status_id = x.get("status_id").and_then(Value::as_u64);
+        // every checked resource joins the project's inventory as a cloud resource, passed or not
+        // (Mission 6); a failed check about public access says so, with the check as the basis
+        let resource_uid = s(res, "uid");
+        if !resource_uid.is_empty() && status_id != Some(3) {
+            let failed = code == "FAIL" || (code.is_empty() && status_id != Some(4));
+            p.push_asset("cloud_resource", &resource_uid, "", cloud_data(x, res, &product, &check, failed));
+        }
         if code == "PASS" || status_id == Some(4) {
             passed += 1;
             p.passed.insert(fp);
@@ -213,7 +268,8 @@ pub(super) fn parse(text: &str) -> Result<Parsed, String> {
             confidence: "high",
             target: trunc(&target, 500),
             host: None,
-            asset: None,
+            // the finding is about the checked resource (Mission 6)
+            asset: (!resource.is_empty() && !s(res, "uid").is_empty()).then(|| ("cloud_resource", s(res, "uid"))),
             description: trunc(&description, 50_000),
             remediation: trunc(&remediation, 50_000),
             technical: trunc(&technical.join("\n"), 50_000),

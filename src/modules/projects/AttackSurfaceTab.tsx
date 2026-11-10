@@ -38,6 +38,7 @@ const ASSET_PLACEHOLDER: Record<AssetType, string> = {
   certificate: "SHA-256 fingerprint",
   technology: "nginx",
   endpoint: "https://app.example.com/api/v1/login",
+  cloud_resource: "arn:aws:s3:::example-bucket",
 };
 
 /** Follows background discovery: progress lines and refreshes when a run ends. */

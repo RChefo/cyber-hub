@@ -12,7 +12,25 @@ use crate::error::{validation, AppError, AppResult};
 use crate::osint::normalize;
 use crate::util::now;
 
-pub const TYPES: &[&str] = &["domain", "subdomain", "ip", "dns_record", "service", "http_service", "certificate", "technology", "endpoint"];
+pub const TYPES: &[&str] = &["domain", "subdomain", "ip", "dns_record", "service", "http_service", "certificate", "technology", "endpoint", "cloud_resource"];
+
+/// The provider of a cloud resource identifier (Mission 6): `aws` (ARN), `azure` (ARM resource
+/// ID), `gcp` (full resource name), `kubernetes` (`k8s://` or `namespace/kind/name` as Prowler
+/// writes it), or `other`. Only the shape of the identifier is read; nothing is contacted.
+pub fn cloud_provider(id: &str) -> &'static str {
+    let lower = id.trim().to_ascii_lowercase();
+    if lower.starts_with("arn:aws") {
+        "aws"
+    } else if lower.starts_with("/subscriptions/") || lower.starts_with("/providers/microsoft.") {
+        "azure"
+    } else if lower.starts_with("//") && lower.contains(".googleapis.com/") || lower.starts_with("projects/") {
+        "gcp"
+    } else if lower.starts_with("k8s://") {
+        "kubernetes"
+    } else {
+        "other"
+    }
+}
 pub const STATUSES: &[&str] = &["active", "not_observed", "retired"];
 const CONFIDENCES: &[&str] = &["low", "medium", "high"];
 const DNS_TYPES: &[&str] = &["A", "AAAA", "CNAME", "MX", "NS", "TXT", "SOA", "PTR", "SRV", "CAA"];
@@ -114,6 +132,15 @@ pub fn normalize_asset(kind: &str, raw: &str) -> Result<(String, String), String
             }
             Ok((v.clone(), v.to_ascii_lowercase()))
         }
+        // an ARN, an Azure resource ID, a Google Cloud resource name or another provider's
+        // identifier; Azure's are case-insensitive, the others are not (Mission 6)
+        "cloud_resource" => {
+            if raw.chars().any(char::is_whitespace) {
+                return Err("A cloud resource is named by its identifier (an ARN, an Azure resource ID, a Google Cloud resource name…), without spaces".into());
+            }
+            let key = if cloud_provider(raw) == "azure" { raw.to_ascii_lowercase() } else { raw.to_string() };
+            Ok((raw.to_string(), key))
+        }
         _ => Err(format!("Unknown asset type '{kind}'")),
     }
 }
@@ -206,7 +233,15 @@ pub fn upsert_observation(c: &Connection, input: &AssetInput, snapshot_id: Optio
     if source.is_empty() {
         return Err(validation("Every asset needs a discovery source"));
     }
-    let data = input.data.clone().unwrap_or_else(|| serde_json::json!({}));
+    let mut data = input.data.clone().unwrap_or_else(|| serde_json::json!({}));
+    // a cloud resource names its provider, read from the identifier when nothing else did
+    if input.kind == "cloud_resource" {
+        if let Some(o) = data.as_object_mut() {
+            if o.get("provider").and_then(serde_json::Value::as_str).is_none_or(|p| p.is_empty()) {
+                o.insert("provider".into(), serde_json::json!(cloud_provider(&value)));
+            }
+        }
+    }
     if data.to_string().len() > 64 * 1024 {
         return Err(validation("Asset data is limited to 64 KB"));
     }
