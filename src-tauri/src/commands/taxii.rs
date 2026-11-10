@@ -38,6 +38,14 @@ fn drop_credential(s: &Server) -> AppResult<()> {
     crate::commands::system::delete_taxii_secret(s)
 }
 
+/// A server's credential changes one change at a time (Mission 7). The credential dialog checks
+/// the server again once the analyst has answered, then writes the credential store. A removal, a
+/// save that moves the server, or "Forget" landing between the two found nothing to delete, and
+/// the write then left the credential in the store for a server that no longer had it (seen live:
+/// a removal 150–200 ms after Store). Each holds this while it checks the server and changes the
+/// store; nothing waits for the dialog itself.
+static CREDENTIALS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[tauri::command]
 pub async fn taxii_servers(db: State<'_, Db>) -> AppResult<Vec<ServerView>> {
     db.with(|c| taxii::servers(c)?.into_iter().map(|s| view(c, s)).collect())
@@ -45,6 +53,11 @@ pub async fn taxii_servers(db: State<'_, Db>) -> AppResult<Vec<ServerView>> {
 
 #[tauri::command]
 pub async fn taxii_server_save(db: State<'_, Db>, input: ServerInput) -> AppResult<i64> {
+    save_server(&db, input).await
+}
+
+async fn save_server(db: &Db, input: ServerInput) -> AppResult<i64> {
+    let _changing = CREDENTIALS.lock().await;
     let before = match input.id {
         Some(id) => Some(db.with(|c| taxii::server(c, id))?),
         None => None,
@@ -66,6 +79,11 @@ pub async fn taxii_server_save(db: State<'_, Db>, input: ServerInput) -> AppResu
 /// their source.
 #[tauri::command]
 pub async fn taxii_server_delete(db: State<'_, Db>, id: i64) -> AppResult<()> {
+    remove_server(&db, id).await
+}
+
+async fn remove_server(db: &Db, id: i64) -> AppResult<()> {
+    let _changing = CREDENTIALS.lock().await;
     let s = db.with(|c| taxii::server(c, id))?;
     drop_credential(&s)?;
     db.with(|c| {
@@ -105,16 +123,25 @@ pub async fn taxii_auth_prompt(app: AppHandle, id: i64) -> AppResult<bool> {
     if s.auth == "basic" && (user.is_empty() || user.len() > 200 || user.contains(':') || user.chars().any(char::is_control)) {
         return Err(validation("Nothing was stored: HTTP Basic needs a user name without ':' (at most 200 characters)"));
     }
-    // the server may have been edited while the dialog was open: the secret is stored only for the
-    // origin, the kind of authentication and the header the dialog named
-    let now = app.state::<Db>().with(|c| taxii::server(c, id))?;
-    if taxii::server_secret_name(&now) != taxii::server_secret_name(&s) {
+    store_typed(&app.state::<Db>(), &s, secret, user).await
+}
+
+/// Stores a credential typed into the dialog, for the server as the dialog named it. The server
+/// may have been removed or edited while the dialog was open: the secret is stored only for the
+/// origin, the kind of authentication and the header the dialog named.
+async fn store_typed(db: &Db, s: &Server, secret: &str, user: &str) -> AppResult<bool> {
+    let _changing = CREDENTIALS.lock().await;
+    let now = match db.with(|c| taxii::server(c, s.id)) {
+        Err(AppError::NotFound(_)) => return Err(validation("Nothing was stored: the server was removed while the dialog was open")),
+        other => other?,
+    };
+    if taxii::server_secret_name(&now) != taxii::server_secret_name(s) {
         return Err(validation("Nothing was stored: the server's address or authentication changed while the dialog was open"));
     }
-    crate::commands::system::store_taxii_secret(&s, secret)?;
+    crate::commands::system::store_taxii_secret(s, secret)?;
     if s.auth == "basic" && user != now.username {
-        app.state::<Db>().with(|c| {
-            c.execute("UPDATE taxii_servers SET username = ?2, updated_at = ?3 WHERE id = ?1", rusqlite::params![id, user, crate::util::now()])?;
+        db.with(|c| {
+            c.execute("UPDATE taxii_servers SET username = ?2, updated_at = ?3 WHERE id = ?1", rusqlite::params![s.id, user, crate::util::now()])?;
             Ok(())
         })?;
     }
@@ -129,6 +156,14 @@ pub async fn taxii_auth_forget(app: AppHandle, id: i64) -> AppResult<bool> {
     if !crate::confirm::native(&app, "Forget a TAXII credential", format!("Delete the stored credential of the TAXII server “{}” from this computer's credential store?", s.name), "Delete").await {
         return Ok(stored(&s));
     }
+    forget(&app.state::<Db>(), id).await
+}
+
+/// Deletes the server's credential as the server is now (it may have been edited while the
+/// confirmation was open).
+async fn forget(db: &Db, id: i64) -> AppResult<bool> {
+    let _changing = CREDENTIALS.lock().await;
+    let s = db.with(|c| taxii::server(c, id))?;
     drop_credential(&s)?;
     Ok(false)
 }
@@ -231,7 +266,60 @@ pub async fn taxii_sync(app: AppHandle, collection_id: i64) -> AppResult<SyncRun
 
 #[cfg(test)]
 mod tests {
-    use super::Syncing;
+    use super::{forget, remove_server, save_server, store_typed, Syncing, CREDENTIALS};
+    use crate::db::Db;
+    use crate::ti::taxii::{self, ServerInput};
+
+    /// Whether the change is still waiting after 300 ms. It is then dropped, so it never reaches
+    /// the credential store.
+    async fn still_waiting<F: std::future::Future>(change: F) -> bool {
+        tokio::time::timeout(std::time::Duration::from_millis(300), change).await.is_err()
+    }
+
+    /// Mission 7: a server's credential changes one change at a time. While a typed credential is
+    /// being stored, removing the server, saving it elsewhere, "Forget" and another store wait,
+    /// so whichever comes second sees what the first did; and a credential typed for a server
+    /// that was moved or removed meanwhile is refused before the credential store is touched. Live
+    /// on Debian, a removal 150–200 ms after Store left the new credential in the Secret Service
+    /// (2 of 10 attempts) before this.
+    #[tokio::test]
+    async fn credential_changes_never_interleave() {
+        let db = Db::open_in_memory().unwrap();
+        let input = ServerInput { id: None, name: "Serialized".into(), discovery_url: "https://taxii.serialized.test/taxii2/".into(), auth: "basic".into(), username: "analyst".into(), reliability: "B".into(), default_confidence: Some(50), ..Default::default() };
+        let first = save_server(&db, input.clone()).await.unwrap();
+        // a number no real credential store holds a credential for: nothing here can reach one
+        let id = 900_001;
+        db.with(|c| {
+            c.execute("UPDATE taxii_servers SET id = ?2 WHERE id = ?1", rusqlite::params![first, id])?;
+            Ok(())
+        })
+        .unwrap();
+        let s = db.with(|c| taxii::server(c, id)).unwrap();
+
+        let storing = CREDENTIALS.lock().await;
+        assert!(still_waiting(remove_server(&db, id)).await, "a removal waits for the credential being stored");
+        let moved = ServerInput { id: Some(id), discovery_url: "https://elsewhere.serialized.test/taxii2/".into(), ..input.clone() };
+        assert!(still_waiting(save_server(&db, moved)).await, "a save that moves the server waits");
+        assert!(still_waiting(forget(&db, id)).await, "Forget waits");
+        assert!(still_waiting(store_typed(&db, &s, "QA-typed-value", "analyst")).await, "another store waits");
+        drop(storing);
+        assert_eq!(db.with(|c| taxii::server(c, id)).unwrap().discovery_url, s.discovery_url, "nothing changed while they waited");
+
+        db.with(|c| {
+            c.execute("UPDATE taxii_servers SET discovery_url = 'https://moved.serialized.test/taxii2/' WHERE id = ?1", [id])?;
+            Ok(())
+        })
+        .unwrap();
+        let err = store_typed(&db, &s, "QA-typed-value", "analyst").await.unwrap_err().to_string();
+        assert!(err.contains("changed while the dialog was open"), "{err}");
+        db.with(|c| {
+            c.execute("DELETE FROM taxii_servers WHERE id = ?1", [id])?;
+            Ok(())
+        })
+        .unwrap();
+        let err = store_typed(&db, &s, "QA-typed-value", "analyst").await.unwrap_err().to_string();
+        assert!(err.contains("removed while the dialog was open"), "{err}");
+    }
 
     /// Mission 7: one synchronization per collection at a time; another collection is not held up,
     /// and the collection is free again when the synchronization ends, however it ends.
