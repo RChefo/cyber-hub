@@ -265,7 +265,9 @@ A defect found is fixed, and its input is kept as a regression test next to the 
 **Coverage-guided fuzzing.** `src-tauri/fuzz` holds cargo-fuzz targets (libFuzzer with AddressSanitizer) for 13 parsers: YAML, Sigma, JSON and text events, EVTX, PCAP, scan imports, SBOMs, lockfiles, API specifications, OSINT imports, IaC and containers, PE/ELF triage, and the MCP proof. They call entry points that exist only with the `fuzzing` Cargo feature, which application builds never enable.
 * In Mission 5 each target ran for 150 s in an offline Linux container (Ubuntu 24.04, nightly Rust), with seeds generated from the sweep's own fixtures: between 0.2 and 38 million inputs per target.
 * It found one defect, in the YAML reader (below), and nothing in the other twelve.
-* The EVTX target started without a seed and barely got past the file signature, so its result says little; a seeded run is listed under open items.
+* The EVTX target first ran without a seed and barely got past the file signature (54 coverage points). It was run again for 600 s from the test suite's generated EVTX file, which has an inline template, a template reference and a nested fragment.
+  * It reached 8,510 coverage points with 570,797 inputs.
+  * There was no crash, timeout or out-of-memory error.
 
 [fuzz/README.md](../src-tauri/fuzz/README.md) says how to run them.
 

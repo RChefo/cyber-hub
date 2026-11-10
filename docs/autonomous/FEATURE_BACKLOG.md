@@ -201,3 +201,42 @@ The Mission 2 scoring model: D demand (×3), U professional usefulness (×2), N 
 | 50 | Assessment comparison and remediation metrics | 3 | 3 | 3 | 4 | 3 | 5 | 4 | 3 | 44 | Deferred |
 | 51 | TAXII 2.1 feeds and indicator import | 3 | 3 | 4 | 3 | 2 | 2 | 3 | 2 | 38 | Deferred: network feeds need their own confirmation and provenance design |
 | 52 | ATT&CK Mobile and ICS matrices | 2 | 2 | 3 | 2 | 2 | 5 | 3 | 2 | 32 | Deferred: the brief asks for proper data and tests first |
+
+## Mission 5 (2026-11-10T10:14Z): hardening, Linux compatibility and feature completion
+
+The brief set the order itself: Linux first, then parser security, database migrations, Sigma, risk acceptance, TAXII, compliance, ATT&CK and performance. No new ranking was made; the table records where the open Mission 4 items and the brief's new work ended.
+
+### Sources consulted during the mission
+
+* **Sigma correlation rules specification v2.1.0 (2025-08-02)**, read from SigmaHQ's `sigma-specification` repository:
+  * the six correlation types;
+  * `rules`, `group-by`, `timespan`, `condition`, field `aliases` and `generate`;
+  * chaining, and the rule that only the outermost correlation carries metadata.
+
+  `value_percentile` is listed but its percentile is not defined, so Cyber Hub refuses it.
+* **TAXII 2.1, OASIS Standard (10 June 2021)**:
+  * the media type and Accept header;
+  * discovery, API roots and collections;
+  * the objects endpoint with `added_after`, `next` and `limit`;
+  * the `X-TAXII-Date-Added-First` and `-Last` headers;
+  * the HTTPS requirement.
+
+  The copy that was read was truncated: the conformance section and "Add Objects" were not visible. Cyber Hub only reads from servers, so it does not use "Add Objects".
+* **Known without a fetch in this mission**, and named as such: STIX 2.1 indicator patterning, beyond the equality comparisons that are imported; and the ATT&CK Navigator layer format, already implemented in Mission 3.
+
+### Status
+
+| # | Item | Status |
+|---|---|---|
+| 47 | Risk acceptance records and exceptions | **Done** (`e6869ed`). Every path that sets *accepted risk* (status menus, the editor, bulk changes, imports, internal services) requires a covering record. MCP can only read the register |
+| 48 | Host hunting analytics beyond rules | Deferred. It was not in the Mission 5 brief; Sigma rules, now with correlations, cover counted and ordered logon patterns |
+| 49 | Sigma correlation rules and aggregations | **Done** (`0c8084f`, fixed in `91b064a`): all types except `value_percentile`, which is refused with the reason |
+| 50 | Assessment comparison and remediation metrics | **Done for ASVS** (`e6869ed`): gaps by chapter with exceptions and the remediation state of linked findings, compliant requirements without evidence, and comparison of two assessments |
+| 51 | TAXII 2.1 feeds and indicator import | **Done** (`3573c2f`). Only on request, each connection confirmed, indicators only, never findings |
+| 52 | ATT&CK Mobile and ICS matrices | Deferred: no official Mobile or ICS data is bundled, and the brief forbids them without it |
+| 53 | ATT&CK technique history and comparison of technique sets, with coverage snapshots | **Done** (`24045f0`) |
+| 54 | Parser hardening: review of every untrusted-input parser, a hostile-input sweep, fuzzing | **Done** (`6acf43e`, `3336d6b`). Smaller amplifications remain open (SECURITY.md, "Parser safety") |
+| 55 | Upgrade validation from every schema version, with failures and kills | **Done** (`ff3e5f5`) |
+| 56 | CI: pinned toolchains and actions, clippy, Debian 12, audits, secret scanning | **Done** (`7206810`). Not run on GitHub, because the repository has not been pushed |
+| 57 | TAXII credentials entered in the app, not only provisioned | Deferred. Credentials are stored only with `cyberhub-keys taxii-set`, so the web view never handles them |
+| 58 | A cloud-resource asset type for cloud findings | Deferred. The cloud workflow used a domain asset (MISSION_REPORT.md, "Mission 5") |

@@ -1021,3 +1021,116 @@ The owner's brief asked for research-driven new capabilities in seven tracks (we
   * gitleaks over the mission's 7 commits clean.
 * The real database was never opened: every real-app run checked its modification time (2026-11-05T15:58:24.853Z, unchanged), and each ran on a fresh copy of a disposable data folder.
 * Not run: the Linux suites and GUI checks, and release-build performance. No installers were built, and nothing was pushed or published.
+
+## Mission 5 (2026-11-10T10:14Z): hardening, Linux compatibility and feature completion
+
+## 10:14–10:56Z: baseline, Linux, migrations and Sigma correlation (`4d9b12f`, `ff3e5f5`, `0c8084f`)
+
+* Baseline:
+  * `release/v0.1.0` at `0f51cd2`, clean tree, schema 26, MSRV 1.90;
+  * Windows: 522 Rust tests (10 ignored), 276 frontend tests in 49 files.
+* Ubuntu 24.04.5 and Debian 12 containers (Rust 1.99.1, Node 22.12.0, WebKitGTK 2.52.6 and 2.50.6):
+  * tsc, 49 frontend test files and 522 Rust tests passed on both;
+  * **clippy failed on both**: clippy 1.99 rejects three patterns that 1.94 on Windows accepts. Fixed in `4d9b12f` without a behaviour change.
+* The earlier Linux GUI regression (scope, imports, findings, workflows, evidence, OSINT, MCP, settings, backup, a restore that restarts the app, recovery after SIGKILL) on a virtual display:
+  * 71/71 on Debian 12;
+  * 70/71 on Ubuntu 24.04, where the one failure was the script's outdated expected count of MCP tools; the app listed the right number.
+* Upgrade validation (`ff3e5f5`):
+  * `migrate()` became `migrate_to(target)`, so a test can build a database at any earlier version;
+  * one row is seeded in every table from the schema itself;
+  * every earlier version is upgraded to the latest, and so is its backup (1 to 25 then; the test follows the latest schema, so 1 to 28 at the end of the mission);
+  * a failure injected before each migration's commit, and a real kill of a child process inside a migration, each leave the last complete version, and the next start finishes.
+* Sigma correlation rules (`0c8084f`), from the correlation specification v2.1.0:
+  * every type except `value_percentile`, with group-by, aliases, `generate` and chains of up to five;
+  * windows anchored at each event;
+  * bounded at 31-day windows, 1M matching events and 100k groups.
+
+## 10:56–11:21Z: parser security (`6acf43e`)
+
+* A read-only review of every parser of untrusted input, and `hostile.rs`, a reusable harness: truncations, seeded mutations, random bytes, hostile text, oversized lines and deep nesting, each case on a 2 MiB thread under a time budget.
+* `hostile_tests.rs` sends about 200 cases through each of about 25 parsers.
+* Found and fixed (SECURITY.md, "Parser safety"):
+  * an MCP handshake panic that any local process could trigger before authenticating;
+  * PCAP and PCAPNG out-of-bounds reads;
+  * unbounded recursion in Sigma conditions and in the YAML loader;
+  * YAML alias expansion bounded in values but not in bytes;
+  * a byte-slicing panic in tool-run checks;
+  * amplifications: self-referencing Postman variables, OpenAPI `allOf` cycles, hosts, remotes and keys copied into every item, unbounded SBOM vulnerabilities merged quadratically, EVTX text nodes, PE section counts, and quadratic duplicate checks;
+  * an unbounded read in OSINT imports;
+  * a detection sample path taken from the database;
+  * Markdown reports that could load remote images.
+
+  Each crash was reproduced before its fix and has a regression test.
+
+## 11:21–11:51Z: risk acceptance and compliance gaps (`e6869ed`)
+
+* Migration 27: acceptances, the items they cover, and history.
+* The rule sits in the three functions every status change goes through, so the editor, status menus, bulk changes, imports and internal services all require a covering acceptance. MCP clients cannot create one.
+* Expiry is computed when read and flagged, never acted on.
+* ASVS: exceptions, gaps by chapter, compliant requirements without evidence, comparison of two assessments, and gaps in the report.
+
+## 11:37–12:33Z: fuzzing (`3336d6b`) and TAXII 2.1 (`3573c2f`)
+
+* cargo-fuzz targets for 13 parsers, behind a `fuzzing` feature that application builds never enable. Each ran for 150 s in an offline Ubuntu container: 0.19M to 38M inputs per target.
+* **The YAML target found a 434-byte input that ran for more than ten minutes.** Cyber Hub's builder re-escaped nested complex keys at every level. Keys are now bounded at 1,024 characters, and the input is a regression test.
+* The EVTX target started without a seed (54 coverage points), so it says little; see 13:28Z below.
+* TAXII 2.1 client, from the OASIS standard:
+  * discovery, collections, and incremental synchronization of STIX indicators into saved indicators with feed provenance;
+  * a native confirmation for every connection, HTTPS only, no redirects;
+  * limits on size, pages and objects;
+  * credentials only in the OS store, through `cyberhub-keys taxii-set`;
+  * migration 28.
+
+  Tests use a local mock server.
+
+## 12:33–12:51Z: ATT&CK, timing tests and CI (`24045f0`, `d23ddf3`, `7206810`)
+
+* A technique's history, comparison of any two technique sets (observed, hypotheses, coverage now, a coverage snapshot, an imported layer), and coverage snapshots (migration 29).
+* Six ignored timing tests for an optimized build, run one per process so that each peak memory is its own.
+* `ci.yml`:
+  * actions pinned by commit and the Debian image by digest;
+  * exact tool versions;
+  * clippy with warnings as errors, and the fuzz entry points compiled;
+  * a Debian 12 job, cargo audit and gitleaks.
+
+  `ci_tests.rs` guards it.
+* Linux at `7206810`'s code, on both distributions: tsc, 50 frontend test files, clippy and 567 Rust tests (16 ignored), npm audit. Ubuntu also passed `cargo +1.90.0 check --all-targets` and the release timings (MISSION_REPORT.md, "Mission 5").
+
+## 12:51–13:11Z: end-to-end workflows on Windows (`91b064a`)
+
+* Seven workflows on disposable data in the real Windows app, with native dialogs and local servers: suspicious file, detection engineering, API security, cloud (IaC), compliance, network, supply chain, and TAXII.
+* **The detection workflow found a defect:** with the specification's chained example, a project run reported two hits for one chain, because the inner correlation also ran on its own. `disable_correlated` now disables every referenced document of the imported file, inner correlations included (`91b064a`).
+* Final run: 48/48. Screen checks of the new views: 10/10.
+
+## 13:11Z–: Linux GUI for the new features, seeded EVTX fuzzing, final checks
+
+* `build.sh` at `91b064a` on both distributions (debug build, frontend embedded).
+* **Virtual display (Xvfb with Openbox, offline):** 18/18 on Ubuntu 24.04.5 and on Debian 12:
+  * Ctrl+K search by keyboard, and the dashboard charts;
+  * a correlation chain and a YARA rule run over two files added through the GTK file chooser, giving one hit each, promoted;
+  * risk acceptance through the status menu, the form (Escape closes it unchanged) and the Risks tab;
+  * TAXII through the GTK confirmation, both cancel and confirm;
+  * the ASVS report through the GTK save dialog;
+  * the investigation graph;
+  * a 50 MB, 500,000-line auth log through the GTK chooser, read off the UI thread (slowest frame 27 ms on Ubuntu, 54 ms on Debian, while it was read);
+  * no runtime errors.
+* **WSLg, the real Weston compositor of this Windows machine (1.0.71), from both distributions:**
+  * native Wayland (`GDK_BACKEND=wayland`): 4/4 (rendering, navigation, keyboard search, charts, no errors);
+  * X11 through XWayland: 6/6 (the same, plus a GTK file chooser and a GTK confirmation).
+
+  The containers mounted the WSLg sockets read-only and wrote nothing to the host's runtime directory.
+* **The EVTX fuzz target, seeded:**
+  * The seed is the test suite's generated EVTX file. A throwaway copy of the sources wrote it out; the repository was mounted read-only.
+  * The target was rebuilt at `91b064a`, then ran for 600 s offline: 570,797 inputs, coverage 7,584 → 8,510 points, nothing found.
+* **Final suites at `91b064a`:**
+  * Windows: 568 Rust tests (16 ignored); clippy, also with `fuzzing`, and tsc clean; 281 frontend tests in 50 files; cargo audit 0 (651 crates, 8 allowed warnings); npm audit 0.
+  * Ubuntu and Debian: tsc, 50 frontend test files, clippy, 568 Rust tests (16 ignored), npm audit.
+  * Ubuntu first reported 569. The test binary from the seed run had been reused, because rsync restores older modification times, so cargo saw nothing to rebuild. With the sources touched, it was rebuilt and passed 568, with no seed test in it.
+* **GUI regression at `91b064a`:**
+  * Ubuntu: 71/71.
+  * Debian's first run lost the WebDriver session when the app was started after SIGKILL, so the after-kill phase did not run.
+  * The re-run with diagnostics passed 71/71, and a direct start after the kill ran normally.
+  * A loop of 12 cycles (SIGKILL during a run, then a restart) came back usable every time, with the run marked interrupted.
+  * The cause was not determined.
+* `cargo +1.90.0 check --all-targets` at `91b064a`: passed.
+* gitleaks over 132 commits and the changed documents: no leaks.

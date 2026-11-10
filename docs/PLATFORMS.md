@@ -18,6 +18,32 @@ Cyber Hub is under active development. It is not released or distributed, and no
 | **Linux — Debian 12** (Docker container, virtual X display: Xvfb + Openbox window manager + GNOME Keyring, app driven through Tauri's WebDriver support: `tauri-driver` + WebKitWebDriver, native dialogs through `xdotool`) | **OSINT durability pass (virtual display):** node drag and wheel zoom with real X pointer events, saved; the app killed with SIGKILL during continuous saves and restarted (integrity clean, consistent last committed state); the OSINT durability tests and the process-tree test (20 runs) natively. **OSINT pass (virtual display, not a physical desktop):** fresh database created at schema 8; investigation and entity creation; a live DNS collection (real resolver) reviewed and imported; private address refused; the graph rendered on WebKitGTK; a workspace change made in the UI and saved; a version checkpoint; graph JSON and the Markdown report written through the GTK save dialog and checked; the JSON imported through the GTK file chooser (preview and apply); the app restarted and the investigation, graph workspace, positions and versions restored; data folder `drwx------` (fixed in this pass, it was `755`); database integrity and foreign keys checked; no runtime errors. **Earlier pass:** the real app on WebKitGTK 4.1 as an unprivileged user: every module and tab, expanded and collapsed sidebar, no runtime errors; frameless window under a real window manager: custom minimize (window hidden), maximize/restore (EWMH state), title-bar drag, edge and corner resize, the 1100×700 minimum, double-click maximize/restore; a second launch exits and leaves one window; developer provisioning into the Secret Service (GNOME Keyring) against the mock, read back by the app; tool detection (`/usr/bin/nmap`, OpenSSL); project with scope and exclusion, target checks; Nmap run through the native GTK confirmation and cancellation (process gone, run recorded as cancelled); VirusTotal lookups and refusal of private and internal indicators; file analysis through the GTK file chooser with a matching SHA-256, upload declined (no request, no temp copy) and approved (upload and analysis polling, temp copy removed); threat-intelligence lookups; finding and report saved through the GTK save dialog; MCP: enable from the page, bridge files 0600 in a 0700 folder, sidecar executable, discovery, approval through the native dialog, decline, turning MCP off with a request waiting; close and restart with data persisting. Also: typecheck, frontend tests, `cargo test`, a warning-free build and sidecar staging (mode `rwxr-xr-x`). | A physical Linux desktop (GNOME/KDE on Wayland or X11): the tests ran on a virtual display, so compositor, HiDPI scaling, Wayland behaviour and desktop portals are untested. The OSINT performance measurements were done on Windows only; the OSINT MCP tools were not repeated on Linux. No physical Linux desktop was available for any OSINT pass: GNOME, Wayland, HiDPI scaling, desktop portals and a real login keyring remain unverified for the OSINT workspace. Claude Code on Linux (not installed in the container; the scripted MCP client was used). KWallet. |
 | **Linux — Ubuntu 24.04 LTS** (same container setup) | **OSINT durability pass:** the same as on Debian 12, with the same results (virtual display). **OSINT pass:** the same OSINT flow as on Debian 12, with the same results (virtual display). **Earlier pass:** build, app start, every module and tab with no runtime errors (expanded and collapsed sidebar), custom maximize/restore/minimize, drag, edge and corner resize, the minimum size, MCP enable and discovery through the sidecar. | Secret Service provisioning: in this container the GNOME Keyring 46 session did not provide a default collection, so provisioning failed with a clear "Secret Service: no result found" error. This is a test-environment limitation; on a desktop the login keyring provides it. Title-bar double-click (the scripted click hit the search box at that window width) and the remaining Debian flows were not repeated on Ubuntu. |
 
+**Mission 5 (2026-11-10), Linux at `91b064a`:**
+* **Suites:** Ubuntu 24.04.5 and Debian 12 containers. On both, these pass:
+  * tsc;
+  * 50 frontend test files;
+  * clippy with warnings as errors;
+  * `cargo test`: 568 passed and 16 ignored, including the Unix-only symlink tests;
+  * npm audit.
+
+  The minimum Rust version also passed on Ubuntu: `cargo +1.90.0 check --locked --all-targets`.
+* **GUI regression on a virtual display:** 71/71 on each distribution: scope, imports, findings, workflows, evidence, OSINT, MCP, settings, backup, a restore that restarts the app, and recovery after SIGKILL.
+  * Debian reached 71/71 on a re-run. Its first run lost the WebDriver session when the app was started after SIGKILL.
+  * That did not reproduce in the re-run, nor in 12 more cycles of SIGKILL and restart.
+* **The Mission 5 features on a virtual display:** 18/18 on each distribution. This covers:
+  * a Sigma correlation and a YARA rule over files added through the GTK file chooser;
+  * risk acceptance through the status menu, its form and the Risks tab, with keyboard input and Escape;
+  * TAXII through the GTK confirmation, both cancel and confirm;
+  * the ASVS report through the GTK save dialog;
+  * Ctrl+K search, the charts and the investigation graph;
+  * a 50 MB log read off the UI thread (the slowest frame while reading was 27 ms on Ubuntu and 54 ms on Debian).
+* **A real compositor:** WSLg 1.0.71 (Weston) on this Windows 11 machine, reached from both containers through its sockets mounted read-only.
+  * **Native Wayland** (`GDK_BACKEND=wayland`): 4/4 on each distribution. This covers rendering, navigation, keyboard search, the charts and no runtime errors.
+  * **X11 through XWayland:** 6/6 on each. This is the same, plus a GTK file chooser and a GTK confirmation.
+
+  Native dialogs were not driven under native Wayland, because xdotool needs X11.
+* **Still untested:** GNOME and KDE sessions, HiDPI scaling, desktop portals, a GPU (every container rendered in software), and a real login keyring.
+
 **Updater (Windows 11, staging):** a disposable NSIS installation of a test build updated from 0.1.0 to 0.2.0 through a local feed, with signature, version-binding, downgrade, TLS, cancellation, install-guard and data-preservation checks (details and the untested parts in [UPDATER.md](UPDATER.md#testing)).
 
 `.github/workflows/release.yml` builds, signs and publishes releases. It has never run.

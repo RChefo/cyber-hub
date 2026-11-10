@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | **Complete** (Mission 4, 2026-11-09T23:21:37Z–2026-11-10T01:56Z: detection engineering (Sigma, YARA), hunting leads, ASVS 5.0.0, indicator lifecycle and MCP tools, schema 23 → 26, see MISSION_REPORT.md "Mission 4". Mission 3, 2026-11-09T20:10:11Z–22:35Z: the unified investigation layer, schema 21 → 23, see MISSION_REPORT.md "Mission 3". Mission 2, 2026-11-09T16:31:14Z–19:55Z: ten research-driven capabilities, schema unchanged at 21, see MISSION_REPORT.md "Mission 2". Feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
+| Current phase | **Complete** (Mission 5, 2026-11-10T10:14:43Z–2026-11-10T14:08Z: Linux compatibility on Ubuntu 24.04 and Debian 12 including a real Wayland compositor, parser hardening with a hostile-input sweep and fuzzing, upgrade validation from every schema, Sigma correlation rules, risk acceptance, TAXII 2.1, ASVS gaps and comparison, ATT&CK history and comparison, release-profile timings and a pinned CI workflow, schema 26 → 29, see MISSION_REPORT.md "Mission 5". Mission 4, 2026-11-09T23:21:37Z–2026-11-10T01:56Z: detection engineering (Sigma, YARA), hunting leads, ASVS 5.0.0, indicator lifecycle and MCP tools, schema 23 → 26, see MISSION_REPORT.md "Mission 4". Mission 3, 2026-11-09T20:10:11Z–22:35Z: the unified investigation layer, schema 21 → 23, see MISSION_REPORT.md "Mission 3". Mission 2, 2026-11-09T16:31:14Z–19:55Z: ten research-driven capabilities, schema unchanged at 21, see MISSION_REPORT.md "Mission 2". Feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -103,6 +103,16 @@ See [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md).
 67. Hunting leads in packet captures (`ef862c3`)
 68. Indicator lifecycle (`d8c8cbb`)
 69. MCP tools for detections and ASVS (`285e439`)
+70. Clippy 1.99 lints found by the Linux runs (`4d9b12f`)
+71. Upgrades from every schema version, with injected failures and kills (`ff3e5f5`)
+72. Sigma correlation rules (`0c8084f`; chained imports fixed in `91b064a`)
+73. Parser hardening and the hostile-input sweep (`6acf43e`)
+74. Risk acceptances, ASVS exceptions and compliance gaps (`e6869ed`)
+75. Coverage-guided fuzzing and the YAML key bound it led to (`3336d6b`)
+76. TAXII 2.1 feeds (`3573c2f`)
+77. ATT&CK technique history, comparison and coverage snapshots (`24045f0`)
+78. Timing tests for an optimized build (`d23ddf3`)
+79. A pinned CI workflow with clippy, Debian 12, audits and secret scanning (`7206810`)
 
 ## Tests executed
 
@@ -110,7 +120,20 @@ See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md).
 
 ## Known failures
 
-None. At `285e439` (Mission 4, Windows 11): 522 Rust tests (10 ignored) and 276 frontend tests in 49 files; clippy, tsc, cargo audit (0 vulnerabilities in 651 crates, 8 allowed warnings), npm audit (0) and gitleaks over the mission's 7 commits are clean; `cargo +1.90.0 check --all-targets` passes; every new capability passed its check in the real app (121 of 121). **Not run for Mission 4:** the Linux suites and Linux GUI checks.
+None. At `91b064a` (Mission 5):
+* **Windows 11:**
+  * 568 Rust tests (16 ignored, six of them the timing tests) and 281 frontend tests in 50 files;
+  * clippy, also with the `fuzzing` feature, and tsc are clean;
+  * cargo audit: 0 vulnerabilities in 651 crates, the same 8 allowed warnings; npm audit: 0;
+  * gitleaks over the whole history (132 commits before this report) and the changed documents: no leaks.
+* **Ubuntu 24.04.5 and Debian 12:** tsc, 50 frontend test files, clippy, 568 Rust tests (16 ignored) and npm audit pass. `cargo +1.90.0 check --all-targets` passes on Ubuntu. The GUI regression is 71/71 on each distribution (Debian on a re-run, see MISSION_REPORT.md).
+* **Real app:**
+  * end-to-end on Windows 48/48 and screens 10/10;
+  * the Mission 5 features on Linux 18/18 per distribution;
+  * WSLg Wayland 4/4 and XWayland 6/6 per distribution.
+* **Not run:** GitHub Actions (nothing pushed), installers, signing and a release build of the app.
+
+At `285e439` (Mission 4, Windows 11): 522 Rust tests (10 ignored) and 276 frontend tests in 49 files; clippy, tsc, cargo audit (0 vulnerabilities in 651 crates, 8 allowed warnings), npm audit (0) and gitleaks over the mission's 7 commits are clean; `cargo +1.90.0 check --all-targets` passes; every new capability passed its check in the real app (121 of 121). **Not run for Mission 4:** the Linux suites and Linux GUI checks.
 
 At `54576dd` (Mission 3, Windows 11): 482 Rust tests (7 ignored) and 264 frontend tests in 47 files; clippy, tsc, cargo audit (0 vulnerabilities in 640 crates, 8 allowed warnings), npm audit (0) and gitleaks over the mission's 9 commits are clean; `cargo +1.90.0 check --locked --all-targets` passes; every new capability passed its check in the real app (112 of 112). **Not run for Mission 3:** the Linux suites and Linux GUI checks.
 
@@ -220,8 +243,33 @@ The final results at `d6a192e`:
 | `ef862c3` | feat(hunting): report beacon-like timing and DNS patterns in captures |
 | `d8c8cbb` | feat(intel): track saved indicators' source, confidence and validity |
 | `285e439` | feat(mcp): expose detections and ASVS assessments to MCP clients |
+| `0f51cd2` | docs(mission): report mission 4 |
+| `4d9b12f` | fix(lint): satisfy clippy 1.99 found by the Linux runs |
+| `ff3e5f5` | test(db): upgrade every schema version with data, failures and kills |
+| `0c8084f` | feat(detections): evaluate Sigma correlation rules |
+| `6acf43e` | fix(security): stop crafted files and peers from crashing or exhausting the app |
+| `e6869ed` | feat(risk): record risk acceptances and ASVS exceptions, with compliance gaps |
+| `3336d6b` | fix(security): bound YAML keys after fuzzing found an exponential blow-up |
+| `3573c2f` | feat(intel): import STIX indicators from TAXII 2.1 feeds |
+| `24045f0` | feat(attack): track techniques over time and compare technique sets |
+| `d23ddf3` | test(perf): time the heavy paths on generated data |
+| `7206810` | ci: pin the verification workflow and add clippy, audits, Debian and secret scanning |
+| `91b064a` | fix(detections): import a chain's inner correlations disabled too |
 
 ## Next action
+
+**After Mission 5 (2026-11-10T14:08Z), the owner decides:**
+1. Review the capabilities and fixes (MISSION_REPORT.md, "Mission 5"). They add migrations 27–29, which only add data; backups are taken before each, and every earlier schema version is upgraded in the tests. No application dependency is added.
+2. Push a branch to let `ci.yml` run on GitHub for the first time. Only the owner can authorize this.
+3. Before any release:
+   * repeat the RC0 checks on a release-candidate build;
+   * pin `release.yml`'s toolchain as `ci.yml` is;
+   * set up signing.
+4. Next candidates (FEATURE_BACKLOG.md, "Mission 5"):
+   * the smaller parser amplifications in SECURITY.md;
+   * TAXII credentials entered in the app;
+   * a cloud-resource asset type;
+   * host hunting analytics.
 
 **After Mission 4 (2026-11-10T01:56Z), the owner decides:**
 1. Review the six capabilities (MISSION_REPORT.md, "Mission 4"). They add migrations 24–26 (backups are taken before each) and one dependency, `boreal` 1.4.0 with its crates.

@@ -906,3 +906,289 @@ All three only add data. Each was exercised by the real app on a copy, after the
 
 * Linux (Ubuntu, Debian): neither the suites nor the GUI checks.
 * Installers, signing and updates: not built or run (not authorized).
+
+## Mission 5: platform-wide hardening, Linux compatibility and feature completion (2026-11-10)
+
+The owner's brief asked, in this order, for:
+* Linux compatibility;
+* the security of every parser of untrusted input;
+* database migrations;
+* Sigma correlation rules;
+* risk acceptance;
+* TAXII 2.1;
+* compliance and ATT&CK work;
+* performance in an optimized build;
+* end-to-end workflows and CI.
+
+It ruled out pushing, publishing, installers, signing, release builds and the real database.
+
+### Statistics
+
+| Item | Value |
+|---|---|
+| Time | 2026-11-10T10:14:43Z–2026-11-10T14:08Z (about 3 h 53 min) |
+| Commits | 12: four capabilities (`0c8084f`, `e6869ed`, `3573c2f`, `24045f0`), four fixes (`4d9b12f`, `6acf43e`, `3336d6b`, `91b064a`), two test commits (`ff3e5f5`, `d23ddf3`), CI (`7206810`) and this report |
+| Schema | 26 → 29 (27 risk acceptances, 28 TAXII, 29 ATT&CK coverage snapshots). Each upgrade keeps a backup first, and the tests upgrade every earlier version |
+| Tests | Rust 522 → 568, and 10 → 16 ignored: the six new ignored tests are the timing tests. Frontend 276 → 281 (49 → 50 files) |
+| New dependency | None in the application. The separate fuzz crate (`src-tauri/fuzz`, never part of an application build) uses `libfuzzer-sys` 0.4 |
+| Real-app checks | Windows: 48/48 end-to-end and 10/10 screens. Linux: the Mission 5 features 18/18 per distribution, WSLg 10/10 per distribution, and the 71-check regression on both, Debian after a re-run (details below) |
+
+### Fully implemented
+
+| Capability | Commit | Verification |
+|---|---|---|
+| **Sigma correlation rules:** `event_count`, `value_count`, `temporal`, `temporal_ordered`, `value_sum` and `value_avg`, with group-by, aliases, `generate` and chains of up to five. Validation that gives the reason; tests on samples; project runs across several files; hits with their group, window, value and events; promotion to a finding under review linked to every file it combined | `0c8084f`, `91b064a` | 9 correlation tests built on the specification's examples, plus library and promotion tests; Windows end-to-end; Linux GUI on both distributions |
+| **Risk acceptance:** justification, compensating controls, owner, approver, approval, expiry and review dates; it covers findings, vulnerabilities and ASVS exceptions; renewal, revocation and history. Expiry is flagged, never acted on. Every path that sets *accepted risk* requires a covering acceptance | `e6869ed` | 5 Rust tests over every status path, frontend tests; Windows end-to-end and screens; Linux GUI (status menu, form, Escape, Risks tab) |
+| **ASVS compliance:** gaps by chapter with exceptions and the remediation state of linked findings, compliant requirements without evidence, comparison of two assessments, and gaps and exceptions in the report | `e6869ed` | Rust test; Windows end-to-end and screens; the Linux report saved through the GTK save dialog |
+| **TAXII 2.1:** servers, discovery, collections, incremental synchronization with a cursor, history and health. Deduplication, the server's reliability, STIX confidence, validity and revocation. The analyst's records and false positives are kept | `3573c2f` | 6 tests against a local mock server; Windows end-to-end; Linux GUI through the GTK confirmation, both cancel and confirm |
+| **ATT&CK:** a technique's history, comparison of observed techniques, hypotheses, coverage, coverage snapshots and imported layers, and coverage snapshots | `24045f0` | Rust test; Windows end-to-end and screens |
+| **Parser hardening:** review of every parser of untrusted input, the hostile-input harness and sweep, and 13 fuzz targets | `6acf43e`, `3336d6b` | A regression test for every defect; about 25 parsers in the sweep, which runs in `cargo test` |
+| **Upgrade validation from every schema version**, with injected failures and killed processes | `ff3e5f5` | 3 tests (and the seeder's own) |
+| **CI:** pinned actions, toolchains and image; clippy, Debian 12, audits and secret scanning | `7206810` | `ci_tests.rs`; the same commands ran locally and in the containers. Not run on GitHub |
+
+### Partially implemented
+
+* **Sigma correlation:**
+  * `value_percentile` is refused, because the specification does not define the percentile;
+  * correlations run over chosen evidence and samples, not over live log streams.
+* **TAXII:**
+  * it reads only ("Add Objects" is not used);
+  * credentials are stored only with the developer tool `cyberhub-keys`, not entered in the app;
+  * only equality patterns on IP, domain, URL and hash observables become indicators, and other patterns are skipped with the reason;
+  * there is no scheduled synchronization, by design: every connection is confirmed.
+* **Compliance:** comparison, gaps and exceptions exist for ASVS only. The WSTG checklist has none of them.
+* **ATT&CK:** Enterprise only.
+* **Parsers:** smaller amplifications remain open (SECURITY.md, "Accepted risks and limitations").
+
+### Deferred
+
+* ATT&CK Mobile and ICS: no official data is bundled.
+* A cloud-resource asset type: the cloud workflow used a domain asset.
+* Entering TAXII credentials in the app.
+* Host hunting analytics beyond rules.
+* The smaller parser amplifications.
+
+The reasons are in FEATURE_BACKLOG.md, "Mission 5".
+
+### Linux compatibility
+
+| Environment | Versions |
+|---|---|
+| Ubuntu 24.04.5 LTS (Docker container) | Rust 1.99.1, Node 22.12.0, WebKitGTK 2.52.6, GTK 3.24.41 |
+| Debian 12 (Docker container) | Rust 1.99.1, Node 22.12.0, WebKitGTK 2.50.6, GTK 3.24.38 |
+| WSLg 1.0.71, the Weston compositor of this Windows 11 machine, used from both containers | Native Wayland (`GDK_BACKEND=wayland`) and X11 through XWayland |
+
+* **Baseline:** clippy failed on both distributions with three lints that clippy 1.99 adds. They were fixed in `4d9b12f`. Nothing else failed.
+* **Suites at `91b064a`:** all clean on both distributions:
+  * tsc;
+  * 50 frontend test files;
+  * clippy with warnings as errors;
+  * `cargo test` (568 passed and 16 ignored on each);
+  * npm audit.
+
+  Linux runs two Unix-only symlink tests, and Windows two Windows-only tests instead.
+* **MSRV:** `cargo +1.90.0 check --locked --all-targets` passed on Ubuntu.
+* **GUI regression at `91b064a`** (scope, imports, findings, workflows, evidence, OSINT, MCP, settings, backup, a restore that restarts the app, recovery after SIGKILL): 71/71 on Ubuntu 24.04.
+  * On Debian 12, the first run passed main (62/62) and after-restore (6/6), but the after-kill phase could not start: its WebDriver session was gone for 60 s after the app was started again.
+  * It did not reproduce. The full re-run passed 71/71, and a direct start after the kill ran normally.
+  * 12 consecutive cycles of SIGKILL during a workflow run, each followed by a start through WebDriver, all came back usable within 5 s, with the run marked interrupted.
+  * The cause is not known: the first run's driver log was not kept.
+* **The new features on a virtual display:** 18/18 on each distribution. Every GUI run is offline, in a fresh container, as an unprivileged user:
+  * Ctrl+K search by keyboard, and the dashboard charts;
+  * a correlation chain and a YARA rule over two files added through the GTK file chooser, giving one hit each, promoted;
+  * risk acceptance through the status menu and its form (Escape closes it, nothing changes), and the Risks tab;
+  * TAXII through the GTK confirmation, both cancel and confirm;
+  * the ASVS report through the GTK save dialog;
+  * the investigation graph;
+  * a 50 MB, 500,000-line auth log through the GTK chooser, read in about 17 s in the debug build while the window kept drawing (slowest frame 27 ms on Ubuntu, 54 ms on Debian);
+  * no runtime errors.
+* **A real compositor (WSLg):**
+  * native Wayland: 4/4 on each distribution (rendering, navigation, keyboard search, charts, no errors);
+  * XWayland: 6/6 on each (the same, plus a GTK file chooser and a GTK confirmation).
+* **Data folder:** `0700`, with `evidence` and `work` also `0700`.
+* **Found on Linux:** only the clippy difference. No defect specific to Linux was found in the new code.
+* **Not tested on Linux:**
+  * GNOME or KDE sessions, HiDPI scaling, desktop portals, a real login keyring;
+  * native dialogs under native Wayland: xdotool needs X11, so dialogs were checked under Xvfb and XWayland;
+  * a GPU (rendering was software in every container);
+  * installers (not built).
+
+### Parser security
+
+* **Method:**
+  1. a read-only review of every parser of untrusted input;
+  2. `hostile.rs`, a harness of truncations, seeded mutations, random bytes, hostile text, oversized lines and deep nesting, each case run on a 2 MiB thread under a time budget;
+  3. coverage-guided fuzzing of 13 parsers (libFuzzer with AddressSanitizer, nightly Rust, offline Ubuntu container).
+* **Defects fixed:** 17, each with a regression test (SECURITY.md, "Parser safety"). Before their fixes:
+  * five could end the app: the MCP handshake (any local process, before authenticating), PCAP and PCAPNG bounds, Sigma condition recursion, YAML recursion, and a tool-argument slice;
+  * one could freeze it: nested YAML keys, found by fuzzing;
+  * the rest were amplifications of memory or time, an unbounded read of a FIFO, a sample path taken from a restored database, and remote images in Markdown reports.
+* **Fuzzing:**
+  * 13 targets × 150 s: 0.19M to 38M inputs per target;
+  * one defect, in YAML;
+  * EVTX, run again for 600 s from the test suite's generated EVTX file: 570,797 inputs, coverage from 7,584 to 8,510 points (54 without a seed), and no crash, timeout or out-of-memory error.
+* **The guarantees and how they are checked:**
+  * imported files and rules are never executed: rules are data, and samples are read by hash;
+  * paths come only from native dialogs or tokens, and a sample's name is a validated SHA-256;
+  * evidence is hashed on intake and checked again;
+  * limits are named in errors;
+  * heavy parsing runs on blocking threads (the Linux check above measured it).
+
+### Sigma
+
+Correlation rules follow specification v2.1.0:
+* **Windows:** a window starts at each matching event; a match is a window whose measure satisfies the condition, and the next window starts after it.
+* **Unusable events:** events without a usable time or group field take no part, and the result says how many.
+* **Imports:** a correlation's referenced rules (inner correlations too, since `91b064a`) are imported disabled unless the correlation says `generate: true`.
+* **Unsupported syntax** is refused with the reason, never accepted silently: `value_percentile`, cycles, chains deeper than five, unknown references and ambiguous names.
+* **Hits** never confirm anything: promotion makes a finding under review.
+
+### Risk acceptance
+
+* **One check for every path.** The check sits in the three functions every status change goes through (`findings::set_status`, the editor's write, `vulns::set_status`). The editor, status menus, bulk changes (uncovered findings are skipped), imports and internal services all meet it.
+* **MCP:** clients cannot create an accepted finding and have no tool to record, renew or revoke an acceptance. The register is readable, which makes 62 tools.
+* **Acceptance is not remediation.** Reports, the findings table, ASVS and the overview show accepted risks apart from resolved and verified ones.
+* **Lifecycle:**
+  * expiry is computed when read and flagged until renewal or revocation;
+  * revocation reopens findings, reopens vulnerabilities and removes exceptions;
+  * an item that leaves (reopened, fixed, verified, requirement met, deleted) is released with the reason.
+* **Legacy data:** findings accepted before schema 27 are listed as accepted without a record, so they can be documented.
+
+### TAXII 2.1
+
+* **Network access:**
+  * off by default, and nothing runs in the background;
+  * every discovery and synchronization is confirmed in a native dialog naming the server;
+  * HTTPS only (loopback HTTP in debug builds, for tests);
+  * no credentials in URLs, no redirects, and API roots on other hosts ignored.
+* **Limits:** 30 s timeouts, 16 MB per response, 200 pages and 100,000 objects per synchronization.
+* **Paging:** it follows `next`, or `added_after` from `X-TAXII-Date-Added-Last`. The cursor moves only past stored pages, so an interrupted or capped synchronization continues on the next one, and one interrupted by a shutdown is marked failed at the next start.
+* **Credentials** (HTTP Basic or an API-key header) live in the OS credential store; errors are scrubbed of them.
+* **What a feed may change:**
+  * it saves indicators, never findings, and never confirms anything as malicious;
+  * it updates only its own indicators, and only with newer versions;
+  * the analyst's records and false positives are never changed, and the feed's view goes to their history.
+
+### Compliance (ASVS)
+
+* **Gaps** by chapter, with:
+  * the exceptions;
+  * the remediation state of linked findings;
+  * compliant requirements without evidence.
+* **Comparison** of two assessments: improved, regressed and unchanged.
+* **The report** has gaps and exceptions.
+* **No requirement is marked compliant** by any of it. Mappings stay the analyst's and attribution stays in the report.
+
+### ATT&CK
+
+* **A technique's history:**
+  * the analyst's assessments with notes;
+  * findings that name it, with their status;
+  * rule matches per rule, with how many are still to review;
+  * investigation links.
+* **Comparison** of any two sets: observed, hypotheses, coverage now, a coverage snapshot or an imported layer. A sentence says what the comparison means, so coverage is never read as activity, nor a layer as observation.
+* **Coverage snapshots** keep the enabled, runnable rules per technique with the ATT&CK version.
+* **Navigator layers:** the import and export from Mission 3 are unchanged.
+* **Enterprise only:** no Mobile or ICS data is bundled.
+
+### Migrations, backup and restore
+
+* **Tests** (`db_upgrade_tests.rs`), on databases built at each earlier version with one row in every table:
+  * every earlier version upgrades to 29 through the real start-up path, with `integrity_check` ok, no broken foreign keys and every row kept;
+  * the backup taken before the upgrade keeps the old version, and opening it (what a restore does) upgrades the same way;
+  * a failure injected before each migration's commit keeps the last complete version, and the next start finishes;
+  * a child process killed inside a migration leaves the previous version, and the next start finishes.
+* **The real app:** the Linux GUI regression above restores a backup (the app restarts and applies it) and recovers after SIGKILL.
+* **Migrations 27–29 only add tables and columns.** None is destructive.
+
+### End-to-end workflows (Windows 11, real app, disposable data, native dialogs, local servers)
+
+48/48 in the final run:
+1. **Suspicious file:** evidence with its SHA-256, File Triage with the library's YARA rule, the triage recorded, a project run, a hit promoted to a finding under review, IOC correlation with a saved indicator, investigation and report.
+2. **Detection engineering:** the specification's chained correlation imported (referenced rules disabled), validated, tested on a sample (one chain for admin, none for guest), run on a log, promoted, and seen in ATT&CK as both observed and covered. **This run found the defect fixed in `91b064a`.**
+3. **API security:** definition import, endpoint inventory, a path outside scope refused, a test in scope, then remediation and verification against the fixed target.
+4. **Cloud (IaC):** issues found, a finding linked to the analysis and an asset, then verification by rescanning the fixed file.
+5. **Compliance:** risk acceptance of a finding and an ASVS exception, refusal without an acceptance, comparison, gaps, report and register.
+6. **Network:** capture leads (beacon-like timing), IOC extraction, timeline and report.
+7. **Supply chain:** two SBOM versions compared (the vulnerability fixed), then remediation and verification.
+
+TAXII ran against a local server: confirmation, a synchronization of 2 added, 1 revoked and 1 skipped, provenance kept, and cancelling connected nothing.
+
+### Performance (release profile, Ubuntu 24.04 container, AMD Ryzen 7 5700X, 16 threads)
+
+Peak memory is the test process's peak resident size up to that step. The steps of one timing test share a process, so a later step's peak includes the earlier ones. The tests are: Sigma; correlation; YARA; capture and log; SBOM and lockfile; and the project from "a fresh database" onwards.
+
+| Path | Time | Peak memory |
+|---|---|---|
+| 1,000 Sigma rules compiled | 549 ms | 60 MB |
+| 50 Sigma rules × 100,000 events (14,444 matches) | 3,096 ms | 137 MB |
+| `event_count` correlation over 500,000 events, 1,000 groups | 156 ms | 421 MB |
+| 100 YARA rules compiled / a 64 MB scan | 5 ms / 33 ms | 10 / 74 MB |
+| PCAP of 200,000 packets (19 MB) | 196 ms | 71 MB |
+| Auth log of 1,000,000 lines (99 MB) | 2,697 ms | 292 MB |
+| SBOM of 20,000 components and 20,000 vulnerabilities | 162 ms | 103 MB |
+| `package-lock.json` of 20,000 packages | 36 ms | 105 MB |
+| A fresh database to schema 29 | 27 ms | 10 MB |
+| 50,000 findings inserted / listed | 1,222 ms / 212 ms | 22 / 70 MB |
+| Global search over them | 41 ms | 70 MB |
+| ATT&CK matrix / Markdown report (12 MB) | 246 ms / 406 ms | 125 / 187 MB |
+| ASVS level 3 view with gaps | 4 ms | 187 MB |
+
+* **Responsiveness:** reading a 50 MB log kept the Linux window drawing (above).
+* **Not measured:** cancellation latency and on-disk growth. Nothing was optimized: no measured path needed it.
+
+### CI
+
+`ci.yml`:
+* **Pinning:** actions are pinned by commit and the Debian image by digest. Rust 1.99.1, Node 22.12.0, cargo-audit 0.22.2 and gitleaks 8.30.1 (with checksum) are pinned by exact version, with `--locked` and `npm ci`.
+* **Windows and Ubuntu 24.04:** typecheck, frontend tests, the frontend build, clippy with warnings as errors, `cargo test` (upgrades and the sweep included), the fuzz entry points, sidecar staging and npm audit.
+* **Debian 12:** frontend checks and `cargo test`.
+* **Audit:** cargo audit and gitleaks over the whole history.
+* **MSRV:** 1.90.0.
+
+`ci_tests.rs` fails if a workflow stops parsing, loses a pin or loses a check. Build environments are in PLATFORMS.md. The workflow has not run on GitHub, because the repository has not been pushed. `release.yml` was not changed and still uses the floating stable toolchain.
+
+### Security review
+
+* **Network:** nothing new contacts a network except TAXII, after its confirmation.
+* **Untrusted content:** nothing in a rule, sample, feed or capture is executed. Files come from native dialogs or tokens.
+* **Status changes:**
+  * risk acceptances cannot be created by MCP clients or imports;
+  * feeds cannot create findings;
+  * no status is set automatically by compliance or coverage.
+* **Scans at the end:**
+  * gitleaks 8.30.1 over all 132 commits before this report and over the changed documents: no leaks;
+  * cargo audit: 0 vulnerabilities in 651 crates, the same 8 allowed warnings;
+  * npm audit: 0.
+
+### Database changes
+
+* **27:** `risk_acceptances`, `risk_acceptance_items` and `risk_acceptance_history`, plus triggers that drop the items of deleted records.
+* **28:**
+  * `taxii_servers` (no secret);
+  * `taxii_collections`, with the cursor and health;
+  * `taxii_syncs`;
+  * feed provenance columns on `ti_saved`.
+* **29:** `attack_coverage_snapshots`.
+
+All three only add data.
+
+### Commits
+
+`4d9b12f`, `ff3e5f5`, `0c8084f`, `6acf43e`, `e6869ed`, `3336d6b`, `3573c2f`, `24045f0`, `d23ddf3`, `7206810`, `91b064a`, and this report.
+
+### Remaining limitations
+
+* **TAXII:** credentials only through `cyberhub-keys`; reading only; equality patterns only.
+* **Sigma:** `value_percentile`.
+* **Assets:** no cloud-resource asset type.
+* **Parsers:** the smaller amplifications in SECURITY.md.
+* **Reports:** the default report leaves closed findings out (by design). Verification reports include them.
+* **MCP:** the read-only risk tool was tested by its Rust test, not through a real MCP client.
+* **CI:** `release.yml` still floats; neither workflow has run on GitHub.
+
+### Not verified
+
+* GitHub Actions runs.
+* GNOME or KDE desktops, HiDPI, desktop portals and a GPU on Linux.
+* Installers, signing and updates: not built or run (not authorized). No release build of the app was made: the timings come from optimized `cargo test` builds.
