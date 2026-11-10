@@ -1,9 +1,15 @@
 name: CI
 
-# Verification only: typecheck, tests and a frontend build on Windows and Linux (the supported
-# platforms; macOS is not supported).
+# Verification only: typecheck, tests (database upgrades from every schema and the hostile-input
+# parser sweep included), clippy, dependency audits and secret scanning, on Windows, Ubuntu 24.04
+# and Debian 12 (the supported platforms; macOS is not supported), and the minimum Rust version.
 # Installer packaging (MSI / NSIS / DEB / RPM / AppImage) is intentionally NOT part of CI;
 # packages are not built during development.
+#
+# Deterministic: actions are pinned by commit, Rust, Node and the scanners by exact version,
+# builds use the lock files (--locked, npm ci). New clippy lints arrive with new Rust releases, so
+# RUST_VERSION is raised on purpose, never by a floating "stable". No step needs a secret or a
+# service outside GitHub other than the package registries.
 
 on:
   push:
@@ -11,6 +17,11 @@ on:
 
 permissions:
   contents: read
+
+env:
+  RUST_VERSION: "1.99.1"
+  NODE_VERSION: "22.12.0"
+  CARGO_TERM_COLOR: never
 
 jobs:
   verify:
@@ -21,7 +32,9 @@ jobs:
         os: [windows-latest, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Linux system dependencies (Tauri + Secret Service)
         if: runner.os == 'Linux'
@@ -29,14 +42,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-1-dev pkg-config build-essential
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: src-tauri
 
@@ -52,9 +68,17 @@ jobs:
       - name: Frontend production build
         run: npx vite build
 
-      - name: Backend tests
+      - name: Clippy (warnings are errors)
         working-directory: src-tauri
-        run: cargo test
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Backend tests (migrations from every schema, hostile-input sweep, everything else)
+        working-directory: src-tauri
+        run: cargo test --locked
+
+      - name: Fuzz entry points still compile (the fuzz targets themselves need nightly)
+        working-directory: src-tauri
+        run: cargo check --locked --lib --features fuzzing
 
       - name: MCP sidecar staging (debug build, checks the binary and its --version)
         run: node scripts/build-sidecar.mjs --debug
@@ -62,19 +86,77 @@ jobs:
       - name: npm audit
         run: npm audit --audit-level=high
 
+  debian:
+    name: Debian 12
+    runs-on: ubuntu-24.04
+    # the official Rust image on Debian 12 (bookworm), Rust 1.99.1, pinned by digest
+    container: rust@sha256:9181b56c2a21ab1d5e73cffe04fc762426d30aa7fac3c91141dd033f49a7fc8b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Tauri system dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-1-dev pkg-config build-essential
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Frontend
+        run: |
+          npm ci
+          npx tsc --noEmit -p tsconfig.json
+          npx vitest run
+          npx vite build
+
+      - name: Backend tests
+        working-directory: src-tauri
+        run: cargo test --locked
+
+  audit:
+    name: Dependency and secret scans
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: cargo audit (RustSec advisories)
+        working-directory: src-tauri
+        run: |
+          cargo install cargo-audit --locked --version 0.22.2
+          cargo audit
+
+      - name: gitleaks (the whole history; known false positives are in .gitleaksignore)
+        run: |
+          curl -fsSLo gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks git --redact --no-banner --exit-code 1 .
+
   msrv:
     # rust-version in src-tauri/Cargo.toml: the locked Tauri 2 crates need 1.90 (Cargo refuses 1.89)
     name: Minimum Rust version (1.90.0)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Linux system dependencies (Tauri + Secret Service)
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-1-dev pkg-config build-essential
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: 1.90.0
 

@@ -20,7 +20,18 @@ Cyber Hub is under active development. It is not released or distributed, and no
 
 **Updater (Windows 11, staging):** a disposable NSIS installation of a test build updated from 0.1.0 to 0.2.0 through a local feed, with signature, version-binding, downgrade, TLS, cancellation, install-guard and data-preservation checks (details and the untested parts in [UPDATER.md](UPDATER.md#testing)).
 
-`.github/workflows/release.yml` builds, signs and publishes releases (never run). `.github/workflows/ci.yml` runs typecheck, frontend tests, a frontend build, `cargo test` and the sidecar staging on Windows and Ubuntu (no packaging). It has not run yet because the repository has not been pushed.
+`.github/workflows/release.yml` builds, signs and publishes releases. It has never run.
+
+`.github/workflows/ci.yml` (Mission 5) runs no packaging. It has not run yet because the repository has not been pushed. It has four jobs:
+* **Windows and Ubuntu 24.04:** typecheck, frontend tests, the frontend build, clippy with warnings as errors, `cargo test --locked`, a check that the fuzz entry points compile, the sidecar staging and `npm audit`. The tests include database upgrades from every schema and the hostile-input sweep.
+* **Debian 12:** a container job running the frontend checks and `cargo test --locked`.
+* **Audit:** `cargo audit` and a gitleaks scan of the whole history.
+* **MSRV:** `cargo check --all-targets` with Rust 1.90.0.
+
+It is deterministic:
+* actions are pinned by commit and the Debian image by digest;
+* Rust (1.99.1), Node (22.12.0), cargo-audit (0.22.2) and gitleaks (8.30.1, checksum-verified) are pinned by exact version;
+* a test (`ci_tests.rs`) fails if a workflow stops parsing, an action loses its commit pin, or one of these checks disappears.
 
 ### Reproducing the Linux GUI tests
 
@@ -33,6 +44,17 @@ The Linux checks above were run in Docker with:
 WebKitWebDriver reports elements under the legacy key `element-6066-11e4-a52e-4f735466cecf`, and its element clear does not update React state (select the text and type instead).
 
 ## Build and test instructions
+
+### Required environments
+
+| Component | Version |
+|---|---|
+| Rust | **1.90.0 at least**: Cargo refuses 1.89 because of the locked Tauri 2 crates. CI and the Linux checks use 1.99.1; the Windows development machine uses 1.94.1. Clippy lints change between releases, so CI pins the version. Nightly Rust is needed only for the fuzz targets (`src-tauri/fuzz`). |
+| Node.js | 22.12.0 in CI and on Linux; 24.19.0 on the Windows development machine. |
+| Windows 10/11 x64 | Visual Studio Build Tools with the C++ workload (SQLite is compiled from source), and the WebView2 runtime. |
+| Ubuntu 24.04 | `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-1-dev pkg-config build-essential`. Tested with WebKitGTK 2.52.6 and GTK 3.24.41. |
+| Debian 12 | The same, plus `libsoup-3.0-dev libjavascriptcoregtk-4.1-dev`. Tested with WebKitGTK 2.50.6 and GTK 3.24.38. |
+| Linux GUI tests | `xvfb openbox xdotool x11-utils imagemagick dbus-x11 gnome-keyring libsecret-tools webkit2gtk-driver at-spi2-core`, and `cargo install tauri-driver` (see above). |
 
 ### Common
 

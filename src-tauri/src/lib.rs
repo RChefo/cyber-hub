@@ -40,6 +40,8 @@ mod hostile;
 mod hostile_tests;
 #[cfg(test)]
 mod perf_tests;
+#[cfg(test)]
+mod ci_tests;
 
 use tauri::{AppHandle, Manager};
 
