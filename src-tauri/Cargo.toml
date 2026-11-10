@@ -111,4 +111,4 @@ gtk = "0.18"
 
 [dev-dependencies]
 # test oracle only (Markdown report escaping is checked against a real CommonMark parser)
-pulldown-cmark = { version = "=0.13.4", default-features = false }
+pulldown-cmark = { version = "=0.13.6", default-features = false }
