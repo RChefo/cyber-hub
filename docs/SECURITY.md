@@ -168,7 +168,7 @@ A URL entry is a path-level authorization:
   * an option with its value attached (`-uhttps://…`, `-uhttps://host/?a=b`) is read from its web scheme;
   * scheme-less `host/path` forms are checked under both HTTP and HTTPS;
   * a URL that cannot be parsed refuses the run instead of being skipped.
-* **Host headers.** In the HTTP request builder, a `Host` header is checked as the same path on that virtual host. In a raw request file, the `Host` header and the request path must be authorized under both HTTPS and HTTP, because the file does not say which the tool will use. Otherwise, pass the URL itself.
+* **Host headers.** In the HTTP request builder, a `Host` header is checked as the same path on that virtual host. It must name exactly one host name or address (a comma-separated list could let a shared proxy route to another tenant), and the headers that servers and proxies read as the host (`X-Forwarded-Host`, `X-Host`, `X-Forwarded-Server`, `X-HTTP-Host-Override`) or as the path (`X-Original-URL`, `X-Rewrite-URL`, which must be a path) are checked the same way; a `Forwarded` header that names a host is refused (Mission 7). In a raw request file, the `Host` header and the request path must be authorized under both HTTPS and HTTP, because the file does not say which the tool will use. Otherwise, pass the URL itself.
 * **Exclusions.** An out-of-scope URL excludes its path on every scheme and port of its host, also in the forms servers commonly treat as the same path: other case, percent-encoding, `;parameters`, `//`, and a `.` suffix (`/admin.json` is inside an excluded `/admin`). Because a host-level operation could reach that path, it also refuses host-level operations on that host. Passive lookups about the host (DNS, certificate transparency) do not reach paths and are not affected, and passive discovery records such names.
 * **Tools decide further paths.** Cyber Hub checks the URLs on a tool's command line, but the tool decides which further paths it requests (wordlist entries, templates, crawling). When only URL entries authorize a run's URLs, the preview warns about this. The HTTP request builder is the way to stay inside a path with every request and redirect checked.
 * **Redirects of external tools need host-level authorization.** A run is refused when it would follow HTTP redirects and one of its URLs is either:
@@ -202,12 +202,12 @@ A URL entry is a path-level authorization:
 * **Internal addresses.** For an internal web application authorized by URL, the name's private addresses must be authorized too, as addresses, or the URL must name the address. Otherwise DNS vetting refuses it, as before.
 * **Redirects.** The HTTP request builder follows redirects only when asked, at most five:
   * every hop is a new request, checked against the scope and DNS vetting before it is sent;
-  * `Authorization`, `Cookie` and `Proxy-Authorization` headers are dropped when the origin (scheme, host or port) changes;
+  * `Authorization`, `Cookie` and `Proxy-Authorization` headers, and every header whose name says it carries a credential (`X-Api-Key`, `X-Auth-Token`, `PRIVATE-TOKEN`…), are dropped when the origin (scheme, host or port) changes, and the host and path headers above are never reused (Mission 7);
   * a 303, and a 301 or 302 after a POST, continue as a GET without the body;
   * a refused hop ends the chain with its reason and is recorded.
 
   All other HTTP clients in Cyber Hub never follow redirects.
-* **No system proxy.** The clients that contact targets (the HTTP request builder, the attack-surface HTTP check and the OSINT web source) connect straight to the addresses that DNS vetting checked. A system proxy would resolve names itself, after the check.
+* **No system proxy.** The clients that contact targets (the HTTP request builder, the attack-surface HTTP check and the OSINT web source) connect straight to the addresses that DNS vetting checked, and so do the OSINT public sources, whose resolver returns only public addresses (Mission 7). A system proxy would resolve names itself, after the check; behind a proxy that is the only way out, these sources cannot connect. The attack-surface HTTP check pins the vetted addresses without a port, so its HTTP request goes to port 80 and its HTTPS request to port 443.
 * **History.** A refused URL is shown and recorded without its credentials, query and fragment; any other refused value is redacted and cut to 255 characters.
 
 Nothing widens a scope automatically.

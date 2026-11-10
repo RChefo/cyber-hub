@@ -13,6 +13,10 @@ pub const MAX_REDIRECTS: usize = 5;
 const MAX_HEADERS: usize = 50;
 const MAX_BODY: usize = 1024 * 1024;
 const MAX_RESPONSE: usize = 2 * 1024 * 1024;
+/// Headers that servers and proxies may read as the request's host instead of `Host` (Mission 7).
+const HOST_HEADERS: &[&str] = &["host", "x-forwarded-host", "x-host", "x-forwarded-server", "x-http-host-override"];
+/// Headers that IIS, Symfony and some proxies read as the request's path (Mission 7).
+const PATH_HEADERS: &[&str] = &["x-original-url", "x-rewrite-url"];
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -99,9 +103,22 @@ pub fn prepare(input: &HttpRequestInput) -> Result<Prepared, String> {
         if name == reqwest::header::CONTENT_LENGTH || name == reqwest::header::TRANSFER_ENCODING {
             return Err(format!("{k} is set automatically"));
         }
-        if name == reqwest::header::HOST {
+        if name.as_str() == "forwarded" && v.to_ascii_lowercase().contains("host=") {
+            return Err("A Forwarded header that names a host is not sent: put the host in the Host header, which is checked against the scope".into());
+        }
+        if PATH_HEADERS.contains(&name.as_str()) {
+            // a path the server handles instead of the URL's: checked on the URL's origin, like
+            // the URL itself (Mission 7)
+            if !v.starts_with('/') || v.starts_with("//") || v.contains('\\') {
+                return Err(format!("{k} must be a path starting with a single /"));
+            }
+            let path = url.join(v).map_err(|_| format!("{k} is not a valid path"))?;
+            targets.push(path.to_string());
+        }
+        if HOST_HEADERS.contains(&name.as_str()) {
             // a different virtual host is a different target: the same scheme and path on that
-            // host (and its port, if the header names one) is scope-checked too
+            // host (and its port, if the header names one) is scope-checked too. Headers that
+            // proxies read as the host are checked the same way (Mission 7)
             let mut vhost = url.clone();
             let (host, port) = match v.strip_prefix('[') {
                 Some(rest) => {
@@ -117,8 +134,12 @@ pub fn prepare(input: &HttpRequestInput) -> Result<Prepared, String> {
                 Some(p) => Some(p.parse::<u16>().map_err(|_| format!("The Host header {v} has an invalid port"))?),
                 None => None,
             };
-            if host.contains(['/', '@', '?', '#', '\\']) || vhost.set_host(Some(&host)).is_err() || vhost.set_port(port.or(url.port())).is_err() {
-                return Err(format!("The Host header {v} is not a valid host"));
+            // exactly one host name or address: a comma, for example, would let a shared proxy
+            // read another host (Mission 7)
+            let literal = host.strip_prefix('[').and_then(|h| h.strip_suffix(']')).unwrap_or(&host);
+            let one_host = crate::scope::is_host_name(&host) || literal.parse::<std::net::IpAddr>().is_ok();
+            if !one_host || host.contains(['/', '@', '?', '#', '\\']) || vhost.set_host(Some(&host)).is_err() || vhost.set_port(port.or(url.port())).is_err() {
+                return Err(format!("The {k} header {v} is not a valid host"));
             }
             targets.push(vhost.to_string());
         }
@@ -163,9 +184,19 @@ pub fn next_request(current: &Prepared, status: u16, location: Option<&str>) -> 
     let method = if to_get { reqwest::Method::GET } else { current.method.clone() };
     let same_origin = next.origin() == current.url.origin();
     let mut headers = current.headers.clone();
-    headers.remove(reqwest::header::HOST);
+    // headers that chose the host or the path were checked for the first URL only
+    for h in HOST_HEADERS.iter().chain(PATH_HEADERS) {
+        headers.remove(*h);
+    }
     if !same_origin {
-        for h in [reqwest::header::AUTHORIZATION, reqwest::header::COOKIE, reqwest::header::PROXY_AUTHORIZATION] {
+        // every header that carries a credential stays with its origin: the standard ones, and
+        // any whose name says it is one (`X-Api-Key`, `PRIVATE-TOKEN`), Mission 7
+        let credentials: Vec<reqwest::header::HeaderName> = headers
+            .keys()
+            .filter(|n| matches!(*n, &reqwest::header::AUTHORIZATION | &reqwest::header::COOKIE | &reqwest::header::PROXY_AUTHORIZATION) || crate::redact::secret_name(n.as_str()))
+            .cloned()
+            .collect();
+        for h in credentials {
             headers.remove(h);
         }
     }
@@ -273,6 +304,42 @@ mod tests {
         let Some(Next::Follow { request, .. }) = next_request(&head, 303, Some("/b")) else { panic!() };
         assert_eq!(request.method.as_str(), "HEAD", "HEAD stays HEAD");
         assert_eq!(label(&url::Url::parse("https://u:p@a.example.com:8443/x?token=1#f").unwrap()), "https://a.example.com:8443/x");
+    }
+
+    /// Mission 7: on another origin, every header whose name says it carries a credential is
+    /// dropped, not only the standard ones; headers that chose the host or the path are not reused.
+    #[test]
+    fn credential_headers_stay_with_their_origin() {
+        let first = prepare(&input("GET", "https://app.example.com/api/", &[("X-Api-Key", "k1"), ("PRIVATE-TOKEN", "t1"), ("X-Auth-Token", "a1"), ("Accept", "text/html"), ("X-Forwarded-Host", "app.example.com")])).unwrap();
+        for to in ["http://app.example.com/api/", "https://other.example.com/api/"] {
+            let Some(Next::Follow { request, .. }) = next_request(&first, 302, Some(to)) else { panic!("{to}") };
+            for h in ["x-api-key", "private-token", "x-auth-token", "x-forwarded-host"] {
+                assert!(request.headers.get(h).is_none(), "{h} sent to {to}");
+            }
+            assert!(request.headers.get("accept").is_some());
+        }
+        let Some(Next::Follow { request, .. }) = next_request(&first, 302, Some("/api/next")) else { panic!() };
+        assert!(request.headers.get("x-api-key").is_some(), "the same origin keeps them");
+    }
+
+    /// Mission 7: a header that names a host names exactly one, and headers that servers and
+    /// proxies read as the host or the path are scope-checked like the Host header.
+    #[test]
+    fn routing_headers_are_scope_checked() {
+        let url = "https://app.example.com/api/";
+        assert!(prepare(&input("GET", url, &[("Host", "victim.other.net,app.example.com")])).is_err());
+        assert!(prepare(&input("GET", url, &[("Host", "a b.example.com")])).is_err());
+        assert!(prepare(&input("GET", url, &[("Host", "app.example.com")])).is_ok());
+        let p = prepare(&input("GET", url, &[("X-Forwarded-Host", "admin.example.com")])).unwrap();
+        assert!(p.targets.contains(&"https://admin.example.com/api/".to_string()), "{:?}", p.targets);
+        assert!(prepare(&input("GET", url, &[("X-Host", "victim.other.net,app.example.com")])).is_err());
+        let p = prepare(&input("GET", url, &[("X-Original-URL", "/admin/delete?id=1")])).unwrap();
+        assert!(p.targets.contains(&"https://app.example.com/admin/delete?id=1".to_string()), "{:?}", p.targets);
+        for bad in ["//evil.example.net/x", "https://evil.example.net/", "admin", "/a\\b"] {
+            assert!(prepare(&input("GET", url, &[("X-Rewrite-URL", bad)])).is_err(), "{bad}");
+        }
+        assert!(prepare(&input("GET", url, &[("Forwarded", "for=192.0.2.1;host=admin.example.com")])).is_err());
+        assert!(prepare(&input("GET", url, &[("Forwarded", "for=192.0.2.1")])).is_ok());
     }
 
     #[test]

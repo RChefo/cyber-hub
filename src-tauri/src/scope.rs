@@ -49,6 +49,12 @@ static HOST_RE: Lazy<Regex> = Lazy::new(|| {
 static IP_RANGE_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.)(\d{1,3})-(\d{1,3})$").unwrap());
 
+/// Whether `h` is a DNS host name (letters, digits, hyphens and dots, with a top-level label), as
+/// the scope reads them: a header that names a host must name exactly one (Mission 7).
+pub fn is_host_name(h: &str) -> bool {
+    HOST_RE.is_match(h)
+}
+
 /// Classify and normalize a user-entered scope value.
 pub fn classify(value: &str) -> AppResult<(String, &'static str)> {
     let v = value.trim().trim_end_matches('.').to_ascii_lowercase();

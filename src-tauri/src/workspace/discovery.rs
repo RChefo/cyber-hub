@@ -474,6 +474,13 @@ fn http_client_builder(insecure: bool) -> reqwest::ClientBuilder {
         .danger_accept_invalid_certs(insecure)
 }
 
+/// The vetted addresses as the client pins them: port 0, so each request goes to its scheme's
+/// port (443 for HTTPS, 80 for HTTP). A pinned non-zero port is used for every scheme, which sent
+/// the plain HTTP probe to port 443 (Mission 7).
+fn pinned_addrs(addrs: &[std::net::SocketAddr]) -> Vec<std::net::SocketAddr> {
+    addrs.iter().map(|a| std::net::SocketAddr::new(a.ip(), 0)).collect()
+}
+
 /// Text of the first `<title>` in (the start of) an HTML body.
 pub fn html_title(body: &str) -> Option<String> {
     let lower = body.to_ascii_lowercase();
@@ -524,10 +531,11 @@ pub async fn http_collect(hosts: &[String], entries: &[ScopeEntry], cancel: &Ato
                 Err(reason) => return (host, Err(reason)),
             };
             let named = host.parse::<std::net::IpAddr>().is_err();
+            let pinned = pinned_addrs(&addrs);
             let client = |insecure: bool| -> Result<reqwest::Client, String> {
                 let mut b = http_client_builder(insecure);
                 if named {
-                    b = b.resolve_to_addrs(&host, &addrs);
+                    b = b.resolve_to_addrs(&host, &pinned);
                 }
                 b.build().map_err(|e| e.to_string())
             };
@@ -757,6 +765,16 @@ pub fn nmap_args(profile: &str, targets: &[String]) -> AppResult<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Mission 7: the vetted addresses are pinned without a port, so the HTTP probe reaches port
+    /// 80 and the HTTPS one port 443.
+    #[test]
+    fn pinned_addresses_leave_the_port_to_the_scheme() {
+        let addrs: Vec<std::net::SocketAddr> = vec!["93.184.216.34:443".parse().unwrap(), "[2606:2800:220:1::1]:443".parse().unwrap()];
+        let pinned = pinned_addrs(&addrs);
+        assert!(pinned.iter().all(|a| a.port() == 0));
+        assert_eq!(pinned.iter().map(|a| a.ip()).collect::<Vec<_>>(), addrs.iter().map(|a| a.ip()).collect::<Vec<_>>());
+    }
 
     fn entries(v: &[(&str, bool)]) -> Vec<ScopeEntry> {
         v.iter()

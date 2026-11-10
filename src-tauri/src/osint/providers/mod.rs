@@ -286,6 +286,8 @@ impl Builder {
 /// DNS (rebinding or a hostile record).
 pub fn client(timeout_secs: u64) -> Result<reqwest::Client, Error> {
     reqwest::Client::builder()
+        // no system proxy: a proxy resolves names itself, past the public-only resolver (Mission 7)
+        .no_proxy()
         .timeout(Duration::from_secs(timeout_secs))
         .redirect(reqwest::redirect::Policy::none())
         .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION")))
@@ -337,6 +339,16 @@ pub async fn get_json(client: &reqwest::Client, url: &str, accept: &str) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Mission 7: the public-source client never uses a system proxy, which would resolve names
+    /// itself and bypass the public-only resolver.
+    #[test]
+    fn the_public_source_client_uses_no_proxy() {
+        let src = include_str!("mod.rs");
+        let start = src.find("pub fn client(").unwrap();
+        let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
+        assert!(body.contains(".no_proxy()") && body.contains(".dns_resolver("));
+    }
 
     #[test]
     fn only_public_addresses_are_connected_to() {
