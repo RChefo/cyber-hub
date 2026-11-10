@@ -21,17 +21,30 @@ use yaml_rust2::scanner::{Marker, TScalarStyle};
 pub const MAX_DEPTH: usize = 128;
 /// Values in all documents together, with every alias expansion counted.
 pub const MAX_NODES: usize = 1_000_000;
+/// Scalar text in all documents together, with every alias expansion counted: a 256 KB scalar
+/// aliased 60,000 times is 60,000 nodes but 15 GB of text.
+pub const MAX_BYTES: usize = 64 * 1024 * 1024;
 
 /// Every document of a YAML stream.
+///
+/// Events are pulled one at a time from yaml-rust2's parser, which is iterative, rather than
+/// through its `load`, which recurses once per nesting level without a limit: a few kilobytes of
+/// indented YAML would overflow the stack and end the app. Reading stops at the first problem,
+/// including nesting deeper than [`MAX_DEPTH`].
 pub fn parse_documents(text: &str) -> Result<Vec<Value>, String> {
     let mut b = Builder::default();
     let mut parser = Parser::new_from_str(text);
-    let loaded = parser.load(&mut b, true);
-    if let Some(e) = b.error {
-        return Err(e);
+    loop {
+        let (ev, mark) = parser.next_token().map_err(|e| format!("not valid YAML: {e}"))?;
+        let end = matches!(ev, Event::StreamEnd);
+        b.on_event(ev, mark);
+        if let Some(e) = b.error.take() {
+            return Err(e);
+        }
+        if end {
+            return Ok(b.docs);
+        }
     }
-    loaded.map_err(|e| format!("not valid YAML: {e}"))?;
-    Ok(b.docs)
 }
 
 /// The first document of a YAML stream (an empty stream is an error).
@@ -44,11 +57,13 @@ struct Sized {
     value: Value,
     nodes: usize,
     depth: usize,
+    /// scalar text it holds, in bytes
+    bytes: usize,
 }
 
 enum Frame {
-    Seq { items: Vec<Value>, anchor: usize, nodes: usize, depth: usize },
-    Map { map: Map<String, Value>, key: Option<String>, anchor: usize, nodes: usize, depth: usize },
+    Seq { items: Vec<Value>, anchor: usize, nodes: usize, depth: usize, bytes: usize },
+    Map { map: Map<String, Value>, key: Option<String>, anchor: usize, nodes: usize, depth: usize, bytes: usize },
 }
 
 #[derive(Default)]
@@ -56,8 +71,9 @@ struct Builder {
     docs: Vec<Value>,
     stack: Vec<Frame>,
     root: Option<Value>,
-    anchors: HashMap<usize, (Value, usize, usize)>,
+    anchors: HashMap<usize, (Value, usize, usize, usize)>,
     nodes: usize,
+    bytes: usize,
     error: Option<String>,
 }
 
@@ -73,7 +89,7 @@ impl Builder {
 
     fn remember(&mut self, anchor: usize, s: &Sized) {
         if anchor > 0 {
-            self.anchors.insert(anchor, (s.value.clone(), s.nodes, s.depth));
+            self.anchors.insert(anchor, (s.value.clone(), s.nodes, s.depth, s.bytes));
         }
     }
 
@@ -84,13 +100,15 @@ impl Builder {
         }
         match self.stack.last_mut() {
             None => self.root = Some(s.value),
-            Some(Frame::Seq { items, nodes, depth, .. }) => {
+            Some(Frame::Seq { items, nodes, depth, bytes, .. }) => {
                 items.push(s.value);
                 *nodes += s.nodes;
+                *bytes += s.bytes;
                 *depth = (*depth).max(s.depth + 1);
             }
-            Some(Frame::Map { map, key, nodes, depth, .. }) => {
+            Some(Frame::Map { map, key, nodes, depth, bytes, .. }) => {
                 *nodes += s.nodes;
+                *bytes += s.bytes;
                 *depth = (*depth).max(s.depth + 1);
                 match key.take() {
                     None => *key = Some(key_text(s.value)),
@@ -102,10 +120,15 @@ impl Builder {
         }
     }
 
-    fn count(&mut self, n: usize, mark: Marker) -> bool {
+    fn count(&mut self, n: usize, bytes: usize, mark: Marker) -> bool {
         self.nodes = self.nodes.saturating_add(n);
+        self.bytes = self.bytes.saturating_add(bytes);
         if self.nodes > MAX_NODES {
             self.fail(format!("the YAML document expands to more than {MAX_NODES} values (line {}); aliases may multiply it", mark.line()));
+            return false;
+        }
+        if self.bytes > MAX_BYTES {
+            self.fail(format!("the YAML document expands to more than {} MB of text (line {}); aliases may multiply it", MAX_BYTES / 1024 / 1024, mark.line()));
             return false;
         }
         true
@@ -127,46 +150,47 @@ impl MarkedEventReceiver for Builder {
                 self.docs.push(doc);
             }
             Event::Scalar(text, style, anchor, tag) => {
-                if !self.count(1, mark) {
+                let bytes = text.len();
+                if !self.count(1, bytes, mark) {
                     return;
                 }
-                let s = Sized { value: scalar(text, style, tag.as_ref()), nodes: 1, depth: 0 };
+                let s = Sized { value: scalar(text, style, tag.as_ref()), nodes: 1, depth: 0, bytes };
                 self.remember(anchor, &s);
                 self.emit(s, mark);
             }
             Event::Alias(id) => {
-                let Some((value, nodes, depth)) = self.anchors.get(&id).cloned() else {
+                let Some((value, nodes, depth, bytes)) = self.anchors.get(&id).cloned() else {
                     return self.fail(format!("an alias refers to an unknown anchor (line {})", mark.line()));
                 };
-                if !self.count(nodes, mark) {
+                if !self.count(nodes, bytes, mark) {
                     return;
                 }
-                self.emit(Sized { value, nodes, depth }, mark);
+                self.emit(Sized { value, nodes, depth, bytes }, mark);
             }
             Event::SequenceStart(..) | Event::MappingStart(..) if self.stack.len() >= MAX_DEPTH => {
                 self.fail(format!("the YAML nesting is deeper than {MAX_DEPTH} levels (line {})", mark.line()));
             }
             Event::SequenceStart(anchor, _) => {
-                if self.count(1, mark) {
-                    self.stack.push(Frame::Seq { items: Vec::new(), anchor, nodes: 1, depth: 1 });
+                if self.count(1, 0, mark) {
+                    self.stack.push(Frame::Seq { items: Vec::new(), anchor, nodes: 1, depth: 1, bytes: 0 });
                 }
             }
             Event::MappingStart(anchor, _) => {
-                if self.count(1, mark) {
-                    self.stack.push(Frame::Map { map: Map::new(), key: None, anchor, nodes: 1, depth: 1 });
+                if self.count(1, 0, mark) {
+                    self.stack.push(Frame::Map { map: Map::new(), key: None, anchor, nodes: 1, depth: 1, bytes: 0 });
                 }
             }
             Event::SequenceEnd => {
-                if let Some(Frame::Seq { items, anchor, nodes, depth }) = self.stack.pop() {
-                    let s = Sized { value: Value::Array(items), nodes, depth };
+                if let Some(Frame::Seq { items, anchor, nodes, depth, bytes }) = self.stack.pop() {
+                    let s = Sized { value: Value::Array(items), nodes, depth, bytes };
                     self.remember(anchor, &s);
                     self.emit(s, mark);
                 }
             }
             Event::MappingEnd => {
-                if let Some(Frame::Map { mut map, anchor, nodes, depth, .. }) = self.stack.pop() {
+                if let Some(Frame::Map { mut map, anchor, nodes, depth, bytes, .. }) = self.stack.pop() {
                     merge_keys(&mut map);
-                    let s = Sized { value: Value::Object(map), nodes, depth };
+                    let s = Sized { value: Value::Object(map), nodes, depth, bytes };
                     self.remember(anchor, &s);
                     self.emit(s, mark);
                 }
@@ -310,5 +334,25 @@ mod tests {
         assert!(err.starts_with("not valid YAML") && err.contains("line"), "{err}");
         assert!(parse_one("x: *missing\n").is_err());
         assert!(parse_one("").is_err());
+    }
+
+    #[test]
+    fn alias_expansion_is_bounded_in_bytes() {
+        // 60,000 aliases of a 256 KB scalar: 60,000 nodes, but 15 GB of text
+        let mut doc = format!("x: &a \"{}\"\ny:\n", "A".repeat(256 * 1024));
+        for _ in 0..60_000 {
+            doc.push_str("  - *a\n");
+        }
+        let err = parse_one(&doc).unwrap_err();
+        assert!(err.contains("MB of text"), "{err}");
+    }
+
+    #[test]
+    fn deep_block_nesting_is_refused_without_recursion() {
+        // yaml-rust2's own loader recursed once per level: 5,000 indented keys overflowed a
+        // 2 MiB stack. Parsed here on a 256 KiB stack, 2,000 levels must be refused, not crash.
+        let doc: String = (0..2_000).map(|i| format!("{}k{i}:\n", " ".repeat(i))).collect();
+        let err = std::thread::Builder::new().stack_size(256 * 1024).spawn(move || parse_documents(&doc)).unwrap().join().unwrap().unwrap_err();
+        assert!(err.contains("deeper than 128"), "{err}");
     }
 }

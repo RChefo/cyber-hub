@@ -542,7 +542,7 @@ pub fn render(c: &Connection, project_id: i64, o: &ReportOptions, today: &str) -
 /// A table cell: one line, `|` and `\` escaped, and no character that could open HTML.
 fn md_cell(v: &str) -> String {
     let t: String = v.chars().map(|c| if c == '\n' || c == '\r' || c == '\t' { ' ' } else { c }).filter(|c| !c.is_control()).collect();
-    let t = t.replace('\\', "\\\\").replace('|', "\\|").replace('<', "&lt;");
+    let t = t.replace('\\', "\\\\").replace('|', "\\|").replace('<', "&lt;").replace('[', "\\[");
     let t = t.trim();
     if t.is_empty() {
         "—".into()
@@ -553,7 +553,7 @@ fn md_cell(v: &str) -> String {
 
 /// A short value on one line (headings, list values): `<` cannot open HTML.
 fn md_line(v: &str) -> String {
-    v.chars().map(|c| if c.is_control() { ' ' } else { c }).collect::<String>().replace('<', "&lt;").trim().to_string()
+    v.chars().map(|c| if c.is_control() { ' ' } else { c }).collect::<String>().replace('<', "&lt;").replace('[', "\\[").trim().to_string()
 }
 
 /// A value shown as code, on one line: backticks inside become `'` so the value cannot end the code
@@ -627,6 +627,10 @@ fn md_text(t: &str) -> String {
             }
             if ch == '<' && chars.get(i + 1).is_some_and(|c| c.is_ascii_alphabetic() || matches!(c, '/' | '!' | '?')) {
                 out.push_str("&lt;");
+            } else if ch == '!' && chars.get(i + 1) == Some(&'[') {
+                // an image would make the viewer request its URL when the report is opened; it
+                // stays a link, which needs a click
+                out.push_str("\\!");
             } else {
                 out.push(ch);
             }

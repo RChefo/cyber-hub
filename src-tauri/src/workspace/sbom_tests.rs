@@ -301,3 +301,19 @@ fn sboms_are_stored_and_become_findings() {
     })
     .unwrap();
 }
+
+#[test]
+fn file_vulnerabilities_are_capped_and_merged_in_linear_time() {
+    let vulns: Vec<String> = (0..(MAX_VULNS + 5)).map(|i| format!("{{\"id\":\"V{i}\",\"affects\":[{{\"ref\":\"pkg:npm/a@1\"}}]}}")).collect();
+    let text = format!(
+        "{{\"bomFormat\":\"CycloneDX\",\"specVersion\":\"1.5\",\"components\":[{{\"type\":\"library\",\"name\":\"a\",\"version\":\"1\",\"bom-ref\":\"pkg:npm/a@1\"}}],\"vulnerabilities\":[{}]}}",
+        vulns.join(",")
+    );
+    let started = std::time::Instant::now();
+    let s = parse(&text).unwrap();
+    assert_eq!(s.vulns.len(), MAX_VULNS);
+    assert!(s.warnings.iter().any(|w| w.contains("20000 vulnerabilities")), "{:?}", s.warnings);
+    let all = merged(&s, &[]);
+    assert_eq!(all.len(), MAX_VULNS);
+    assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
+}

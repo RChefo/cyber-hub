@@ -32,6 +32,11 @@ mod vtfile;
 mod workspace;
 mod yaml;
 
+#[cfg(test)]
+mod hostile;
+#[cfg(test)]
+mod hostile_tests;
+
 use tauri::{AppHandle, Manager};
 
 use commands::{activity, analysis as analysis_commands, apisec as apisec_commands, sbom as sbom_commands, assistant as assistant_commands, intel, library, mcp as mcp_commands, osint as osint_commands, projects, sectools as sectool_commands, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, vulns as vuln_commands, wordlists, workflows as workflow_commands, workspace as workspace_commands};

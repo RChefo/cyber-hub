@@ -904,3 +904,13 @@ fn files_saved_by_excel_are_read_in_their_encoding() {
     let (text, _) = decode_text(b"<nmaprun>\xff\xfe\x00 stray</nmaprun>");
     assert!(text.starts_with("<nmaprun>"));
 }
+
+#[test]
+fn a_zap_site_with_an_endless_host_is_bounded() {
+    let host = "h".repeat(1_000_000);
+    let alerts: Vec<Value> = (0..200).map(|i| json!({ "pluginid": "1", "alert": format!("Alert {i}"), "riskcode": "1", "confidence": "2", "desc": "", "instances": [{ "uri": "https://x/", "method": "GET" }] })).collect();
+    let text = json!({ "@programName": "ZAP", "@version": "2.16.0", "site": [{ "@name": "", "@host": host, "alerts": alerts }] }).to_string();
+    let p = parse(&text).unwrap();
+    assert!(!p.findings.is_empty());
+    assert!(p.findings.iter().all(|f| f.host.as_ref().is_none_or(|h| h.chars().count() <= 253)));
+}

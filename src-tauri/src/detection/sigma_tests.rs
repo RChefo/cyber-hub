@@ -315,3 +315,15 @@ fn sigma_rules_on_attack_samples() {
         assert_eq!(n > 0, want, "{file}");
     }
 }
+
+#[test]
+fn deeply_nested_conditions_are_refused_before_the_parser_recurses() {
+    // either of these would overflow the stack of the thread checking the rule
+    for cond in [format!("{}sel{}", "(".repeat(100_000), ")".repeat(100_000)), format!("{}sel", "not ".repeat(120_000))] {
+        let c = one(&format!("title: t\nlogsource:\n    category: test\ndetection:\n    sel:\n        Image: x\n    condition: '{cond}'\n"));
+        assert!(c.rule.is_none());
+        assert!(c.issues.iter().any(|i| i.level == "error" && i.message.contains("nests deeper than 64")), "{:?}", c.issues);
+    }
+    let ok = one(&format!("title: t\nlogsource:\n    category: test\ndetection:\n    sel:\n        Image: x\n    condition: '{}sel{}'\n", "(".repeat(60), ")".repeat(60)));
+    assert!(ok.rule.is_some(), "{:?}", ok.issues);
+}

@@ -165,7 +165,7 @@ pub(super) fn parse(text: &str) -> Result<Parsed, String> {
         let more = [s(&x["unmapped"], "related_url")].into_iter().chain(strings(x["unmapped"].get("additional_urls")));
         for r in strings(x["remediation"].get("references")).into_iter().chain(more) {
             if r.starts_with("https://") || r.starts_with("http://") {
-                if !refs.contains(&r) {
+                if refs.len() < 50 && !refs.contains(&r) {
                     refs.push(r);
                 }
             } else if !r.is_empty() && commands.len() < 10 {

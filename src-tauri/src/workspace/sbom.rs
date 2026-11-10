@@ -23,6 +23,8 @@ use crate::error::{validation, AppError, AppResult};
 
 pub const MAX_FILE_BYTES: usize = 50 * 1024 * 1024;
 pub const MAX_COMPONENTS: usize = 20_000;
+/// Vulnerabilities read from a file (CycloneDX `vulnerabilities`).
+pub const MAX_VULNS: usize = 20_000;
 pub const OSV_BASE: &str = "https://api.osv.dev";
 const OSV_BATCH: usize = 1000;
 const MAX_VULN_DETAILS: usize = 2000;
@@ -448,6 +450,10 @@ fn cyclonedx(root: &Value, format: &str) -> Sbom {
     }
     let index: HashMap<String, usize> = components.iter().enumerate().filter(|(_, c)| !c.reference.is_empty()).map(|(i, c)| (c.reference.clone(), i)).collect();
     for v in list(root.get("vulnerabilities")) {
+        if sbom.vulns.len() >= MAX_VULNS {
+            sbom.warnings.push(format!("Only the first {MAX_VULNS} vulnerabilities of the file were kept"));
+            break;
+        }
         let id = text(v.get("id"));
         if id.is_empty() {
             continue;
@@ -1183,9 +1189,23 @@ pub struct SbomSummary {
 /// looked-up record first).
 pub fn merged(sbom: &Sbom, osv: &[Vuln]) -> Vec<Vuln> {
     let mut out: Vec<Vuln> = osv.to_vec();
+    // every id and alias → the record carrying it, so the merge is linear (this runs on every
+    // SBOM list and search, not only at import)
+    let mut index: HashMap<String, usize> = HashMap::new();
+    let remember = |index: &mut HashMap<String, usize>, v: &Vuln, i: usize| {
+        index.entry(v.id.clone()).or_insert(i);
+        for a in &v.aliases {
+            index.entry(a.clone()).or_insert(i);
+        }
+    };
+    for (i, o) in out.iter().enumerate() {
+        remember(&mut index, o, i);
+    }
     for v in &sbom.vulns {
-        match out.iter_mut().find(|o| o.id == v.id || o.aliases.contains(&v.id) || v.aliases.contains(&o.id)) {
-            Some(o) => {
+        let hit = index.get(&v.id).copied().or_else(|| v.aliases.iter().find_map(|a| index.get(a).copied()));
+        match hit {
+            Some(i) => {
+                let o = &mut out[i];
                 if o.analysis.is_empty() {
                     o.analysis = v.analysis.clone();
                 }
@@ -1195,7 +1215,10 @@ pub fn merged(sbom: &Sbom, osv: &[Vuln]) -> Vec<Vuln> {
                     }
                 }
             }
-            None => out.push(v.clone()),
+            None => {
+                remember(&mut index, v, out.len());
+                out.push(v.clone());
+            }
         }
     }
     out.sort_by(|a, b| (severity_rank(&a.severity), a.id.as_str()).cmp(&(severity_rank(&b.severity), b.id.as_str())));

@@ -455,12 +455,24 @@ fn lex(s: &str) -> Result<Vec<String>, String> {
     Ok(out)
 }
 
+/// Parentheses and `not`s around one point of a condition. The parser recurses once per level,
+/// so a crafted condition of a few kilobytes would otherwise overflow the stack and end the app.
+const MAX_CONDITION_DEPTH: usize = 64;
+
 struct P<'a> {
     t: &'a [String],
     i: usize,
+    depth: usize,
 }
 
 impl P<'_> {
+    fn enter(&mut self) -> Result<(), String> {
+        self.depth += 1;
+        if self.depth > MAX_CONDITION_DEPTH {
+            return Err(format!("the condition nests deeper than {MAX_CONDITION_DEPTH} levels of parentheses and 'not'"));
+        }
+        Ok(())
+    }
     fn peek(&self) -> Option<&str> {
         self.t.get(self.i).map(String::as_str)
     }
@@ -488,14 +500,19 @@ impl P<'_> {
     fn not(&mut self) -> Result<Expr, String> {
         if self.peek().is_some_and(|w| w.eq_ignore_ascii_case("not")) {
             self.i += 1;
-            return Ok(Expr::Not(Box::new(self.not()?)));
+            self.enter()?;
+            let e = self.not()?;
+            self.depth -= 1;
+            return Ok(Expr::Not(Box::new(e)));
         }
         self.atom()
     }
     fn atom(&mut self) -> Result<Expr, String> {
         let w = self.next().ok_or("the condition ends too early")?.to_string();
         if w == "(" {
+            self.enter()?;
             let e = self.or()?;
+            self.depth -= 1;
             if self.next() != Some(")") {
                 return Err("a parenthesis is not closed".into());
             }
@@ -536,7 +553,7 @@ fn parse_condition(s: &str) -> Result<Expr, String> {
     if t.is_empty() {
         return Err("the condition is empty".into());
     }
-    let mut p = P { t: &t, i: 0 };
+    let mut p = P { t: &t, i: 0, depth: 0 };
     let e = p.or()?;
     if p.i < t.len() {
         return Err(format!("unexpected '{}' in the condition", t[p.i]));

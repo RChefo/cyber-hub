@@ -394,6 +394,7 @@ impl Ctx<'_> {
                 if ty != 0x01 {
                     return Err("value text that is not a string");
                 }
+                self.count()?;
                 let n = self.u16(*pos)? as usize;
                 let s = utf16(self.bytes(*pos + 2, n * 2)?);
                 *pos += 2 + n * 2;
@@ -408,6 +409,9 @@ impl Ctx<'_> {
                         self.fragment(&mut p, v.start + v.len, &[], depth + 1)
                     }
                     Some(v) => {
+                        // text nodes count too: a template referring to one value thousands of
+                        // times would otherwise expand without a bound
+                        self.count()?;
                         let s = value_text(v.ty, self.bytes(v.start, v.len)?);
                         Ok(if s.is_empty() { Vec::new() } else { vec![Node::Text(s)] })
                     }
@@ -415,12 +419,14 @@ impl Ctx<'_> {
                 }
             }
             0x07 => {
+                self.count()?;
                 let n = self.u16(*pos)? as usize;
                 let s = utf16(self.bytes(*pos + 2, n * 2)?);
                 *pos += 2 + n * 2;
                 Ok(vec![Node::Text(s)])
             }
             0x08 => {
+                self.count()?;
                 let c = self.u16(*pos)?;
                 *pos += 2;
                 Ok(char::from_u32(u32::from(c)).map(|c| vec![Node::Text(c.to_string())]).unwrap_or_default())
@@ -569,4 +575,4 @@ fn flatten(nodes: &[Node]) -> Event {
 
 #[cfg(test)]
 #[path = "evtx_tests.rs"]
-mod tests;
+pub(crate) mod tests;

@@ -140,8 +140,10 @@ pub fn follows(tool_id: &str, args: &[String]) -> Option<String> {
     let mut disabled = false;
     for (i, arg) in args.iter().enumerate() {
         // bundled short options (`-kr`): letters only, so a value such as `-uhttps://…` is not read as one
-        if !p.bundled.is_empty() && !arg.starts_with("--") && arg.len() > 2 && arg[1..].chars().all(|c| c.is_ascii_alphabetic()) {
-            if let Some(c) = arg[1..].chars().find(|c| p.bundled.contains(c)) {
+        // (strip_prefix, not a byte slice: an argument starting with a multi-byte character must not panic)
+        let short = arg.strip_prefix('-').filter(|rest| !p.bundled.is_empty() && !rest.starts_with('-') && rest.len() > 1 && rest.chars().all(|c| c.is_ascii_alphabetic()));
+        if let Some(rest) = short {
+            if let Some(c) = rest.chars().find(|c| p.bundled.contains(c)) {
                 enabled.get_or_insert_with(|| format!("-{c} in {arg}"));
             }
         }
@@ -334,5 +336,13 @@ mod tests {
         assert!(own_option_files("nikto").contains("CLIOPTS"));
         assert_eq!(own_option_files("sqlmap"), "");
         assert_eq!(own_option_files("gobuster"), "");
+    }
+
+    #[test]
+    fn arguments_starting_with_multibyte_characters_are_not_options() {
+        // `é1` used to be sliced at its second byte, inside the character, and panic
+        assert_eq!(follows("feroxbuster", &a(&["-u", "https://app.example.com/api/", "é1"])), None);
+        assert_eq!(follows("dalfox", &a(&["url", "https://app.example.com/", "€F"])), None);
+        assert!(follows("feroxbuster", &a(&["-kr", "-u", "https://app.example.com/"])).is_some(), "bundled short options are still read");
     }
 }

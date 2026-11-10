@@ -180,7 +180,7 @@ fn logon_values(user: &str, ip: &str, logon_type: u32, record: u64) -> Vec<(u8, 
     ]
 }
 
-fn sample() -> Vec<u8> {
+pub(crate) fn sample() -> Vec<u8> {
     let mut w = W::new();
     let mut def = 0u32;
     // 1: the template inline

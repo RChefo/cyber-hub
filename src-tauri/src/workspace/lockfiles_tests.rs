@@ -251,3 +251,12 @@ fn cut_or_multibyte_lockfiles_never_panic() {
         }
     }
 }
+
+#[test]
+fn a_long_gemfile_remote_is_not_copied_whole_into_every_spec() {
+    let remote = format!("https://gems.example/{}", "r".repeat(100_000));
+    let text = format!("GEM\n  remote: {remote}\n  specs:\n    a (1.0)\n    b (2.0)\n\nDEPENDENCIES\n  a\n  b\n");
+    let s = parse("Gemfile.lock", &text).unwrap().unwrap();
+    assert_eq!(s.components.len(), 2);
+    assert!(s.sources.iter().all(|r| r.len() <= 2_048), "{:?}", s.sources.iter().map(String::len).collect::<Vec<_>>());
+}

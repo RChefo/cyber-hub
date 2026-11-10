@@ -239,12 +239,22 @@ fn bounded(schema: &Value) -> bool {
     ["maximum", "exclusiveMaximum", "maxLength", "maxItems", "enum", "const"].iter().any(|k| schema.get(k).is_some()) || schema.get("type").and_then(Value::as_str) == Some("boolean")
 }
 
+/// Schemas visited for one request body. A schema whose `allOf` lists itself 50 times would
+/// otherwise be visited 50^8 times within the depth limit.
+const MAX_SCHEMA_VISITS: usize = 2_000;
+
 /// The property names of a request body schema (allOf/oneOf/anyOf combined; the items of an array).
 fn body_fields(root: &Value, schema: Option<&Value>, out: &mut Vec<String>, depth: usize) {
+    let mut budget = MAX_SCHEMA_VISITS;
+    body_fields_in(root, schema, out, depth, &mut budget);
+}
+
+fn body_fields_in(root: &Value, schema: Option<&Value>, out: &mut Vec<String>, depth: usize, budget: &mut usize) {
     let Some(schema) = schema else { return };
-    if depth > 8 || out.len() >= MAX_FIELDS {
+    if depth > 8 || out.len() >= MAX_FIELDS || *budget == 0 {
         return;
     }
+    *budget -= 1;
     let s = deref(root, schema);
     if let Some(props) = s.get("properties").and_then(Value::as_object) {
         for k in props.keys() {
@@ -256,12 +266,12 @@ fn body_fields(root: &Value, schema: Option<&Value>, out: &mut Vec<String>, dept
     for combo in ["allOf", "oneOf", "anyOf"] {
         if let Some(list) = s.get(combo).and_then(Value::as_array) {
             for sub in list {
-                body_fields(root, Some(sub), out, depth + 1);
+                body_fields_in(root, Some(sub), out, depth + 1, budget);
             }
         }
     }
     if s.get("type").and_then(Value::as_str) == Some("array") {
-        body_fields(root, s.get("items"), out, depth + 1);
+        body_fields_in(root, s.get("items"), out, depth + 1, budget);
     }
 }
 
@@ -458,6 +468,10 @@ fn swagger(root: &Value) -> ApiSpec {
 
 /* ─────────────── Postman collections ─────────────── */
 
+/// A substituted value. Variables that expand into each other (`a` = `{{a}}{{a}}…`) grow
+/// without end; past this size the text is left as written.
+const MAX_SUBSTITUTED: usize = 64 * 1024;
+
 /// `{{name}}` replaced by the collection's variables (unknown ones are left as they are).
 fn substitute(s: &str, vars: &BTreeMap<String, String>) -> String {
     let mut out = s.to_string();
@@ -465,10 +479,16 @@ fn substitute(s: &str, vars: &BTreeMap<String, String>) -> String {
         let mut changed = false;
         for (k, v) in vars {
             let pat = format!("{{{{{k}}}}}");
-            if out.contains(&pat) {
-                out = out.replace(&pat, v);
-                changed = true;
+            let n = out.matches(&pat).count();
+            if n == 0 {
+                continue;
             }
+            // the size is known before anything is allocated
+            if out.len() + n * v.len() > MAX_SUBSTITUTED {
+                return s.to_string();
+            }
+            out = out.replace(&pat, v);
+            changed = true;
         }
         if !changed {
             break;

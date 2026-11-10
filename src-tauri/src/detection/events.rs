@@ -14,6 +14,8 @@ pub const MAX_EVENTS: usize = 500_000;
 pub const MAX_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_VALUE: usize = 32 * 1024;
 const MAX_FIELDS: usize = 512;
+/// A field name (a nested key is copied into the name of every leaf under it).
+const MAX_KEY: usize = 1024;
 
 /// One event: named fields (`EventID`, `Channel`, `CommandLine`…) and, for text logs, the line.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -47,9 +49,13 @@ impl Event {
     }
 }
 
-fn cut(mut v: String) -> String {
-    if v.len() > MAX_VALUE {
-        let mut end = MAX_VALUE;
+fn cut(v: String) -> String {
+    cut_to(v, MAX_VALUE)
+}
+
+fn cut_to(mut v: String, max: usize) -> String {
+    if v.len() > max {
+        let mut end = max;
         while !v.is_char_boundary(end) {
             end -= 1;
         }
@@ -276,7 +282,18 @@ fn flatten(prefix: &str, v: &Value, out: &mut Vec<(String, String)>, depth: usiz
     if depth > 16 || out.len() >= MAX_FIELDS {
         return;
     }
-    let key = |k: &str| if prefix.is_empty() { k.to_string() } else { format!("{prefix}.{k}") };
+    let key = |k: &str| {
+        let full = if prefix.is_empty() { k.to_string() } else { format!("{prefix}.{k}") };
+        if full.len() <= MAX_KEY {
+            return full;
+        }
+        // the end is kept, so the leaf's own name stays reachable
+        let mut start = full.len() - MAX_KEY;
+        while !full.is_char_boundary(start) {
+            start += 1;
+        }
+        format!("…{}", &full[start..])
+    };
     match v {
         Value::Object(o) => {
             for (k, x) in o {
@@ -286,7 +303,7 @@ fn flatten(prefix: &str, v: &Value, out: &mut Vec<(String, String)>, depth: usiz
         // lists of scalars become one value; lists of objects are flattened by index
         Value::Array(a) if a.iter().all(|x| !x.is_object() && !x.is_array()) => {
             if !prefix.is_empty() {
-                out.push((prefix.to_string(), a.iter().map(scalar).collect::<Vec<_>>().join(", ")));
+                out.push((prefix.to_string(), cut(a.iter().map(scalar).collect::<Vec<_>>().join(", "))));
             }
         }
         Value::Array(a) => {
@@ -296,7 +313,8 @@ fn flatten(prefix: &str, v: &Value, out: &mut Vec<(String, String)>, depth: usiz
         }
         _ => {
             if !prefix.is_empty() {
-                out.push((prefix.to_string(), scalar(v)));
+                // cut here, before the value is copied into the leaf list
+                out.push((prefix.to_string(), cut(scalar(v))));
             }
         }
     }
@@ -366,5 +384,15 @@ mod tests {
         );
         let text = read("first line\r\n\nsecond line\n".as_bytes()).unwrap();
         assert_eq!((text.kind, text.events.len(), text.events[1].position.as_str(), text.events[0].get("message")), (Kind::Text, 2, "line 3", Some("first line")));
+    }
+
+    #[test]
+    fn long_keys_and_values_are_cut_while_flattening() {
+        let key = "k".repeat(100_000);
+        let line = format!("{{\"{key}\":{{\"a\":\"x\",\"b\":\"{}\"}}}}\n", "v".repeat(100_000));
+        let s = read(line.as_bytes()).unwrap();
+        let ev = &s.events[0];
+        assert!(ev.fields.iter().all(|(k, v)| k.len() <= MAX_KEY + 3 && v.len() <= MAX_VALUE), "{:?}", ev.fields.iter().map(|(k, v)| (k.len(), v.len())).collect::<Vec<_>>());
+        assert_eq!(ev.get("a"), Some("x"), "the leaf keeps its own name");
     }
 }

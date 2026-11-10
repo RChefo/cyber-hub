@@ -279,7 +279,8 @@ fn pe(data: &[u8], p: &goblin::pe::PE, r: &mut Report) {
     let mut caps = Vec::new();
     // sections
     let mut end_of_sections = 0u64;
-    for s in &p.sections {
+    // the PE format allows at most 96 sections; a file claiming more is not read past them
+    for s in p.sections.iter().take(96) {
         let start = s.pointer_to_raw_data as usize;
         let size = s.size_of_raw_data as usize;
         let body = data.get(start..start.saturating_add(size).min(data.len())).unwrap_or(&[]);

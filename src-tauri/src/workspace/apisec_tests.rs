@@ -277,3 +277,29 @@ fn definitions_are_stored_listed_and_become_findings() {
     })
     .unwrap();
 }
+
+#[test]
+fn hostile_specs_stay_bounded() {
+    use serde_json::json;
+    // Postman variables that expand into each other: the text is left as written
+    let bomb = json!({
+        "info": {"name": "x", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+        "variable": [{"key": "a", "value": "{{a}}".repeat(1000)}],
+        "item": [{"name": "r", "request": {"method": "GET", "url": "https://api.example/{{a}}"}}]
+    })
+    .to_string();
+    let spec = parse(&bomb).unwrap();
+    assert!(serde_json::to_string(&spec).unwrap().len() < 100_000);
+    // a schema whose allOf lists itself 50 times: visited within a budget, not 50^8 times
+    let refs: Vec<serde_json::Value> = (0..50).map(|_| json!({"$ref": "#/components/schemas/S"})).collect();
+    let spec = json!({
+        "openapi": "3.0.0", "info": {"title": "t", "version": "1"},
+        "paths": {"/a": {"post": {"requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/S"}}}}}}},
+        "components": {"schemas": {"S": {"allOf": refs, "properties": {"x": {"type": "string"}}}}}
+    })
+    .to_string();
+    let started = std::time::Instant::now();
+    let s = parse(&spec).unwrap();
+    assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
+    assert_eq!(s.endpoints[0].body_fields, vec!["x".to_string()]);
+}

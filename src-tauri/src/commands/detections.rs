@@ -426,6 +426,11 @@ fn test_one(app: &AppHandle, rule_id: i64, sample_id: i64) -> AppResult<TestOutc
             .ok();
         Ok((lib::stored(c, rule_id)?, lib::sample(c, sample_id)?, previous))
     })?;
+    // the hash comes from the database, which a restored file may have supplied: only a SHA-256
+    // (64 hexadecimal characters) names a file of the sample store
+    if sample_row.sha256.len() != 64 || !sample_row.sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(validation(format!("The sample record of {} is damaged (its hash is not a SHA-256)", sample_row.file_name)));
+    }
     let path = samples_dir(app)?.join(&sample_row.sha256);
     if !path.exists() {
         return Err(validation(format!("The sample {} is missing from the sample store", sample_row.file_name)));

@@ -711,7 +711,11 @@ pub async fn osint_import_pick(app: AppHandle, db: State<'_, Db>, imports: State
         "graphml" | "xml" => "graphml",
         _ => return Err(validation("Choose a .json (Cyber Hub graph) or .graphml file")),
     };
-    let bytes = std::fs::read(&path)?;
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut std::io::Read::take(std::fs::File::open(&path)?, io::MAX_IMPORT_BYTES as u64 + 1), &mut bytes)?;
+    if bytes.len() > io::MAX_IMPORT_BYTES {
+        return Err(validation(format!("The file is larger than {} MB", io::MAX_IMPORT_BYTES / 1024 / 1024)));
+    }
     let doc = io::parse(&bytes, format).map_err(AppError::Validation)?;
     let preview = db.with(|c| io::preview(c, &doc, format, investigation_id))?;
     let file_name: String = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default().chars().take(120).collect();

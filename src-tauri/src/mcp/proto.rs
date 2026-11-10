@@ -116,11 +116,16 @@ pub fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// Hexadecimal to bytes. Works on bytes, not `str` slices: the text comes from a client that has
+/// not authenticated yet, and slicing a multi-byte character would panic (and abort the app).
 fn unhex(s: &str) -> Option<Vec<u8>> {
-    if !s.len().is_multiple_of(2) || s.len() > 256 {
+    let b = s.as_bytes();
+    if !b.len().is_multiple_of(2) || b.len() > 256 {
         return None;
     }
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok()).collect()
+    let digit = |c: u8| (c as char).to_digit(16).map(|d| d as u8);
+    let (pairs, _) = b.as_chunks::<2>();
+    pairs.iter().map(|[hi, lo]| Some(digit(*hi)? << 4 | digit(*lo)?)).collect()
 }
 
 pub fn random_hex(bytes: usize) -> String {
@@ -248,6 +253,10 @@ mod tests {
         assert!(verify(key, "server", c, s, &server_mac(key, c, s)));
         assert!(!verify(key, "client", s, c, "zz"));
         assert!(!verify(key, "client", s, c, ""));
+        // multi-byte text of an even length, from a client that has not authenticated: never
+        // sliced inside a character
+        assert!(!verify(key, "client", s, c, "a€"));
+        assert!(!verify(key, "client", s, c, "€€"));
     }
 
     #[tokio::test]

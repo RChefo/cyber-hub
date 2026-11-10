@@ -199,7 +199,7 @@ pub fn markdown(c: &Connection, inv: i64, generated: &str) -> AppResult<String> 
     };
     let evidence = store::evidence_list(c, inv, MAX_EVIDENCE_ROWS)?;
     let mut l: Vec<String> = vec![];
-    l.push(format!("# OSINT investigation: {}", i.name.trim()));
+    l.push(format!("# OSINT investigation: {}", i.name.trim().replace('<', "&lt;").replace('[', "\\[")));
     l.push(String::new());
     l.push(format!("Generated {generated} by Cyber Hub from locally stored data. Status: {}.", i.status));
     l.push(String::new());
@@ -220,7 +220,8 @@ pub fn markdown(c: &Connection, inv: i64, generated: &str) -> AppResult<String> 
     }
     if !i.description.trim().is_empty() {
         l.push(String::new());
-        l.push(i.description.trim().to_string());
+        // the description as written, except that an image would make the viewer request its URL
+        l.push(i.description.trim().replace("![", "!\\["));
     }
     l.push(String::new());
 

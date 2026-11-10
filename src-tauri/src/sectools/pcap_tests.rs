@@ -73,7 +73,7 @@ fn client_hello(name: &str) -> Vec<u8> {
 
 /// The frames of a small session: DNS, HTTP with Basic credentials, TLS, FTP, IMAP, SMTP, a
 /// VLAN-tagged packet, an IPv6 packet and an ARP frame.
-fn frames() -> Vec<Vec<u8>> {
+pub(crate) fn frames() -> Vec<Vec<u8>> {
     let http = b"GET /admin?token=x HTTP/1.1\r\nHost: app.example.com\r\nUser-Agent: curl/8.5\r\nAuthorization: Basic YWxpY2U6czNjcmV0IQ==\r\n\r\n";
     let mut vlan = vec![0x02, 0, 0, 0, 0, 1, 0x02, 0, 0, 0, 0, 2, 0x81, 0x00, 0x00, 0x0a, 0x08, 0x00];
     vlan.extend_from_slice(&ipv4(17, CLIENT, [10, 0, 0, 1], &udp(40000, 53, &[0x00, 0x01, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0, 4, b'w', b'p', b'a', b'd', 0, 0, 1, 0, 1])));
@@ -98,7 +98,7 @@ fn frames() -> Vec<Vec<u8>> {
     ]
 }
 
-fn pcap_file(frames: &[Vec<u8>]) -> Vec<u8> {
+pub(crate) fn pcap_file(frames: &[Vec<u8>]) -> Vec<u8> {
     let mut f = vec![0xd4, 0xc3, 0xb2, 0xa1, 2, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0, 0, 1, 0, 0, 0];
     for (i, fr) in frames.iter().enumerate() {
         f.extend_from_slice(&(1_700_000_000u32 + i as u32).to_le_bytes());
@@ -110,7 +110,7 @@ fn pcap_file(frames: &[Vec<u8>]) -> Vec<u8> {
     f
 }
 
-fn pcapng_file(frames: &[Vec<u8>]) -> Vec<u8> {
+pub(crate) fn pcapng_file(frames: &[Vec<u8>]) -> Vec<u8> {
     let mut f = Vec::new();
     // section header block
     f.extend_from_slice(&0x0a0d0d0au32.to_le_bytes());
@@ -265,4 +265,22 @@ fn hunting_leads_come_from_the_capture_apart_from_its_issues() {
     let rules: Vec<(&str, &str)> = r.hunting.dns.iter().map(|d| (d.rule.as_str(), d.subject.as_str())).collect();
     assert!(rules.contains(&("DNS-TUNNEL", "tunnel.example")) && rules.contains(&("DNS-TXT", "tunnel.example")), "{rules:?}");
     assert!(r.issues.iter().all(|i| !i.rule.contains("DNS") && !i.rule.contains("BEACON")), "leads are not issues");
+}
+
+#[test]
+fn crafted_frames_and_blocks_do_not_panic() {
+    // IPv4 "packets" shorter than the fixed 20-byte header: 8 bytes, and 17 to 19 bytes (the
+    // address bytes used to be indexed without a check)
+    let mut frames = vec![eth(0x0800, &[0x45, 0, 0, 0x14, 0, 0, 0, 0])];
+    for n in 17..20 {
+        let mut p = vec![0x45u8, 0, 0, 0x14, 0, 0, 0, 0, 0x40, 6];
+        p.resize(n, 0);
+        frames.push(eth(0x0800, &p));
+    }
+    let r = analyze(std::io::Cursor::new(pcap_file(&frames))).expect("a readable capture");
+    assert_eq!(r.packets, 4);
+    // a PCAPNG simple packet block of the minimum length (12 bytes) holds no frame at all
+    let mut ng = vec![0x0a, 0x0d, 0x0d, 0x0a, 28, 0, 0, 0, 0x4d, 0x3c, 0x2b, 0x1a, 1, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 28, 0, 0, 0];
+    ng.extend_from_slice(&[3, 0, 0, 0, 12, 0, 0, 0, 12, 0, 0, 0]);
+    let _ = analyze(std::io::Cursor::new(ng));
 }

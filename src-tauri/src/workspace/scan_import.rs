@@ -1117,8 +1117,9 @@ fn parse_zap(text: &str) -> Result<Parsed, String> {
     };
     for site in &sites {
         let name = s(site, "@name");
-        let host = host_of(&name).or_else(|| { let h = s(site, "@host"); (!h.is_empty()).then(|| h.to_lowercase()) });
-        let origin = origin_of(&name);
+        // copied into every alert of the site, so bounded (a host name is at most 253 characters)
+        let host = host_of(&name).or_else(|| { let h = s(site, "@host"); (!h.is_empty()).then(|| h.to_lowercase()) }).map(|h| trunc(&h, 253));
+        let origin = origin_of(&name).map(|o| trunc(&o, 2_048));
         if let (Some(o), Some(h)) = (origin.as_ref(), host.as_ref()) {
             p.push_asset("http_service", o, h, json!({ "sources": ["zap"] }));
         }

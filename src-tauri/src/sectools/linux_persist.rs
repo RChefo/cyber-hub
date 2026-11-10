@@ -75,16 +75,21 @@ const SHELL_ESCAPES: &[&str] = &[
 ];
 const LOGIN_SHELLS: &[&str] = &["sh", "bash", "zsh", "dash", "ksh", "fish", "tcsh", "csh", "ash", "mksh"];
 
+/// Issues reported for one collection (a file of 1 MiB can be a million one-character lines).
+const MAX_ISSUES: usize = 5_000;
+
 struct Out<'a> {
     file: &'a str,
     issues: Vec<Issue>,
+    /// (rule, location) pairs already reported
+    seen: std::collections::HashSet<(String, String)>,
 }
 
 impl Out<'_> {
     #[allow(clippy::too_many_arguments)]
     fn add(&mut self, rule: String, severity: &str, title: String, line: usize, detail: String, remediation: &str, reference: &str) {
         let location = if line == 0 { "whole file".to_string() } else { format!("line {line}") };
-        if self.issues.iter().any(|i| i.rule == rule && i.location == location) {
+        if self.issues.len() >= MAX_ISSUES || !self.seen.insert((rule.clone(), location.clone())) {
             return;
         }
         self.issues.push(Issue { rule, severity: severity.into(), title, location, detail, remediation: remediation.into(), reference: reference.into() });
@@ -165,7 +170,7 @@ fn program(cmd: &str) -> &str {
 /// the kind unless `hint` names one; pasted text has no path.
 pub fn analyze(path: &str, text: &str, hint: &str) -> Option<FileReport> {
     let kind = if hint == "auto" || hint.is_empty() { kind_of(path).or_else(|| guess(text))? } else { KINDS.contains(&hint).then_some(hint)? };
-    let mut out = Out { file: path, issues: Vec::new() };
+    let mut out = Out { file: path, issues: Vec::new(), seen: Default::default() };
     let user = owner(path);
     match kind {
         "crontab" | "system-crontab" => crontab(&mut out, text, kind == "system-crontab", user.as_deref()),

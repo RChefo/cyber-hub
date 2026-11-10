@@ -437,7 +437,7 @@ fn status_label(s: &str) -> &'static str {
 }
 
 fn md(s: &str) -> String {
-    s.replace('|', "\\|").replace('\n', " ").replace('<', "&lt;")
+    s.replace('|', "\\|").replace('\n', " ").replace('<', "&lt;").replace('[', "\\[")
 }
 
 /// The assessment as a Markdown report: totals, then every requirement of the level by chapter

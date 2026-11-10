@@ -694,7 +694,8 @@ fn gemfile(body: &str, out: &mut Out) -> Result<(), String> {
         match (section.as_str(), indent) {
             ("GEM" | "GIT" | "PATH", 2) => {
                 if let Some(r) = t.strip_prefix("remote:") {
-                    remote = r.trim().to_string();
+                    // copied into every spec of the section, so bounded
+                    remote = r.trim().chars().take(2_048).collect();
                     if section == "GEM" {
                         out.sbom.sources.push(remote.clone());
                     }

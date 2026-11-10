@@ -647,7 +647,8 @@ pub fn markdown(ind: &Indicator, results: &[ProviderResult], generated: &str) ->
             for f in &rep.facts {
                 m.push_str(&format!("- {}: {}\n", md_escape(&f.label), md_escape(&f.value)));
             }
-            if let Some(link) = &rep.permalink {
+            // the provider's link, only as a plain https URL (nothing in it can end the autolink)
+            if let Some(link) = rep.permalink.as_deref().filter(|l| l.starts_with("https://") && !l.chars().any(|c| c.is_whitespace() || c.is_control() || matches!(c, '<' | '>' | '`' | '(' | ')'))) {
                 m.push_str(&format!("- Source: <{link}>\n"));
             }
             for t in &rep.tables {

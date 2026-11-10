@@ -231,16 +231,18 @@ fn transport(ip: &[u8]) -> Option<Segment<'_>> {
     let version = ip.first()? >> 4;
     let (src, dst, mut proto, mut rest): (IpAddr, IpAddr, u8, &[u8]) = match version {
         4 => {
-            let ihl = (ip[0] & 0x0f) as usize * 4;
+            // the fixed header is 20 bytes; a shorter frame is not a packet (indexing it would panic)
+            let hdr = ip.get(..20)?;
+            let ihl = (hdr[0] & 0x0f) as usize * 4;
             let total = be16(ip, 2)? as usize;
             let frag = be16(ip, 6)? & 0x1fff;
             if ihl < 20 || frag != 0 {
                 return None;
             }
             let end = total.min(ip.len()).max(ihl);
-            let src = Ipv4Addr::new(ip[12], ip[13], ip[14], ip[15]);
-            let dst = Ipv4Addr::new(*ip.get(16)?, ip[17], ip[18], ip[19]);
-            (IpAddr::V4(src), IpAddr::V4(dst), ip[9], ip.get(ihl..end)?)
+            let src = Ipv4Addr::new(hdr[12], hdr[13], hdr[14], hdr[15]);
+            let dst = Ipv4Addr::new(hdr[16], hdr[17], hdr[18], hdr[19]);
+            (IpAddr::V4(src), IpAddr::V4(dst), hdr[9], ip.get(ihl..end)?)
         }
         6 => {
             let plen = be16(ip, 4)? as usize;
@@ -793,7 +795,10 @@ fn pcapng(acc: &mut Acc, input: &mut impl Read) -> Result<(), String> {
                 let orig = u32_at(body, 0, le).unwrap_or(0) as u64;
                 let (link, _) = ifaces.first().copied().unwrap_or((1, 1e6));
                 let cap = (orig as usize).min(body.len().saturating_sub(4));
-                acc.packet(link, &body[4..4 + cap], orig, 0.0);
+                // a block of the minimum length has no frame at all
+                if let Some(frame) = body.get(4..4 + cap) {
+                    acc.packet(link, frame, orig, 0.0);
+                }
             }
             _ => {}
         }
@@ -803,4 +808,4 @@ fn pcapng(acc: &mut Acc, input: &mut impl Read) -> Result<(), String> {
 
 #[cfg(test)]
 #[path = "pcap_tests.rs"]
-mod tests;
+pub(crate) mod tests;

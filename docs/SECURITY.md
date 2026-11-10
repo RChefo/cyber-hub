@@ -239,6 +239,50 @@ Tests: `src-tauri/src/scope.rs` and `src-tauri/src/targets.rs` (target files, ex
 * `commands/sectools.rs`: Host headers, and redirects against a local server, where the URL outside the path is never requested;
 * `scan_import_tests.rs`: findings at URLs, host-level results, CSV rows.
 
+## Parser safety (Mission 5)
+
+Everything Cyber Hub reads from a file, a paste, a capture or a peer is untrusted. The release build aborts on panic (`panic = "abort"`), so a parser that panics, overflows its stack or allocates without bound ends the whole app, and with it any unsaved work. Parsers run on 2 MiB threads (tokio's blocking pool).
+
+**Harness.** `src-tauri/src/hostile.rs` generates hostile input:
+* every short prefix and a spread of longer cuts of a valid file;
+* seeded byte mutations (a deterministic mutation fuzzer);
+* random bytes;
+* NUL bytes, invalid and overlong UTF-8, byte-order marks, bidirectional overrides, combining marks, lone CRs;
+* 4 MB lines;
+* 100,000 levels of nesting in JSON, YAML (flow and block), XML, HCL and parentheses.
+
+It runs each case on a named 2 MiB thread under a time budget, so a panic or a hang fails with the parser and the case named, and a stack overflow names the case in Rust's abort message. `hostile_tests.rs` sends about 200 cases through each parser, taking generated seeds, never real data:
+* YAML, Sigma (correlation rules included), YARA, JSON and text events, EVTX and the Windows event analysis;
+* PCAP and PCAPNG, Linux and web logs, PE/ELF triage, Linux persistence files;
+* every scan import format (Nessus, Burp, Nmap, Nuclei, SARIF, OCSF, CSV), SBOMs (CycloneDX JSON and XML, SPDX), ten lockfile formats, OpenAPI, Postman and HAR, OSINT graph imports (JSON and GraphML);
+* Terraform, CloudFormation, Kubernetes, Compose, Dockerfiles, IAM policies, CVSS vectors;
+* external tools' redirect options, and the MCP handshake proof.
+
+A defect found is fixed, and its input is kept as a regression test next to the parser.
+
+**Defects found and fixed in Mission 5** (each has a regression test; the crashes were reproduced before the fix):
+
+| Defect | Effect | Fix |
+|---|---|---|
+| The MCP handshake decoded the client's proof by slicing text at byte offsets: a 4-byte proof such as `a€` split a character | **Any local process could end the app, before authenticating**, while MCP was on | decoded byte by byte |
+| PCAP: an IPv4 packet shorter than its 20-byte header was indexed; PCAPNG: a simple packet block of 12 bytes was sliced | a crafted capture ended the app | bounds checked |
+| Sigma conditions: one recursion per parenthesis or `not`, without a limit (also while the rule editor held the database lock) | a rule of a few kilobytes ended the app | conditions nesting deeper than 64 levels are refused |
+| YAML: yaml-rust2's loader recursed once per indentation level (found by the harness) | a few kilobytes of indented YAML (a Sigma rule, an OpenAPI file, a pnpm lockfile, a manifest) ended the app | events are pulled one by one from its iterative parser; nesting deeper than 128 is refused |
+| YAML: aliases were bounded in values but not in bytes | 500 KB of YAML could expand to 15 GB | expansions are bounded to 64 MB of text |
+| A tool argument starting with a multi-byte character was sliced at byte 1 | checking a run (also an MCP run preview) ended the app | read without slicing |
+| Postman variables that refer to themselves grew exponentially | 5 KB grew towards terabytes | a substitution larger than 64 KB is left as written |
+| An OpenAPI schema whose `allOf` lists itself 50 times was visited 50^8 times | the import never ended | 2,000 schema visits per request body |
+| A ZAP site host, a Gemfile.lock remote and JSON log keys were copied whole into every finding, package or field | gigabytes from a small file | bounded before they are copied (253 characters for a host, 2 KB for a remote, 1 KB for a key) |
+| SBOM vulnerabilities were unbounded and merged in quadratic time, on every SBOM list and search | an SBOM of 1M vulnerabilities stalled the app, again after every restart | 20,000 per file; merged through an index |
+| EVTX text nodes and substitutions were not counted towards the 25,000-node limit | a 64 KB chunk could expand to ~88M nodes | every text node counts |
+| PE files claiming up to 65,535 sections had the entropy of each computed | hours of CPU for one file | the format's 96 sections at most |
+| OSINT graph imports checked the size from metadata, then read the file whole | on Linux, a FIFO or a link to a device was read without end | the read itself is bounded |
+| A restored database supplies the hash that names a detection sample on disk | a crafted restore could make "test rule" read any file | only a 64-hex SHA-256 names a sample |
+| Linux persistence: a quadratic duplicate check per line | seconds to minutes on a 1 MiB file of short lines | a set, and 5,000 issues per file |
+| Markdown reports: `![...](https://…)` in imported text stayed an image, and a provider's link was not checked | opening a report in a viewer could make it request an attacker's URL | images are escaped in free text, brackets in cells and headings; links must be plain `https://` URLs |
+
+Open items are listed under *Accepted risks and limitations*.
+
 ## Accepted risks and limitations
 
 | Risk | Status / mitigation |
@@ -262,6 +306,7 @@ Tests: `src-tauri/src/scope.rs` and `src-tauri/src/targets.rs` (target files, ex
 | **VirusTotal file uploads are public** and cannot be withdrawn by Cyber Hub. | Two explicit confirmations per file (in-page acknowledgement and a native dialog), a prominent warning, a hash lookup first, and a size limit. |
 | **Shodan requires the key in the URL.** A proxy that logs full URLs would see it. | Only sent to `api.shodan.io` over HTTPS; never logged or shown by Cyber Hub. |
 | **Owner-provisioned credentials are readable by the local OS user.** Anyone who can run programs as that user can read the user's credential store. | Provision only machines and accounts you trust. Making integrations work for third parties without giving them the keys requires an owner-run API gateway (not implemented); see [PROVISIONING.md](PROVISIONING.md). |
+| **Parsers not yet bounded everywhere.** The Mission 5 review also found smaller amplifications that are not fixed yet: Nessus, Burp and OpenVAS copy a host into every item; SARIF and OCSF have slow paths for very large files; OSINT imports accept many evidence ids per entity; a CSP header from a target is matched with a regex that is slow on long values; YARA scans keep up to 1,000 matches per string. Each needs a file of tens of megabytes and costs time or memory rather than ending the app at once. | Imports are size-capped (25 to 50 MB) and run off the UI thread; the hostile-input sweep runs in CI on every change. |
 | **MCP same-user trust.** Any program running as your OS user can read the bridge key and send requests while MCP is enabled. | Requests remain subject to your policy, approvals, scope checks and native confirmations. MCP is off by default, and you can turn it off at any time. |
 | **MCP client names are self-reported.** | They are shown as such and never used for authorization. |
 | **MCP clients share one trust level.** Every client on the bridge holds the same key; a client can read any run's output by run ID and can cancel any run started through MCP. A run that you approved continues after the requesting client disconnects. | Same-user programs are inside the trust boundary anyway (see above). Approval IDs are random 96-bit values that are never listed. |
