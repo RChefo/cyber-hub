@@ -407,7 +407,7 @@ mod tests {
     fn target_file_errors_never_repeat_the_files_content() {
         let d = tmpdir("leak");
         // a credentials file with one endpoint-like line: refused, without its token
-        let npmrc = write(&d.0, "npmrc", b"//registry.npmjs.org/:_authToken=npm_FAKE0123456789abcdefFAKE0123456789ab\n");
+        let npmrc = write(&d.0, "npmrc", b"//registry.npmjs.org/:_authToken=npm_FAKE0123456789abcdefFAKE0123456789ab\n"); // gitleaks:allow (made-up token)
         let e = resolve(&["10.0.0.1".into(), npmrc], &[], &scope(), None).unwrap_err();
         assert!(!e.contains("npm_FAKE") && !e.contains("_authToken") && e.contains("line 1"), "{e}");
         // a target list naming a host outside the scope: its line, not the host

@@ -19,3 +19,10 @@ c3f26af86216f874f83bc32e04a8f2d62bb53087:src-tauri/src/redact.rs:private-key:159
 # the commit that added them.
 57d3c482910952c34ae747997681c97208e7bdd9:src-tauri/src/mcp/ops.rs:aws-access-token:1843
 57d3c482910952c34ae747997681c97208e7bdd9:src-tauri/src/mcp/ops.rs:aws-access-token:1853
+
+# Mission 7: made-up values in two test fixtures, not credentials. The TAXII test server accepts
+# only throwaway test values, and the argument-validation test uses a fake npm token to check that
+# a file's content is never repeated in an error. The lines now carry an inline gitleaks:allow;
+# these entries cover the commits that added them.
+1e5d4dd8594f81f9b94fd15e11c5ecb040ae5c86:scripts/qa/taxii-mock.mjs:generic-api-key:23
+5bc31b0e43ae1328e59690bd7810b6e7bfc277b5:src-tauri/src/targets.rs:npm-access-token:410

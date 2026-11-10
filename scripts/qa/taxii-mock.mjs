@@ -20,7 +20,7 @@ const arg = (name, def) => {
 const port = Number(arg("port", "18556"));
 const logfile = arg("log", `taxii-mock-${port}.log`);
 const PASSWORDS = { "QA-only-not-a-real-secret-7f3a": "password", "QA-rotated-secret-55e1": "rotated password" };
-const KEYS = { "QA-only-api-key-91c2": "API key", "QA-rotated-key-08b4": "rotated API key" };
+const KEYS = { "QA-only-api-key-91c2": "API key", "QA-rotated-key-08b4": "rotated API key" }; // gitleaks:allow (made-up test values)
 const COLLECTION = "91a7b528-80eb-42ed-a74d-c6fbd5a26116";
 const MEDIA = "application/taxii+json;version=2.1";
 
