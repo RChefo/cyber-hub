@@ -10,10 +10,10 @@ import { Panel } from "@/components/ui/Panel";
 import { notify, openExternal } from "@/lib/actions";
 import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { AttackCatalog, AttackEntry, AttackMatrix, AttackStatus, AttackTechnique, Project, RecordRef } from "@/lib/types";
+import type { AttackCatalog, AttackDomain, AttackEntry, AttackMatrix, AttackStatus, AttackTechnique, Project, RecordRef } from "@/lib/types";
 import { cn, formatRelative, pluralize } from "@/lib/utils";
 import { Segmented } from "@/modules/utilities/tools/shared";
-import { activeRules, buildColumns, gaps, mitreUrl, outside, STATE_STYLE, stateOf, type Overlay, type TechniqueState } from "./attackMatrix";
+import { activeRules, ATTACK_DOMAINS, buildColumns, domainLabel, gaps, mitreUrl, outside, STATE_STYLE, stateOf, type Overlay, type TechniqueState } from "./attackMatrix";
 import { provenance } from "./investigation";
 import { AttackCompare, TechniqueHistory } from "./AttackCompare";
 
@@ -66,8 +66,9 @@ function Cell({ tech, entry, layerId, sub, onOpen }: { tech: AttackTechnique; en
 export function AttackMatrixView({ project, archived, onOpen }: { project: Project; archived: boolean; onOpen: (r: RecordRef) => void }) {
   const { runtime } = useApp();
   const confirm = useConfirm();
-  const catalog = useQuery(["attack"], () => api.attackCatalog(), [], runtime);
-  const matrix = useQuery(["attack", "findings", "relations"], () => api.attackMatrix(project.id), [project.id], runtime);
+  const [domain, setDomain] = useState<AttackDomain>("enterprise-attack");
+  const catalog = useQuery(["attack"], () => api.attackCatalog(domain), [domain], runtime);
+  const matrix = useQuery(["attack", "findings", "relations"], () => api.attackMatrix(project.id, domain), [project.id, domain], runtime);
   const [onlyData, setOnlyData] = useState(true);
   const [filter, setFilter] = useState("");
   const [layerId, setLayerId] = useState<Overlay>(null);
@@ -81,7 +82,7 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
   const exportCoverage = () =>
     act("coverage", async () => {
       try {
-        const f = await api.attackCoverageExport(project.id);
+        const f = await api.attackCoverageExport(project.id, domain);
         if (f) notify.success("Coverage layer saved", f);
       } catch (e) {
         notify.error("The coverage was not exported", e);
@@ -112,7 +113,7 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
   const exportLayer = () =>
     act("export", async () => {
       try {
-        const f = await api.attackLayerExport(project.id);
+        const f = await api.attackLayerExport(project.id, domain);
         if (f) notify.success("Layer saved", f);
       } catch (e) {
         notify.error("The layer was not exported", e);
@@ -124,9 +125,19 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
   const empty = m.entries.length === 0;
   return (
     <div className="flex flex-col gap-3">
+      <Segmented
+        value={domain}
+        onChange={(d) => {
+          setDomain(d);
+          setLayerId(null);
+          setOpen(null);
+        }}
+        ariaLabel="ATT&CK matrix"
+        options={ATTACK_DOMAINS.map((d) => ({ id: d.id, label: d.label }))}
+      />
       <Panel
-        title="ATT&CK matrix"
-        description={`Techniques that findings name are leads from the tools, not confirmed adversary activity: only your assessment marks a technique as confirmed, a hypothesis or ruled out. Imported layers (for example detection coverage) are an overlay and never count as observed. MITRE ATT&CK Enterprise v${cat.version}, retrieved ${cat.retrieved}.`}
+        title={`ATT&CK ${domainLabel(domain)} matrix`}
+        description={`Techniques that findings name are leads from the tools, not confirmed adversary activity: only your assessment marks a technique as confirmed, a hypothesis or ruled out. Imported layers (for example detection coverage) are an overlay and never count as observed. MITRE ATT&CK ${domainLabel(domain)} v${cat.version}, retrieved ${cat.retrieved}.${domain === "enterprise-attack" ? "" : " Mobile and ICS are separate matrices: a technique, a layer or a snapshot belongs to one, and sets of different matrices are not compared."}`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="tertiary" onPress={() => void importLayer()} isPending={busy === "import"} isDisabled={!runtime || archived}>
@@ -273,7 +284,7 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
           </ul>
         </Panel>
       )}
-      <AttackCompare projectId={project.id} layers={m.layers} archived={archived} />
+      <AttackCompare projectId={project.id} domain={domain} layers={m.layers} archived={archived} />
       {open && <TechniqueModal id={open} project={project} archived={archived} catalog={cat} matrix={m} onClose={() => setOpen(null)} onOpen={onOpen} />}
       {confirm.element}
     </div>

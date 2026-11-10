@@ -386,8 +386,8 @@ pub static TOOLS: &[ToolSpec] = &[
             "offset": { "type": "integer", "minimum": 0 }
         }), &["project_id"]) },
     ToolSpec { name: "cyberhub_get_attack_matrix", title: "ATT&CK matrix of a project", group: "investigation", category: Category::Read,
-        description: "The ATT&CK techniques of a project, keeping apart what findings name (tool leads, not confirmed activity), the analyst's assessments (confirmed, hypothesis, ruled out, with confidence) and imported Navigator layers such as detection coverage (an overlay that never counts as observed).",
-        schema: || obj(json!({ "project_id": project_id() }), &["project_id"]) },
+        description: "The ATT&CK techniques of a project in one matrix (Enterprise by default; Mobile or ICS with domain), keeping apart what findings name (tool leads, not confirmed activity), the analyst's assessments (confirmed, hypothesis, ruled out, with confidence) and imported Navigator layers such as detection coverage (an overlay that never counts as observed).",
+        schema: || obj(json!({ "project_id": project_id(), "domain": { "type": "string", "enum": ["enterprise-attack", "mobile-attack", "ics-attack"], "description": "The ATT&CK matrix; enterprise-attack when left out" } }), &["project_id"]) },
     ToolSpec { name: "cyberhub_correlate_project", title: "Correlate a project's records", group: "investigation", category: Category::LocalWrite,
         description: "Run Cyber Hub's correlation rules over a project's records (exact matches of URLs, hosts, CVEs, package URLs, file hashes and API paths). Matches are stored as suggestions in the user's review queue; nothing is confirmed or merged. Requires the user's approval in Cyber Hub.",
         schema: || obj(json!({ "project_id": project_id() }), &["project_id"]) },

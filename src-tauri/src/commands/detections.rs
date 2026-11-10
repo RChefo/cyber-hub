@@ -38,9 +38,13 @@ pub async fn detection_engine() -> AppResult<serde_json::Value> {
 
 /// Saves the detection library's ATT&CK coverage as a Navigator layer through a native dialog.
 #[tauri::command]
-pub async fn attack_coverage_export(app: AppHandle, project_id: i64) -> AppResult<Option<String>> {
+pub async fn attack_coverage_export(app: AppHandle, project_id: i64, domain: Option<String>) -> AppResult<Option<String>> {
+    let domain = match domain.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+        None => crate::workspace::attack::ENTERPRISE,
+        Some(d) => crate::workspace::attack::parse_domain(d).ok_or_else(|| validation("The ATT&CK domain is enterprise-attack, mobile-attack or ics-attack"))?,
+    };
     let content = app.state::<Db>().with(|c| {
-        let m = crate::workspace::attack_matrix::matrix(c, project_id)?;
+        let m = crate::workspace::attack_matrix::matrix_for(c, project_id, domain)?;
         crate::workspace::attack_matrix::export_coverage_layer(&crate::util::now(), &m).map_err(validation)
     })?;
     let (tx, rx) = tokio::sync::oneshot::channel();

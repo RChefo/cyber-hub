@@ -1,4 +1,4 @@
-import type { AttackCatalog, AttackEntry, AttackMatrix, AttackTactic, AttackTechnique } from "@/lib/types";
+import type { AttackCatalog, AttackDomain, AttackEntry, AttackMatrix, AttackTactic, AttackTechnique } from "@/lib/types";
 
 /** What the project says about a technique, strongest statement first. Findings name techniques
  * (leads); only an assessment confirms, suspects or rules one out; a layer is an overlay. */
@@ -99,4 +99,15 @@ export function outside(matrix: AttackMatrix): AttackEntry[] {
 
 export function mitreUrl(id: string): string {
   return `https://attack.mitre.org/techniques/${id.replace(".", "/")}/`;
+}
+
+/** The ATT&CK matrices Cyber Hub bundles (Mission 6), in the order they are offered. */
+export const ATTACK_DOMAINS: { id: AttackDomain; label: string }[] = [
+  { id: "enterprise-attack", label: "Enterprise" },
+  { id: "mobile-attack", label: "Mobile" },
+  { id: "ics-attack", label: "ICS" },
+];
+
+export function domainLabel(d: AttackDomain | string): string {
+  return ATTACK_DOMAINS.find((x) => x.id === d)?.label ?? "Enterprise";
 }

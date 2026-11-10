@@ -31,6 +31,7 @@ This document states exactly what an upgrade does, what was tested, and how far 
 | development: TAXII 2.1 feeds | 28 |
 | development: ATT&CK coverage snapshots | 29 |
 | development: WSTG exceptions | 30 |
+| development: ATT&CK Mobile and ICS | 31 |
 
 The schema version is SQLite's `user_version`. Migrations 9–25 are listed in [DATA_MODEL.md](DATA_MODEL.md); migration 26 in [PROVIDERS.md](PROVIDERS.md#saved-indicators).
 * Migrations 9–12 add tables and columns, rebuild `findings` once to give it the new lifecycle, and map the old finding statuses: `open` becomes `new`, `reported` becomes `confirmed`, and every finding that was `reported` gets a history entry recording the mapping. Ids and all other columns are kept.
@@ -45,6 +46,7 @@ The schema version is SQLite's `user_version`. Migrations 9–25 are listed in [
 * Migration 27 only adds tables (risk acceptances, what they cover and their history) and triggers that remove a deleted finding's, vulnerability's or ASVS assessment's items, and changes nothing that exists. Findings already marked as accepted risks keep their status; the risk register lists them as accepted without a record.
 * Migration 28 only adds tables (`taxii_servers`, `taxii_collections`, `taxii_syncs`) and three columns with empty defaults to `ti_saved` (the feed, the STIX object and its version), and changes nothing that exists. A synchronization interrupted by closing the app is marked failed at the next start; its cursor never moved past a page that was not stored.
 * Migration 29 only adds a table (`attack_coverage_snapshots`) and changes nothing that exists.
+* Migration 31 adds a `domain` column (`enterprise-attack`, `mobile-attack` or `ics-attack`, default `enterprise-attack`) to `attack_assessments`, `attack_layers` and `attack_coverage_snapshots`. Everything recorded before is Enterprise, the only matrix then. Nothing else changes.
 * Migration 30 rebuilds `risk_acceptance_items` so that its `kind` can also be `wstg` (an exception for a failed WSTG test). It copies every row with its rowid into the new table, drops the old one, and recreates its index and the three triggers that name it; no table refers to it. Nothing else changes. The upgrade tests run it on databases from every earlier schema with a row in every table.
 * Every migration is tested from every earlier schema (`db_upgrade_tests.rs`, Mission 5):
   * a row is seeded in every table of each schema from 1 to the latest − 1, and after the upgrade every one of them must still exist, with `integrity_check` and `foreign_key_check` clean;

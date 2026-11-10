@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { AttackCatalog, AttackEntry, AttackMatrix } from "@/lib/types";
-import { buildColumns, gaps, mitreUrl, outside, stateOf } from "./attackMatrix";
+import { ATTACK_DOMAINS, buildColumns, domainLabel, gaps, mitreUrl, outside, stateOf } from "./attackMatrix";
 
 const catalog: AttackCatalog = {
+  domain: "enterprise-attack",
   version: "20.1",
   modified: "",
   retrieved: "",
@@ -25,6 +26,7 @@ const entry = (id: string, over: Partial<AttackEntry> = {}): AttackEntry => ({ i
 const observed = [{ findingId: 1, title: "x", severity: "high" as const, status: "new", confidence: "medium", evidence: 0 }];
 
 const matrix: AttackMatrix = {
+  domain: "enterprise-attack",
   attackVersion: "20.1",
   attackModified: "",
   attackRetrieved: "",
@@ -62,5 +64,12 @@ describe("ATT&CK matrix", () => {
     expect(gaps(matrix, "rules").map((e) => e.id)).toEqual(["T1059.001", "T1055"]);
     expect(outside(matrix).map((e) => e.id)).toEqual(["T1143"]);
     expect(mitreUrl("T1059.001")).toBe("https://attack.mitre.org/techniques/T1059/001/");
+  });
+});
+
+describe("ATT&CK domains (Mission 6)", () => {
+  it("offers Enterprise, Mobile and ICS, Enterprise first", () => {
+    expect(ATTACK_DOMAINS.map((d) => d.id)).toEqual(["enterprise-attack", "mobile-attack", "ics-attack"]);
+    expect([domainLabel("mobile-attack"), domainLabel("ics-attack"), domainLabel("enterprise-attack")]).toEqual(["Mobile", "ICS", "Enterprise"]);
   });
 });

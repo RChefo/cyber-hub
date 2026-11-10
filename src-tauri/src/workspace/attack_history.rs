@@ -6,6 +6,10 @@
 //! (enabled, runnable rules: what could be detected, not what happened), a coverage
 //! **snapshot**, or an imported Navigator **layer** (someone else's view). A comparison only
 //! reports differences; it never turns one kind into another.
+//!
+//! Since Mission 6 every set belongs to one ATT&CK domain (Enterprise, Mobile or ICS): snapshots
+//! and layers record theirs, and two sets of different domains are not compared (their tactics,
+//! IDs and versions differ; the same behaviour has a different ID in each).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -85,6 +89,8 @@ pub struct CoveredBy {
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub id: i64,
+    /// the ATT&CK domain whose techniques it records
+    pub domain: String,
     pub label: String,
     pub attack_version: String,
     pub taken_at: String,
@@ -92,10 +98,13 @@ pub struct Snapshot {
     pub rules: i64,
 }
 
-/// What the library covers now: technique → enabled, runnable rules.
-fn coverage_now(c: &Connection) -> AppResult<BTreeMap<String, Vec<CoveredBy>>> {
+/// What the library covers now in a domain: technique → enabled, runnable rules.
+fn coverage_now(c: &Connection, domain: &str) -> AppResult<BTreeMap<String, Vec<CoveredBy>>> {
     let mut out = BTreeMap::new();
     for (t, rules) in crate::workspace::detections::coverage(c)? {
+        if !attack::in_domain(&t, domain) {
+            continue;
+        }
         let live: Vec<CoveredBy> = rules.into_iter().filter(|r| r.enabled && r.runnable).map(|r| CoveredBy { rule_id: r.rule_id, title: r.title, kind: r.kind }).collect();
         if !live.is_empty() {
             out.insert(t, live);
@@ -104,22 +113,29 @@ fn coverage_now(c: &Connection) -> AppResult<BTreeMap<String, Vec<CoveredBy>>> {
     Ok(out)
 }
 
-/// Records the library's coverage now, to compare later (rules added, removed, disabled).
-pub fn snapshot_take(c: &Connection, label: &str) -> AppResult<i64> {
+fn domain_or_err(domain: &str) -> AppResult<&'static str> {
+    attack::parse_domain(domain).ok_or_else(|| validation("The ATT&CK domain is enterprise-attack, mobile-attack or ics-attack"))
+}
+
+/// Records the library's coverage of a domain now, to compare later (rules added, removed,
+/// disabled), with that domain's catalog version.
+pub fn snapshot_take(c: &Connection, label: &str, domain: &str) -> AppResult<i64> {
+    let domain = domain_or_err(domain)?;
     let label = crate::util::clean("The label", label, 120, true)?;
-    let cov = coverage_now(c)?;
+    let cov = coverage_now(c, domain)?;
     let rules: BTreeSet<i64> = cov.values().flatten().map(|r| r.rule_id).collect();
+    let version = attack::catalog_for(domain).map(|c| c.version.clone()).unwrap_or_default();
     c.execute(
-        "INSERT INTO attack_coverage_snapshots (label, attack_version, taken_at, coverage, techniques, rules) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![label, attack::catalog().version, now(), serde_json::to_string(&cov).unwrap_or_else(|_| "{}".into()), cov.len() as i64, rules.len() as i64],
+        "INSERT INTO attack_coverage_snapshots (label, attack_version, taken_at, coverage, techniques, rules, domain) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![label, version, now(), serde_json::to_string(&cov).unwrap_or_else(|_| "{}".into()), cov.len() as i64, rules.len() as i64, domain],
     )?;
     Ok(c.last_insert_rowid())
 }
 
 pub fn snapshots(c: &Connection) -> AppResult<Vec<Snapshot>> {
     Ok(c
-        .prepare("SELECT id, label, attack_version, taken_at, techniques, rules FROM attack_coverage_snapshots ORDER BY id DESC")?
-        .query_map([], |r| Ok(Snapshot { id: r.get(0)?, label: r.get(1)?, attack_version: r.get(2)?, taken_at: r.get(3)?, techniques: r.get(4)?, rules: r.get(5)? }))?
+        .prepare("SELECT id, label, attack_version, taken_at, techniques, rules, domain FROM attack_coverage_snapshots ORDER BY id DESC")?
+        .query_map([], |r| Ok(Snapshot { id: r.get(0)?, label: r.get(1)?, attack_version: r.get(2)?, taken_at: r.get(3)?, techniques: r.get(4)?, rules: r.get(5)?, domain: r.get(6)? }))?
         .collect::<Result<_, _>>()?)
 }
 
@@ -139,9 +155,18 @@ struct Set {
     items: BTreeMap<String, String>,
 }
 
-/// `observed`, `hypotheses`, `coverage`, `snapshot:<id>` or `layer:<id>` (a layer of the project).
-fn side(c: &Connection, project_id: i64, spec: &str) -> AppResult<Set> {
-    let m = || super::attack_matrix::matrix(c, project_id);
+/// `observed`, `hypotheses`, `coverage`, `snapshot:<id>` or `layer:<id>` (a layer of the project),
+/// in `domain`. A snapshot or a layer of another domain is refused.
+fn side(c: &Connection, project_id: i64, domain: &'static str, spec: &str) -> AppResult<Set> {
+    let m = || super::attack_matrix::matrix_for(c, project_id, domain);
+    let other_domain = |what: &str, theirs: &str| {
+        validation(format!(
+            "{what} is for ATT&CK {}; it cannot be compared with ATT&CK {} sets (different tactics, IDs and versions). Compare it in the {} matrix.",
+            attack::domain_label(theirs),
+            attack::domain_label(domain),
+            attack::domain_label(theirs)
+        ))
+    };
     match spec.split_once(':').unwrap_or((spec, "")) {
         ("observed", _) => {
             let mut items = BTreeMap::new();
@@ -162,25 +187,31 @@ fn side(c: &Connection, project_id: i64, spec: &str) -> AppResult<Set> {
         ("coverage", _) => Ok(Set {
             label: "Detection coverage now".into(),
             kind: "coverage",
-            items: coverage_now(c)?.into_iter().map(|(t, r)| (t, r.iter().map(|x| x.title.clone()).take(3).collect::<Vec<_>>().join("; "))).collect(),
+            items: coverage_now(c, domain)?.into_iter().map(|(t, r)| (t, r.iter().map(|x| x.title.clone()).take(3).collect::<Vec<_>>().join("; "))).collect(),
         }),
         ("snapshot", id) => {
             let id: i64 = id.parse().map_err(|_| validation("Unknown snapshot"))?;
-            let (label, taken, cov): (String, String, String) = c
-                .query_row("SELECT label, taken_at, coverage FROM attack_coverage_snapshots WHERE id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            let (label, taken, cov, theirs): (String, String, String, String) = c
+                .query_row("SELECT label, taken_at, coverage, domain FROM attack_coverage_snapshots WHERE id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
                 .optional()?
                 .ok_or_else(|| AppError::NotFound(format!("coverage snapshot {id}")))?;
+            if theirs != domain {
+                return Err(other_domain(&format!("The snapshot “{label}”"), &theirs));
+            }
             let cov: BTreeMap<String, Vec<CoveredBy>> = serde_json::from_str(&cov).unwrap_or_default();
             Ok(Set { label: format!("Coverage snapshot “{label}” ({})", taken.get(..10).unwrap_or(&taken)), kind: "coverage", items: cov.into_iter().map(|(t, r)| (t, r.iter().map(|x| x.title.clone()).take(3).collect::<Vec<_>>().join("; "))).collect() })
         }
         ("layer", id) => {
             let id: i64 = id.parse().map_err(|_| validation("Unknown layer"))?;
-            let (name, owner, marks): (String, i64, String) = c
-                .query_row("SELECT name, project_id, techniques FROM attack_layers WHERE id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            let (name, owner, marks, theirs): (String, i64, String, String) = c
+                .query_row("SELECT name, project_id, techniques, domain FROM attack_layers WHERE id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
                 .optional()?
                 .ok_or_else(|| AppError::NotFound(format!("layer {id}")))?;
             if owner != project_id {
                 return Err(validation("The layer belongs to another project"));
+            }
+            if theirs != domain {
+                return Err(other_domain(&format!("The layer “{name}”"), &theirs));
             }
             let marks: BTreeMap<String, super::attack_matrix::Mark> = serde_json::from_str(&marks).unwrap_or_default();
             Ok(Set {
@@ -205,6 +236,8 @@ pub struct Diffed {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Comparison {
+    /// the ATT&CK domain both sets belong to
+    pub domain: String,
     pub a_label: String,
     pub b_label: String,
     pub a_kind: String,
@@ -216,16 +249,18 @@ pub struct Comparison {
     pub reading: String,
 }
 
-fn name(id: &str) -> String {
-    attack::catalog().techniques.iter().find(|t| t.id == id).map(|t| t.name.clone()).unwrap_or_else(|| "(not in the catalog)".into())
+fn name(domain: &str, id: &str) -> String {
+    attack::technique_in(domain, id).map(|t| t.name.clone()).unwrap_or_else(|| "(not in the catalog)".into())
 }
 
-pub fn compare(c: &Connection, project_id: i64, a: &str, b: &str) -> AppResult<Comparison> {
+/// Two technique sets of one ATT&CK domain compared (Enterprise when `domain` is empty).
+pub fn compare(c: &Connection, project_id: i64, domain: &str, a: &str, b: &str) -> AppResult<Comparison> {
+    let domain = if domain.trim().is_empty() { attack::ENTERPRISE } else { domain_or_err(domain)? };
     if a == b {
         return Err(validation("Choose two different sets"));
     }
-    let (x, y) = (side(c, project_id, a)?, side(c, project_id, b)?);
-    let d = |id: &String| Diffed { id: id.clone(), name: name(id), a: x.items.get(id).cloned().unwrap_or_default(), b: y.items.get(id).cloned().unwrap_or_default() };
+    let (x, y) = (side(c, project_id, domain, a)?, side(c, project_id, domain, b)?);
+    let d = |id: &String| Diffed { id: id.clone(), name: name(domain, id), a: x.items.get(id).cloned().unwrap_or_default(), b: y.items.get(id).cloned().unwrap_or_default() };
     let only_a = x.items.keys().filter(|k| !y.items.contains_key(*k)).map(d).collect();
     let only_b = y.items.keys().filter(|k| !x.items.contains_key(*k)).map(d).collect();
     let both = x.items.keys().filter(|k| y.items.contains_key(*k)).map(d).collect();
@@ -235,7 +270,7 @@ pub fn compare(c: &Connection, project_id: i64, a: &str, b: &str) -> AppResult<C
         ("layer", _) | (_, "layer") => "A layer is someone else's view (a threat profile, a red-team plan): matching it shows overlap, not activity in this project.",
         _ => "Differences between two sets of techniques; each keeps its own meaning.",
     };
-    Ok(Comparison { a_label: x.label, b_label: y.label, a_kind: x.kind.into(), b_kind: y.kind.into(), only_a, only_b, both, reading: reading.into() })
+    Ok(Comparison { domain: domain.into(), a_label: x.label, b_label: y.label, a_kind: x.kind.into(), b_kind: y.kind.into(), only_a, only_b, both, reading: reading.into() })
 }
 
 #[cfg(test)]
@@ -258,19 +293,19 @@ mod tests {
             let rule = "title: PS\nid: 0f1e2d3c-4b5a-4968-8776-655443322111\ntags: [attack.t1059.001]\nlogsource:\n    product: windows\n    category: process_creation\ndetection:\n    s:\n        Image|endswith: '\\\\powershell.exe'\n    condition: s\n";
             let checked = crate::detection::sigma::read(rule).unwrap().remove(0);
             let r = crate::workspace::detections::upsert_sigma(c, rule, &checked, "r.yml", "")?;
-            let snap = snapshot_take(c, "Before tuning")?;
+            let snap = snapshot_take(c, "Before tuning", attack::ENTERPRISE)?;
             assert_eq!(snapshots(c)?[0].techniques, 1);
             // observed vs coverage: T1059.001 is covered; T1003 is only a hypothesis (not observed)
-            let cmp = compare(c, 1, "observed", "coverage")?;
+            let cmp = compare(c, 1, "", "observed", "coverage")?;
             assert_eq!((cmp.only_a.len(), cmp.both.len(), cmp.only_b.len()), (0, 1, 0));
             assert!(cmp.reading.contains("says nothing about activity"));
-            assert_eq!(compare(c, 1, "hypotheses", "observed")?.only_a[0].id, "T1003");
+            assert_eq!(compare(c, 1, "", "hypotheses", "observed")?.only_a[0].id, "T1003");
             // the rule disabled: the snapshot still has it, coverage now does not
             crate::workspace::detections::set_enabled(c, r.id, false)?;
-            let drift = compare(c, 1, &format!("snapshot:{snap}"), "coverage")?;
+            let drift = compare(c, 1, attack::ENTERPRISE, &format!("snapshot:{snap}"), "coverage")?;
             assert_eq!(drift.only_a.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), ["T1059.001"]);
             assert!(drift.reading.contains("added, removed or disabled"));
-            assert!(compare(c, 1, "coverage", "coverage").is_err() && compare(c, 1, "layer:99", "coverage").is_err());
+            assert!(compare(c, 1, "", "coverage", "coverage").is_err() && compare(c, 1, "", "layer:99", "coverage").is_err());
             Ok(())
         })
         .unwrap();

@@ -176,6 +176,14 @@ struct ProjectArg {
     project_id: i64,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MatrixArg {
+    project_id: i64,
+    #[serde(default)]
+    domain: Option<String>,
+}
+
 #[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 struct OptProject {
@@ -1542,9 +1550,10 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
             to_json(db.with(|c| relations::list(c, a.project_id, &f)).map_err(app_err)?)
         }
         "cyberhub_get_attack_matrix" => {
-            let a: ProjectArg = parse(args)?;
+            let a: MatrixArg = parse(args)?;
             check_project(&db, a.project_id)?;
-            let m = db.with(|c| crate::workspace::attack_matrix::matrix(c, a.project_id)).map_err(app_err)?;
+            let domain = a.domain.unwrap_or_else(|| crate::workspace::attack::ENTERPRISE.into());
+            let m = db.with(|c| crate::workspace::attack_matrix::matrix_for(c, a.project_id, &domain)).map_err(app_err)?;
             Ok(json!({ "matrix": m, "note": "observed lists the findings that name a technique: tool leads, not confirmed activity. Only an assessment with status confirmed is analyst-confirmed. Layers are imported overlays such as detection coverage." }))
         }
         "cyberhub_correlate_project" => {

@@ -79,7 +79,7 @@ The assessment tools (added in November 2026) work as follows:
 
 The investigation tools (Mission 3) give a client the same view of a project's records as the Investigation tab, and keep its conclusions apart from the analyst's:
 * Records are named by keys (`finding:12`, `api_endpoint:3:5`, `technique:T1059.001`) that `cyberhub_search_records` returns and the other tools accept; a key of another project is refused.
-* Relationships come with their origin and verification: `verified` is confirmed by the analyst, `inferred` is a suggestion. `cyberhub_get_attack_matrix` keeps techniques that findings name (leads) apart from the analyst's assessments and from imported layers; its result says so.
+* Relationships come with their origin and verification: `verified` is confirmed by the analyst, `inferred` is a suggestion. `cyberhub_get_attack_matrix` keeps techniques that findings name (leads) apart from the analyst's assessments and from imported layers; its result says so. It reads one matrix: Enterprise, or Mobile or ICS with `domain` (Mission 6).
 * A client can run correlation and propose relationships, each after your approval. Both only add suggestions to the review queue: a proposal is stored as `suggested`, `inferred`, low confidence, with the client's name and rationale, and becomes a fact only when you accept it in Cyber Hub. Clients cannot accept, reject or link records themselves, and cannot change ATT&CK assessments.
 * Both write tools refuse archived projects, before the approval and when it is carried out.
 

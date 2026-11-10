@@ -747,7 +747,12 @@ export interface AttackHistoryEntry {
   refId: number | null;
 }
 
+/** An ATT&CK matrix: Enterprise, Mobile or ICS. */
+export type AttackDomain = "enterprise-attack" | "mobile-attack" | "ics-attack";
+
 export interface AttackSnapshot {
+  /** the ATT&CK domain (Mission 6) */
+  domain: AttackDomain;
   id: number;
   label: string;
   attackVersion: string;
@@ -764,6 +769,8 @@ export interface AttackDiffed {
 }
 
 export interface AttackComparison {
+  /** the ATT&CK domain (Mission 6) */
+  domain: AttackDomain;
   aLabel: string;
   bLabel: string;
   aKind: string;
@@ -2277,6 +2284,8 @@ export interface AttackTechnique {
 }
 
 export interface AttackCatalog {
+  /** the ATT&CK domain (Mission 6) */
+  domain: AttackDomain;
   version: string;
   modified: string;
   retrieved: string;
@@ -2341,6 +2350,8 @@ export interface AttackEntry {
 }
 
 export interface AttackLayer {
+  /** the ATT&CK domain (Mission 6) */
+  domain: AttackDomain;
   id: number;
   name: string;
   description: string;
@@ -2357,6 +2368,8 @@ export interface AttackLayer {
 }
 
 export interface AttackMatrix {
+  /** the ATT&CK domain (Mission 6) */
+  domain: AttackDomain;
   attackVersion: string;
   attackModified: string;
   attackRetrieved: string;

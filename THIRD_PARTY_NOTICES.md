@@ -38,7 +38,11 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## MITRE ATT&CK
 
-`src-tauri/catalog/attack-enterprise.json` is a compact catalog of the Enterprise ATT&CK tactics and techniques (IDs, names, tactics, platforms, parents, revoked and deprecated IDs), built by `scripts/attack-catalog.mjs` from MITRE's STIX 2.1 bundle (<https://github.com/mitre-attack/attack-stix-data>, `enterprise-attack-20.1.json`, retrieved 2026-11-09; the file's SHA-256 is recorded in the catalog).
+`src-tauri/catalog/attack-enterprise.json`, `attack-mobile.json` and `attack-ics.json` are compact catalogs of the Enterprise, Mobile and ICS ATT&CK tactics and techniques (IDs, names, tactics, platforms, parents, revoked and deprecated IDs). `scripts/attack-catalog.mjs` built them from MITRE's STIX 2.1 bundles at <https://github.com/mitre-attack/attack-stix-data>:
+* `enterprise-attack-20.1.json`, retrieved 2026-11-09;
+* `mobile-attack-20.1.json` and `ics-attack-20.1.json`, retrieved 2026-11-10 (Mission 6).
+
+Each catalog records the SHA-256 of its source file. The Enterprise catalog regenerated from its bundle is identical, byte for byte, to the one bundled before.
 
 * **Notice:** © 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.
 * **License:** MITRE hereby grants you a non-exclusive, royalty-free license to use ATT&CK® for research, development, and commercial purposes. Any copy you make for such purposes is authorized provided that you reproduce MITRE's copyright designation and this license in any such copy.

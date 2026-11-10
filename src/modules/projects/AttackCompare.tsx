@@ -1,6 +1,6 @@
 import { Button } from "@heroui/react";
 import { Camera, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "@/app/store";
 import { ToneChip } from "@/components/ui/Badges";
 import { ErrorBlock } from "@/components/ui/Feedback";
@@ -9,7 +9,7 @@ import { Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
 import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { AttackDiffed, AttackLayer } from "@/lib/types";
+import type { AttackDiffed, AttackDomain, AttackLayer } from "@/lib/types";
 import { pluralize } from "@/lib/utils";
 
 const HISTORY_KIND: Record<string, string> = { assessment: "Assessment", finding: "Finding", detection: "Detection", link: "Link" };
@@ -63,23 +63,29 @@ function List({ title, items, side }: { title: string; items: AttackDiffed[]; si
 
 /** Two technique sets compared (observed, hypotheses, coverage, a snapshot, a layer), and the
  * coverage snapshots that make coverage changes visible. */
-export function AttackCompare({ projectId, layers, archived }: { projectId: number; layers: AttackLayer[]; archived: boolean }) {
+export function AttackCompare({ projectId, domain, layers, archived }: { projectId: number; domain: AttackDomain; layers: AttackLayer[]; archived: boolean }) {
   const { runtime } = useApp();
   const snapshots = useQuery(["attack", "detections"], () => api.attackSnapshots(), [], runtime);
   const [a, setA] = useState("observed");
   const [b, setB] = useState("coverage");
   const [label, setLabel] = useState("");
-  const cmp = useQuery(["attack", "detections", "findings"], () => (a !== b ? api.attackCompare(projectId, a, b) : Promise.resolve(null)), [projectId, a, b], runtime);
+  // another matrix: start again from sets every matrix has
+  useEffect(() => {
+    setA("observed");
+    setB("coverage");
+  }, [domain]);
+  const cmp = useQuery(["attack", "detections", "findings"], () => (a !== b ? api.attackCompare(projectId, a, b, domain) : Promise.resolve(null)), [projectId, a, b, domain], runtime);
   const options = [
     { id: "observed", label: "Observed in the project" },
     { id: "hypotheses", label: "Hypotheses" },
     { id: "coverage", label: "Detection coverage now" },
-    ...(snapshots.data ?? []).map((s) => ({ id: `snapshot:${s.id}`, label: `Coverage snapshot “${s.label}” (${s.takenAt.slice(0, 10)})` })),
+    // snapshots of this matrix only: sets of different ATT&CK domains are not compared
+    ...(snapshots.data ?? []).filter((s) => s.domain === domain).map((s) => ({ id: `snapshot:${s.id}`, label: `Coverage snapshot “${s.label}” (${s.takenAt.slice(0, 10)})` })),
     ...layers.map((l) => ({ id: `layer:${l.id}`, label: `Layer “${l.name}”` })),
   ];
   const take = async () => {
     try {
-      await api.attackSnapshotTake(label.trim());
+      await api.attackSnapshotTake(label.trim(), domain);
       setLabel("");
       invalidate("attack");
       notify.success("Coverage snapshot saved");

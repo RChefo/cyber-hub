@@ -52,12 +52,15 @@ pub fn layer(project: &str, generated: &str, findings: &[Finding]) -> Result<Str
     let mut by: BTreeMap<String, Vec<&Finding>> = BTreeMap::new();
     let mut named = 0usize;
     let mut skipped = 0usize;
+    // an Enterprise layer: Mobile and ICS techniques are in their own matrices (Mission 6)
+    let mut elsewhere = 0usize;
     for f in findings {
         if f.status == "false_positive" {
             skipped += 1;
             continue;
         }
-        let ids = techniques_of(f);
+        let (ids, other): (Vec<String>, Vec<String>) = techniques_of(f).into_iter().partition(|id| crate::workspace::attack::in_domain(id, crate::workspace::attack::ENTERPRISE));
+        elsewhere += other.len();
         if !ids.is_empty() {
             named += 1;
         }
@@ -102,10 +105,13 @@ pub fn layer(project: &str, generated: &str, findings: &[Finding]) -> Result<Str
             1 => " 1 false positive is left out.".to_string(),
             n => format!(" {n} false positives are left out."),
         }
-    );
+    ) + &match elsewhere {
+        0 => String::new(),
+        n => format!(" {n} ATT&CK Mobile or ICS reference{} left out: export {} from the project's matrix in that domain.", if n == 1 { " is" } else { "s are" }, if n == 1 { "it" } else { "them" }),
+    };
     let doc = json!({
         "name": format!("{project}: findings"),
-        "versions": { "layer": "4.5", "navigator": NAVIGATOR },
+        "versions": { "attack": crate::workspace::attack_matrix::attack_major_of(crate::workspace::attack::ENTERPRISE), "layer": "4.5", "navigator": NAVIGATOR },
         "domain": "enterprise-attack",
         "description": description,
         "sorting": 3,
@@ -171,7 +177,7 @@ mod tests {
         ];
         let v: Value = serde_json::from_str(&layer("Web01", "2026-11-09T19:00:00Z", &fs).unwrap()).unwrap();
         // required by the 4.5 format
-        assert_eq!(v["versions"], json!({ "layer": "4.5", "navigator": "5.3.2" }));
+        assert_eq!(v["versions"], json!({ "attack": "20", "layer": "4.5", "navigator": "5.3.2" }), "the ATT&CK version is named (Mission 6)");
         assert_eq!(v["domain"], "enterprise-attack");
         assert_eq!(v["name"], "Web01: findings");
         let ids: Vec<&str> = v["techniques"].as_array().unwrap().iter().map(|t| t["techniqueID"].as_str().unwrap()).collect();

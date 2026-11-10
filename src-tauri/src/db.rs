@@ -1367,6 +1367,14 @@ pub(crate) const MIGRATIONS: &[&str] = &[
         DELETE FROM risk_acceptance_items WHERE kind = 'asvs' AND ref_id = OLD.id;
     END;
     "#,
+    // 31 — ATT&CK domains (docs/DATA_MODEL.md#attck-matrix-schema-23): assessments, imported layers
+    // and coverage snapshots name their matrix (Enterprise, Mobile or ICS). Everything recorded
+    // before was Enterprise, the only matrix then.
+    r#"
+    ALTER TABLE attack_assessments ADD COLUMN domain TEXT NOT NULL DEFAULT 'enterprise-attack' CHECK (domain IN ('enterprise-attack','mobile-attack','ics-attack'));
+    ALTER TABLE attack_layers ADD COLUMN domain TEXT NOT NULL DEFAULT 'enterprise-attack' CHECK (domain IN ('enterprise-attack','mobile-attack','ics-attack'));
+    ALTER TABLE attack_coverage_snapshots ADD COLUMN domain TEXT NOT NULL DEFAULT 'enterprise-attack' CHECK (domain IN ('enterprise-attack','mobile-attack','ics-attack'));
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a

@@ -20,6 +20,7 @@ use crate::workspace::{relations, timeline};
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogView {
+    pub domain: String,
     pub version: String,
     pub modified: String,
     pub retrieved: String,
@@ -29,11 +30,20 @@ pub struct CatalogView {
     pub techniques: Vec<Technique>,
 }
 
-/// The bundled ATT&CK Enterprise catalog: tactics in matrix order and every technique.
+fn domain_arg(domain: Option<String>) -> AppResult<&'static str> {
+    match domain.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+        None => Ok(attack::ENTERPRISE),
+        Some(d) => attack::parse_domain(d).ok_or_else(|| validation("The ATT&CK domain is enterprise-attack, mobile-attack or ics-attack")),
+    }
+}
+
+/// A bundled ATT&CK catalog (Enterprise by default, Mobile or ICS): tactics in matrix order and
+/// every technique.
 #[tauri::command]
-pub async fn attack_catalog() -> AppResult<CatalogView> {
-    let c = attack::catalog();
-    Ok(CatalogView { version: c.version.clone(), modified: c.modified.clone(), retrieved: c.retrieved.clone(), url: c.url.clone(), notice: c.notice.clone(), tactics: c.tactics.clone(), techniques: c.techniques.clone() })
+pub async fn attack_catalog(domain: Option<String>) -> AppResult<CatalogView> {
+    let d = domain_arg(domain)?;
+    let c = attack::catalog_for(d).unwrap_or_else(attack::catalog);
+    Ok(CatalogView { domain: d.into(), version: c.version.clone(), modified: c.modified.clone(), retrieved: c.retrieved.clone(), url: c.url.clone(), notice: c.notice.clone(), tactics: c.tactics.clone(), techniques: c.techniques.clone() })
 }
 
 /// Everything that happened about one technique in a project, oldest first.
@@ -44,8 +54,9 @@ pub async fn attack_technique_history(db: State<'_, Db>, project_id: i64, techni
 
 /// Two technique sets compared: observed, hypotheses, coverage, snapshot:<id>, layer:<id>.
 #[tauri::command]
-pub async fn attack_compare(db: State<'_, Db>, project_id: i64, a: String, b: String) -> AppResult<crate::workspace::attack_history::Comparison> {
-    db.with(|c| crate::workspace::attack_history::compare(c, project_id, &a, &b))
+pub async fn attack_compare(db: State<'_, Db>, project_id: i64, a: String, b: String, domain: Option<String>) -> AppResult<crate::workspace::attack_history::Comparison> {
+    let d = domain_arg(domain)?;
+    db.with(|c| crate::workspace::attack_history::compare(c, project_id, d, &a, &b))
 }
 
 #[tauri::command]
@@ -54,8 +65,9 @@ pub async fn attack_snapshots(db: State<'_, Db>) -> AppResult<Vec<crate::workspa
 }
 
 #[tauri::command]
-pub async fn attack_snapshot_take(db: State<'_, Db>, label: String) -> AppResult<i64> {
-    db.with(|c| crate::workspace::attack_history::snapshot_take(c, &label))
+pub async fn attack_snapshot_take(db: State<'_, Db>, label: String, domain: Option<String>) -> AppResult<i64> {
+    let d = domain_arg(domain)?;
+    db.with(|c| crate::workspace::attack_history::snapshot_take(c, &label, d))
 }
 
 #[tauri::command]
@@ -64,8 +76,9 @@ pub async fn attack_snapshot_delete(db: State<'_, Db>, id: i64) -> AppResult<()>
 }
 
 #[tauri::command]
-pub async fn attack_matrix(db: State<'_, Db>, project_id: i64) -> AppResult<Matrix> {
-    db.with(|c| matrix::matrix(c, project_id))
+pub async fn attack_matrix(db: State<'_, Db>, project_id: i64, domain: Option<String>) -> AppResult<Matrix> {
+    let d = domain_arg(domain)?;
+    db.with(|c| matrix::matrix_for(c, project_id, d))
 }
 
 /// Sets the analyst's assessment of a technique (confirmed, hypothesis, ruled_out), or removes it
@@ -142,10 +155,11 @@ pub async fn attack_layer_delete(db: State<'_, Db>, id: i64) -> AppResult<()> {
 /// Saves the project's techniques (named by findings, and the analyst's assessments) as an
 /// ATT&CK Navigator layer through a native dialog. Returns the file name, or None if cancelled.
 #[tauri::command]
-pub async fn attack_layer_export(app: AppHandle, project_id: i64) -> AppResult<Option<String>> {
+pub async fn attack_layer_export(app: AppHandle, project_id: i64, domain: Option<String>) -> AppResult<Option<String>> {
+    let d = domain_arg(domain)?;
     let (name, content) = app.state::<Db>().with(|c| {
         let name: String = c.query_row("SELECT name FROM projects WHERE id = ?1", params![project_id], |r| r.get(0))?;
-        let m = matrix::matrix(c, project_id)?;
+        let m = matrix::matrix_for(c, project_id, d)?;
         Ok((name.clone(), matrix::export_layer(&name, &crate::util::now(), &m).map_err(validation)?))
     })?;
     let safe: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).take(60).collect();

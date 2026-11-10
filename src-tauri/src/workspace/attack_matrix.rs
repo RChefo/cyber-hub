@@ -38,8 +38,9 @@ static ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[Tt]\d{4}(\.\d{3})?$").expec
 static COLOR: Lazy<Regex> = Lazy::new(|| Regex::new(r"^#[0-9a-fA-F]{3,8}$").expect("color"));
 
 /// The catalog's version as the Navigator writes it in `versions.attack` (the major version).
-pub fn attack_major() -> String {
-    attack::catalog().version.split('.').next().unwrap_or_default().to_string()
+/// The major ATT&CK version of a domain's catalog, as Navigator layers name it.
+pub fn attack_major_of(domain: &str) -> String {
+    attack::catalog_for(domain).unwrap_or_else(attack::catalog).version.split('.').next().unwrap_or_default().to_string()
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -116,6 +117,8 @@ pub struct Entry {
 #[serde(rename_all = "camelCase")]
 pub struct LayerSummary {
     pub id: i64,
+    /// the layer's ATT&CK domain (`enterprise-attack`, `mobile-attack`, `ics-attack`)
+    pub domain: String,
     pub name: String,
     pub description: String,
     pub file_name: String,
@@ -150,6 +153,8 @@ pub struct Counts {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Matrix {
+    /// the ATT&CK domain of this matrix (`enterprise-attack`, `mobile-attack`, `ics-attack`)
+    pub domain: String,
     pub attack_version: String,
     pub attack_modified: String,
     pub attack_retrieved: String,
@@ -158,22 +163,23 @@ pub struct Matrix {
     pub counts: Counts,
 }
 
-fn label(id: &str, state: &IdState) -> String {
+fn label(domain: &str, id: &str, state: &IdState) -> String {
+    let name = |id: &str| attack::technique_in(domain, id).map(|t| t.name.clone());
     match state {
-        IdState::Current => attack::technique_name(id).unwrap_or_default(),
-        IdState::Revoked { by } => format!("revoked, now {by}{}", attack::technique_name(by).map(|n| format!(" {n}")).unwrap_or_default()),
+        IdState::Current => name(id).unwrap_or_default(),
+        IdState::Revoked { by } => format!("revoked, now {by}{}", name(by).map(|n| format!(" {n}")).unwrap_or_default()),
         IdState::Deprecated => "deprecated".into(),
         IdState::Unknown => "not in ATT&CK".into(),
     }
 }
 
-fn entry<'a>(map: &'a mut BTreeMap<String, Entry>, id: &str) -> &'a mut Entry {
+fn entry<'a>(map: &'a mut BTreeMap<String, Entry>, domain: &str, id: &str) -> &'a mut Entry {
     let id = id.to_ascii_uppercase();
     map.entry(id.clone()).or_insert_with(|| {
-        let state = attack::id_state(&id);
-        let t = attack::technique(&id);
+        let state = attack::id_state_in(domain, &id);
+        let t = attack::technique_in(domain, &id);
         Entry {
-            name: label(&id, &state),
+            name: label(domain, &id, &state),
             tactics: t.map(|t| t.tactics.clone()).unwrap_or_default(),
             parent: t.and_then(|t| t.parent.clone()),
             state,
@@ -188,8 +194,16 @@ fn entry<'a>(map: &'a mut BTreeMap<String, Entry>, id: &str) -> &'a mut Entry {
     })
 }
 
-/// Every technique the project says something about, with what it says.
+/// Every Enterprise technique the project says something about, with what it says.
 pub fn matrix(c: &Connection, project_id: i64) -> AppResult<Matrix> {
+    matrix_for(c, project_id, attack::ENTERPRISE)
+}
+
+/// [`matrix`] for one ATT&CK domain: only the techniques of that domain (an ID no catalog knows is
+/// shown with Enterprise), its assessments, layers, coverage and matches.
+pub fn matrix_for(c: &Connection, project_id: i64, domain: &str) -> AppResult<Matrix> {
+    let domain = attack::parse_domain(domain).ok_or_else(|| validation("The ATT&CK domain is enterprise-attack, mobile-attack or ics-attack"))?;
+    let here = |id: &str| attack::in_domain(id, domain);
     relations::project_status(c, project_id)?;
     let mut map: BTreeMap<String, Entry> = BTreeMap::new();
     let mut counts = Counts::default();
@@ -202,12 +216,12 @@ pub fn matrix(c: &Connection, project_id: i64) -> AppResult<Matrix> {
         if f.status == "false_positive" {
             continue;
         }
-        let ids = techniques_of(&f);
+        let ids: Vec<String> = techniques_of(&f).into_iter().filter(|id| here(id)).collect();
         if !ids.is_empty() {
             counts.findings += 1;
         }
         for id in ids {
-            entry(&mut map, &id).observed.push(Observed {
+            entry(&mut map, domain, &id).observed.push(Observed {
                 finding_id: f.id,
                 title: f.title.clone(),
                 severity: f.severity.clone(),
@@ -221,11 +235,14 @@ pub fn matrix(c: &Connection, project_id: i64) -> AppResult<Matrix> {
     let page = relations::list(c, project_id, &relations::Filter { kind: Some("technique".into()), limit: Some(500), ..Default::default() })?;
     for r in page.items.iter().filter(|r| r.verification != "rejected") {
         let (tech, other) = if r.a.r.kind == "technique" { (&r.a, &r.b) } else { (&r.b, &r.a) };
-        entry(&mut map, &tech.r.sub).linked.push(Linked { relation_id: r.id, label: other.label.clone(), key: other.key.clone(), verification: r.verification.clone(), origin: r.origin.clone() });
+        if !here(&tech.r.sub) {
+            continue;
+        }
+        entry(&mut map, domain, &tech.r.sub).linked.push(Linked { relation_id: r.id, label: other.label.clone(), key: other.key.clone(), verification: r.verification.clone(), origin: r.origin.clone() });
     }
     // the analyst's assessments
-    let mut st = c.prepare("SELECT technique, status, confidence, note, attack_version, created_by, updated_at FROM attack_assessments WHERE project_id = ?1")?;
-    for row in st.query_map(params![project_id], |r| {
+    let mut st = c.prepare("SELECT technique, status, confidence, note, attack_version, created_by, updated_at FROM attack_assessments WHERE project_id = ?1 AND domain = ?2")?;
+    for row in st.query_map(params![project_id, domain], |r| {
         Ok((r.get::<_, String>(0)?, Assessment { status: r.get(1)?, confidence: r.get(2)?, note: r.get(3)?, attack_version: r.get(4)?, created_by: r.get(5)?, updated_at: r.get(6)? }))
     })? {
         let (id, a) = row?;
@@ -234,22 +251,26 @@ pub fn matrix(c: &Connection, project_id: i64) -> AppResult<Matrix> {
             "hypothesis" => counts.hypothesis += 1,
             _ => counts.ruled_out += 1,
         }
-        entry(&mut map, &id).assessment = Some(a);
+        entry(&mut map, domain, &id).assessment = Some(a);
     }
-    // imported layers
-    let layers = layers(c, project_id)?;
+    // imported layers of this domain
+    let layers: Vec<LayerSummary> = layers(c, project_id)?.into_iter().filter(|l| l.domain == domain).collect();
     for l in &layers {
         let marks: BTreeMap<String, Mark> = c.query_row("SELECT techniques FROM attack_layers WHERE id = ?1", params![l.id], |r| r.get::<_, String>(0)).map(|s| serde_json::from_str(&s).unwrap_or_default())?;
         for (id, mark) in marks {
-            entry(&mut map, &id).layers.push(LayerMark { layer_id: l.id, mark });
+            entry(&mut map, domain, &id).layers.push(LayerMark { layer_id: l.id, mark });
         }
     }
     // detection coverage of the library, and this project's detection matches
     for (t, rules) in crate::workspace::detections::coverage(c)? {
-        entry(&mut map, &t).rules = rules;
+        if here(&t) {
+            entry(&mut map, domain, &t).rules = rules;
+        }
     }
     for (t, n) in crate::workspace::detections::hits_by_technique(c, project_id)? {
-        entry(&mut map, &t).hits = n;
+        if here(&t) {
+            entry(&mut map, domain, &t).hits = n;
+        }
     }
     counts.observed = map.values().filter(|e| !e.observed.is_empty()).count();
     counts.covered = map.values().filter(|e| e.rules.iter().any(|r| r.enabled && r.runnable)).count();
@@ -257,23 +278,24 @@ pub fn matrix(c: &Connection, project_id: i64) -> AppResult<Matrix> {
         .values()
         .filter(|e| matches!(e.state, IdState::Current) && (!e.observed.is_empty() || e.assessment.as_ref().is_some_and(|a| a.status != "ruled_out")) && !e.rules.iter().any(|r| r.enabled && r.runnable))
         .count();
-    let cat = attack::catalog();
-    Ok(Matrix { attack_version: cat.version.clone(), attack_modified: cat.modified.clone(), attack_retrieved: cat.retrieved.clone(), entries: map.into_values().collect(), layers, counts })
+    let cat = attack::catalog_for(domain).unwrap_or_else(attack::catalog);
+    Ok(Matrix { domain: domain.into(), attack_version: cat.version.clone(), attack_modified: cat.modified.clone(), attack_retrieved: cat.retrieved.clone(), entries: map.into_values().collect(), layers, counts })
 }
 
 /// Sets (or, with no status, removes) the analyst's assessment of a technique in a project.
 pub fn assess(c: &Connection, project_id: i64, technique: &str, status: Option<&str>, confidence: &str, note: &str, actor: &str) -> AppResult<Option<Assessment>> {
     relations::require_open(c, project_id)?;
     let id = technique.trim().to_ascii_uppercase();
-    let state = attack::id_state(&id);
-    if state == IdState::Unknown {
-        return Err(validation(format!("{id} is not an ATT&CK Enterprise technique (catalog v{})", attack::catalog().version)));
-    }
+    let Some(domain) = attack::domain_of(&id) else {
+        return Err(validation(format!("{id} is not an ATT&CK technique of the bundled Enterprise, Mobile or ICS catalogs (v{})", attack::catalog().version)));
+    };
+    let state = attack::id_state_in(domain, &id);
     if !["low", "medium", "high"].contains(&confidence) {
         return Err(validation("Confidence is low, medium or high"));
     }
     let note: String = note.trim().chars().take(5000).collect();
-    let name = label(&id, &state);
+    let name = label(domain, &id, &state);
+    let version = attack::catalog_for(domain).map(|c| c.version.clone()).unwrap_or_default();
     let tx = c.unchecked_transaction()?;
     let ts = now();
     let summary = match status {
@@ -288,9 +310,9 @@ pub fn assess(c: &Connection, project_id: i64, technique: &str, status: Option<&
                 return Err(validation("An assessment is confirmed, hypothesis or ruled out"));
             }
             tx.execute(
-                "INSERT INTO attack_assessments (project_id, technique, status, confidence, note, attack_version, created_by, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
-                 ON CONFLICT (project_id, technique) DO UPDATE SET status = excluded.status, confidence = excluded.confidence, note = excluded.note, attack_version = excluded.attack_version, created_by = excluded.created_by, updated_at = excluded.updated_at",
-                params![project_id, id, s, confidence, note, attack::catalog().version, actor, ts],
+                "INSERT INTO attack_assessments (project_id, technique, status, confidence, note, attack_version, created_by, created_at, updated_at, domain) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9)
+                 ON CONFLICT (project_id, technique) DO UPDATE SET status = excluded.status, confidence = excluded.confidence, note = excluded.note, attack_version = excluded.attack_version, created_by = excluded.created_by, updated_at = excluded.updated_at, domain = excluded.domain",
+                params![project_id, id, s, confidence, note, version, actor, ts, domain],
             )?;
             format!("ATT&CK {id} {name}: {} ({confidence} confidence)", s.replace('_', " "))
         }
@@ -309,6 +331,8 @@ pub fn assess(c: &Connection, project_id: i64, technique: &str, status: Option<&
 /// A Navigator layer as read, before it is stored.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ParsedLayer {
+    /// the layer's ATT&CK domain
+    pub domain: String,
     pub name: String,
     pub description: String,
     pub layer_version: String,
@@ -344,14 +368,15 @@ pub fn parse_layer(bytes: &[u8]) -> Result<ParsedLayer, String> {
         return Err(format!("The layer lists more than {MAX_LAYER_TECHNIQUES} techniques"));
     }
     let mut out = ParsedLayer::default();
-    let domain = text(obj.get("domain").unwrap_or(&Value::Null)).to_ascii_lowercase();
-    match domain.as_str() {
-        "enterprise-attack" | "mitre-enterprise" => {}
-        "" => out.warnings.push("The layer names no domain; it was read as ATT&CK Enterprise".into()),
-        "mobile-attack" | "mitre-mobile" => return Err("This layer is for ATT&CK for Mobile; Cyber Hub's catalog covers ATT&CK Enterprise".into()),
-        "ics-attack" => return Err("This layer is for ATT&CK for ICS; Cyber Hub's catalog covers ATT&CK Enterprise".into()),
-        other => return Err(format!("Unknown layer domain '{}'", cut(other, 40))),
-    }
+    let named = text(obj.get("domain").unwrap_or(&Value::Null));
+    let domain = if named.trim().is_empty() {
+        out.warnings.push("The layer names no domain; it was read as ATT&CK Enterprise".into());
+        attack::ENTERPRISE
+    } else {
+        attack::parse_domain(&named).ok_or_else(|| format!("Unknown layer domain '{}' (Cyber Hub reads enterprise-attack, mobile-attack and ics-attack)", cut(&named, 40)))?
+    };
+    out.domain = domain.into();
+    let catalog = attack::catalog_for(domain).unwrap_or_else(attack::catalog);
     let versions = obj.get("versions").and_then(Value::as_object);
     out.layer_version = cut(&versions.map(|v| text(v.get("layer").unwrap_or(&Value::Null))).filter(|s| !s.is_empty()).unwrap_or_else(|| text(obj.get("version").unwrap_or(&Value::Null))), 20);
     out.attack_version = cut(&versions.map(|v| text(v.get("attack").unwrap_or(&Value::Null))).unwrap_or_default(), 20);
@@ -362,9 +387,9 @@ pub fn parse_layer(bytes: &[u8]) -> Result<ParsedLayer, String> {
     } else if major == 0 {
         out.warnings.push("The layer names no format version; it was read as format 4.5".into());
     }
-    let catalog_major = attack_major();
+    let catalog_major = attack_major_of(domain);
     if !out.attack_version.is_empty() && out.attack_version.split('.').next() != Some(catalog_major.as_str()) {
-        out.warnings.push(format!("The layer was made for ATT&CK v{}; Cyber Hub's catalog is v{}", out.attack_version, attack::catalog().version));
+        out.warnings.push(format!("The layer was made for ATT&CK v{}; Cyber Hub's {} catalog is v{}", out.attack_version, attack::domain_label(domain), catalog.version));
     }
     out.name = cut(&text(obj.get("name").unwrap_or(&Value::Null)), 200);
     out.description = cut(&text(obj.get("description").unwrap_or(&Value::Null)), 2000);
@@ -379,7 +404,7 @@ pub fn parse_layer(bytes: &[u8]) -> Result<ParsedLayer, String> {
             continue;
         }
         let raw = raw.to_ascii_uppercase();
-        let id = match attack::id_state(&raw) {
+        let id = match attack::id_state_in(domain, &raw) {
             IdState::Current => raw.clone(),
             IdState::Revoked { by } => {
                 out.remapped.insert(raw.clone(), by.clone());
@@ -417,7 +442,7 @@ pub fn parse_layer(bytes: &[u8]) -> Result<ParsedLayer, String> {
     }
     out.unknown = unknown.into_iter().take(200).collect();
     if out.techniques.is_empty() {
-        return Err(if out.unknown.is_empty() { "The layer lists no technique".into() } else { format!("None of the layer's techniques is in ATT&CK Enterprise v{} ({} unknown)", attack::catalog().version, out.unknown.len()) });
+        return Err(if out.unknown.is_empty() { "The layer lists no technique".into() } else { format!("None of the layer's techniques is in ATT&CK {} v{} ({} unknown)", attack::domain_label(domain), catalog.version, out.unknown.len()) });
     }
     if out.name.is_empty() {
         out.name = "Imported layer".into();
@@ -432,8 +457,8 @@ pub fn store_layer(c: &Connection, project_id: i64, file_name: &str, sha256: &st
         return Err(validation("This layer is already imported in the project"));
     }
     c.execute(
-        "INSERT INTO attack_layers (project_id, name, description, file_name, sha256, evidence_id, layer_version, attack_version, navigator_version, techniques, unknown, remapped, warnings, imported_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+        "INSERT INTO attack_layers (project_id, name, description, file_name, sha256, evidence_id, layer_version, attack_version, navigator_version, techniques, unknown, remapped, warnings, imported_at, domain)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         params![
             project_id,
             l.name,
@@ -448,7 +473,8 @@ pub fn store_layer(c: &Connection, project_id: i64, file_name: &str, sha256: &st
             serde_json::to_string(&l.unknown).unwrap_or_else(|_| "[]".into()),
             serde_json::to_string(&l.remapped).unwrap_or_else(|_| "{}".into()),
             serde_json::to_string(&l.warnings).unwrap_or_else(|_| "[]".into()),
-            now()
+            now(),
+            attack::parse_domain(&l.domain).unwrap_or(attack::ENTERPRISE)
         ],
     )?;
     Ok(c.last_insert_rowid())
@@ -456,7 +482,7 @@ pub fn store_layer(c: &Connection, project_id: i64, file_name: &str, sha256: &st
 
 pub fn layers(c: &Connection, project_id: i64) -> AppResult<Vec<LayerSummary>> {
     let mut st = c.prepare(
-        "SELECT id, name, description, file_name, evidence_id, layer_version, attack_version, navigator_version, techniques, unknown, remapped, warnings, imported_at FROM attack_layers WHERE project_id = ?1 ORDER BY id",
+        "SELECT id, name, description, file_name, evidence_id, layer_version, attack_version, navigator_version, techniques, unknown, remapped, warnings, imported_at, domain FROM attack_layers WHERE project_id = ?1 ORDER BY id",
     )?;
     let rows = st.query_map(params![project_id], |r| {
         let marks: BTreeMap<String, Value> = serde_json::from_str(&r.get::<_, String>(8)?).unwrap_or_default();
@@ -474,6 +500,7 @@ pub fn layers(c: &Connection, project_id: i64) -> AppResult<Vec<LayerSummary>> {
             remapped: serde_json::from_str(&r.get::<_, String>(10)?).unwrap_or_default(),
             warnings: serde_json::from_str(&r.get::<_, String>(11)?).unwrap_or_default(),
             imported_at: r.get(12)?,
+            domain: r.get(13)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
@@ -526,9 +553,9 @@ pub fn export_coverage_layer(generated: &str, m: &Matrix) -> Result<String, Stri
     }
     let doc = json!({
         "name": "Cyber Hub detection coverage",
-        "versions": { "attack": attack_major(), "layer": "4.5", "navigator": NAVIGATOR },
-        "domain": "enterprise-attack",
-        "description": format!("Techniques with enabled Sigma rules in Cyber Hub's detection library, exported on {generated} with ATT&CK Enterprise v{}. Score: number of rules; dark green: every rule passed its tests. Coverage says what could be detected, not what was observed.", m.attack_version),
+        "versions": { "attack": attack_major_of(&m.domain), "layer": "4.5", "navigator": NAVIGATOR },
+        "domain": m.domain,
+        "description": format!("Techniques with enabled Sigma rules in Cyber Hub's detection library, exported on {generated} with ATT&CK {} v{}. Score: number of rules; dark green: every rule passed its tests. Coverage says what could be detected, not what was observed.", attack::domain_label(&m.domain), m.attack_version),
         "sorting": 3,
         "layout": { "layout": "side", "showID": true, "showName": true, "expandedSubtechniques": "annotated" },
         "hideDisabled": false,
@@ -580,11 +607,12 @@ pub fn export_layer(project: &str, generated: &str, m: &Matrix) -> Result<String
     }
     let legend: Vec<Value> = used.iter().map(|i| json!({ "label": STATE_COLORS[*i].1, "color": STATE_COLORS[*i].2 })).collect();
     let doc = json!({
-        "name": format!("{project}: ATT&CK"),
-        "versions": { "attack": attack_major(), "layer": "4.5", "navigator": NAVIGATOR },
-        "domain": "enterprise-attack",
+        "name": format!("{project}: ATT&CK {}", attack::domain_label(&m.domain)),
+        "versions": { "attack": attack_major_of(&m.domain), "layer": "4.5", "navigator": NAVIGATOR },
+        "domain": m.domain,
         "description": format!(
-            "Techniques of {project}, exported by Cyber Hub on {generated} with ATT&CK Enterprise v{}. Color: the analyst's assessment (confirmed, hypothesis, ruled out); techniques only named by findings are leads, not confirmed activity. Score: how many findings name a technique. Ruled-out techniques are disabled.",
+            "Techniques of {project}, exported by Cyber Hub on {generated} with ATT&CK {} v{}. Color: the analyst's assessment (confirmed, hypothesis, ruled out); techniques only named by findings are leads, not confirmed activity. Score: how many findings name a technique. Ruled-out techniques are disabled.",
+            attack::domain_label(&m.domain),
             m.attack_version
         ),
         "sorting": 3,
@@ -593,7 +621,7 @@ pub fn export_layer(project: &str, generated: &str, m: &Matrix) -> Result<String
         "techniques": techniques,
         "gradient": { "colors": ["#ffffff", "#66b1ff"], "minValue": 0, "maxValue": most },
         "legendItems": legend,
-        "metadata": [{ "name": "Project", "value": project }, { "name": "Exported", "value": generated }, { "name": "Source", "value": "Cyber Hub" }, { "name": "ATT&CK catalog", "value": format!("Enterprise v{} ({})", m.attack_version, m.attack_modified) }],
+        "metadata": [{ "name": "Project", "value": project }, { "name": "Exported", "value": generated }, { "name": "Source", "value": "Cyber Hub" }, { "name": "ATT&CK catalog", "value": format!("{} v{} ({})", attack::domain_label(&m.domain), m.attack_version, m.attack_modified) }],
         "showTacticRowBackground": false,
         "selectTechniquesAcrossTactics": true,
         "selectSubtechniquesWithParent": false,

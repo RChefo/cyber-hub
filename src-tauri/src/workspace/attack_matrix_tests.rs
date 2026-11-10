@@ -39,8 +39,10 @@ fn layers_are_read_by_the_specification_and_checked_against_the_catalog() {
     assert_eq!((old.layer_version.as_str(), old.techniques.len()), ("3.0", 1));
     // other domains, other files
     for (bad, why) in [
-        (r#"{"name":"m","domain":"mobile-attack","techniques":[{"techniqueID":"T1404"}]}"#, "Mobile"),
-        (r#"{"name":"i","domain":"ics-attack","techniques":[{"techniqueID":"T0800"}]}"#, "ICS"),
+        // a technique of another domain is not in this domain's catalog (Mission 6)
+        (r#"{"name":"m","domain":"mobile-attack","techniques":[{"techniqueID":"T1059.001"}]}"#, "None of the layer's techniques is in ATT&CK Mobile"),
+        (r#"{"name":"i","domain":"ics-attack","techniques":[{"techniqueID":"T1404"}]}"#, "None of the layer's techniques is in ATT&CK ICS"),
+        (r#"{"name":"p","domain":"pre-attack","techniques":[{"techniqueID":"T1404"}]}"#, "Unknown layer domain"),
         (r#"{"name":"x","domain":"enterprise-attack"}"#, "no technique list"),
         (r#"{"name":"x","domain":"enterprise-attack","techniques":[{"techniqueID":"T9999"}]}"#, "None of the layer's techniques"),
         ("[1,2]", "JSON object"),
@@ -115,7 +117,7 @@ fn findings_assessments_and_layers_stay_apart() {
         // the export: findings and assessments, not the imported layer
         let doc: Value = serde_json::from_str(&export_layer("IR", "now", &m).unwrap()).unwrap();
         assert_eq!(doc["versions"]["layer"], "4.5");
-        assert_eq!(doc["versions"]["attack"], attack_major());
+        assert_eq!(doc["versions"]["attack"], attack_major_of(attack::ENTERPRISE));
         assert_eq!(doc["domain"], "enterprise-attack");
         let t = |id: &str| doc["techniques"].as_array().unwrap().iter().find(|t| t["techniqueID"] == id).cloned();
         assert_eq!(t("T1055").unwrap()["color"], "#c62828");
@@ -146,7 +148,7 @@ fn findings_assessments_and_layers_stay_apart() {
 
 #[test]
 fn an_empty_project_exports_nothing() {
-    let m = Matrix { attack_version: "20.1".into(), attack_modified: String::new(), attack_retrieved: String::new(), entries: Vec::new(), layers: Vec::new(), counts: Counts::default() };
+    let m = Matrix { domain: attack::ENTERPRISE.into(), attack_version: "20.1".into(), attack_modified: String::new(), attack_retrieved: String::new(), entries: Vec::new(), layers: Vec::new(), counts: Counts::default() };
     assert!(export_layer("Empty", "now", &m).unwrap_err().contains("No technique"));
 }
 
@@ -171,6 +173,64 @@ fn detection_rules_are_coverage_and_their_matches_are_leads() {
         let m = matrix(c, 1)?;
         assert_eq!(m.counts.covered, 0, "a disabled rule covers nothing");
         assert!(export_coverage_layer("now", &m).is_err());
+        Ok(())
+    })
+    .unwrap();
+}
+
+/// Mission 6: Mobile and ICS are matrices of their own. Findings, assessments and layers land in
+/// the domain whose catalog knows their technique; exports name their domain and version; sets of
+/// different domains are never compared.
+#[test]
+fn mobile_and_ics_are_separate_matrices() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'Fleet', 'active', 't', 't')", [])?;
+        c.execute("INSERT INTO findings (id, project_id, title, severity, status, tags, created_at, updated_at) VALUES (1, 1, 'Sideloaded APK escalates', 'high', 'confirmed', '[\"T1404\"]', 't', 't'), (2, 1, 'PLC program changed', 'high', 'confirmed', '[\"T0889\"]', 't', 't'), (3, 1, 'PowerShell', 'medium', 'confirmed', '[\"T1059.001\"]', 't', 't')", [])?;
+        assess(c, 1, "T1404", Some("confirmed"), "high", "seen in the MDM logs", "user")?;
+        assess(c, 1, "T0800", Some("hypothesis"), "low", "", "user")?;
+        let stored: Vec<(String, String)> = c.prepare("SELECT technique, domain FROM attack_assessments ORDER BY technique")?.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?;
+        assert_eq!(stored, [("T0800".to_string(), "ics-attack".to_string()), ("T1404".to_string(), "mobile-attack".to_string())]);
+
+        let mobile = matrix_for(c, 1, "mobile-attack")?;
+        let ids = |m: &Matrix| m.entries.iter().map(|e| e.id.clone()).collect::<Vec<_>>();
+        assert_eq!((mobile.domain.as_str(), ids(&mobile)), ("mobile-attack", vec!["T1404".to_string()]));
+        let e = &mobile.entries[0];
+        assert_eq!((e.observed.len(), e.assessment.as_ref().map(|a| a.status.as_str()), e.state.clone()), (1, Some("confirmed"), IdState::Current));
+        assert!(!e.tactics.is_empty() && e.name == "Exploitation for Privilege Escalation");
+        assert_eq!(ids(&matrix_for(c, 1, "ics-attack")?), ["T0800", "T0889"]);
+        let enterprise = matrix(c, 1)?;
+        assert_eq!((enterprise.domain.as_str(), ids(&enterprise)), ("enterprise-attack", vec!["T1059.001".to_string()]), "Enterprise keeps only its own");
+        assert!(matrix_for(c, 1, "pre-attack").is_err());
+
+        // a Mobile layer: read against the Mobile catalog, shown only in the Mobile matrix
+        let l = parse_layer(&layer(r#"{"name":"Mobile threat profile","versions":{"attack":"20","layer":"4.5","navigator":"5.3.2"},"domain":"mobile-attack","techniques":[{"techniqueID":"T1404","score":5},{"techniqueID":"T1418","score":2},{"techniqueID":"T1059","score":9}]}"#)).unwrap();
+        assert_eq!((l.domain.as_str(), l.techniques.len(), l.unknown.clone()), ("mobile-attack", 2, vec!["T1059".to_string()]), "an Enterprise ID is not a Mobile technique");
+        let lid = store_layer(c, 1, "mobile.json", "ab", None, &l)?;
+        assert_eq!(layers(c, 1)?[0].domain, "mobile-attack");
+        assert!(matrix_for(c, 1, "mobile-attack")?.layers.iter().any(|x| x.id == lid));
+        assert!(matrix(c, 1)?.layers.is_empty() && !matrix(c, 1)?.entries.iter().any(|e| e.id == "T1418"));
+
+        // exports name their domain and version
+        let out: serde_json::Value = serde_json::from_str(&export_layer("Fleet", "2026-11-10", &matrix_for(c, 1, "mobile-attack")?).unwrap()).unwrap();
+        assert_eq!((out["domain"].as_str(), out["versions"]["attack"].as_str()), (Some("mobile-attack"), Some("20")));
+        assert!(out["description"].as_str().unwrap().contains("ATT&CK Mobile v20.1"));
+
+        // comparisons stay inside one domain
+        let cmp = crate::workspace::attack_history::compare(c, 1, "mobile-attack", "observed", &format!("layer:{lid}"))?;
+        assert_eq!((cmp.domain.as_str(), cmp.both.len(), cmp.only_b.len()), ("mobile-attack", 1, 1));
+        let err = crate::workspace::attack_history::compare(c, 1, "enterprise-attack", "observed", &format!("layer:{lid}")).unwrap_err().to_string();
+        assert!(err.contains("is for ATT&CK Mobile") && err.contains("cannot be compared with ATT&CK Enterprise"), "{err}");
+        let snap = crate::workspace::attack_history::snapshot_take(c, "Enterprise coverage", "enterprise-attack")?;
+        assert!(crate::workspace::attack_history::compare(c, 1, "ics-attack", &format!("snapshot:{snap}"), "observed").unwrap_err().to_string().contains("is for ATT&CK Enterprise"));
+        assert_eq!(crate::workspace::attack_history::snapshots(c)?[0].domain, "enterprise-attack");
+
+        // the findings layer stays Enterprise and says what it left out
+        let findings = crate::commands::projects::findings_of(c, 1)?;
+        let fl: serde_json::Value = serde_json::from_str(&crate::workspace::attack_layer::layer("Fleet", "2026-11-10", &findings).unwrap()).unwrap();
+        let listed: Vec<&str> = fl["techniques"].as_array().unwrap().iter().map(|t| t["techniqueID"].as_str().unwrap()).collect();
+        assert_eq!(listed, ["T1059.001"]);
+        assert!(fl["description"].as_str().unwrap().contains("2 ATT&CK Mobile or ICS references are left out"));
         Ok(())
     })
     .unwrap();
