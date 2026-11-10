@@ -11,6 +11,7 @@ import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { AttackDiffed, AttackDomain, AttackLayer } from "@/lib/types";
 import { pluralize } from "@/lib/utils";
+import { domainLabel } from "./attackMatrix";
 
 const HISTORY_KIND: Record<string, string> = { assessment: "Assessment", finding: "Finding", detection: "Detection", link: "Link" };
 
@@ -88,7 +89,7 @@ export function AttackCompare({ projectId, domain, layers, archived }: { project
       await api.attackSnapshotTake(label.trim(), domain);
       setLabel("");
       invalidate("attack");
-      notify.success("Coverage snapshot saved");
+      notify.success(`${domainLabel(domain)} coverage snapshot saved`);
     } catch (e) {
       notify.error("Not saved", e);
     }
@@ -120,16 +121,20 @@ export function AttackCompare({ projectId, domain, layers, archived }: { project
               <TextInput aria-label="Snapshot label" value={label} onChange={setLabel} placeholder="Before the Q4 rule review" className="w-72" />
               <Button size="sm" variant="secondary" className="h-8 gap-1" onPress={take} isDisabled={!label.trim()}>
                 <Camera className="size-3.5" />
-                Save snapshot
+                Save {domainLabel(domain)} snapshot
               </Button>
             </div>
           )}
+          {/* a snapshot belongs to one matrix: the others are listed under theirs */}
+          {(snapshots.data ?? []).some((s) => s.domain !== domain) && (
+            <p className="text-muted">{pluralize((snapshots.data ?? []).filter((s) => s.domain !== domain).length, "snapshot")} of other ATT&CK matrices {(snapshots.data ?? []).filter((s) => s.domain !== domain).length === 1 ? "is" : "are"} listed under {(snapshots.data ?? []).filter((s) => s.domain !== domain).length === 1 ? "its matrix" : "their matrices"}.</p>
+          )}
           <ul className="flex flex-col gap-0.5">
-            {(snapshots.data ?? []).map((s) => (
+            {(snapshots.data ?? []).filter((s) => s.domain === domain).map((s) => (
               <li key={s.id} className="flex items-center gap-2">
                 <span>{s.label}</span>
                 <span className="text-muted">
-                  {s.takenAt.slice(0, 10)} · ATT&CK v{s.attackVersion} · {pluralize(s.techniques, "technique")}, {pluralize(s.rules, "rule")}
+                  {s.takenAt.slice(0, 10)} · ATT&CK {domainLabel(s.domain)} v{s.attackVersion} · {pluralize(s.techniques, "technique")}, {pluralize(s.rules, "rule")}
                 </span>
                 <Button
                   isIconOnly

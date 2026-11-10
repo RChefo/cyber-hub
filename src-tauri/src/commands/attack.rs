@@ -164,12 +164,15 @@ pub async fn attack_layer_export(app: AppHandle, project_id: i64, domain: Option
     })?;
     let safe: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).take(60).collect();
     let (tx, rx) = tokio::sync::oneshot::channel();
-    main_window_dialog(&app, "Export ATT&CK layer").set_file_name(format!("{safe}-attack-layer.json")).add_filter("ATT&CK Navigator layer", &["json"]).save_file(move |f| {
+    // the file name says which matrix the layer belongs to
+    let short = d.split('-').next().unwrap_or("enterprise");
+    main_window_dialog(&app, "Export ATT&CK layer").set_file_name(format!("{safe}-attack-{short}-layer.json")).add_filter("ATT&CK Navigator layer", &["json"]).save_file(move |f| {
         let _ = tx.send(f.and_then(|f| f.into_path().ok()));
     });
     let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
     std::fs::write(&path, content).map_err(|e| AppError::Internal(format!("Could not write the layer: {e}")))?;
     let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    let _ = app.state::<Db>().with(|c| timeline::record(c, project_id, "report", "ATT&CK layer exported (findings and assessments)", &file, None, None));
+    let what = format!("ATT&CK {} layer exported (findings and assessments)", attack::domain_label(d));
+    let _ = app.state::<Db>().with(|c| timeline::record(c, project_id, "report", &what, &file, None, None));
     Ok(Some(file))
 }

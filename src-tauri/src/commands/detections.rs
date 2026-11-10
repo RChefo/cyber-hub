@@ -48,7 +48,8 @@ pub async fn attack_coverage_export(app: AppHandle, project_id: i64, domain: Opt
         crate::workspace::attack_matrix::export_coverage_layer(&crate::util::now(), &m).map_err(validation)
     })?;
     let (tx, rx) = tokio::sync::oneshot::channel();
-    main_window_dialog(&app, "Export detection coverage").set_file_name("cyberhub-detection-coverage.json").add_filter("ATT&CK Navigator layer", &["json"]).save_file(move |f| {
+    let short = domain.split('-').next().unwrap_or("enterprise");
+    main_window_dialog(&app, "Export detection coverage").set_file_name(format!("cyberhub-detection-coverage-{short}.json")).add_filter("ATT&CK Navigator layer", &["json"]).save_file(move |f| {
         let _ = tx.send(f.and_then(|f| f.into_path().ok()));
     });
     let Some(path) = rx.await.ok().flatten() else { return Ok(None) };

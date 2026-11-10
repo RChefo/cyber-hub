@@ -104,8 +104,13 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
         const l = await api.attackLayerImport(project.id);
         if (!l) return;
         invalidate("attack", "findings", "relations");
+        // a layer belongs to one matrix: it is shown there, never as gaps of another one
+        if (l.domain !== domain) {
+          setDomain(l.domain);
+          setOpen(null);
+        }
         setLayerId(l.id);
-        notify.success(`Layer imported: ${l.name}`, [`${pluralize(l.techniques, "technique")}`, l.unknown.length ? `${l.unknown.length} unknown left out` : null, Object.keys(l.remapped).length ? `${Object.keys(l.remapped).length} revoked IDs mapped` : null].filter(Boolean).join(" · "));
+        notify.success(`Layer imported: ${l.name}`, [`ATT&CK ${domainLabel(l.domain)}`, `${pluralize(l.techniques, "technique")}`, l.unknown.length ? `${l.unknown.length} unknown left out` : null, Object.keys(l.remapped).length ? `${Object.keys(l.remapped).length} revoked IDs mapped` : null].filter(Boolean).join(" · "));
       } catch (e) {
         notify.error("The layer was not imported", e);
       }
@@ -233,7 +238,7 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
                     .join(", ")}
                 </span>
               )}
-              {layer.unknown.length > 0 && <span className="text-muted">Not in ATT&CK Enterprise v{cat.version}, left out: {layer.unknown.join(", ")}</span>}
+              {layer.unknown.length > 0 && <span className="text-muted">Not in ATT&CK {domainLabel(domain)} v{cat.version}, left out: {layer.unknown.join(", ")}</span>}
               <span className={cn(missing.length ? "text-danger" : "text-success")}>
                 {missing.length ? `${pluralize(missing.length, "technique")} that findings name or you confirmed or suspect ${missing.length === 1 ? "is" : "are"} not in this layer (marked “gap”): ${missing.map((e) => e.id).join(", ")}` : "Every technique that findings name or you confirmed or suspect is in this layer."}
               </span>
@@ -245,7 +250,11 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
         <EmptyBlock
           icon={ShieldAlert}
           title="No technique yet"
-          description="Techniques appear when findings name them (file, log, event log, Linux and cloud triage record them as tags such as T1059.001), when you link a record to a technique, or when you import a layer. Turn off “Only techniques with data” to browse and assess the whole matrix."
+          description={
+            domain === "enterprise-attack"
+              ? "Techniques appear when findings name them (file, log, event log, Linux and cloud triage record them as tags such as T1059.001), when you link a record to a technique, or when you import a layer. Turn off “Only techniques with data” to browse and assess the whole matrix."
+              : `Techniques of the ${domainLabel(domain)} matrix appear when findings name them, when you link a record to one, or when you import a ${domainLabel(domain)} layer. Turn off “Only techniques with data” to browse and assess the whole matrix.`
+          }
         />
       ) : (
         <div className="overflow-x-auto pb-2">
@@ -272,7 +281,7 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
         </div>
       )}
       {odd.length > 0 && (
-        <Panel title="Outside the matrix" description={`Technique IDs that findings or links name but ATT&CK Enterprise v${cat.version} no longer lists as they are.`}>
+        <Panel title="Outside the matrix" description={`Technique IDs that findings or links name but ATT&CK ${domainLabel(domain)} v${cat.version} no longer lists as they are.`}>
           <ul className="flex flex-col gap-1">
             {odd.map((e) => (
               <li key={e.id}>
@@ -355,7 +364,7 @@ function TechniqueModal({ id, project, archived, catalog, matrix, onClose, onOpe
       <div className="flex flex-col gap-4 text-[12.5px]">
         {entry && entry.state.state !== "current" && (
           <p className="rounded-[8px] bg-warning-soft px-2.5 py-1.5 text-warning-soft-foreground">
-            {entry.state.state === "revoked" ? `ATT&CK revoked ${id}; it is now ${entry.state.by}.` : entry.state.state === "deprecated" ? `${id} is deprecated in ATT&CK v${catalog.version}.` : `${id} is not in ATT&CK Enterprise v${catalog.version}.`}
+            {entry.state.state === "revoked" ? `ATT&CK revoked ${id}; it is now ${entry.state.by}.` : entry.state.state === "deprecated" ? `${id} is deprecated in ATT&CK v${catalog.version}.` : `${id} is not in ATT&CK ${domainLabel(catalog.domain)} v${catalog.version}.`}
           </p>
         )}
         <section className="flex flex-col gap-1.5">
