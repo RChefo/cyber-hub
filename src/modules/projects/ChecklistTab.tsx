@@ -1,7 +1,7 @@
 import { Button } from "@heroui/react";
 import { ExternalLink, ListChecks, ShieldAlert, ShieldCheck, StickyNote, Unlink } from "lucide-react";
 import { useMemo, useState } from "react";
-import { AppModal } from "@/components/ui/Dialogs";
+import { AppModal, useConfirm } from "@/components/ui/Dialogs";
 import { EmptyBlock, QueryView } from "@/components/ui/Feedback";
 import { ToneChip } from "@/components/ui/Badges";
 import { SearchInput, SelectInput, TextAreaInput } from "@/components/ui/Fields";
@@ -17,7 +17,8 @@ import { coverIndex, coverKey, RISK_STANDING } from "./risk";
 import { AcceptRiskModal } from "./RiskTab";
 
 /** Progress through the bundled OWASP WSTG checklist for one project. */
-export function ChecklistTab({ projectId, archived = false }: { projectId: number; archived?: boolean }) {
+export function ChecklistTab({ projectId, archived = false, onOpenRisks }: { projectId: number; archived?: boolean; onOpenRisks?: () => void }) {
+  const confirm = useConfirm();
   const catalog = useQuery(["checklist"], api.wstgCatalog, []);
   const items = useQuery(["checklist"], () => api.checklistItems(projectId), [projectId]);
   const [query, setQuery] = useState("");
@@ -35,9 +36,20 @@ export function ChecklistTab({ projectId, archived = false }: { projectId: numbe
 
   const save = async (test: WstgTest, next: ChecklistStatus, note?: string, findingId?: number, unlink = false) => {
     const current = byTest.get(test.id);
+    // an exception covers a failed test only: any other result ends it for this test
+    const exception = covers.get(coverKey("wstg", projectId, test.id));
+    if (exception && (current?.status ?? "not_started") === "failed" && next !== "failed") {
+      const nextLabel = CHECKLIST_STATUS_OPTIONS.find((o) => o.id === next)?.label ?? next;
+      const ok = await confirm.ask({
+        title: `End the exception for ${test.id}?`,
+        body: `Exception #${exception.id} “${exception.title}” covers this test only while it is failed. Setting it to “${nextLabel}” ends the exception for this test; the acceptance's history keeps the change, and covering the test again takes a new exception.`,
+        confirmLabel: "Change and end the exception",
+      });
+      if (!ok) return;
+    }
     try {
       await api.checklistSet(projectId, test.id, next, note ?? current?.note ?? "", findingId ?? null, unlink);
-      invalidate("checklist");
+      invalidate("checklist", "risk");
     } catch (e) {
       notify.error("Could not update the checklist", e);
     }
@@ -93,7 +105,14 @@ export function ChecklistTab({ projectId, archived = false }: { projectId: numbe
                             {it?.note && <div className="truncate text-[12px] text-muted">{it.note}</div>}
                             {exception && (
                               <div className="text-[12px] text-muted">
-                                Exception #{exception.id} “{exception.title}”, approved by {exception.approver}; the test stays failed. Managed on the Risks tab.
+                                Exception #{exception.id} “{exception.title}”, approved by {exception.approver}; the test stays failed.{" "}
+                                {onOpenRisks ? (
+                                  <button type="button" className="text-accent hover:underline" onClick={onOpenRisks}>
+                                    Open in Risks
+                                  </button>
+                                ) : (
+                                  "Managed on the Risks tab."
+                                )}
                               </div>
                             )}
                           </div>

@@ -510,6 +510,7 @@ const SECTIONS: { key: keyof ReportOptions; label: string }[] = [
   { key: "includeScope", label: "Scope and rules of engagement" },
   { key: "includeFindings", label: "Findings" },
   { key: "includeVulnerabilities", label: "Vulnerabilities" },
+  { key: "includeRisks", label: "Risk acceptances and exceptions" },
   { key: "includeAssets", label: "Assets" },
   { key: "includeEvidence", label: "Evidence register" },
   { key: "includeTimeline", label: "Timeline" },
@@ -528,6 +529,7 @@ const DEFAULT_OPTIONS: ReportOptions = {
   includeAssets: true,
   includeEvidence: true,
   includeTimeline: false,
+  includeRisks: true,
 };
 
 /** Prints an HTML document through the web view's print dialog (choose "Save as PDF"). */

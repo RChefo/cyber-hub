@@ -28,6 +28,8 @@ pub struct ReportOptions {
     pub include_assets: bool,
     pub include_evidence: bool,
     pub include_timeline: bool,
+    /// risk acceptances and exceptions (Mission 6)
+    pub include_risks: bool,
 }
 
 impl Default for ReportOptions {
@@ -45,6 +47,7 @@ impl Default for ReportOptions {
             include_assets: true,
             include_evidence: true,
             include_timeline: false,
+            include_risks: true,
         }
     }
 }
@@ -307,24 +310,36 @@ fn collect(c: &Connection, project_id: i64, o: &ReportOptions, today: &str) -> A
     let risks_revoked = acceptances.iter().filter(|a| a.standing == "revoked").count();
     let standing = acceptances.iter().filter(|a| a.standing != "revoked");
     let wstg_excepted = standing.clone().flat_map(|a| a.items.iter()).filter(|i| i.kind == "wstg" && i.removed_at.is_none()).count();
-    let risks: Vec<Vec<String>> = standing
-        .map(|a| {
-            let covers: Vec<String> = a
-                .items
-                .iter()
-                .filter(|i| i.removed_at.is_none())
-                .map(|i| match i.kind.as_str() {
-                    "finding" => format!("Finding #{} {} (accepted risk)", i.ref_id, i.label),
-                    "vulnerability" => format!("Vulnerability {} (accepted risk)", i.label),
-                    "asvs" => format!("{} (non-compliant, exception)", i.label),
-                    "wstg" => format!("{} (test failed, exception)", i.label),
-                    _ => i.label.clone(),
-                })
-                .collect();
-            vec![format!("#{} {}", a.id, a.title), label(&a.standing), a.owner.clone(), format!("{}, {}", a.approver, a.approved_at), a.expires_at.clone(), covers.join("; ")]
-        })
-        .collect();
-    let risks_undocumented = crate::workspace::risk::uncovered_findings(c, project_id)?;
+    let risks: Vec<Vec<String>> = if !o.include_risks {
+        vec![]
+    } else {
+        standing
+            .filter_map(|a| {
+                let covers: Vec<String> = a
+                    .items
+                    .iter()
+                    .filter(|i| i.removed_at.is_none())
+                    .map(|i| match i.kind.as_str() {
+                        // a section left out of the report is not brought back through this one
+                        "finding" if o.include_findings => format!("Finding #{} {} (accepted risk)", i.ref_id, i.label),
+                        "finding" => format!("Finding #{} (accepted risk)", i.ref_id),
+                        "vulnerability" if o.include_vulnerabilities => format!("Vulnerability {} (accepted risk)", i.label),
+                        "vulnerability" => format!("Vulnerability #{} (accepted risk)", i.ref_id),
+                        "asvs" => format!("{} (non-compliant, exception)", i.label),
+                        "wstg" => format!("{} (test failed, exception)", i.label),
+                        _ => i.label.clone(),
+                    })
+                    .collect();
+                // an acceptance whose items were all released covers nothing any more
+                if covers.is_empty() {
+                    return None;
+                }
+                let why: String = a.justification.chars().take(300).collect();
+                Some(vec![format!("#{} {}", a.id, a.title), label(&a.standing), a.owner.clone(), format!("{}, {}", a.approver, a.approved_at), a.expires_at.clone(), why, covers.join("; ")])
+            })
+            .collect()
+    };
+    let risks_undocumented = if o.include_risks { crate::workspace::risk::uncovered_findings(c, project_id)? } else { vec![] };
     Ok(Data {
         title,
         o: o.clone(),
@@ -380,10 +395,12 @@ fn figures(d: &Data) -> Vec<(i64, &'static str)> {
 fn checklist_line(d: &Data) -> Option<String> {
     let cov = &d.coverage;
     (cov.done() + cov.in_progress > 0).then(|| {
+        // the section is referred to only when the report includes it
+        let see = if d.o.include_risks { " (see Risk acceptances and exceptions)" } else { "" };
         let excepted = match d.wstg_excepted {
             0 => String::new(),
-            1 => " One failed test has a documented exception and stays failed (see Risk acceptances and exceptions).".into(),
-            n => format!(" {n} failed tests have a documented exception and stay failed (see Risk acceptances and exceptions)."),
+            1 => format!(" One failed test has a documented exception and stays failed{see}."),
+            n => format!(" {n} failed tests have a documented exception and stay failed{see}."),
         };
         format!(
             "OWASP Web Security Testing Guide: {} of {} tests have a result ({} passed, {} failed, {} not applicable); {} in progress.{excepted}",
@@ -397,7 +414,7 @@ fn checklist_line(d: &Data) -> Option<String> {
     })
 }
 
-const RISKS_HEAD: &[&str] = &["Acceptance", "Standing", "Owner", "Approved", "Until", "Covers"];
+const RISKS_HEAD: &[&str] = &["Acceptance", "Standing", "Owner", "Approved", "Until", "Justification", "Covers"];
 const RISKS_NOTE: &str = "Accepting a risk is not fixing it: covered findings and vulnerabilities stay accepted risks, excepted ASVS requirements stay non-compliant and excepted WSTG tests stay failed. An expired acceptance changes nothing by itself and is listed as expired until it is renewed or revoked.";
 
 /// The register's closing lines: revoked acceptances and findings accepted without a record.
@@ -562,7 +579,7 @@ pub fn render(c: &Connection, project_id: i64, o: &ReportOptions, today: &str) -
             w.table(VULNS_HEAD, d.vulnerabilities.clone());
         }
     }
-    if !d.risks.is_empty() || !d.risks_undocumented.is_empty() {
+    if d.o.include_risks && (!d.risks.is_empty() || !d.risks_undocumented.is_empty()) {
         w.el("h2", "", "Risk acceptances and exceptions");
         w.el("p", "muted", RISKS_NOTE);
         if !d.risks.is_empty() {
@@ -817,7 +834,7 @@ pub fn markdown(c: &Connection, project_id: i64, o: &ReportOptions, today: &str)
 
     for (on, head, cols, rows, empty) in [
         (d.o.include_vulnerabilities, "Vulnerabilities", VULNS_HEAD, &d.vulnerabilities, "No vulnerabilities tracked."),
-        (true, "Risk acceptances and exceptions", RISKS_HEAD, &d.risks, ""),
+        (d.o.include_risks, "Risk acceptances and exceptions", RISKS_HEAD, &d.risks, ""),
         (d.o.include_assets, "Assets", ASSETS_HEAD, &d.asset_rows, "No assets recorded."),
         (d.o.include_evidence, "Evidence register", EVIDENCE_HEAD, &d.evidence, "No evidence registered."),
     ] {

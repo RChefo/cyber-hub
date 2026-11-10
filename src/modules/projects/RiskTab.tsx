@@ -42,13 +42,15 @@ export function AcceptRiskModal({
   const [error, setError] = useState<string | null>(null);
   const problems = draftProblems(d, today);
   const set = (k: keyof RiskDraft, v: string) => setD((x) => ({ ...x, [k]: k === "reviewAt" ? v || null : v }));
+  // a requirement or a test is excepted; a finding or a vulnerability is an accepted risk
+  const exceptionOnly = items.length > 0 && items.every((i) => i.kind === "asvs" || i.kind === "wstg");
   const save = async () => {
     setSaving(true);
     setError(null);
     try {
       await api.riskAccept(projectId, d, items);
       invalidate("risk", "findings", "vulns", "asvs", "projects");
-      notify.success("Risk acceptance recorded", `${pluralize(items.length, "item")} covered until ${d.expiresAt}`);
+      notify.success(exceptionOnly ? "Exception recorded" : "Risk acceptance recorded", `${pluralize(items.length, "item")} covered until ${d.expiresAt}`);
       onOpenChange(false);
       onDone?.();
     } catch (e) {
@@ -62,15 +64,19 @@ export function AcceptRiskModal({
       isOpen={isOpen}
       onOpenChange={onOpenChange}
       size="lg"
-      title="Accept risk"
-      description="Accepting a risk is not fixing it: the items stay listed as accepted risks, apart from open and resolved ones, until the acceptance expires or is revoked."
+      title={exceptionOnly ? "Record an exception" : "Accept risk"}
+      description={
+        exceptionOnly
+          ? "An exception is not compliance: excepted requirements stay non-compliant and excepted tests stay failed. It is listed with the risk acceptances until it expires or is revoked."
+          : "Accepting a risk is not fixing it: the items stay listed as accepted risks, apart from open and resolved ones, until the acceptance expires or is revoked."
+      }
       footer={
         <>
           <Button variant="tertiary" onPress={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="primary" onPress={save} isDisabled={problems.length > 0} isPending={saving}>
-            Record acceptance
+            {exceptionOnly ? "Record exception" : "Record acceptance"}
           </Button>
         </>
       }
@@ -312,7 +318,7 @@ export function RiskTab({ project }: { project: Project }) {
   return (
     <div className="flex flex-col gap-3">
       <Panel
-        title="Accepted risks"
+        title="Risk acceptances and exceptions"
         description="Who accepted which risk, why, approved by whom and until when. Findings and vulnerabilities become accepted risks only through an acceptance; an expired one changes nothing by itself and is flagged until it is renewed or revoked."
         actions={counts ? <span className="text-[12.5px] text-muted">{counts}</span> : undefined}
       >
@@ -330,7 +336,7 @@ export function RiskTab({ project }: { project: Project }) {
         {list.loading && !list.data ? (
           <LoadingRows rows={3} />
         ) : (list.data ?? []).length === 0 ? (
-          <EmptyBlock compact icon={ShieldCheck} title="No risk accepted" description="Accept a risk from a finding (its status menu), a vulnerability, or a non-compliant ASVS requirement." />
+          <EmptyBlock compact icon={ShieldCheck} title="No risk accepted" description="Accept a risk from a finding (its status menu) or a vulnerability, or record an exception for a non-compliant ASVS requirement or a failed test in the Checklist." />
         ) : (
           <ul className="flex flex-col gap-2">
             {(list.data ?? []).map((a) => (

@@ -506,10 +506,10 @@ export function ProjectDetail({ id }: { id: number }) {
           <EvidenceVault project={p} findings={f} onOpenFindings={() => setTab("findings")} />
         </Tabs.Panel>
         <Tabs.Panel id="checklist">
-          <ChecklistTab projectId={p.id} archived={p.status === "archived"} />
+          <ChecklistTab projectId={p.id} archived={p.status === "archived"} onOpenRisks={() => setTab("risk")} />
         </Tabs.Panel>
         <Tabs.Panel id="asvs">
-          <AsvsTab project={p} onOpenFinding={(id) => openRecordTab({ kind: "finding", id, sub: "" })} />
+          <AsvsTab project={p} onOpenFinding={(id) => openRecordTab({ kind: "finding", id, sub: "" })} onOpenRisks={() => setTab("risk")} />
         </Tabs.Panel>
         <Tabs.Panel id="risk">
           <RiskTab project={p} />

@@ -177,6 +177,8 @@ export interface ReportOptions {
   includeAssets: boolean;
   includeEvidence: boolean;
   includeTimeline: boolean;
+  /** risk acceptances and exceptions (Mission 6) */
+  includeRisks: boolean;
 }
 
 export interface ScopeCheck {

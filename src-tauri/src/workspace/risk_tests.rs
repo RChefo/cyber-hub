@@ -326,6 +326,38 @@ fn an_expired_or_revoked_wstg_exception_is_flagged_and_changes_no_result() {
     .unwrap();
 }
 
+/// The report's register follows the report's options (Mission 6 review): it can be switched off,
+/// it gives the justification, it does not bring back a section left out (finding titles), and an
+/// acceptance whose items were all released is not listed as if it still covered something.
+#[test]
+fn the_report_register_follows_the_report_options() {
+    use crate::workspace::report::{markdown, ReportOptions};
+    let db = setup();
+    db.with(|c| {
+        let f = finding(c, 1, "Secret admin panel at /backstage", "confirmed");
+        create(c, 1, &draft(30), &[it("finding", f)], "user")?;
+        check(c, "WSTG-CONF-05", "failed", "user")?;
+        create(c, 1, &draft(30), &[wstg("WSTG-CONF-05")], "user")?;
+        let md = markdown(c, 1, &ReportOptions::default(), "2026-11-10")?;
+        assert!(md.contains("| Justification |") && md.contains("The vendor appliance cannot be upgraded"), "{md}");
+        assert!(md.contains("Secret admin panel at /backstage (accepted risk)"));
+        // findings left out of the report: the register names the finding by number only
+        let no_findings = ReportOptions { include_findings: false, ..ReportOptions::default() };
+        let md = markdown(c, 1, &no_findings, "2026-11-10")?;
+        assert!(md.contains(&format!("Finding #{f} (accepted risk)")) && !md.contains("Secret admin panel"), "{md}");
+        // the section can be switched off
+        let off = ReportOptions { include_risks: false, ..ReportOptions::default() };
+        assert!(!markdown(c, 1, &off, "2026-11-10")?.contains("Risk acceptances and exceptions"));
+        assert!(!crate::workspace::report::render(c, 1, &off, "2026-11-10")?.contains("Risk acceptances and exceptions"));
+        // the test passes: its exception covers nothing any more and leaves the table
+        check(c, "WSTG-CONF-05", "passed", "user")?;
+        let md = markdown(c, 1, &ReportOptions::default(), "2026-11-10")?;
+        assert!(!md.contains("WSTG-CONF-05 (test failed, exception)") && md.contains("Secret admin panel at /backstage (accepted risk)"), "{md}");
+        Ok(())
+    })
+    .unwrap();
+}
+
 /// Migration 30 copied the items table: its triggers still drop the items of deleted records.
 #[test]
 fn the_items_table_keeps_its_triggers_after_migration_30() {

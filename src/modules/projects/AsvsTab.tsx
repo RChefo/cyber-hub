@@ -19,7 +19,7 @@ import { AsvsGaps } from "./AsvsGaps";
 import { coverIndex, coverKey, RISK_STANDING } from "./risk";
 
 /** Projects → ASVS: OWASP ASVS 5.0.0 assessments. */
-export function AsvsTab({ project, onOpenFinding }: { project: Project; onOpenFinding: (id: number) => void }) {
+export function AsvsTab({ project, onOpenFinding, onOpenRisks }: { project: Project; onOpenFinding: (id: number) => void; onOpenRisks?: () => void }) {
   const { runtime } = useApp();
   const confirm = useConfirm();
   const catalog = useQuery(["asvs"], () => api.asvsCatalog(), [], runtime);
@@ -119,7 +119,7 @@ export function AsvsTab({ project, onOpenFinding }: { project: Project; onOpenFi
         )}
       </Panel>
       {current && <AsvsGaps key={`gaps-${current.id}`} assessment={current} others={list.data ?? []} />}
-      {current && <Requirements key={current.id} assessment={current} project={project} archived={archived} onOpenFinding={onOpenFinding} />}
+      {current && <Requirements key={current.id} assessment={current} project={project} archived={archived} onOpenFinding={onOpenFinding} onOpenRisks={onOpenRisks} />}
       {confirm.element}
     </div>
   );
@@ -157,7 +157,7 @@ function CreateForm({ projectId, onDone }: { projectId: number; onDone: (id: num
   );
 }
 
-function Requirements({ assessment, project, archived, onOpenFinding }: { assessment: AsvsSummary; project: Project; archived: boolean; onOpenFinding: (id: number) => void }) {
+function Requirements({ assessment, project, archived, onOpenFinding, onOpenRisks }: { assessment: AsvsSummary; project: Project; archived: boolean; onOpenFinding: (id: number) => void; onOpenRisks?: () => void }) {
   const { runtime } = useApp();
   const view = useQuery(["asvs", "findings"], () => api.asvsAssessmentGet(assessment.id), [assessment.id], runtime);
   const catalog = useQuery(["asvs"], () => api.asvsCatalog(), [], runtime);
@@ -192,7 +192,7 @@ function Requirements({ assessment, project, archived, onOpenFinding }: { assess
                 {ch.id} {ch.name} <span className="font-normal text-muted">· {pluralize(rows.length, "requirement")}</span>
               </h3>
               {rows.map((i) => (
-                <Row key={i.requirement.id} id={assessment.id} item={i} project={project} archived={archived} open={open === i.requirement.id} onToggle={() => setOpen(open === i.requirement.id ? null : i.requirement.id)} onOpenFinding={onOpenFinding} exception={covers.get(coverKey("asvs", assessment.id, i.requirement.id))} />
+                <Row key={i.requirement.id} id={assessment.id} item={i} project={project} archived={archived} open={open === i.requirement.id} onToggle={() => setOpen(open === i.requirement.id ? null : i.requirement.id)} onOpenFinding={onOpenFinding} onOpenRisks={onOpenRisks} exception={covers.get(coverKey("asvs", assessment.id, i.requirement.id))} />
               ))}
             </section>
           );
@@ -216,13 +216,23 @@ function Requirements({ assessment, project, archived, onOpenFinding }: { assess
   );
 }
 
-function Row({ id, item, project, archived, open, onToggle, onOpenFinding, exception }: { id: number; item: AsvsItem; project: Project; archived: boolean; open: boolean; onToggle: () => void; onOpenFinding: (id: number) => void; exception?: RiskAcceptance }) {
+function Row({ id, item, project, archived, open, onToggle, onOpenFinding, onOpenRisks, exception }: { id: number; item: AsvsItem; project: Project; archived: boolean; open: boolean; onToggle: () => void; onOpenFinding: (id: number) => void; onOpenRisks?: () => void; exception?: RiskAcceptance }) {
+  const confirm = useConfirm();
   const r = item.requirement;
   const st = ASVS_STATUS[item.status];
   const setStatus = async (s: AsvsStatus, note?: string) => {
+    // an exception covers a non-compliant requirement only: any other status ends it
+    if (exception && item.status === "non_compliant" && s !== "non_compliant") {
+      const ok = await confirm.ask({
+        title: `End the exception for ${r.id}?`,
+        body: `Exception #${exception.id} “${exception.title}” covers this requirement only while it is non-compliant. Changing its status ends the exception for this requirement; the acceptance's history keeps the change, and covering it again takes a new exception.`,
+        confirmLabel: "Change and end the exception",
+      });
+      if (!ok) return;
+    }
     try {
       await api.asvsSetStatus(id, r.id, s, note);
-      invalidate("asvs");
+      invalidate("asvs", "risk");
     } catch (e) {
       notify.error("The status was not saved", e);
     }
@@ -245,12 +255,12 @@ function Row({ id, item, project, archived, open, onToggle, onOpenFinding, excep
         )}
         <SelectInput aria-label={`Status of ${r.id}`} value={item.status} isDisabled={archived} onChange={(v) => void setStatus(v as AsvsStatus)} options={Object.entries(ASVS_STATUS).map(([k, s]) => ({ id: k, label: s.label }))} className={cn("w-40 shrink-0", st.tone === "danger" && "text-danger")} />
       </div>
-      {open && <Details id={id} item={item} project={project} archived={archived} onSaveNote={(note) => void setStatus(item.status, note)} onOpenFinding={onOpenFinding} exception={exception} />}
+      {open && <Details id={id} item={item} project={project} archived={archived} onSaveNote={(note) => void setStatus(item.status, note)} onOpenFinding={onOpenFinding} onOpenRisks={onOpenRisks} exception={exception} />}
     </div>
   );
 }
 
-function Details({ id, item, project, archived, onSaveNote, onOpenFinding, exception }: { id: number; item: AsvsItem; project: Project; archived: boolean; onSaveNote: (note: string) => void; onOpenFinding: (id: number) => void; exception?: RiskAcceptance }) {
+function Details({ id, item, project, archived, onSaveNote, onOpenFinding, onOpenRisks, exception }: { id: number; item: AsvsItem; project: Project; archived: boolean; onSaveNote: (note: string) => void; onOpenFinding: (id: number) => void; onOpenRisks?: () => void; exception?: RiskAcceptance }) {
   const { runtime } = useApp();
   const [excepting, setExcepting] = useState(false);
   const r = item.requirement;
@@ -373,7 +383,14 @@ function Details({ id, item, project, archived, onSaveNote, onOpenFinding, excep
       )}
       {exception ? (
         <p className="text-[12px] text-muted">
-          Exception: risk acceptance #{exception.id} “{exception.title}”, owner {exception.owner}, approved by {exception.approver} on {exception.approvedAt}, {exception.standing === "expired" ? "expired on" : "until"} {exception.expiresAt}. It stays non-compliant; the exception is managed on the Risks tab.
+          Exception: risk acceptance #{exception.id} “{exception.title}”, owner {exception.owner}, approved by {exception.approver} on {exception.approvedAt}, {exception.standing === "expired" ? "expired on" : "until"} {exception.expiresAt}. It stays non-compliant.{" "}
+          {onOpenRisks ? (
+            <button type="button" className="text-accent hover:underline" onClick={onOpenRisks}>
+              Open in Risks
+            </button>
+          ) : (
+            "The exception is managed on the Risks tab."
+          )}
         </p>
       ) : (
         !archived &&

@@ -568,7 +568,8 @@ A risk acceptance records who accepted which risk, why, with which compensating 
   * Renewing records a new approval (approver, date) and expiry.
   * Revoking (with a reason) reopens what it covered and nothing else covers: findings become `reopened`, vulnerabilities `open`, and requirements lose the exception.
 * **Earlier data.** Findings marked accepted before schema 27 keep their status. The register lists them as accepted without a record, so an acceptance can document them without changing their status.
-* **Report** (Mission 6): the project report's *Risk acceptances and exceptions* section lists every acceptance that is not revoked, with its standing, owner, approver, expiry and what it covers, says that accepting is not fixing, and names findings marked accepted without a record.
+* **Report** (Mission 6): the project report's *Risk acceptances and exceptions* section lists every acceptance that is not revoked and still covers something, with its standing, owner, approver, expiry, justification and what it covers, says that accepting is not fixing, and names findings marked accepted without a record. It has its own switch in the report options (on by default); when findings or vulnerabilities are left out of the report, the section names them by number only.
+* **Changing an excepted result** (Mission 6): setting a failed test, or a non-compliant ASVS requirement, to another result ends its exception for that item. The Checklist and ASVS views ask before doing so, and the acceptance's history records it.
 * **Timeline:** an acceptance and a revocation are recorded as `risk`.
 * **MCP:** `cyberhub_list_risk_acceptances` (read) returns the register, redacted.
 
