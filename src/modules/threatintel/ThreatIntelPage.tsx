@@ -23,17 +23,74 @@ import { StatusDot, ToneChip } from "@/components/ui/Badges";
 import { CopyButton } from "@/components/ui/Code";
 import { AppModal, useConfirm } from "@/components/ui/Dialogs";
 import { EmptyBlock, ErrorBlock, InlineSpinner, QueryView } from "@/components/ui/Feedback";
-import { SelectInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
+import { SearchInput, SelectInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
 import { PageHeader, Panel } from "@/components/ui/Panel";
 import { notify, openExternal } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
+import { useShowMore } from "@/lib/showMore";
 import type { TiInvestigation, TiProviderResult, TiProviderStatus, TiSavedIndicator, TiSavedStatus, TiSummary, VtDetected } from "@/lib/types";
 import { cn, debounce, formatRelative } from "@/lib/utils";
 import { availability, compareRows, correlate, LEVEL_META, parseConfidence, RELIABILITY, savedStanding, sortResults, STATUS_META, summaryParts } from "./model";
 import { TaxiiFeeds } from "./TaxiiFeeds";
 
 const KIND_LABEL: Record<string, string> = { ip: "IP address", domain: "Domain", url: "URL", file: "File hash" };
+
+/** The saved indicators, searchable and drawn in steps: a TAXII feed can save many thousands, and
+ * drawing them all at once would block the window (Mission 7). */
+function SavedIndicatorList({ items, onPivot, onEdit }: { items: TiSavedIndicator[]; onPivot: (value: string) => void; onEdit: (item: TiSavedIndicator) => void }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const list = useMemo(
+    () => (q ? items.filter((it) => [it.indicator, it.source ?? "", KIND_LABEL[it.kind] ?? it.kind, savedStanding(it).label].some((v) => v.toLowerCase().includes(q))) : items),
+    [items, q],
+  );
+  const shown = useShowMore(list, q, 100);
+  return (
+    <div className="flex flex-col gap-1.5">
+      {items.length > 10 && <SearchInput value={query} onChange={setQuery} placeholder={`Search ${items.length.toLocaleString()} indicators`} />}
+      {list.length === 0 ? (
+        <p className="px-2.5 py-2 text-[12.5px] text-muted">No saved indicator matches “{query.trim()}”.</p>
+      ) : (
+        <ul className="flex flex-col gap-0.5">
+          {shown.visible.map((it) => {
+            const standing = savedStanding(it);
+            return (
+              <li key={it.id} className="flex items-start gap-1">
+                <button type="button" onClick={() => onPivot(it.indicator)} className="flex min-w-0 flex-1 flex-col rounded-lg px-2.5 py-2 text-left outline-none hover:bg-white/[0.03] focus-visible:ring-2 focus-visible:ring-focus">
+                  <span className={cn("truncate font-mono text-[12.5px]", it.effective !== "active" && "text-muted line-through decoration-white/30")}>{it.indicator}</span>
+                  <span className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted">
+                    <ToneChip tone={standing.tone} dot={false} className="text-[10.5px]">
+                      {standing.label}
+                    </ToneChip>
+                    {it.confidence != null && <span>confidence {it.confidence} ({it.confidenceLabel})</span>}
+                    {it.source && <span className="truncate">from {it.source}{it.reliability ? ` (${it.reliability})` : ""}</span>}
+                    <span>
+                      {KIND_LABEL[it.kind]} · saved {formatRelative(it.createdAt)}
+                    </span>
+                  </span>
+                </button>
+                <Button size="sm" variant="ghost" className="mt-1 h-7" aria-label={`Edit ${it.indicator}`} onPress={() => onEdit(it)}>
+                  Edit
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {shown.hidden > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 text-[12px] text-muted">
+          <span>
+            Showing {shown.visible.length.toLocaleString()} of {list.length.toLocaleString()}
+          </span>
+          <Button size="sm" variant="ghost" onPress={shown.more}>
+            Show {Math.min(shown.step, shown.hidden).toLocaleString()} more
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SummaryStrip({ summary }: { summary: TiSummary }) {
   const parts = summaryParts(summary);
@@ -663,33 +720,7 @@ export default function ThreatIntelPage() {
             }
           >
             <QueryView query={saved} rows={3} isEmpty={(d) => d.length === 0} empty={<EmptyBlock compact icon={Bookmark} title="Nothing saved yet" />}>
-              {(items) => (
-                <ul className="flex flex-col gap-0.5">
-                  {items.map((it) => {
-                    const standing = savedStanding(it);
-                    return (
-                      <li key={it.id} className="flex items-start gap-1">
-                        <button type="button" onClick={() => pivot(it.indicator)} className="flex min-w-0 flex-1 flex-col rounded-lg px-2.5 py-2 text-left outline-none hover:bg-white/[0.03] focus-visible:ring-2 focus-visible:ring-focus">
-                          <span className={cn("truncate font-mono text-[12.5px]", it.effective !== "active" && "text-muted line-through decoration-white/30")}>{it.indicator}</span>
-                          <span className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted">
-                            <ToneChip tone={standing.tone} dot={false} className="text-[10.5px]">
-                              {standing.label}
-                            </ToneChip>
-                            {it.confidence != null && <span>confidence {it.confidence} ({it.confidenceLabel})</span>}
-                            {it.source && <span className="truncate">from {it.source}{it.reliability ? ` (${it.reliability})` : ""}</span>}
-                            <span>
-                              {KIND_LABEL[it.kind]} · saved {formatRelative(it.createdAt)}
-                            </span>
-                          </span>
-                        </button>
-                        <Button size="sm" variant="ghost" className="mt-1 h-7" aria-label={`Edit ${it.indicator}`} onPress={() => setEditing(it)}>
-                          Edit
-                        </Button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+              {(items) => <SavedIndicatorList items={items} onPivot={pivot} onEdit={setEditing} />}
             </QueryView>
           </Panel>
 
