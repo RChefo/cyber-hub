@@ -150,7 +150,7 @@ async fn confirm(app: &AppHandle, s: &Server, what: &str) -> AppResult<()> {
     if ok {
         Ok(())
     } else {
-        Err(validation("Not connected: the connection was not confirmed"))
+        Err(AppError::Cancelled("Not connected: the connection was not confirmed".into()))
     }
 }
 
@@ -177,6 +177,34 @@ pub async fn taxii_discover(app: AppHandle, id: i64) -> AppResult<ServerView> {
     })
 }
 
+/// The collections being synchronized now: one synchronization per collection at a time.
+static SYNCING: std::sync::Mutex<Vec<i64>> = std::sync::Mutex::new(Vec::new());
+
+/// A collection's synchronization while it runs; it ends when this is dropped (Mission 7).
+#[derive(Debug)]
+struct Syncing(i64);
+
+impl Syncing {
+    /// Refuses a second synchronization of a collection while one runs: they would both move the
+    /// same cursor.
+    fn start(collection_id: i64) -> AppResult<Syncing> {
+        let mut running = SYNCING.lock().map_err(|_| AppError::Internal("the synchronization list is unavailable".into()))?;
+        if running.contains(&collection_id) {
+            return Err(validation("This collection is already being synchronized; it continues if you leave the page"));
+        }
+        running.push(collection_id);
+        Ok(Syncing(collection_id))
+    }
+}
+
+impl Drop for Syncing {
+    fn drop(&mut self) {
+        if let Ok(mut running) = SYNCING.lock() {
+            running.retain(|id| *id != self.0);
+        }
+    }
+}
+
 /// Downloads a collection's new indicators (after the analyst confirms the connection).
 #[tauri::command]
 pub async fn taxii_sync(app: AppHandle, collection_id: i64) -> AppResult<SyncRun> {
@@ -187,8 +215,10 @@ pub async fn taxii_sync(app: AppHandle, collection_id: i64) -> AppResult<SyncRun
     if !coll.can_read {
         return Err(validation("The server does not let these credentials read this collection"));
     }
-    // refused before asking: the collection must still be on the server's own origin
+    // refused before asking: the collection must still be on the server's own origin, and only one
+    // synchronization of it runs at a time
     taxii::collection_root(&s, &coll).map_err(validation)?;
+    let _syncing = Syncing::start(collection_id)?;
     let client = client_for(&s)?;
     confirm(&app, &s, &format!("download new indicators of the collection “{}”", if coll.title.is_empty() { &coll.collection } else { &coll.title })).await?;
     let db = app.state::<Db>();
@@ -197,4 +227,21 @@ pub async fn taxii_sync(app: AppHandle, collection_id: i64) -> AppResult<SyncRun
         crate::commands::activity::log(c, "ti", &format!("TAXII synchronization: {}", coll.title), &format!("{} added, {} updated, {} revoked, {} already known, {} skipped ({})", out.added, out.updated, out.revoked, out.sighted, out.skipped, out.status), None, None, None)
     });
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Syncing;
+
+    /// Mission 7: one synchronization per collection at a time; another collection is not held up,
+    /// and the collection is free again when the synchronization ends, however it ends.
+    #[test]
+    fn a_collection_is_synchronized_once_at_a_time() {
+        let first = Syncing::start(9001).unwrap();
+        assert!(Syncing::start(9001).unwrap_err().to_string().contains("already being synchronized"));
+        let other = Syncing::start(9002).unwrap();
+        drop(first);
+        let again = Syncing::start(9001).unwrap();
+        drop((other, again));
+    }
 }

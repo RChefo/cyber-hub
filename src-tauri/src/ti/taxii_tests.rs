@@ -337,3 +337,19 @@ async fn a_credential_only_goes_to_the_servers_own_origin() {
     db.with(|c| server_save(c, &ServerInput { id: Some(sid), discovery_url: format!("{new}/taxii2/"), ..input.clone() })).unwrap();
     assert!(db.with(|c| collections_of(c, sid)).unwrap().is_empty(), "the old origin's collections are removed");
 }
+
+/// Mission 7: a collection says when the synchronization running now started, so the page can show
+/// it after being left and opened again.
+#[test]
+fn a_running_synchronization_is_visible_on_its_collection() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let sid = server_save(c, &ServerInput { name: "S".into(), discovery_url: "https://taxii.example.org/taxii2/".into(), auth: "none".into(), ..Default::default() })?;
+        c.execute("INSERT INTO taxii_collections (id, server_id, api_root, collection, title, description, can_read, media_types, discovered_at) VALUES (5, ?1, 'https://taxii.example.org/api1/', 'c1', 'C', '', 1, '[]', 't')", params![sid])?;
+        assert_eq!(collections_of(c, sid)?[0].running_since, None);
+        c.execute("INSERT INTO taxii_syncs (collection_id, started_at, status) VALUES (5, '2026-11-10T20:00:00Z', 'succeeded'), (5, '2026-11-10T21:00:00Z', 'running')", [])?;
+        assert_eq!(collections_of(c, sid)?[0].running_since.as_deref(), Some("2026-11-10T21:00:00Z"));
+        Ok(())
+    })
+    .unwrap();
+}

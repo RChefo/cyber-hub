@@ -562,6 +562,8 @@ pub struct Collection {
     pub last_error: String,
     /// indicators saved from this collection
     pub indicators: i64,
+    /// when the synchronization that is running now started (Mission 7)
+    pub running_since: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -680,7 +682,8 @@ pub fn server_save(c: &Connection, input: &ServerInput) -> AppResult<i64> {
 }
 
 const COLLECTION_COLS: &str = "c.id, c.server_id, c.api_root, c.collection, c.title, c.description, c.can_read, c.added_after, c.last_sync_at, c.last_status, c.last_error,
-    (SELECT COUNT(*) FROM ti_saved t WHERE t.feed_ref = 'taxii:' || c.id)";
+    (SELECT COUNT(*) FROM ti_saved t WHERE t.feed_ref = 'taxii:' || c.id),
+    (SELECT s.started_at FROM taxii_syncs s WHERE s.collection_id = c.id AND s.status = 'running' ORDER BY s.id DESC LIMIT 1)";
 
 fn collection_row(r: &rusqlite::Row) -> rusqlite::Result<Collection> {
     Ok(Collection {
@@ -696,6 +699,7 @@ fn collection_row(r: &rusqlite::Row) -> rusqlite::Result<Collection> {
         last_status: r.get(9)?,
         last_error: r.get(10)?,
         indicators: r.get(11)?,
+        running_since: r.get(12)?,
     })
 }
 

@@ -800,6 +800,8 @@ export interface TaxiiCollection {
   lastStatus: "" | "succeeded" | "partial" | "failed";
   lastError: string;
   indicators: number;
+  /** when the synchronization running now started (Mission 7) */
+  runningSince: string | null;
 }
 
 export interface TaxiiServer {

@@ -115,10 +115,11 @@ function CollectionRow({ c }: { c: TaxiiCollection }) {
     try {
       const r = await api.taxiiSync(c.id);
       invalidate("ti");
-      notify.success(
-        r.status === "succeeded" ? "Feed synchronized" : r.status === "partial" ? "Feed partly synchronized" : "The synchronization failed",
-        `${r.added} added, ${r.updated} updated, ${r.revoked} revoked, ${r.sighted} already saved, ${r.skipped} skipped${r.message ? ` — ${r.message}` : ""}`,
-      );
+      // the toast's tone follows the outcome (Mission 7)
+      const detail = `${r.added} added, ${r.updated} updated, ${r.revoked} revoked, ${r.sighted} already saved, ${r.skipped} skipped${r.message ? ` — ${r.message}` : ""}`;
+      if (r.status === "succeeded") notify.success("Feed synchronized", detail);
+      else if (r.status === "partial") notify.warning("Feed partly synchronized", detail);
+      else notify.error("The synchronization failed", r.message || detail);
     } catch (e) {
       notify.error("Not synchronized", e);
     } finally {
@@ -135,11 +136,15 @@ function CollectionRow({ c }: { c: TaxiiCollection }) {
           </ToneChip>
         )}
         <span className="text-muted">{pluralize(c.indicators, "indicator")}</span>
-        <Button size="sm" variant="secondary" className="ml-auto h-7 gap-1" isDisabled={!c.canRead} isPending={busy} onPress={sync}>
+        <Button size="sm" variant="secondary" className="ml-auto h-7 gap-1" isDisabled={!c.canRead || !!c.runningSince} isPending={busy} onPress={sync}>
           <RefreshCw className="size-3.5" />
           Sync
         </Button>
       </div>
+      {c.runningSince && !busy && (
+        // a synchronization started earlier, maybe before the page was left, still runs (Mission 7)
+        <p className="text-muted">Synchronizing since {formatRelative(c.runningSince)}; it goes on if you leave this page.</p>
+      )}
       {c.lastError && <p className="text-danger">{c.lastError}</p>}
       {!c.canRead && <p className="text-muted">These credentials cannot read this collection.</p>}
       <details onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
