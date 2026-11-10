@@ -38,6 +38,8 @@ pub mod fuzzing;
 mod hostile;
 #[cfg(test)]
 mod hostile_tests;
+#[cfg(test)]
+mod perf_tests;
 
 use tauri::{AppHandle, Manager};
 
