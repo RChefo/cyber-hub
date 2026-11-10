@@ -1321,6 +1321,19 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     ALTER TABLE ti_saved ADD COLUMN feed_object TEXT NOT NULL DEFAULT '';
     ALTER TABLE ti_saved ADD COLUMN feed_modified TEXT NOT NULL DEFAULT '';
     "#,
+    // 29 — ATT&CK coverage snapshots (docs/DATA_MODEL.md#attck-matrix-schema-23): the detection
+    // library's coverage at a moment, to compare with later coverage or with a project.
+    r#"
+    CREATE TABLE attack_coverage_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT NOT NULL,
+        attack_version TEXT NOT NULL,
+        taken_at TEXT NOT NULL,
+        coverage TEXT NOT NULL DEFAULT '{}',
+        techniques INTEGER NOT NULL DEFAULT 0,
+        rules INTEGER NOT NULL DEFAULT 0
+    );
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a

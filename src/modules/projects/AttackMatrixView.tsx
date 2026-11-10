@@ -15,6 +15,7 @@ import { cn, formatRelative, pluralize } from "@/lib/utils";
 import { Segmented } from "@/modules/utilities/tools/shared";
 import { activeRules, buildColumns, gaps, mitreUrl, outside, STATE_STYLE, stateOf, type Overlay, type TechniqueState } from "./attackMatrix";
 import { provenance } from "./investigation";
+import { AttackCompare, TechniqueHistory } from "./AttackCompare";
 
 function cellStyle(state: TechniqueState) {
   return state === "none" ? undefined : { backgroundColor: `${STATE_STYLE[state].color}2e` };
@@ -272,6 +273,7 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
           </ul>
         </Panel>
       )}
+      <AttackCompare projectId={project.id} layers={m.layers} archived={archived} />
       {open && <TechniqueModal id={open} project={project} archived={archived} catalog={cat} matrix={m} onClose={() => setOpen(null)} onOpen={onOpen} />}
       {confirm.element}
     </div>
@@ -464,6 +466,7 @@ function TechniqueModal({ id, project, archived, catalog, matrix, onClose, onOpe
           </section>
         )}
       </div>
+      <TechniqueHistory projectId={project.id} technique={id} />
     </AppModal>
   );
 }

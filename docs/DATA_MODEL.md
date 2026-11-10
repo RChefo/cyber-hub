@@ -1,4 +1,4 @@
-# Project data model (schema 28)
+# Project data model (schema 29)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -437,6 +437,18 @@ Projects → *Investigation* → *ATT&CK* shows the techniques of a project in A
 **Layer import.** A JSON file chosen in a native dialog (at most 10 MB and 20,000 entries), read as the Navigator's layer format specifies: format 4.x, and the older 2.x and 3.x files (`version`, domain `mitre-enterprise`). Only the Enterprise domain is accepted; Mobile and ICS layers are refused with a message. The layer's name, description, format, Navigator and ATT&CK versions are kept; a layer made for another ATT&CK version than the bundled catalog is said so. Entries are merged per technique (a layer may list a technique once per tactic: the highest score, the comments joined, enabled if any entry is); colors are kept only when they are hexadecimal colors. Technique IDs are checked against the catalog: revoked IDs count for the technique that replaced them and are listed as mapped, deprecated ones are kept with a warning, unknown ones are listed and left out, never guessed. The file is kept in the evidence vault (`source_module` `attack_layer`, the Navigator version as the tool), the same file is refused twice in a project, and removing a layer keeps its file.
 
 **Layer export.** The project's techniques as a Navigator layer (format 4.5, domain `enterprise-attack`, `versions.attack` the catalog's major version), through a native save dialog: techniques named by findings and assessed techniques, colored by state (confirmed, named by findings, hypothesis, ruled out), scored with the number of findings, with the assessment and the findings in the comment and metadata; ruled-out techniques are disabled. Imported layers are not exported. The export is recorded on the timeline. The Findings tab's export of a filtered list of findings stays as it was.
+
+**Over time** (Mission 5, `workspace/attack_history.rs`; schema 29):
+* **A technique's history** (in its dialog), oldest first, from what the project already records:
+  * the analyst's assessments (status, confidence and note, from the investigation's events);
+  * the findings that name the technique, with their current status;
+  * the matches of detection rules mapped to it, per rule, with how many are still to review;
+  * the records linked to it in the investigation.
+* **Coverage snapshots** (`attack_coverage_snapshots`): the enabled, runnable rules of the library for each technique at a moment, with the ATT&CK version, kept until deleted.
+* **Comparison** of any two sets, each keeping its meaning: *observed in the project* (findings and confirmed assessments), *hypotheses*, *detection coverage now*, a *coverage snapshot*, or an imported *layer* of the project.
+  * The result lists the techniques only in the first set, in both, and only in the second, and says what the comparison means. For example, observed techniques without coverage are detection gaps, while coverage without observation says nothing about activity.
+  * Comparing a snapshot with the coverage now shows rules added, removed or disabled.
+  * A layer compared with what was observed shows overlap with someone else's view, not activity.
 
 ## Detection engineering (schema 24)
 

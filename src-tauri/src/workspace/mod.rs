@@ -5,6 +5,7 @@
 pub mod analysis;
 pub mod apisec;
 pub mod attack;
+pub mod attack_history;
 pub mod attack_matrix;
 pub mod asvs;
 pub mod asvs_gaps;

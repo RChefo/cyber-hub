@@ -738,6 +738,42 @@ export interface PriorityReason {
   text: string;
 }
 
+/** ATT&CK over time (Mission 5). */
+export interface AttackHistoryEntry {
+  at: string;
+  kind: "assessment" | "finding" | "detection" | "link";
+  summary: string;
+  actor: string;
+  refId: number | null;
+}
+
+export interface AttackSnapshot {
+  id: number;
+  label: string;
+  attackVersion: string;
+  takenAt: string;
+  techniques: number;
+  rules: number;
+}
+
+export interface AttackDiffed {
+  id: string;
+  name: string;
+  a: string;
+  b: string;
+}
+
+export interface AttackComparison {
+  aLabel: string;
+  bLabel: string;
+  aKind: string;
+  bKind: string;
+  onlyA: AttackDiffed[];
+  onlyB: AttackDiffed[];
+  both: AttackDiffed[];
+  reading: string;
+}
+
 /** A TAXII 2.1 collection of a server (Mission 5). */
 export interface TaxiiCollection {
   id: number;

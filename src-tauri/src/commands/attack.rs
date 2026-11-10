@@ -36,6 +36,33 @@ pub async fn attack_catalog() -> AppResult<CatalogView> {
     Ok(CatalogView { version: c.version.clone(), modified: c.modified.clone(), retrieved: c.retrieved.clone(), url: c.url.clone(), notice: c.notice.clone(), tactics: c.tactics.clone(), techniques: c.techniques.clone() })
 }
 
+/// Everything that happened about one technique in a project, oldest first.
+#[tauri::command]
+pub async fn attack_technique_history(db: State<'_, Db>, project_id: i64, technique: String) -> AppResult<Vec<crate::workspace::attack_history::HistoryEntry>> {
+    db.with(|c| crate::workspace::attack_history::technique_history(c, project_id, &technique))
+}
+
+/// Two technique sets compared: observed, hypotheses, coverage, snapshot:<id>, layer:<id>.
+#[tauri::command]
+pub async fn attack_compare(db: State<'_, Db>, project_id: i64, a: String, b: String) -> AppResult<crate::workspace::attack_history::Comparison> {
+    db.with(|c| crate::workspace::attack_history::compare(c, project_id, &a, &b))
+}
+
+#[tauri::command]
+pub async fn attack_snapshots(db: State<'_, Db>) -> AppResult<Vec<crate::workspace::attack_history::Snapshot>> {
+    db.with(crate::workspace::attack_history::snapshots)
+}
+
+#[tauri::command]
+pub async fn attack_snapshot_take(db: State<'_, Db>, label: String) -> AppResult<i64> {
+    db.with(|c| crate::workspace::attack_history::snapshot_take(c, &label))
+}
+
+#[tauri::command]
+pub async fn attack_snapshot_delete(db: State<'_, Db>, id: i64) -> AppResult<()> {
+    db.with(|c| crate::workspace::attack_history::snapshot_delete(c, id))
+}
+
 #[tauri::command]
 pub async fn attack_matrix(db: State<'_, Db>, project_id: i64) -> AppResult<Matrix> {
     db.with(|c| matrix::matrix(c, project_id))

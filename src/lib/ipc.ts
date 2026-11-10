@@ -227,6 +227,11 @@ export const api = {
   attackCoverageExport: (projectId: number) => call<string | null>("attack_coverage_export", { projectId }),
   attackCatalog: () => call<T.AttackCatalog>("attack_catalog"),
   attackMatrix: (projectId: number) => call<T.AttackMatrix>("attack_matrix", { projectId }),
+  attackTechniqueHistory: (projectId: number, technique: string) => call<T.AttackHistoryEntry[]>("attack_technique_history", { projectId, technique }),
+  attackCompare: (projectId: number, a: string, b: string) => call<T.AttackComparison>("attack_compare", { projectId, a, b }),
+  attackSnapshots: () => call<T.AttackSnapshot[]>("attack_snapshots"),
+  attackSnapshotTake: (label: string) => call<number>("attack_snapshot_take", { label }),
+  attackSnapshotDelete: (id: number) => call<void>("attack_snapshot_delete", { id }),
   attackAssess: (projectId: number, technique: string, status: T.AttackStatus | null, confidence: string, note: string) =>
     call<T.AttackAssessment | null>("attack_assess", { projectId, technique, status, confidence, note }),
   attackLayerImport: (projectId: number) => call<T.AttackLayer | null>("attack_layer_import", { projectId }),
