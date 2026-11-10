@@ -122,6 +122,11 @@ pub fn is_non_public(ip: &IpAddr) -> bool {
             if s[0] == 0x64 && s[1] == 0xff9b && s[2..6].iter().all(|x| *x == 0) {
                 return v4_non_public(embedded(s[6], s[7]));
             }
+            // 64:ff9b:1::/48, the local-use NAT64 prefix (RFC 8215): a local translator may map it
+            // to internal IPv4 addresses, so it never counts as public (Mission 7)
+            if s[0] == 0x64 && s[1] == 0xff9b && s[2] == 1 {
+                return true;
+            }
             // 2002::/16 6to4
             if s[0] == 0x2002 {
                 return v4_non_public(embedded(s[1], s[2]));
@@ -234,6 +239,17 @@ pub fn detect(input: &str) -> Result<Indicator, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Mission 7: the local-use NAT64 prefix may translate to internal IPv4 addresses.
+    #[test]
+    fn the_local_use_nat64_prefix_is_not_public() {
+        let ip = |s: &str| s.parse::<IpAddr>().unwrap();
+        assert!(is_non_public(&ip("64:ff9b:1::a00:5")));
+        assert!(is_non_public(&ip("64:ff9b:1::808:808")));
+        // the well-known prefix is still judged by the IPv4 address it carries
+        assert!(!is_non_public(&ip("64:ff9b::808:808")));
+        assert!(is_non_public(&ip("64:ff9b::a00:5")));
+    }
 
     #[test]
     fn detects_indicator_types() {

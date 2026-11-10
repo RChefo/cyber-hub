@@ -7,7 +7,7 @@ import { EmptyBlock } from "@/components/ui/Feedback";
 import { SwitchInput, TextInput } from "@/components/ui/Fields";
 import { Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
-import { api, errorMessage } from "@/lib/ipc";
+import { api, errorMessage, IpcError } from "@/lib/ipc";
 import { invalidate } from "@/lib/query";
 import type { Project, ScopeCheck } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -61,20 +61,24 @@ export function ScopeTab({ project, onChanged }: { project: Project; onChanged: 
       onChanged();
       notify.success(inScope ? "Added to scope" : "Exclusion added");
     } catch (e) {
-      notify.error("Could not add scope entry", e);
+      // internal addresses are authorized in a native dialog; declining it is not an error
+      if (e instanceof IpcError && e.kind === "cancelled") notify.info("Scope unchanged", "The internal addresses were not authorized.");
+      else notify.error("Could not add scope entry", e);
     } finally {
       setAdding(false);
     }
   };
 
-  const remove = async (id: number, label: string) => {
-    if (!(await confirm.ask({ title: "Remove scope entry?", body: `“${label}” will no longer be part of this project's scope.`, confirmLabel: "Remove" }))) return;
+  const remove = async (id: number, label: string, inScope: boolean) => {
+    // removing an exclusion widens the scope: the backend asks in a native dialog instead
+    if (inScope && !(await confirm.ask({ title: "Remove scope entry?", body: `“${label}” will no longer be part of this project's scope.`, confirmLabel: "Remove" }))) return;
     try {
       await api.projectTargetDelete(id);
       invalidate("projects");
       onChanged();
     } catch (e) {
-      notify.error("Could not remove scope entry", e);
+      if (e instanceof IpcError && e.kind === "cancelled") notify.info("Scope unchanged", "The exclusion was kept.");
+      else notify.error("Could not remove scope entry", e);
     }
   };
 
@@ -150,7 +154,7 @@ export function ScopeTab({ project, onChanged }: { project: Project; onChanged: 
                   </Chip>
                   <ToneChip tone={t.inScope ? "success" : "danger"}>{t.inScope ? "In scope" : "Excluded"}</ToneChip>
                   <Tooltip delay={400}>
-                    <Button isIconOnly size="sm" variant="ghost" aria-label={`Remove ${t.value}`} onPress={() => remove(t.id, t.value)}>
+                    <Button isIconOnly size="sm" variant="ghost" aria-label={`Remove ${t.value}`} onPress={() => remove(t.id, t.value, t.inScope)}>
                       <Trash2 className="size-3.5" />
                     </Button>
                     <Tooltip.Content>Remove</Tooltip.Content>
@@ -192,7 +196,8 @@ export function ScopeTab({ project, onChanged }: { project: Project; onChanged: 
               ["*.example.com", "matches any subdomain (a.example.com, a.b.example.com) but not the apex."],
               ["10.0.0.0/24", "matches addresses and smaller ranges fully contained in it."],
               ["Exclusions", "an out-of-scope entry blocks a target even when another entry allows it."],
-              ["URLs", "authorize the URL's host."],
+              ["URLs", "authorize requests under the URL's path (same scheme, host and port), not the whole host."],
+              ["Internal addresses", "private, loopback and link-local entries are authorized in a system dialog, outside this page."],
             ].map(([k, v]) => (
               <li key={k} className="flex gap-2">
                 <Info className="mt-0.5 size-3.5 shrink-0" />

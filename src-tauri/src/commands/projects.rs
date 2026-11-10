@@ -345,9 +345,29 @@ pub async fn scope_classify(value: String) -> AppResult<(String, String)> {
 }
 
 #[tauri::command]
-pub async fn project_target_add(db: State<'_, Db>, project_id: i64, input: TargetInput) -> AppResult<i64> {
+pub async fn project_target_add(app: tauri::AppHandle, db: State<'_, Db>, project_id: i64, input: TargetInput) -> AppResult<i64> {
     let (value, kind) = scope::classify(&input.value)?;
     let note = clean("Note", &input.note, 300, false)?;
+    // authorizing non-public addresses lets the project's tools and requests reach the analyst's
+    // own network and cloud metadata services: confirmed outside the web page (Mission 7)
+    if input.in_scope && scope::covers_non_public(&value, kind) {
+        let (name, already): (String, bool) = db.with(|c| {
+            let name: String = c.query_row("SELECT name FROM projects WHERE id = ?1", params![project_id], |r| r.get(0)).optional()?.ok_or_else(|| validation("Unknown project"))?;
+            let already = c.query_row("SELECT in_scope FROM project_targets WHERE project_id = ?1 AND value = ?2", params![project_id, value], |r| r.get::<_, i64>(0)).optional()? == Some(1);
+            Ok((name, already))
+        })?;
+        if !already
+            && !crate::confirm::native(
+                &app,
+                "Authorize internal addresses",
+                format!("Add {value} to the scope of the project “{name}”?\n\nIt covers addresses that are not on the public Internet: your own network, this computer, or cloud metadata services (169.254.169.254). The project's tools and HTTP requests will be able to reach them."),
+                "Authorize",
+            )
+            .await
+        {
+            return Err(AppError::Cancelled("The scope was not changed".into()));
+        }
+    }
     db.with(|c| target_add(c, project_id, &value, kind, input.in_scope, &note))
 }
 
@@ -388,7 +408,24 @@ pub(crate) fn target_add(c: &Connection, project_id: i64, value: &str, kind: &st
 }
 
 #[tauri::command]
-pub async fn project_target_delete(db: State<'_, Db>, id: i64) -> AppResult<()> {
+pub async fn project_target_delete(app: tauri::AppHandle, db: State<'_, Db>, id: i64) -> AppResult<()> {
+    // removing an exclusion widens the scope: confirmed outside the web page (Mission 7)
+    let exclusion: Option<(String, String)> = db.with(|c| {
+        Ok(c.query_row("SELECT t.value, p.name FROM project_targets t JOIN projects p ON p.id = t.project_id WHERE t.id = ?1 AND t.in_scope = 0", params![id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .optional()?)
+    })?;
+    if let Some((value, name)) = exclusion {
+        if !crate::confirm::native(
+            &app,
+            "Remove an exclusion",
+            format!("Remove the exclusion of {value} from the project “{name}”?\n\nWhatever the rest of the scope covers, the project's tools and requests will then be able to reach it."),
+            "Remove exclusion",
+        )
+        .await
+        {
+            return Err(AppError::Cancelled("The scope was not changed".into()));
+        }
+    }
     db.with(|c| target_delete(c, id))
 }
 
@@ -854,6 +891,18 @@ pub async fn project_report_export(app: tauri::AppHandle, db: State<'_, Db>, id:
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
+
+    /// Mission 7: widening the scope toward non-public space, or removing an exclusion, is
+    /// confirmed in a native dialog; a page cannot authorize itself.
+    #[test]
+    fn widening_the_scope_is_confirmed_outside_the_page() {
+        let src = include_str!("projects.rs");
+        for (command, needle) in [("pub async fn project_target_add(", "covers_non_public"), ("pub async fn project_target_delete(", "t.in_scope = 0")] {
+            let start = src.find(command).unwrap_or_else(|| panic!("{command}"));
+            let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
+            assert!(body.contains(needle) && body.contains("crate::confirm::native("), "{command} confirms natively");
+        }
+    }
 
     fn setup(db: &Db) -> i64 {
         db.with(|c| {

@@ -91,6 +91,37 @@ pub fn classify(value: &str) -> AppResult<(String, &'static str)> {
     )))
 }
 
+/// Address ranges that are not on the public Internet: private, loopback, link-local (cloud
+/// metadata services live at 169.254.169.254 and fd00:ec2::254), shared (CGNAT), reserved and
+/// documentation space, and the IPv6 forms that embed or translate IPv4 addresses.
+const NON_PUBLIC_NETS: &[&str] = &[
+    "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24", "192.168.0.0/16", "198.18.0.0/15",
+    "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/3", "::/127", "::ffff:0:0/96", "64:ff9b::/96", "64:ff9b:1::/48", "2002::/16", "2001:db8::/32", "fc00::/7", "fe80::/10",
+    "fec0::/10", "ff00::/8",
+];
+
+/// Whether a scope entry (as `classify` returns it) covers addresses that are not on the public
+/// Internet, or names that only exist on a local network. Authorizing such an entry lets the
+/// project's tools and requests reach the analyst's own network and cloud metadata services, so it
+/// is confirmed outside the web page (Mission 7).
+pub fn covers_non_public(value: &str, kind: &str) -> bool {
+    let ip_covers = |ip: IpAddr| crate::ti::indicator::is_non_public(&ip);
+    match kind {
+        "ip" => IpAddr::from_str(value).is_ok_and(ip_covers),
+        "cidr" => IpNet::from_str(value).is_ok_and(|net| {
+            NON_PUBLIC_NETS.iter().filter_map(|n| IpNet::from_str(n).ok()).any(|np| np.contains(&net.network()) || net.contains(&np.network()))
+        }),
+        "url" => url::Url::parse(value).ok().and_then(|u| u.host().map(|h| h.to_owned())).is_some_and(|h| match h {
+            url::Host::Ipv4(v4) => ip_covers(IpAddr::V4(v4)),
+            url::Host::Ipv6(v6) => ip_covers(IpAddr::V6(v6)),
+            url::Host::Domain(d) => crate::ti::indicator::is_internal_domain(&d),
+        }),
+        "domain" => crate::ti::indicator::is_internal_domain(value),
+        "wildcard" => crate::ti::indicator::is_internal_domain(value.trim_start_matches("*.")),
+        _ => false,
+    }
+}
+
 /// A target as extracted from a command argument.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Target {
@@ -709,6 +740,21 @@ pub fn strict_targets(value: &str) -> Result<Vec<Target>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Mission 7: the entries whose authorization is confirmed outside the page.
+    #[test]
+    fn non_public_coverage_is_recognized() {
+        let covers = |v: &str| {
+            let (value, kind) = classify(v).unwrap();
+            covers_non_public(&value, kind)
+        };
+        for v in ["10.0.0.5", "127.0.0.1", "169.254.169.254", "192.168.1.0/24", "10.20.0.0/16", "0.0.0.0/0", "100.64.0.1", "::1", "fd00:ec2::254", "fe80::1", "fd00::/8", "64:ff9b:1::a00:5", "http://127.0.0.1:8080/admin", "http://[::1]/", "https://localhost/x", "printer.corp", "*.lab.internal", "10.0.0.0/7"] {
+            assert!(covers(v), "{v} covers non-public space");
+        }
+        for v in ["8.8.8.8", "203.0.114.1", "2001:4860:4860::8888", "2001:4860::/32", "93.184.0.0/16", "example.com", "*.example.com", "https://app.example.com/api/"] {
+            assert!(!covers(v), "{v} is public");
+        }
+    }
 
     fn e(value: &str, in_scope: bool) -> ScopeEntry {
         let (v, kind) = classify(value).unwrap();
