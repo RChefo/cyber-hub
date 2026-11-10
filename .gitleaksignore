@@ -13,3 +13,9 @@ e4985baed53066296245606139ce534e28c72027:.gitleaksignore:stripe-access-token:5
 # Made-up PEM private-key text in the redaction test (the line now carries an inline gitleaks:allow);
 # this entry covers the commit that added it.
 c3f26af86216f874f83bc32e04a8f2d62bb53087:src-tauri/src/redact.rs:private-key:159
+
+# A made-up AWS access key ID in the MCP result-redaction test (it checks that such values are
+# masked): not a credential. The lines now carry an inline gitleaks:allow; these entries cover
+# the commit that added them.
+57d3c482910952c34ae747997681c97208e7bdd9:src-tauri/src/mcp/ops.rs:aws-access-token:1843
+57d3c482910952c34ae747997681c97208e7bdd9:src-tauri/src/mcp/ops.rs:aws-access-token:1853

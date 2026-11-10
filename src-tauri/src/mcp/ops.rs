@@ -1840,7 +1840,7 @@ mod tests {
         let mut v = json!({
             "findings": [{
                 "description": "The page leaks Authorization: Bearer abcdefabcdefabcdef0123456789 and password=hunter2hunter2",
-                "notes": ["db at postgres://admin:S3cretPass@db.internal/app", "key AKIAABCDEFGHIJKLMNOP"],
+                "notes": ["db at postgres://admin:S3cretPass@db.internal/app", "key AKIAABCDEFGHIJKLMNOP"], // gitleaks:allow (made-up key ID)
                 "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
                 "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                 "target": "https://app.example.com/admin",
@@ -1850,7 +1850,7 @@ mod tests {
         });
         crate::redact::redact_json(&mut v);
         let s = v.to_string();
-        for secret in ["hunter2hunter2", "abcdefabcdefabcdef0123456789", "S3cretPass", "AKIAABCDEFGHIJKLMNOP"] {
+        for secret in ["hunter2hunter2", "abcdefabcdefabcdef0123456789", "S3cretPass", "AKIAABCDEFGHIJKLMNOP"] { // gitleaks:allow (made-up key ID)
             assert!(!s.contains(secret), "{secret} is masked: {s}");
         }
         // what is not a credential is kept exactly: vectors, hashes, targets, keys and numbers
