@@ -16,7 +16,8 @@ pub struct Typed {
 /// prefilled with `user` and ignored). None when the user cancels. Blocks until the dialog closes,
 /// so it is called from a blocking task, never from the UI thread.
 pub fn ask(app: &AppHandle, title: &str, message: &str, user_label: Option<&str>, user: &str) -> Result<Option<Typed>, String> {
-    imp::ask(app, title, message, user_label, user)
+    // the server's name and header in the message cannot reorder, hide or add text (Mission 7)
+    imp::ask(app, title, &crate::util::dialog_text(message), user_label, user)
 }
 
 #[cfg(windows)]

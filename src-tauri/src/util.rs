@@ -101,3 +101,53 @@ pub fn is_network_or_device_path(value: &str) -> bool {
     let sep = |c: u8| c == b'\\' || c == b'/';
     (v.len() >= 2 && sep(v[0]) && sep(v[1])) || v.starts_with(b"\\??\\")
 }
+
+/// Unicode format characters (general category Cf, Unicode 15.1): bidirectional overrides and
+/// isolates, zero-width characters, the soft hyphen and other invisible marks.
+const FORMAT_CHARS: &[(u32, u32)] = &[
+    (0x00AD, 0x00AD),
+    (0x0600, 0x0605),
+    (0x061C, 0x061C),
+    (0x06DD, 0x06DD),
+    (0x070F, 0x070F),
+    (0x0890, 0x0891),
+    (0x08E2, 0x08E2),
+    (0x180E, 0x180E),
+    (0x200B, 0x200F),
+    (0x202A, 0x202E),
+    (0x2060, 0x2064),
+    (0x2066, 0x206F),
+    (0xFEFF, 0xFEFF),
+    (0xFFF9, 0xFFFB),
+    (0x110BD, 0x110BD),
+    (0x110CD, 0x110CD),
+    (0x13430, 0x1343F),
+    (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A),
+    (0xE0001, 0xE0001),
+    (0xE0020, 0xE007F),
+];
+
+/// Whether a character can disguise text where a person reads it to decide (a native
+/// confirmation, an approval): a control character, a format character (bidi overrides,
+/// zero-width characters), a line or paragraph separator (U+2028, U+2029), or a blank-looking
+/// filler (Braille blank, Hangul fillers). Mission 7.
+pub fn is_deceptive_char(c: char) -> bool {
+    let u = c as u32;
+    c.is_control() || matches!(u, 0x2028 | 0x2029 | 0x2800 | 0x115F | 0x1160 | 0x3164 | 0xFFA0) || FORMAT_CHARS.iter().any(|(lo, hi)| (*lo..=*hi).contains(&u))
+}
+
+/// Text as a native dialog shows it: line breaks stay, every other character that could disguise
+/// it is shown as its code point (`<U+202E>`), so nothing in a value can reorder, hide or add lines
+/// to the text around it.
+pub fn dialog_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if c != '\n' && is_deceptive_char(c) {
+            out.push_str(&format!("<U+{:04X}>", c as u32));
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}

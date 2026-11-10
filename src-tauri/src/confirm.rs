@@ -25,7 +25,8 @@ static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(())
 /// explicitly chose the confirm button, after it became available.
 pub async fn native(app: &AppHandle, title: &str, message: String, confirm_label: &str) -> bool {
     let _one = ONE_AT_A_TIME.lock().await;
-    imp::ask(app, title, message, confirm_label).await
+    // values in the message (names, titles, arguments) cannot reorder, hide or add text
+    imp::ask(app, title, crate::util::dialog_text(&message), confirm_label).await
 }
 
 #[cfg(windows)]

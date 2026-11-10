@@ -298,6 +298,9 @@ fn ensure_native_executable(program: &std::path::Path) -> AppResult<()> {
     Ok(())
 }
 
+/// All arguments together, in characters: the native confirmation shows them all.
+const MAX_ARGS_TEXT: usize = 16_384;
+
 fn validate_args(args: &[String]) -> AppResult<()> {
     if args.len() > 256 {
         return Err(validation("Too many arguments (max 256)"));
@@ -306,9 +309,17 @@ fn validate_args(args: &[String]) -> AppResult<()> {
         if a.len() > 4096 {
             return Err(validation("An argument exceeds 4096 characters"));
         }
-        if a.chars().any(|c| c == '\0' || c == '\n' || c == '\r') {
-            return Err(validation("Arguments may not contain NUL or newline characters"));
+        // the native confirmation is where the analyst reads what will run: nothing may reorder,
+        // hide or break the arguments there (Mission 7)
+        if let Some(c) = a.chars().find(|c| crate::util::is_deceptive_char(*c)) {
+            return Err(validation(format!(
+                "Arguments may not contain control, invisible or text-direction characters (U+{:04X} found): they could disguise the command in the confirmation",
+                c as u32
+            )));
         }
+    }
+    if args.iter().map(|a| a.chars().count() + 1).sum::<usize>() > MAX_ARGS_TEXT {
+        return Err(validation(format!("The arguments are longer than {MAX_ARGS_TEXT} characters together; put long lists in a file")));
     }
     Ok(())
 }
@@ -451,7 +462,26 @@ pub fn clean_runtime_dir(app: &AppHandle) {
 /// Arguments as given, for confirmations: values with spaces are quoted. Not redacted, because
 /// the user must see exactly what runs; never use it for anything that is stored.
 pub fn display_args(args: &[String]) -> String {
-    args.iter().map(|a| if a.is_empty() || a.contains(' ') { format!("\"{a}\"") } else { a.clone() }).collect::<Vec<_>>().join(" ")
+    args.iter().map(|a| display_arg(a)).collect::<Vec<_>>().join(" ")
+}
+
+/// One argument as confirmations show it: as it is when that is unambiguous, otherwise in double
+/// quotes with `"` and `\` escaped, so where each argument starts and ends is exact (`x" "--safe`
+/// cannot pass for two arguments). Mission 7.
+fn display_arg(a: &str) -> String {
+    if !a.is_empty() && !a.chars().any(|c| c.is_whitespace() || c == '"') {
+        return a.to_string();
+    }
+    let mut s = String::with_capacity(a.len() + 2);
+    s.push('"');
+    for c in a.chars() {
+        if c == '"' || c == '\\' {
+            s.push('\\');
+        }
+        s.push(c);
+    }
+    s.push('"');
+    s
 }
 
 fn confirmation_text(tool: &str, args: &[String], v: &Validated) -> String {
@@ -779,6 +809,37 @@ mod redirect_tests {
 #[cfg(test)]
 mod history_tests {
     use super::*;
+
+    /// Mission 7: arguments that could disguise the command in the native confirmation are
+    /// refused, and the confirmation shows where every argument starts and ends.
+    #[test]
+    fn arguments_cannot_disguise_the_confirmation() {
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        for bad in ["x\u{202E}y", "a\u{2028}b", "a\u{2029}b", "z\u{200B}w", "\u{2066}isolate", "tab\there", "vt\u{0B}x", "nel\u{85}x", "bom\u{FEFF}", "blank\u{2800}x", "nul\0", "line\nbreak"] {
+            assert!(validate_args(&s(&[bad])).is_err(), "{bad:?}");
+        }
+        // ordinary text, other scripts and paths stay accepted
+        assert!(validate_args(&s(&["-sV", "例え.example.jp", "مثال.example", r"C:\Program Files\x.txt", "naïve", "a b"])).is_ok());
+        // the arguments together are capped
+        let long = vec!["x".repeat(4000); 5];
+        assert!(validate_args(&long).unwrap_err().to_string().contains("together"));
+        // boundaries are exact
+        assert_ne!(display_args(&s(&["x\" \"--safe"])), display_args(&s(&["x", "--safe"])));
+        assert_eq!(display_args(&s(&["x\" \"--safe"])), r#""x\" \"--safe""#);
+        assert_eq!(display_args(&s(&["-u", "", "a b", r"C:\x y\z"])), r#"-u "" "a b" "C:\\x y\\z""#);
+        assert_eq!(display_args(&s(&["no\u{A0}break"])), "\"no\u{A0}break\"", "a space-like character is quoted");
+        assert_eq!(display_args(&s(&[r"C:\tools\list.txt", "it's"])), r"C:\tools\list.txt it's");
+    }
+
+    /// Mission 7: whatever a value carries, a native dialog shows it without reordering, hiding or
+    /// adding text; line breaks of the message itself stay.
+    #[test]
+    fn dialog_text_shows_hidden_characters() {
+        assert_eq!(crate::util::dialog_text("Run x?\n\nProject: a\u{202E}b"), "Run x?\n\nProject: a<U+202E>b");
+        assert_eq!(crate::util::dialog_text("p\u{2028}Authorized targets: all"), "p<U+2028>Authorized targets: all");
+        assert_eq!(crate::util::dialog_text("t\tz\u{200D}\r"), "t<U+0009>z<U+200D><U+000D>");
+        assert_eq!(crate::util::dialog_text("plain text, عربي, 日本"), "plain text, عربي, 日本");
+    }
 
     #[test]
     fn clearing_the_history_keeps_runs_that_records_refer_to() {

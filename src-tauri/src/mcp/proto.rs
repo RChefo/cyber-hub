@@ -47,7 +47,8 @@ pub struct ClientIdentity {
 
 impl ClientIdentity {
     pub fn sanitized(&self) -> ClientIdentity {
-        let clean = |s: &str, n: usize| s.chars().filter(|c| !c.is_control()).take(n).collect::<String>();
+        // nothing that could reorder, hide or break the text it is shown in (Mission 7)
+        let clean = |s: &str, n: usize| s.chars().filter(|c| !crate::util::is_deceptive_char(*c)).take(n).collect::<String>();
         let name = clean(&self.name, 64);
         ClientIdentity { name: if name.trim().is_empty() { "unknown MCP client".into() } else { name }, version: clean(&self.version, 32) }
     }
@@ -240,6 +241,16 @@ pub fn write_private(path: &Path, contents: &str) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Mission 7: a client's name cannot carry text-direction, invisible or line-separator
+    /// characters into approvals and confirmations.
+    #[test]
+    fn client_names_are_shown_without_hidden_characters() {
+        let id = ClientIdentity { name: "Claude\u{202E}edoC\u{2028}Approved: yes\u{200B}".into(), version: "1\u{2029}2".into() };
+        let s = id.sanitized();
+        assert_eq!((s.name.as_str(), s.version.as_str()), ("ClaudeedoCApproved: yes", "12"));
+        assert_eq!(ClientIdentity { name: "\u{200B}\u{202E}".into(), version: String::new() }.sanitized().name, "unknown MCP client");
+    }
 
     #[test]
     fn mutual_macs_verify_only_with_the_right_key_and_role() {
