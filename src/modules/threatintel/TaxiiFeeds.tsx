@@ -1,5 +1,5 @@
 import { Button } from "@heroui/react";
-import { Pencil, Plus, RefreshCw, Rss, Search, Trash2 } from "lucide-react";
+import { KeyRound, Pencil, Plus, RefreshCw, Rss, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/app/store";
 import { ToneChip } from "@/components/ui/Badges";
@@ -12,6 +12,7 @@ import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { TaxiiCollection, TaxiiServer, TaxiiServerInput } from "@/lib/types";
 import { formatRelative, pluralize } from "@/lib/utils";
+import { editDropsCredential } from "./taxiiCredential";
 
 const STATUS_TONE: Record<string, "success" | "warning" | "danger" | "default"> = { succeeded: "success", partial: "warning", failed: "danger", running: "default" };
 
@@ -40,7 +41,7 @@ function ServerForm({ initial, onClose }: { initial: TaxiiServer | null; onClose
       isOpen
       onOpenChange={(o) => !o && onClose()}
       title={initial ? "Edit TAXII server" : "Add a TAXII server"}
-      description="Only the server's address and how to authenticate are kept here. A password or API key is stored in the OS credential store with cyberhub-keys taxii-set, never in the app's database."
+      description="Only the server's address and how to authenticate are kept here. A password or API key is typed into a dialog of the operating system, never into this window, and kept in the OS credential store, never in the app's database."
       footer={
         <>
           <Button variant="tertiary" onPress={onClose}>
@@ -80,6 +81,11 @@ function ServerForm({ initial, onClose }: { initial: TaxiiServer | null; onClose
           placeholder="0–100, or empty"
         />
       </div>
+      {editDropsCredential(initial, f) && (
+        <p className="rounded-lg bg-warning-soft px-3 py-2 text-[12.5px] text-warning-soft-foreground">
+          Saving deletes the stored credential: it is never sent to another address or used for another kind of authentication. Store it again after saving.
+        </p>
+      )}
       {error && (
         <div role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger-soft-foreground">
           {error}
@@ -145,6 +151,7 @@ function CollectionRow({ c }: { c: TaxiiCollection }) {
 function ServerCard({ s, onEdit }: { s: TaxiiServer; onEdit: () => void }) {
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
+  const [credBusy, setCredBusy] = useState(false);
   const discover = async () => {
     setBusy(true);
     try {
@@ -158,12 +165,34 @@ function ServerCard({ s, onEdit }: { s: TaxiiServer; onEdit: () => void }) {
     }
   };
   const remove = async () => {
-    if (!(await confirm.ask({ title: "Remove this TAXII server?", body: "Its collections and their history are removed. Indicators already saved from it stay, with their source.", confirmLabel: "Remove server" }))) return;
+    if (!(await confirm.ask({ title: "Remove this TAXII server?", body: s.credentialStored ? "Its collections, their history and its stored credential are removed. Indicators already saved from it stay, with their source." : "Its collections and their history are removed. Indicators already saved from it stay, with their source.", confirmLabel: "Remove server" }))) return;
     try {
       await api.taxiiServerDelete(s.id);
       invalidate("ti");
     } catch (e) {
       notify.error("Not removed", e);
+    }
+  };
+  const storeCredential = async () => {
+    setCredBusy(true);
+    try {
+      if (await api.taxiiAuthPrompt(s.id)) notify.success(s.credentialStored ? "Credential replaced" : "Credential stored", "In this computer's credential store");
+      invalidate("ti");
+    } catch (e) {
+      notify.error("No credential stored", e);
+    } finally {
+      setCredBusy(false);
+    }
+  };
+  const forgetCredential = async () => {
+    setCredBusy(true);
+    try {
+      if (!(await api.taxiiAuthForget(s.id))) notify.success("Credential deleted", "From this computer's credential store");
+      invalidate("ti");
+    } catch (e) {
+      notify.error("Not deleted", e);
+    } finally {
+      setCredBusy(false);
     }
   };
   return (
@@ -190,14 +219,24 @@ function ServerCard({ s, onEdit }: { s: TaxiiServer; onEdit: () => void }) {
         </div>
       </div>
       <span className="truncate font-mono text-[11.5px] text-muted">{s.discoveryUrl}</span>
-      {s.auth !== "none" &&
-        (s.credentialStored ? (
-          <span className="text-muted">{s.auth === "basic" ? `HTTP Basic as ${s.username}` : `API key in ${s.headerName}`}: credential stored in the OS credential store.</span>
-        ) : (
-          <span className="text-warning-soft-foreground">
-            No credential stored yet. Run <code className="font-mono">{s.credentialCommand}</code> on this computer, then Discover.
-          </span>
-        ))}
+      {s.auth !== "none" && (
+        <div className="flex flex-wrap items-center gap-2">
+          {s.credentialStored ? (
+            <span className="text-muted">{s.auth === "basic" ? `HTTP Basic as ${s.username}` : `API key in ${s.headerName}`}: credential stored in the OS credential store.</span>
+          ) : (
+            <span className="text-warning-soft-foreground">No credential stored yet: store one, then Discover.</span>
+          )}
+          <Button size="sm" variant="tertiary" className="h-7 gap-1" isPending={credBusy} onPress={storeCredential}>
+            <KeyRound className="size-3.5" />
+            {s.credentialStored ? "Replace credential…" : "Store credential…"}
+          </Button>
+          {s.credentialStored && (
+            <Button size="sm" variant="ghost" className="h-7" isDisabled={credBusy} onPress={forgetCredential}>
+              Forget credential…
+            </Button>
+          )}
+        </div>
+      )}
       {s.collections.length > 0 ? (
         <ul className="flex flex-col gap-1">
           {s.collections.map((c) => (

@@ -1,6 +1,6 @@
 # Credential provisioning (application owner only)
 
-Cyber Hub's provider integrations (VirusTotal, AbuseIPDB, AlienVault OTX, the abuse.ch services URLhaus / MalwareBazaar / ThreatFox, Shodan) and the optional NVD key use credentials that the **application owner** provisions. End users never see, enter, validate, replace or remove credentials, and the app has no screen or IPC command for doing so.
+Cyber Hub's provider integrations (VirusTotal, AbuseIPDB, AlienVault OTX, the abuse.ch services URLhaus / MalwareBazaar / ThreatFox, Shodan) and the optional NVD key use credentials that the **application owner** provisions. End users never see, enter, validate, replace or remove these credentials, and the app has no screen or IPC command for doing so. (TAXII servers are the analyst's own: their credential is typed into a native dialog in the app; see [TAXII servers](#taxii-servers).)
 
 ## How it works
 
@@ -68,7 +68,7 @@ Credentials are never accepted as command-line arguments, because those end up i
 
 ### TAXII servers
 
-A TAXII server that needs a password (HTTP Basic) or an API key (a header) shows its number in *Threat Intel → TAXII feeds*. Store the value for that server:
+A TAXII server's password (HTTP Basic) or API key (a header) belongs to the analyst, not to the application owner, so it is normally entered in the app: *Threat Intel → TAXII feeds → Store credential…* opens a dialog of the operating system (Windows' credential dialog, a GTK dialog on Linux) that the web view cannot read, and stores the value in the credential store ([PROVIDERS.md](PROVIDERS.md#taxii-21-feeds)). The tool does the same from a terminal, with the number the server shows in that list:
 
 ```sh
 cyberhub-keys taxii-set 3           # hidden prompt
@@ -94,6 +94,7 @@ Inside the app, Settings → Threat intelligence providers shows each provider's
 
 * **Windows:** entries are stored in Credential Manager (verified with the tool and the app).
 * **Linux:** entries are stored through the Secret Service D-Bus API in the default collection (verified with GNOME Keyring on Debian 12: `import`, `status`, the app reading the keys for lookups, `remove all`). The collection must exist and be unlocked, which a desktop login keyring provides. In a minimal session without a default collection the tool fails with "Secret Service: no result found" and stores nothing (seen in an Ubuntu 24.04 container). KWallet's Secret Service bridge was not tested.
+* **TAXII credential dialog:** on Windows it is the system's credential dialog (`CredUIPromptForWindowsCredentials`, generic credentials, never saved by Windows itself); on Linux a GTK dialog of the app's own process. Storing then needs the same credential store as the tool: on Linux a Secret Service with an unlocked default collection.
 * macOS is not supported.
 
 ## Important limits of this model

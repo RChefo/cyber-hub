@@ -185,6 +185,10 @@ export const api = {
   taxiiServerDelete: (id: number) => call<void>("taxii_server_delete", { id }),
   taxiiSyncs: (collectionId: number) => call<T.TaxiiSync[]>("taxii_syncs", { collectionId }),
   taxiiDiscover: (id: number) => call<T.TaxiiServer>("taxii_discover", { id }),
+  /** Opens a native OS dialog for the server's password or API key; the value never reaches the web view. */
+  taxiiAuthPrompt: (id: number) => call<boolean>("taxii_auth_prompt", { id }),
+  /** Deletes the stored credential after a native confirmation. */
+  taxiiAuthForget: (id: number) => call<boolean>("taxii_auth_forget", { id }),
   taxiiSync: (collectionId: number) => call<T.TaxiiSync>("taxii_sync", { collectionId }),
   riskGet: (id: number) => call<T.RiskAcceptance>("risk_get", { id }),
   riskHistory: (id: number) => call<T.RiskEvent[]>("risk_history", { id }),

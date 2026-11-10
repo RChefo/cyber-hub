@@ -34,6 +34,7 @@ mod yaml;
 
 #[cfg(feature = "fuzzing")]
 pub mod fuzzing;
+mod native_prompt;
 #[cfg(test)]
 mod hostile;
 #[cfg(test)]
@@ -295,6 +296,8 @@ pub fn run() {
             crate::commands::taxii::taxii_server_save,
             crate::commands::taxii::taxii_server_delete,
             crate::commands::taxii::taxii_syncs,
+            crate::commands::taxii::taxii_auth_prompt,
+            crate::commands::taxii::taxii_auth_forget,
             crate::commands::taxii::taxii_discover,
             crate::commands::taxii::taxii_sync,
             crate::commands::risk::risk_list,

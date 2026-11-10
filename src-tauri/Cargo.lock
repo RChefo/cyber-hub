@@ -868,6 +868,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.3.4",
  "goblin",
+ "gtk",
  "hcl-rs",
  "hickory-resolver",
  "hmac",
@@ -906,6 +907,7 @@ dependencies = [
  "windows-sys 0.60.2",
  "x509-parser",
  "yaml-rust2",
+ "zeroize",
 ]
 
 [[package]]

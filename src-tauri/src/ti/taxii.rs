@@ -10,8 +10,11 @@
 //!   a size limit, and every synchronization a page and object budget. Errors never contain the
 //!   credential.
 //! * **Credentials** (HTTP Basic, which TAXII 2.1 clients must support, or an API-key header) are
-//!   provisioned with `cyberhub-keys taxii-set <server id>` into the OS credential store, like the
-//!   other credentials: the web view never reads or writes them.
+//!   typed by the analyst into a native OS dialog (`native_prompt`: Windows' credential dialog, a
+//!   GTK dialog on Linux) and kept in the OS credential store; `cyberhub-keys taxii-set <server id>`
+//!   still stores them from a terminal. The web view never reads or writes them. A stored
+//!   credential is deleted when its server moves to another origin, changes its kind of
+//!   authentication or is removed.
 //! * **What is imported.** STIX `indicator` objects whose pattern is a simple equality (or an OR
 //!   of equalities) on an IPv4/IPv6 address, a domain name, a URL or a file hash. Other objects and
 //!   patterns are counted and skipped with the reason; nothing is guessed. Indicators become saved
@@ -64,7 +67,7 @@ pub fn check_url(raw: &str) -> Result<Url, String> {
         _ => return Err("TAXII 2.1 uses HTTPS: the URL must start with https://".into()),
     }
     if !u.username().is_empty() || u.password().is_some() {
-        return Err("Put no user name or password in the URL: credentials are provisioned with cyberhub-keys".into());
+        return Err("Put no user name or password in the URL: store the credential with Store credential… on the server's card".into());
     }
     if u.query().is_some() || u.fragment().is_some() {
         return Err("A TAXII URL has no query or fragment".into());
@@ -140,7 +143,7 @@ impl Client {
             let detail = [json.get("title").and_then(Value::as_str), json.get("description").and_then(Value::as_str)].into_iter().flatten().collect::<Vec<_>>().join(": ");
             let what = match status {
                 300..=399 => "the server redirected the request (redirects are not followed, so credentials stay with this server)".to_string(),
-                401 => "the server wants credentials, or refused them (provision them with cyberhub-keys taxii-set)".into(),
+                401 => "the server wants credentials, or refused them (store or replace the server's credential)".into(),
                 403 => "the credentials do not give access to this resource".into(),
                 404 => "not found (or not visible with these credentials)".into(),
                 406 => "the server does not speak TAXII 2.1 (it refused application/taxii+json;version=2.1)".into(),
@@ -699,8 +702,8 @@ pub fn syncs(c: &Connection, collection_id: i64) -> AppResult<Vec<SyncRun>> {
 /// The credential of a server from the OS credential store (never shown to the web view).
 pub fn auth_of(s: &Server, secret: Option<String>) -> Result<Auth, String> {
     match s.auth.as_str() {
-        "basic" => Ok(Auth::Basic { username: s.username.clone(), password: secret.ok_or_else(|| format!("No password is stored for this server: run cyberhub-keys taxii-set {}", s.id))? }),
-        "header" => Ok(Auth::Header { name: s.header_name.clone(), value: secret.ok_or_else(|| format!("No API key is stored for this server: run cyberhub-keys taxii-set {}", s.id))? }),
+        "basic" => Ok(Auth::Basic { username: s.username.clone(), password: secret.ok_or("No password is stored for this server: use Store credential… on its card")? }),
+        "header" => Ok(Auth::Header { name: s.header_name.clone(), value: secret.ok_or("No API key is stored for this server: use Store credential… on its card")? }),
         _ => Ok(Auth::None),
     }
 }

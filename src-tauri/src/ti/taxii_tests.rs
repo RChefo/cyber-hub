@@ -163,7 +163,7 @@ async fn a_feed_is_discovered_synchronized_incrementally_and_never_overrides_the
     .unwrap();
     let srv = db.with(|c| server(c, sid)).unwrap();
     // without the stored credential, nothing is sent
-    assert!(auth_of(&srv, None).unwrap_err().contains("cyberhub-keys taxii-set"));
+    assert!(auth_of(&srv, None).unwrap_err().contains("Store credential"));
     let client = Client::new(auth_of(&srv, Some("s3cr3t-pass".into())).unwrap()).unwrap();
     let d = discover(&client, &check_url(&srv.discovery_url).unwrap()).await.unwrap();
     assert_eq!(d.api_roots, vec![format!("{base}/api1/")], "an API root on another host is not used");

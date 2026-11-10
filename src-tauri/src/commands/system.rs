@@ -130,10 +130,14 @@ fn dirs_home() -> Option<PathBuf> {
 
 /* ─────────────── secrets (OS keychain) ─────────────── */
 //
-// Credentials are provisioned by the application owner with the developer-only
+// Provider credentials are provisioned by the application owner with the developer-only
 // `cyberhub-keys` tool (see docs/PROVISIONING.md). The app itself only reads them, inside
-// the Rust functions that call a provider. No IPC command can read, list, set or delete a
-// credential; the web view only learns whether a service is configured.
+// the Rust functions that call a provider. No IPC command can read or list a credential, or
+// pass one in; the web view only learns whether a service is configured.
+//
+// TAXII servers (Mission 6) are the analyst's own, so the app can also store their credential:
+// the analyst types it into a native OS dialog (`native_prompt`), never into the web view, and
+// `store_taxii_secret` writes it to the credential store. Provider keys stay provisioning-only.
 
 pub const SERVICE: &str = "dev.cyberhub.workstation";
 pub const NVD_KEY: &str = "nvd_api_key";
@@ -160,6 +164,27 @@ pub fn read_secret(name: &str) -> Option<String> {
 /// Whether a credential is present (never its value).
 pub fn secret_configured(name: &str) -> bool {
     read_secret(name).is_some()
+}
+
+/// Stores a TAXII server's credential (typed into a native dialog). Only `taxii_<id>` names.
+pub fn store_taxii_secret(server_id: i64, value: &str) -> AppResult<()> {
+    let name = crate::ti::taxii::secret_name(server_id);
+    if !is_taxii_secret(&name) {
+        return Err(validation("Unknown secret name"));
+    }
+    entry(&name)?.set_password(value).map_err(|e| AppError::Secret(e.to_string()))
+}
+
+/// Deletes a TAXII server's credential; nothing stored is not an error.
+pub fn delete_taxii_secret(server_id: i64) -> AppResult<()> {
+    let name = crate::ti::taxii::secret_name(server_id);
+    if !is_taxii_secret(&name) {
+        return Err(validation("Unknown secret name"));
+    }
+    match entry(&name)?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(AppError::Secret(e.to_string())),
+    }
 }
 
 /// Write a credential. Only compiled into the developer provisioning tool.
@@ -196,6 +221,27 @@ mod tests {
         }
         // the only credential-related information the UI gets is "configured or not"
         assert!(handlers.contains("vt_key_status") && handlers.contains("ti_providers"));
+    }
+
+    /// Mission 6: the only commands that store or delete a credential are the TAXII ones, and they
+    /// take no credential: the value is typed into a native dialog and never crosses the IPC
+    /// boundary, in either direction.
+    #[test]
+    fn taxii_credentials_are_typed_into_a_native_dialog_never_passed_in() {
+        let src = include_str!("taxii.rs");
+        for (name, signature) in [
+            ("taxii_auth_prompt", "pub async fn taxii_auth_prompt(app: AppHandle, id: i64) -> AppResult<bool>"),
+            ("taxii_auth_forget", "pub async fn taxii_auth_forget(app: AppHandle, id: i64) -> AppResult<bool>"),
+        ] {
+            assert!(src.contains(signature), "{name} keeps its signature: an id in, a yes or no out");
+        }
+        // only those two commands write or delete one
+        for (fun, calls) in [("store_taxii_secret(", 1), ("delete_taxii_secret(", 1)] {
+            assert_eq!(src.matches(fun).count(), calls, "{fun} in taxii.rs");
+            for other in [include_str!("threat_intel.rs"), include_str!("intel.rs"), include_str!("projects.rs"), include_str!("workspace.rs")] {
+                assert!(!other.contains(fun), "{fun} called elsewhere");
+            }
+        }
     }
 
     #[test]

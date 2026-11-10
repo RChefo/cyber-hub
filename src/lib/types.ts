@@ -813,7 +813,6 @@ export interface TaxiiServer {
   updatedAt: string;
   /** a credential is stored (never its value) */
   credentialStored: boolean;
-  credentialCommand: string;
   collections: TaxiiCollection[];
 }
 
