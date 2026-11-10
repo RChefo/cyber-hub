@@ -70,6 +70,18 @@ fn the_release_workflow_is_pinned_least_privileged_and_publishes_only_on_explici
             assert!(def.get("timeout-minutes").is_some(), "{name}: {job} has no timeout");
         }
     }
+    // Mission 7: no expression is expanded inside a shell script (template injection); values reach
+    // scripts through `env:` only
+    for (name, text) in [("ci.yml", ci), ("release.yml", release)] {
+        let parsed = crate::yaml::parse_one(text).unwrap();
+        for (job, def) in parsed["jobs"].as_object().unwrap() {
+            for step in def["steps"].as_array().into_iter().flatten() {
+                if let Some(run) = step["run"].as_str() {
+                    assert!(!run.contains("${{"), "{name}: {job}: an expression inside a run script: {run}");
+                }
+            }
+        }
+    }
     // least privilege, and never from a pull request
     assert_eq!(doc["permissions"], serde_json::json!({}), "release.yml grants nothing at the top level");
     assert!(doc["on"].get("pull_request").is_none() && doc["on"].get("pull_request_target").is_none());
@@ -81,8 +93,9 @@ fn the_release_workflow_is_pinned_least_privileged_and_publishes_only_on_explici
             assert_eq!(def["environment"], "release", "{job} reads secrets outside the protected environment");
         }
         if job != "validate" {
-            // nothing is built, signed or uploaded unless the owner switched publishing on
-            assert_eq!(def["if"], "vars.RELEASE_PUBLISHING == 'enabled'", "{job} runs without the release switch");
+            // nothing is built, signed or uploaded unless the owner switched publishing on and
+            // started the run by hand: a tag push only validates (Mission 7)
+            assert_eq!(def["if"], "vars.RELEASE_PUBLISHING == 'enabled' && github.event_name == 'workflow_dispatch'", "{job} runs without the release switch or a manual run");
         }
     }
     assert_eq!(jobs["validate"]["permissions"], serde_json::json!({ "contents": "read" }));

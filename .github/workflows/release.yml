@@ -5,14 +5,16 @@ name: Release
 # - Runs only for a pushed version tag (vMAJOR.MINOR.PATCH) or a manual run naming an existing tag;
 #   never for pull requests, so untrusted code never sees the signing secrets.
 # - validate: version, tag and branch checks, tests, clippy and security checks (no secrets).
-# - build and publish run only while the repository variable RELEASE_PUBLISHING is `enabled`
-#   (Settings → Secrets and variables → Actions → Variables). Without it a tag push only validates.
+# - build and publish run only in a manual run (Actions → Release → Run workflow) and only while the
+#   repository variable RELEASE_PUBLISHING is `enabled` (Settings → Secrets and variables → Actions →
+#   Variables). A tag push only validates, also while publishing is enabled: nothing is signed or
+#   uploaded without someone starting the run by hand (Mission 7).
 # - build: the only job that receives TAURI_SIGNING_PRIVATE_KEY and its password, in the protected
 #   `release` environment (add required reviewers under Settings → Environments → release).
 # - publish: generates latest.json, verifies every signature against the public key compiled into
-#   the app and uploads everything to a draft release. A tag push always stops at the draft; only a
-#   manual run with "draft" unchecked and the tag typed again in "confirm" makes it public. A
-#   failure in any job leaves nothing published.
+#   the app and uploads everything to a draft release. A run stops at the draft unless "draft" is
+#   unchecked and the tag is typed again in "confirm". A failure in any job leaves nothing
+#   published.
 # Toolchains and tools are exact versions (the same as ci.yml); src-tauri/src/ci_tests.rs fails if
 # an action, toolchain or tool floats or a gate disappears. No caches are used here (a poisoned
 # cache must not reach a signed build). See docs/UPDATER.md for the setup and the owner's checklist.
@@ -125,9 +127,14 @@ jobs:
       - name: Release switch
         env:
           PUBLISHING: ${{ vars.RELEASE_PUBLISHING }}
+          EVENT: ${{ github.event_name }}
         run: |
           if [ "$PUBLISHING" = "enabled" ]; then
-            echo "RELEASE_PUBLISHING is enabled: build and publish follow if validation passes."
+            if [ "$EVENT" = "workflow_dispatch" ]; then
+              echo "RELEASE_PUBLISHING is enabled and this is a manual run: build and publish follow if validation passes."
+            else
+              echo "::notice::A tag push only validates: start the workflow by hand to build, sign and upload."
+            fi
           else
             echo "::notice::RELEASE_PUBLISHING is not 'enabled': this run only validates; nothing is built, signed or uploaded."
           fi
@@ -170,8 +177,9 @@ jobs:
   build:
     name: Build and sign (${{ matrix.name }})
     needs: validate
-    # explicit opt-in: nothing is built or signed unless the owner enabled publishing
-    if: vars.RELEASE_PUBLISHING == 'enabled'
+    # explicit opt-in: nothing is built or signed unless the owner enabled publishing and started
+    # the run by hand (a tag push only validates)
+    if: vars.RELEASE_PUBLISHING == 'enabled' && github.event_name == 'workflow_dispatch'
     timeout-minutes: 120
     environment: release
     permissions:
@@ -248,7 +256,7 @@ jobs:
   publish:
     name: Publish
     needs: [validate, build]
-    if: vars.RELEASE_PUBLISHING == 'enabled'
+    if: vars.RELEASE_PUBLISHING == 'enabled' && github.event_name == 'workflow_dispatch'
     timeout-minutes: 45
     runs-on: ubuntu-24.04
     environment: release
@@ -322,8 +330,7 @@ jobs:
           echo "Every asset digest matches SHA256SUMS.txt."
 
       - name: Publish the release
-        # a tag push always stops at the draft; a manual run publishes only with draft unchecked
-        # and the tag typed again
+        # a run stops at the draft unless draft is unchecked and the tag is typed again
         if: github.event_name == 'workflow_dispatch' && inputs.draft == false && inputs.confirm == inputs.tag
         env:
           GH_TOKEN: ${{ github.token }}
