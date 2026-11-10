@@ -641,6 +641,11 @@ pub async fn osint_export_image(app: AppHandle, db: State<'_, Db>, graph_id: i64
             if !data.trim_start().starts_with("<svg") && !data.trim_start().starts_with("<?xml") {
                 return Err(validation("Invalid SVG data"));
             }
+            // the page supplies the drawing: only an inert one is saved, as for investigation
+            // exports, since an SVG file runs scripts and loads links when it is opened (Mission 7)
+            if !crate::commands::investigation::svg_is_inert(&data) {
+                return Err(validation("The SVG contains scripts, links or other active content and was not saved"));
+            }
             data.into_bytes()
         }
         _ => return Err(validation("Unknown image format")),
@@ -772,6 +777,15 @@ pub async fn osint_import_discard(imports: State<'_, ImportState>, token: String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Mission 7: the graph image export saves a page-supplied SVG only when it is inert.
+    #[test]
+    fn graph_svg_exports_are_checked_for_active_content() {
+        let src = include_str!("osint.rs");
+        let start = src.find("pub async fn osint_export_image(").unwrap();
+        let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
+        assert!(body.contains("svg_is_inert(&data)"));
+    }
 
     #[test]
     fn base64_decodes_png_data_urls() {

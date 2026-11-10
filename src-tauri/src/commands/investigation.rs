@@ -216,7 +216,7 @@ pub async fn timeline_export(app: AppHandle, project_id: i64, query: timeline::Q
 
 /// True when an SVG only draws: the drawing elements the graph export writes, no scripts, event
 /// handlers, embedded documents, style sheets or links, and no references outside the image.
-fn svg_is_inert(svg: &str) -> bool {
+pub(crate) fn svg_is_inert(svg: &str) -> bool {
     use once_cell::sync::Lazy;
     use regex::Regex;
     static EVENT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?:^|[\s/])on[a-z]+\s*=").expect("event attribute"));
@@ -275,6 +275,11 @@ fn svg_is_inert(svg: &str) -> bool {
         if EVENT.is_match(&attrs) || ["href", "javascript:", "http:", "https:", "data:", "file:", "@import"].iter().any(|x| attrs.contains(x)) {
             return false;
         }
+        // a character reference or a CSS escape could spell what the checks above look for
+        // (`&#117;rl(`, `ur\l(`); the exports never write either in an attribute (Mission 7)
+        if attrs.contains("&#") || attrs.contains('\\') {
+            return false;
+        }
         // url() only to something inside the image (an arrow marker)
         let mut k = 0;
         while let Some(p) = attrs[k..].find("url(") {
@@ -298,6 +303,10 @@ mod tests {
         for bad in [
             r#"<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>"#,
             r#"<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>"#,
+            // Mission 7: references and escapes that spell url() or a scheme
+            r##"<svg xmlns="http://www.w3.org/2000/svg"><rect fill="&#117;rl(//x.example/a.svg#p)"/></svg>"##,
+            r##"<svg xmlns="http://www.w3.org/2000/svg"><rect fill="&#x75;rl(//x.example/a.svg#p)"/></svg>"##,
+            r#"<svg xmlns="http://www.w3.org/2000/svg"><rect style="fill:ur\l(//x.example/a.svg)"/></svg>"#,
             r#"<svg xmlns="http://www.w3.org/2000/svg"><g title="a>b" onclick="x()"></g></svg>"#,
             r#"<svg xmlns="http://www.w3.org/2000/svg"><a href="https://example.com"><text>x</text></a></svg>"#,
             r#"<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div/></foreignObject></svg>"#,
