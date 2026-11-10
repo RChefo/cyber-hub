@@ -39,7 +39,14 @@ class PageErrorBoundary extends Component<{ children: ReactNode; resetKey: strin
     if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null });
   }
   render() {
-    if (this.state.error) return <ErrorBlock message={`This page failed to render: ${this.state.error.message}`} />;
+    // a Retry and what to do when it keeps failing (Mission 7)
+    if (this.state.error)
+      return (
+        <ErrorBlock
+          message={`This page failed to render: ${this.state.error.message}. Retry, or open another page from the sidebar; if it keeps failing, note what you did before it happened.`}
+          onRetry={() => this.setState({ error: null })}
+        />
+      );
     return this.props.children;
   }
 }
@@ -49,7 +56,7 @@ function Main() {
   const Page = PAGES[route.page];
   const key = `${route.page}:${JSON.stringify(route.params ?? {})}`;
   return (
-    <main id="main-scroll" className="scroll-area flex-1 px-6 pt-5 pb-10">
+    <main id="main-scroll" tabIndex={-1} aria-label="Page content" className="scroll-area flex-1 px-6 pt-5 pb-10 focus:outline-none">
       <div className="mx-auto max-w-[1480px]">
         <PageErrorBoundary resetKey={key}>
           <Suspense fallback={<LoadingRows rows={6} />}>
@@ -64,6 +71,13 @@ function Main() {
 export default function App() {
   return (
     <AppProvider>
+      <button
+        type="button"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:text-[13px] focus:shadow-lg"
+        onClick={() => document.getElementById("main-scroll")?.focus()}
+      >
+        Skip to content
+      </button>
       <div className="flex h-full">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">

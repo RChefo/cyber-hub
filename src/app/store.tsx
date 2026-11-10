@@ -55,7 +55,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const navigate = useCallback((page: PageId, params?: Record<string, string>) => {
     setRoute({ page, params });
-    document.getElementById("main-scroll")?.scrollTo({ top: 0 });
+    const main = document.getElementById("main-scroll");
+    main?.scrollTo({ top: 0 });
+    // keyboard focus follows the navigation to the page's content, so it does not stay in the
+    // sidebar about 30 Tab presses away (Mission 7)
+    requestAnimationFrame(() => main?.focus({ preventScroll: true }));
   }, []);
 
   const toolMap = useMemo(() => new Map((catalog.data?.tools ?? []).map((t) => [t.id, t])), [catalog.data]);
