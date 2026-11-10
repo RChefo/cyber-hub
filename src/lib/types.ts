@@ -1879,8 +1879,46 @@ export interface CaptureReport {
   tls: { name: string; server: string; count: number }[];
   credentials: { protocol: string; client: string; server: string; user: string; secretLength: number }[];
   issues: CaptureIssue[];
+  hunting: CaptureHunting;
   undecoded: number;
   warnings: string[];
+}
+
+/** Connections on a regular schedule: a hunting lead (updaters and health checks keep schedules too). */
+export interface CaptureBeacon {
+  client: string;
+  server: string;
+  protocol: string;
+  port: number;
+  connections: number;
+  /** median seconds between connections */
+  interval: number;
+  /** median distance from the interval, in percent of it */
+  jitter: number;
+  onSchedule: number;
+  first: number;
+  last: number;
+  regularity: "regular" | "jittered";
+  note: string | null;
+}
+
+export interface CaptureDnsLead {
+  rule: "DNS-TUNNEL" | "DNS-LONG" | "DNS-TXT" | "DNS-NXDOMAIN";
+  title: string;
+  detail: string;
+  /** what else the pattern can be */
+  benign: string;
+  subject: string;
+  clients: string[];
+  examples: string[];
+  count: number;
+  techniques: string[];
+}
+
+export interface CaptureHunting {
+  beacons: CaptureBeacon[];
+  dns: CaptureDnsLead[];
+  notes: string[];
 }
 
 export interface LogDetection {

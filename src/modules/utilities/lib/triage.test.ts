@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { captureFinding, captureSpan, formatBytes, logFinding } from "./triage";
+import { beaconFinding, beaconLine, captureFinding, captureSpan, dnsLeadFinding, duration, formatBytes, logFinding } from "./triage";
 
 describe("triage helpers", () => {
   it("builds findings from capture issues and log detections", () => {
@@ -40,3 +40,24 @@ describe("Windows event log findings", () => {
   });
 });
 
+
+describe("hunting leads", () => {
+  const beacon = { client: "10.0.0.5", server: "203.0.113.9:443", protocol: "tcp", port: 443, connections: 30, interval: 45, jitter: 1.2, onSchedule: 100, first: 1_700_000_000, last: 1_700_001_305, regularity: "regular" as const, note: null };
+
+  it("say a schedule plainly", () => {
+    expect([duration(45), duration(300), duration(7800), duration(7200)]).toEqual(["45 s", "5 min", "2 h 10 min", "2 h"]);
+    expect(beaconLine(beacon)).toBe("10.0.0.5 → 203.0.113.9:443 (tcp): 30 connections about every 45 s (jitter 1.2%, 100% on schedule) over 22 min");
+  });
+
+  it("become hypotheses under review, without ATT&CK tags", () => {
+    const f = beaconFinding(3, "lan.pcap", beacon);
+    expect([f.status, f.confidence, f.severity, f.category]).toEqual(["under_review", "low", "info", "Threat hunting"]);
+    expect(f.tags).toEqual(["pcap", "hunting", "beacon"]);
+    expect(f.description).toContain("updaters, time synchronization, health checks");
+    expect(f.technicalDetails).toContain("If confirmed as command and control, ATT&CK T1071");
+    const d = dnsLeadFinding(3, "lan.pcap", { rule: "DNS-TUNNEL", title: "60 long, random-looking names under t.example", detail: "Data encoded into names.", benign: "CDNs and telemetry.", subject: "t.example", clients: ["10.0.0.9"], examples: ["abc.t.example"], count: 60, techniques: ["T1071.004", "T1572"] });
+    expect(d.tags).toEqual(["pcap", "hunting", "dns"]);
+    expect(d.description).toContain("Also possible: CDNs and telemetry.");
+    expect(d.technicalDetails).toContain("If confirmed, ATT&CK T1071.004 and T1572 would apply.");
+  });
+});

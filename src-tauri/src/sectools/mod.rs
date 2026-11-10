@@ -10,6 +10,7 @@ pub mod iam;
 pub mod linux_persist;
 pub mod logs;
 pub mod pcap;
+pub mod pcap_hunt;
 pub mod containers;
 pub mod secrets;
 pub mod tls;

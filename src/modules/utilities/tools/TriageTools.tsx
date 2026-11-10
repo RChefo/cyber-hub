@@ -9,9 +9,9 @@ import { SelectInput, TextAreaInput } from "@/components/ui/Fields";
 import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { CaptureScan, FindingInput, LogScan, UtilityModule } from "@/lib/types";
+import type { CaptureReport, CaptureScan, FindingInput, LogScan, UtilityModule } from "@/lib/types";
 import { cn, pluralize } from "@/lib/utils";
-import { captureFinding, captureSpan, formatBytes, logFinding } from "../lib/triage";
+import { beaconFinding, beaconLine, captureFinding, captureSpan, dnsLeadFinding, formatBytes, logFinding } from "../lib/triage";
 import { PrivacyNote } from "./shared";
 
 /** Where recorded findings come from: the utility, what it analysed, the file's token from the
@@ -221,6 +221,7 @@ export function CaptureTool() {
               ))}
             </section>
           )}
+          <HuntingLeads key={scan.token ?? scan.file} scan={scan} r={r} />
           <section className="flex flex-col gap-1.5">
             <h3 className="text-[13.5px] font-medium">Cleartext credentials ({r.credentials.length})</h3>
             <Table head={["Protocol", "Client", "Server", "User", "Secret"]} rows={r.credentials.map((c) => [c.protocol, c.client, c.server, c.user || "(unknown)", `${c.secretLength} characters, not shown`])} />
@@ -252,6 +253,72 @@ export function CaptureTool() {
       )}
       {!scan && !error && <EmptyBlock compact icon={Network} title="No capture open" description="Captures from Wireshark, tcpdump or a network tap: pcap and pcapng, up to 2 GB." />}
     </div>
+  );
+}
+
+/** Beacon-like schedules and DNS patterns of a capture: leads, each with what else it can be. The
+ * analyst records the ones to investigate as findings under review. */
+function HuntingLeads({ scan, r }: { scan: CaptureScan; r: CaptureReport }) {
+  const h = r.hunting;
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const toggle = (k: string) => setPicked((p) => (p.has(k) ? new Set([...p].filter((x) => x !== k)) : new Set([...p, k])));
+  const total = h.beacons.length + h.dns.length;
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="flex-1 text-[13.5px] font-medium">Hunting leads ({total})</h3>
+        {total > 0 && (
+          <RecordBar
+            picked={picked.size}
+            build={(pid) => [...h.beacons.flatMap((b, i) => (picked.has(`b${i}`) ? [beaconFinding(pid, scan.file, b)] : [])), ...h.dns.flatMap((d, i) => (picked.has(`d${i}`) ? [dnsLeadFinding(pid, scan.file, d)] : []))]}
+            onDone={() => setPicked(new Set())}
+            source={{ module: "pcap_triage", subject: scan.file, token: scan.token, report: () => r }}
+          />
+        )}
+      </div>
+      <p className="text-[12.5px] text-muted">Patterns worth a look, not findings: connections on a regular schedule (beacon-like timing) and DNS names that look like tunnels or generated domains. Each says what else it can be. Record the ones you will investigate; they become findings under review.</p>
+      {h.notes.map((n) => (
+        <p key={n} className="text-[12.5px] text-warning">
+          {n}
+        </p>
+      ))}
+      {total === 0 && <span className="text-[12.5px] text-muted">No regular schedule over two minutes or more, and no DNS pattern, in this capture.</span>}
+      {h.beacons.map((b, i) => (
+        <div key={`b${i}`} className={cn("flex items-start gap-2.5 rounded-[8px] px-2.5 py-2", picked.has(`b${i}`) ? "bg-accent-soft/40" : "bg-white/[0.02]")}>
+          <Pick label={`Select ${b.client} to ${b.server}`} selected={picked.has(`b${i}`)} onToggle={() => toggle(`b${i}`)} />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-[12.5px]">
+            <div className="flex flex-wrap items-center gap-2">
+              <ToneChip tone={b.note ? "default" : "warning"} dot={false} className="text-[11px]">
+                {b.regularity === "regular" ? "regular schedule" : "schedule with jitter"}
+              </ToneChip>
+              <span className="font-mono">{beaconLine(b)}</span>
+            </div>
+            <p className="text-muted">{b.note ? `${b.note}.` : "Beacons call home on a schedule; so do updaters, time sync and health checks. Check the process on the client and the destination."}</p>
+          </div>
+        </div>
+      ))}
+      {h.dns.map((d, i) => (
+        <div key={`d${i}`} className={cn("flex items-start gap-2.5 rounded-[8px] px-2.5 py-2", picked.has(`d${i}`) ? "bg-accent-soft/40" : "bg-white/[0.02]")}>
+          <Pick label={`Select ${d.title}`} selected={picked.has(`d${i}`)} onToggle={() => toggle(`d${i}`)} />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-[12.5px]">
+            <div className="flex flex-wrap items-center gap-2">
+              <ToneChip tone="warning" dot={false} className="text-[11px]">
+                {d.rule}
+              </ToneChip>
+              <span className="text-[13px] font-medium">{d.title}</span>
+              {d.techniques.map((t) => (
+                <span key={t} className="font-mono text-[11px] text-muted">
+                  if confirmed: {t}
+                </span>
+              ))}
+            </div>
+            <p className="text-muted">{d.detail}</p>
+            <p className="text-muted">Also possible: {d.benign}</p>
+            <p className="font-mono text-[11.5px] break-all text-muted">{d.examples.slice(0, 5).join(" · ")}</p>
+          </div>
+        </div>
+      ))}
+    </section>
   );
 }
 

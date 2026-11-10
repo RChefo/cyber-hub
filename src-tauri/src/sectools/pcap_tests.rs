@@ -210,3 +210,59 @@ fn helpers() {
     // a DNS compression pointer that points forward is refused (no loops)
     assert!(dns_name(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xc0, 0x0e, 3, b'a', b'b', b'c', 0], 12).is_none());
 }
+
+fn syn(sport: u16, dport: u16, flags: u8) -> Vec<u8> {
+    let mut t = tcp(sport, dport, &[]);
+    t[13] = flags;
+    t
+}
+
+fn dns_query(name: &str, qtype: u16) -> Vec<u8> {
+    let mut m = vec![0x00, 0x01, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0];
+    for label in name.split('.') {
+        m.push(label.len() as u8);
+        m.extend_from_slice(label.as_bytes());
+    }
+    m.push(0);
+    m.extend_from_slice(&qtype.to_be_bytes());
+    m.extend_from_slice(&[0, 1]);
+    m
+}
+
+fn timed_pcap(frames: &[(f64, Vec<u8>)]) -> Vec<u8> {
+    let mut f = vec![0xd4, 0xc3, 0xb2, 0xa1, 2, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0, 0, 1, 0, 0, 0];
+    for (t, fr) in frames {
+        f.extend_from_slice(&(t.floor() as u32).to_le_bytes());
+        f.extend_from_slice(&(((t - t.floor()) * 1e6) as u32).to_le_bytes());
+        f.extend_from_slice(&(fr.len() as u32).to_le_bytes());
+        f.extend_from_slice(&(fr.len() as u32).to_le_bytes());
+        f.extend_from_slice(fr);
+    }
+    f
+}
+
+#[test]
+fn hunting_leads_come_from_the_capture_apart_from_its_issues() {
+    let remote = [203, 0, 113, 9];
+    let mut frames = Vec::new();
+    for i in 0..30u16 {
+        let t = 1_700_000_000.0 + f64::from(i) * 45.0 + if i % 3 == 0 { 0.8 } else { 0.0 };
+        frames.push((t, eth(0x0800, &ipv4(6, CLIENT, remote, &syn(50_000 + i, 443, 0x02)))));
+        // the server's SYN-ACK and the data that follows are not connection starts
+        frames.push((t + 0.05, eth(0x0800, &ipv4(6, remote, CLIENT, &syn(443, 50_000 + i, 0x12)))));
+        frames.push((t + 0.1, eth(0x0800, &ipv4(6, CLIENT, remote, &tcp(50_000 + i, 443, b"x")))));
+    }
+    for i in 0..40u16 {
+        let name = format!("{:032x}.data.tunnel.example", (u128::from(i) + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15_f39c_c060_5ced_c835));
+        frames.push((1_700_000_100.0 + f64::from(i), eth(0x0800, &ipv4(17, CLIENT, [10, 0, 0, 53], &udp(53_000 + i, 53, &dns_query(&name, 16))))));
+    }
+    frames.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let r = analyze(&timed_pcap(&frames)[..]).unwrap();
+    assert_eq!(r.hunting.beacons.len(), 1, "{:?}", r.hunting.beacons);
+    let b = &r.hunting.beacons[0];
+    assert_eq!((b.client.as_str(), b.server.as_str(), b.connections, b.regularity.as_str()), ("10.0.0.5", "203.0.113.9:443", 30, "regular"));
+    assert!((b.interval - 45.0).abs() < 1.0, "{b:?}");
+    let rules: Vec<(&str, &str)> = r.hunting.dns.iter().map(|d| (d.rule.as_str(), d.subject.as_str())).collect();
+    assert!(rules.contains(&("DNS-TUNNEL", "tunnel.example")) && rules.contains(&("DNS-TXT", "tunnel.example")), "{rules:?}");
+    assert!(r.issues.iter().all(|i| !i.rule.contains("DNS") && !i.rule.contains("BEACON")), "leads are not issues");
+}

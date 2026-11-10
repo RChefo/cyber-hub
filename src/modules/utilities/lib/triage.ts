@@ -1,4 +1,4 @@
-import type { CaptureIssue, FindingInput, LogDetection } from "@/lib/types";
+import type { CaptureBeacon, CaptureDnsLead, CaptureIssue, FindingInput, LogDetection } from "@/lib/types";
 
 const cap = (s: string, n = 200) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
@@ -17,6 +17,57 @@ export function captureFinding(projectId: number, file: string, i: CaptureIssue)
     technicalDetails: `Rule ${i.rule} (packet capture triage).`,
     remediation: i.remediation,
     tags: ["pcap"],
+  };
+}
+
+const when = (t: number) => new Date(t * 1000).toISOString().replace(".000Z", "Z");
+
+/** Seconds as a short duration: 45 s, 5 min, 2 h 10 min. */
+export function duration(s: number): string {
+  if (s < 90) return `${Math.round(s)} s`;
+  if (s < 5400) return `${Math.round(s / 60)} min`;
+  const h = Math.floor(s / 3600);
+  const m = Math.round((s - h * 3600) / 60);
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+/** A schedule in a sentence. */
+export function beaconLine(b: CaptureBeacon): string {
+  return `${b.client} → ${b.server} (${b.protocol}): ${b.connections} connections about every ${duration(b.interval)} (jitter ${b.jitter}%, ${b.onSchedule}% on schedule) over ${duration(b.last - b.first)}`;
+}
+
+/** The finding a beacon-like schedule becomes when the analyst records it: a hypothesis to
+ * check, under review with low confidence. No technique is tagged: timing alone shows none. */
+export function beaconFinding(projectId: number, file: string, b: CaptureBeacon): FindingInput {
+  return {
+    projectId,
+    title: cap(`Connections on a regular schedule: ${b.client} → ${b.server} (${file})`),
+    severity: "info",
+    status: "under_review",
+    category: "Threat hunting",
+    confidence: "low",
+    description: `${beaconLine(b)}, from ${when(b.first)} to ${when(b.last)}.\n\nA regular schedule is how implants call home (beaconing), but updaters, time synchronization, health checks and monitoring keep schedules too.${b.note ? ` ${b.note}.` : ""} Check what runs on ${b.client} and who ${b.server} is before treating it as command and control.`,
+    affectedTarget: b.client,
+    technicalDetails: `Hunting lead from the packet capture triage of ${file}: ${b.regularity} timing, median interval ${b.interval} s. If confirmed as command and control, ATT&CK T1071 (Application Layer Protocol) would apply.`,
+    remediation: "Identify the process behind the connections on the client; block the destination and investigate the host if it is not a known service.",
+    tags: ["pcap", "hunting", "beacon"],
+  };
+}
+
+/** The finding a DNS pattern becomes when the analyst records it: a hypothesis to check. */
+export function dnsLeadFinding(projectId: number, file: string, d: CaptureDnsLead): FindingInput {
+  return {
+    projectId,
+    title: cap(`${d.title} (${file})`),
+    severity: "info",
+    status: "under_review",
+    category: "Threat hunting",
+    confidence: "low",
+    description: `${d.detail}\n\nAlso possible: ${d.benign}\n\nClients: ${d.clients.join(", ") || "—"}\nExamples:\n${d.examples.map((e) => `- ${e}`).join("\n")}`,
+    affectedTarget: d.subject,
+    technicalDetails: `Hunting lead ${d.rule} from the packet capture triage of ${file}. If confirmed, ATT&CK ${d.techniques.join(" and ")} would apply.`,
+    remediation: "Look at the process that sent the queries and at the domain's owner and history before blocking it or treating it as an exfiltration channel.",
+    tags: ["pcap", "hunting", "dns"],
   };
 }
 

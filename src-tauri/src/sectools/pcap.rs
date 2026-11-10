@@ -9,6 +9,8 @@
 //!   length of its secret.
 //! * **Bounded.** The file is streamed, at most [`MAX_PACKETS`] packets are read, and every table
 //!   is capped; the report says when a limit was reached.
+//! * **Hunting leads** (`pcap_hunt.rs`): connections on a regular schedule and DNS patterns of
+//!   tunneling or generated domains, kept apart from the issues and reported as leads.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::Read;
@@ -114,6 +116,8 @@ pub struct Report {
     pub tls: Vec<TlsServer>,
     pub credentials: Vec<Credential>,
     pub issues: Vec<Issue>,
+    /// beacon-like timing and DNS patterns: leads to check, not findings
+    pub hunting: super::pcap_hunt::Hunting,
     /// packets not decoded (other protocols, truncated or fragments)
     pub undecoded: u64,
     pub warnings: Vec<String>,
@@ -216,6 +220,8 @@ struct Segment<'a> {
     src: IpAddr,
     dst: IpAddr,
     tcp: bool,
+    /// a TCP SYN without ACK: a connection attempt
+    syn: bool,
     sport: u16,
     dport: u16,
     payload: &'a [u8],
@@ -267,9 +273,9 @@ fn transport(ip: &[u8]) -> Option<Segment<'_>> {
     match proto {
         6 => {
             let off = ((*rest.get(12)? >> 4) as usize) * 4;
-            Some(Segment { src, dst, tcp: true, sport: be16(rest, 0)?, dport: be16(rest, 2)?, payload: rest.get(off.max(20)..).unwrap_or(&[]) })
+            Some(Segment { src, dst, tcp: true, syn: rest.get(13).is_some_and(|f| f & 0x12 == 0x02), sport: be16(rest, 0)?, dport: be16(rest, 2)?, payload: rest.get(off.max(20)..).unwrap_or(&[]) })
         }
-        17 => Some(Segment { src, dst, tcp: false, sport: be16(rest, 0)?, dport: be16(rest, 2)?, payload: rest.get(8..).unwrap_or(&[]) }),
+        17 => Some(Segment { src, dst, tcp: false, syn: false, sport: be16(rest, 0)?, dport: be16(rest, 2)?, payload: rest.get(8..).unwrap_or(&[]) }),
         _ => None,
     }
 }
@@ -398,6 +404,7 @@ struct Acc {
     pending_user: HashMap<(String, String), (String, String)>,
     cleartext_ports: BTreeMap<u16, BTreeSet<String>>,
     capped: bool,
+    hunt: super::pcap_hunt::Hunt,
 }
 
 const CLEARTEXT: &[(u16, &str)] = &[(21, "FTP"), (23, "Telnet"), (69, "TFTP"), (110, "POP3"), (143, "IMAP"), (161, "SNMP"), (512, "rexec"), (513, "rlogin"), (514, "rsh"), (389, "LDAP"), (5900, "VNC")];
@@ -431,6 +438,10 @@ impl Acc {
         // the client is the side with the higher (ephemeral) port
         let (client, server, port) = if seg.sport > seg.dport { (endpoint(&seg.src, seg.sport), endpoint(&seg.dst, seg.dport), seg.dport) } else { (endpoint(&seg.dst, seg.dport), endpoint(&seg.src, seg.sport), seg.sport) };
         let client_ip = client.rsplit_once(':').map(|(h, _)| h.trim_matches(['[', ']']).to_string()).unwrap_or_default();
+        if seg.sport > seg.dport {
+            // from the client to the server
+            self.hunt.packet(&client_ip, &server, seg.tcp, port, ts, seg.syn);
+        }
         let key = (client_ip.clone(), server.clone(), seg.tcp, port);
         if self.convs.len() < MAX_KEYS || self.convs.contains_key(&key) {
             let c = self.convs.entry(key).or_default();
@@ -449,7 +460,12 @@ impl Acc {
             return;
         }
         if !seg.tcp && (seg.sport == 53 || seg.dport == 53) {
-            if let Some((name, kind, answers, _)) = dns(p) {
+            if let Some((name, kind, answers, response)) = dns(p) {
+                if response {
+                    self.hunt.response(&client_ip, &name, be16(p, 2).unwrap_or(0) & 0x000f);
+                } else {
+                    self.hunt.query(&client_ip, &name, &kind);
+                }
                 if self.dns.len() < MAX_KEYS || self.dns.contains_key(&(name.clone(), kind.clone())) {
                     let e = self.dns.entry((name, kind)).or_default();
                     e.1 += 1;
@@ -547,6 +563,7 @@ impl Acc {
 
     fn finish(mut self) -> Report {
         let mut r = std::mem::take(&mut self.report);
+        r.hunting = std::mem::take(&mut self.hunt).finish();
         let mut hosts: Vec<HostStat> = self.hosts.into_iter().map(|(ip, (packets, bytes, peers))| HostStat { ip: ip.to_string(), packets, bytes, peers: peers.len() }).collect();
         hosts.sort_by(|a, b| b.bytes.cmp(&a.bytes).then(a.ip.cmp(&b.ip)));
         hosts.truncate(MAX_ROWS);
