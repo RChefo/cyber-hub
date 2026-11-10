@@ -1,16 +1,15 @@
 import { Button, Dropdown, Tabs } from "@heroui/react";
-import { ArrowLeft, ChevronDown, ClipboardCopy, FileDown, FileText, Pencil, Play, Save, SquareTerminal, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, FileDown, FileText, Pencil, Play, Save, SquareTerminal, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/app/store";
 import { SeverityBarChart } from "@/components/charts/SeverityBarChart";
 import { EXEC_STATUS_META, PROJECT_STATUS_META, ToneChip } from "@/components/ui/Badges";
-import { CodeBlock, CopyButton } from "@/components/ui/Code";
-import { AppModal } from "@/components/ui/Dialogs";
+import { CopyButton } from "@/components/ui/Code";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/ui/Feedback";
 import { TextAreaInput } from "@/components/ui/Fields";
 import { Panel, Stat } from "@/components/ui/Panel";
 import { FeaturedIcon } from "@/components/vendor/untitledui/FeaturedIcon";
-import { copyCommand, copyText, notify } from "@/lib/actions";
+import { copyCommand, notify } from "@/lib/actions";
 import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { Finding, Project, ProjectStatus, RecordRef } from "@/lib/types";
@@ -300,7 +299,6 @@ export function ProjectDetail({ id }: { id: number }) {
     if (r.kind === "finding") setFocusFinding(r.id);
   };
   const [editOpen, setEditOpen] = useState(false);
-  const [report, setReport] = useState<string | null>(null);
   const project = useQuery(["projects"], () => api.projectGet(id), [id], runtime);
   const findings = useQuery(["findings"], () => api.findingsList(id), [id], runtime);
 
@@ -338,26 +336,6 @@ export function ProjectDetail({ id }: { id: number }) {
       navigate("projects");
     } catch (e) {
       notify.error("Could not delete project", e);
-    }
-  };
-
-  const exportReport = async () => {
-    try {
-      const md = await api.projectReport(p.id);
-      setReport(md);
-      await copyText(md, "Markdown report copied to clipboard");
-    } catch (e) {
-      notify.error("Could not build the report", e);
-    }
-  };
-
-  // the backend opens the system save dialog and writes the file; the page never sees the path
-  const saveReport = async () => {
-    try {
-      const name = await api.projectReportExport(p.id);
-      if (name) notify.success("Report saved", name);
-    } catch (e) {
-      notify.error("Could not save the report", e);
     }
   };
 
@@ -421,9 +399,10 @@ export function ProjectDetail({ id }: { id: number }) {
               </Dropdown.Menu>
             </Dropdown.Popover>
           </Dropdown>
-          <Button size="sm" variant="tertiary" onPress={exportReport}>
+          {/* the Report tab exports HTML, PDF and Markdown with its options (Mission 7) */}
+          <Button size="sm" variant="tertiary" onPress={() => setTab("report")}>
             <FileDown className="size-3.5" />
-            Export report (Markdown)
+            Report…
           </Button>
           <Button size="sm" variant="tertiary" onPress={() => setEditOpen(true)}>
             <Pencil className="size-3.5" />
@@ -531,30 +510,6 @@ export function ProjectDetail({ id }: { id: number }) {
       </Tabs>
 
       <ProjectFormModal isOpen={editOpen} onOpenChange={setEditOpen} project={p} />
-      <AppModal
-        isOpen={report !== null}
-        onOpenChange={(o) => !o && setReport(null)}
-        title="Markdown report"
-        description="Copied to your clipboard. Paste it into a .md file or your reporting tool."
-        size="lg"
-        footer={
-          <>
-            <Button variant="tertiary" onPress={() => report && copyText(report, "Markdown report copied to clipboard")}>
-              <ClipboardCopy className="size-3.5" />
-              Copy again
-            </Button>
-            <Button variant="tertiary" onPress={saveReport}>
-              <FileDown className="size-3.5" />
-              Save as file…
-            </Button>
-            <Button variant="primary" onPress={() => setReport(null)}>
-              Done
-            </Button>
-          </>
-        }
-      >
-        <CodeBlock code={report ?? ""} maxHeight={460} />
-      </AppModal>
     </div>
   );
 }

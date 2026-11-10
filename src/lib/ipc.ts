@@ -281,6 +281,8 @@ export const api = {
   tiSavedExportStix: () => call<{ fileName: string; exported: number; skipped: string[] } | null>("ti_saved_export_stix"),
   reportHtml: (projectId: number, options: T.ReportOptions) => call<string>("report_html", { projectId, options }),
   reportExportHtml: (projectId: number, options: T.ReportOptions) => call<string | null>("report_export_html", { projectId, options }),
+  reportMarkdown: (projectId: number, options: T.ReportOptions) => call<string>("report_markdown", { projectId, options }),
+  reportExportMarkdown: (projectId: number, options: T.ReportOptions) => call<string | null>("report_export_markdown", { projectId, options }),
   reportSaveEvidence: (projectId: number, options: T.ReportOptions) => call<T.EvidenceRecord>("report_save_evidence", { projectId, options }),
   reportPrinted: (projectId: number) => call<void>("report_printed", { projectId }),
   // attack surface discovery

@@ -1,5 +1,5 @@
 import { Button, Dropdown } from "@heroui/react";
-import { ChevronDown, Download, FileDown, FilePlus2, FileText, History, Link2, NotebookPen, Printer, Save, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { ChevronDown, ClipboardCopy, Download, FileDown, FilePlus2, FileText, History, Link2, NotebookPen, Printer, Save, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/app/store";
 import { ToneChip } from "@/components/ui/Badges";
@@ -8,7 +8,7 @@ import { AppModal } from "@/components/ui/Dialogs";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/ui/Feedback";
 import { SearchInput, SelectInput, SwitchInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
 import { Panel } from "@/components/ui/Panel";
-import { notify } from "@/lib/actions";
+import { copyText, notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { EvidenceRecord, Finding, Project, ReportOptions, Severity, TimelineEvent, TimelineEventType, TimelineQuery } from "@/lib/types";
@@ -634,6 +634,20 @@ export function ReportTab({ project }: { project: Project }) {
             <Button variant="secondary" className="justify-start" isPending={busy === "html"} onPress={() => run("html", () => api.reportExportHtml(project.id, o), (r) => (r ? `Saved ${r as string}` : null))}>
               <Save className="size-4" />
               Save as HTML…
+            </Button>
+            {/* Markdown with the same options as the preview (Mission 7) */}
+            <Button variant="secondary" className="justify-start" isPending={busy === "md"} onPress={() => run("md", () => api.reportExportMarkdown(project.id, o), (r) => (r ? `Saved ${r as string}` : null))}>
+              <FileDown className="size-4" />
+              Save as Markdown…
+            </Button>
+            <Button
+              variant="secondary"
+              className="justify-start"
+              isPending={busy === "mdcopy"}
+              onPress={() => run("mdcopy", async () => copyText(await api.reportMarkdown(project.id, o), "Markdown report copied to clipboard"), () => null)}
+            >
+              <ClipboardCopy className="size-4" />
+              Copy as Markdown
             </Button>
             <Button variant="secondary" className="justify-start" isPending={busy === "evidence"} onPress={() => run("evidence", () => api.reportSaveEvidence(project.id, o), () => "Report saved to the evidence")}>
               <FilePlus2 className="size-4" />

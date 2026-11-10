@@ -316,6 +316,35 @@ pub async fn report_export_html(app: AppHandle, project_id: i64, options: crate:
     Ok(Some(file))
 }
 
+/// The Markdown report with the Report tab's options (Mission 7: the header's export used the
+/// defaults whatever the tab said).
+#[tauri::command]
+pub async fn report_markdown(db: State<'_, Db>, project_id: i64, options: crate::workspace::report::ReportOptions) -> AppResult<String> {
+    db.with(|c| crate::workspace::report::markdown(c, project_id, &options, &today()))
+}
+
+/// Saves the Markdown report, with the Report tab's options, through a native save dialog. Returns
+/// the file name, or None if cancelled.
+#[tauri::command]
+pub async fn report_export_markdown(app: AppHandle, project_id: i64, options: crate::workspace::report::ReportOptions) -> AppResult<Option<String>> {
+    let (md, name) = {
+        let db = app.state::<Db>();
+        let md = db.with(|c| crate::workspace::report::markdown(c, project_id, &options, &today()))?;
+        let name: String = db.with(|c| Ok(c.query_row("SELECT name FROM projects WHERE id = ?1", params![project_id], |r| r.get(0))?))?;
+        (md, name)
+    };
+    let safe: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).take(60).collect();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    main_window_dialog(&app, "Save assessment report").set_file_name(format!("{safe}-report.md")).add_filter("Markdown", &["md"]).save_file(move |f| {
+        let _ = tx.send(f.and_then(|f| f.into_path().ok()));
+    });
+    let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
+    std::fs::write(&path, md).map_err(|e| AppError::Internal(format!("Could not write the report: {e}")))?;
+    let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let _ = app.state::<Db>().with(|c| timeline::record(c, project_id, "report", "Report exported (Markdown)", &file, None, None));
+    Ok(Some(file))
+}
+
 /// Keeps a copy of the report in the project's evidence (text, at most 1 MB).
 #[tauri::command]
 pub async fn report_save_evidence(db: State<'_, Db>, project_id: i64, options: crate::workspace::report::ReportOptions) -> AppResult<EvidenceRecord> {

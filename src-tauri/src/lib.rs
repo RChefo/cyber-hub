@@ -399,6 +399,8 @@ pub fn run() {
             workspace_commands::database_restore_cancel,
             workspace_commands::report_html,
             workspace_commands::report_export_html,
+            workspace_commands::report_markdown,
+            workspace_commands::report_export_markdown,
             workspace_commands::report_save_evidence,
             workspace_commands::report_printed,
             // attack surface discovery
