@@ -9,7 +9,7 @@ import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/ui/Feedback";
 import { TextInput } from "@/components/ui/Fields";
 import { PageHeader, Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
-import { api, errorMessage } from "@/lib/ipc";
+import { api, errorMessage, IpcError } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { CveRecord, CveSearchResult, Severity } from "@/lib/types";
 import { cn, formatDate, formatDateTime, formatNumber, formatRelative } from "@/lib/utils";
@@ -45,6 +45,9 @@ export default function IntelPage() {
   const [result, setResult] = useState<CveSearchResult | null>(null);
   const [lastQuery, setLastQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // whether the failed search was live and failed for the network (or NVD's rate limit): the local
+  // cache can still answer (Mission 7)
+  const [netFailed, setNetFailed] = useState(false);
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<CveRecord | null>(null);
 
@@ -61,6 +64,7 @@ export default function IntelPage() {
     setQuery(term);
     setSearching(true);
     setError(null);
+    setNetFailed(false);
     try {
       const res = await api.cveSearch(term, useLive);
       setResult(res);
@@ -69,6 +73,7 @@ export default function IntelPage() {
       if (res.records.length === 1 && isCveId(term)) setSelected(res.records[0]);
     } catch (e) {
       setError(errorMessage(e));
+      setNetFailed(useLive && ((e instanceof IpcError && (e.kind === "network" || e.kind === "rate_limited")) || errorMessage(e).toLowerCase().includes("rate limit")));
     } finally {
       setSearching(false);
     }
@@ -84,7 +89,6 @@ export default function IntelPage() {
     return c;
   }, [result]);
 
-  const rateLimited = error?.toLowerCase().includes("rate limit");
 
   return (
     <div>
@@ -137,8 +141,8 @@ export default function IntelPage() {
         <div className="xl:col-span-8">
           {error && (
             <div className="mb-3 flex flex-col gap-2">
-              <ErrorBlock message={error} />
-              {rateLimited && (
+              <ErrorBlock message={error} onRetry={query.trim() ? () => void run(query) : undefined} />
+              {netFailed && (
                 <div className="flex gap-2">
                   <Button size="sm" variant="ghost" onPress={() => run(query, false)}>
                     Search the local cache instead

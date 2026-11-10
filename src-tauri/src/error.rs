@@ -67,7 +67,31 @@ impl From<serde_json::Error> for AppError {
 
 impl From<reqwest::Error> for AppError {
     fn from(e: reqwest::Error) -> Self {
-        AppError::Network(e.to_string())
+        let host = e.url().and_then(|u| u.host_str()).map(str::to_string);
+        AppError::Network(describe_reqwest(e.without_url(), host.as_deref()))
+    }
+}
+
+/// A network error for people (Mission 7): what failed, its innermost cause and what to check. The
+/// URL is reduced to its host, so a query string, which may carry a key, never reaches the page.
+pub fn describe_reqwest(e: reqwest::Error, host: Option<&str>) -> String {
+    let site = host.unwrap_or("the service");
+    if e.is_timeout() {
+        return format!("{site} did not answer in time; check the network connection, or try again later");
+    }
+    let mut cause: &dyn std::error::Error = &e;
+    while let Some(next) = cause.source() {
+        cause = next;
+    }
+    let inner = cause.to_string();
+    if e.is_connect() {
+        return format!("could not connect to {site} ({inner}); check the network connection or proxy");
+    }
+    let top = e.to_string();
+    if inner == top {
+        format!("{top} ({site})")
+    } else {
+        format!("{top} ({site}: {inner})")
     }
 }
 
@@ -114,5 +138,19 @@ mod tests {
         assert!(other.to_string().starts_with("Database error: "));
         drop((a, b));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod network_tests {
+    /// Mission 7: a network error says what to check and never repeats the URL's query (which may
+    /// carry a key). The port is closed on this computer, so nothing else is contacted.
+    #[tokio::test]
+    async fn network_errors_say_what_to_check_without_the_url() {
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let e = reqwest::Client::new().get(format!("http://127.0.0.1:{port}/v1?apiKey=SECRET-KEY-123")).send().await.unwrap_err();
+        let msg = super::AppError::from(e).to_string();
+        assert!(msg.contains("could not connect to 127.0.0.1") && msg.contains("check the network connection"), "{msg}");
+        assert!(!msg.contains("SECRET-KEY-123") && !msg.contains("apiKey"), "{msg}");
     }
 }
