@@ -78,15 +78,17 @@ struct Pending {
 }
 
 /// Requests a client cancelled, remembered per connection (also when the cancellation arrives
-/// before the request's approval exists). Bounded: a client flooding cancellations only loses
-/// the protection for its own later requests.
-const MAX_CANCELLED: usize = 1024;
+/// before the request's approval exists) until the request has been handled. Each connection keeps
+/// its newest cancellations up to this number: a client flooding cancellations only loses its own
+/// oldest ones, never another client's (Mission 7).
+const MAX_CANCELLED_PER_CONNECTION: usize = 256;
 
 #[derive(Default)]
 pub struct Approvals {
     pending: Mutex<HashMap<String, Pending>>,
     finished: Mutex<VecDeque<ApprovalStatus>>,
-    cancelled: Mutex<std::collections::HashSet<(u64, u64)>>,
+    /// connection → the requests it cancelled, oldest first
+    cancelled: Mutex<HashMap<u64, VecDeque<u64>>>,
 }
 
 pub struct NewRequest {
@@ -185,7 +187,7 @@ impl Approvals {
     /// Cancel everything a disconnected client was waiting for.
     pub fn cancel_connection(&self, connection: u64) -> usize {
         if let Ok(mut c) = self.cancelled.lock() {
-            c.retain(|(conn, _)| *conn != connection);
+            c.remove(&connection);
         }
         let ids: Vec<String> = match self.pending.lock() {
             Ok(m) => m.iter().filter(|(_, p)| p.view.connection == connection).map(|(k, _)| k.clone()).collect(),
@@ -199,8 +201,12 @@ impl Approvals {
     /// Work the user already approved goes on, as when a client disconnects.
     pub fn cancel_request(&self, connection: u64, request: u64) -> usize {
         if let Ok(mut c) = self.cancelled.lock() {
-            if c.len() < MAX_CANCELLED {
-                c.insert((connection, request));
+            let q = c.entry(connection).or_default();
+            if !q.contains(&request) {
+                q.push_back(request);
+                if q.len() > MAX_CANCELLED_PER_CONNECTION {
+                    q.pop_front();
+                }
             }
         }
         let ids: Vec<String> = match self.pending.lock() {
@@ -212,7 +218,19 @@ impl Approvals {
 
     /// Whether the client already cancelled this request.
     pub fn was_cancelled(&self, connection: u64, request: u64) -> bool {
-        self.cancelled.lock().map(|c| c.contains(&(connection, request))).unwrap_or(false)
+        self.cancelled.lock().map(|c| c.get(&connection).is_some_and(|q| q.contains(&request))).unwrap_or(false)
+    }
+
+    /// A request has been handled: its cancellation no longer needs to be remembered.
+    pub fn forget_cancelled(&self, connection: u64, request: u64) {
+        if let Ok(mut c) = self.cancelled.lock() {
+            if let Some(q) = c.get_mut(&connection) {
+                q.retain(|r| *r != request);
+                if q.is_empty() {
+                    c.remove(&connection);
+                }
+            }
+        }
     }
 
     pub fn cancel_all(&self) -> usize {
@@ -283,6 +301,23 @@ mod tests {
         let (id2, rx2) = a.request(req(1)).unwrap();
         assert!(a.decide(&id2, false));
         assert_eq!(rx2.await.unwrap(), Decision::Denied);
+    }
+
+    /// Mission 7: cancellations are remembered per connection, so a client flooding them cannot make
+    /// another client's be forgotten, and an entry goes once its request has been handled.
+    #[test]
+    fn cancellations_are_remembered_per_connection() {
+        let a = Approvals::default();
+        for r in 0..2000 {
+            a.cancel_request(1, r);
+        }
+        a.cancel_request(2, 7);
+        assert!(a.was_cancelled(2, 7), "another connection's flood does not push it out");
+        assert!(a.was_cancelled(1, 1999) && !a.was_cancelled(1, 0), "a connection keeps its newest");
+        a.forget_cancelled(2, 7);
+        assert!(!a.was_cancelled(2, 7));
+        a.cancel_connection(1);
+        assert!(!a.was_cancelled(1, 1999));
     }
 
     #[tokio::test]

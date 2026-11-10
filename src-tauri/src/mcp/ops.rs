@@ -619,7 +619,17 @@ fn approval_word(r: &Result<Value, ErrorBody>) -> &'static str {
     }
 }
 
+/// Forgets a request's cancellation when its call has been handled, on every way out of `handle`.
+struct ForgetCancellation(Arc<super::approvals::Approvals>, u64, u64);
+
+impl Drop for ForgetCancellation {
+    fn drop(&mut self) {
+        self.0.forget_cancelled(self.1, self.2);
+    }
+}
+
 async fn handle(app: AppHandle, conn: ConnCtx, tool: String, args: Value) -> Result<Value, ErrorBody> {
+    let _forget = ForgetCancellation(app.state::<Arc<Bridge>>().approvals.clone(), conn.id, conn.request);
     let started = Instant::now();
     let args = if args.is_null() { json!({}) } else { args };
     let name: String = tool.chars().filter(|c| !c.is_control()).take(64).collect();
@@ -774,6 +784,16 @@ pub(crate) fn prune_audit(c: &rusqlite::Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
+/// A project as MCP clients see it: everything but the client's contacts, which are personal data
+/// that reports leave out too (Mission 7). The dispatcher redacts credentials in the rest.
+pub(crate) fn project_for_client(p: &projects::Project) -> Result<Value, ErrorBody> {
+    let mut v = to_json(p)?;
+    if let Some(o) = v.as_object_mut() {
+        o.remove("contacts");
+    }
+    Ok(v)
+}
+
 /* ───────────────────────── local paths ───────────────────────── */
 
 /// MCP clients may not name local files: the execution engine opens existing files named in
@@ -782,7 +802,7 @@ pub(crate) fn prune_audit(c: &rusqlite::Connection) -> rusqlite::Result<()> {
 /// the answer reveals nothing about whether a file exists.
 pub fn refuse_local_paths(args: &[String]) -> Result<(), ErrorBody> {
     for a in args {
-        let attached = a.starts_with('-') && !a.contains('=') && attached_path(a);
+        let attached = a.starts_with('-') && !a.contains('=') && (attached_path(a) || attached_existing(a));
         let value = if a.starts_with('-') { a.split_once('=').map(|(_, v)| v).unwrap_or("") } else { a.as_str() };
         if !attached && value.is_empty() {
             continue;
@@ -807,6 +827,22 @@ fn attached_path(opt: &str) -> bool {
     }
     // a drive letter counts only with a separator after it, so port specs like `-pU:53,T:80` pass
     rest.contains('\\') || rest.contains('/') || rest.contains('~') || rest.as_bytes().windows(3).any(|w| w[0].is_ascii_alphabetic() && w[1] == b':' && (w[2] == b'\\' || w[2] == b'/'))
+}
+
+/// A short option with a value attached and no `=` (`-rcapture.pcap`, `-vvrlist.txt`): whether any
+/// value it may carry names an existing file or folder in the working directory, where tools run
+/// and earlier outputs are kept (Mission 7). A tool such as tshark would read it.
+fn attached_existing(opt: &str) -> bool {
+    if opt.starts_with("--") || !opt.starts_with('-') || opt.contains('=') {
+        return false;
+    }
+    let rest = &opt[1..];
+    // only bare names are looked up: URLs are targets, values with separators or a drive are
+    // judged by `attached_path`, and a lookup must never reach a network path or a mapped drive
+    if rest.contains(['/', '\\', ':']) {
+        return false;
+    }
+    (1..rest.len()).filter(|i| rest.is_char_boundary(*i)).any(|i| std::path::Path::new(&rest[i..]).exists())
 }
 
 fn looks_like_path(v: &str) -> bool {
@@ -1214,7 +1250,7 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
         }
         "cyberhub_get_project" => {
             let a: ProjectArg = parse(args)?;
-            to_json(projects::project_get(app.state::<Db>(), a.project_id).await.map_err(app_err)?)
+            project_for_client(&projects::project_get(app.state::<Db>(), a.project_id).await.map_err(app_err)?)
         }
         "cyberhub_get_project_scope" => {
             let a: ProjectArg = parse(args)?;
@@ -1702,6 +1738,22 @@ pub fn compare(inv: &Value) -> Value {
 mod tests {
     use super::*;
 
+    /// Mission 7: MCP clients get a project without its client contacts (personal data).
+    #[test]
+    fn projects_reach_clients_without_their_contacts() {
+        let db = Db::open_in_memory().unwrap();
+        let p = db
+            .with(|c| {
+                c.execute("INSERT INTO projects (id, name, status, notes, contacts, created_at, updated_at) VALUES (1, 'Acme', 'active', 'internal note', 'Jane Roe, +1 555 0100, jane@example.com', 't', 't')", [])?;
+                projects::project_load(c, 1)
+            })
+            .unwrap();
+        let v = project_for_client(&p).unwrap();
+        assert!(v.get("contacts").is_none() && !v.to_string().contains("Jane Roe"));
+        assert_eq!(v["name"], "Acme");
+        assert_eq!(v["notes"], "internal note", "notes stay, as the tool says");
+    }
+
     #[test]
     fn confirmations_show_arguments_exactly() {
         let args: Vec<String> = ["-sT", "--script-args=http.useragent=a b", "", "--cookie", "session=abc"].map(String::from).into();
@@ -1790,6 +1842,19 @@ mod tests {
         assert!(check_proposal(&db, &bad).is_err(), "free-text types are refused");
         let missing = OsintProposeArg { source_entity_id: 1, target_entity_id: 2, rel_type: "OWNED_BY".into(), rationale: "a reason long enough".into() };
         assert!(check_proposal(&db, &missing).is_err(), "unknown entities are refused");
+    }
+
+    #[test]
+    fn attached_short_option_files_are_refused() {
+        // Mission 7: the tests run in the crate's folder, where `Cargo.toml` and `src` exist, like
+        // earlier outputs in the folder tools run in
+        assert!(std::path::Path::new("Cargo.toml").exists());
+        for bad in ["-rCargo.toml", "-vvrCargo.toml", "-isrc"] {
+            assert!(refuse_local_paths(&[bad.into()]).is_err(), "{bad}");
+        }
+        for ok in ["-sV", "-p80,443", "-T4", "-pU:53,T:80", "-rno-such-capture-file.pcap", "--rate=100"] {
+            assert!(refuse_local_paths(&[ok.into()]).is_ok(), "{ok}");
+        }
     }
 
     #[test]

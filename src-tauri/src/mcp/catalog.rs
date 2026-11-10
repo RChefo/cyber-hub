@@ -171,7 +171,7 @@ pub static TOOLS: &[ToolSpec] = &[
     ToolSpec { name: "cyberhub_list_projects", title: "List projects", group: "projects", category: Category::Read,
         description: "Assessment projects with status, target and finding counts.", schema: none },
     ToolSpec { name: "cyberhub_get_project", title: "Get project", group: "projects", category: Category::Read,
-        description: "One project with description, rules of engagement, notes and scope entries.",
+        description: "One project with description, rules of engagement, notes and scope entries (never its client contacts).",
         schema: || obj(json!({ "project_id": project_id() }), &["project_id"]) },
     ToolSpec { name: "cyberhub_get_project_scope", title: "Get project scope", group: "projects", category: Category::Read,
         description: "The authorized scope of a project as stored in Cyber Hub: in-scope and excluded targets plus rules of engagement.",
@@ -463,6 +463,11 @@ pub fn tool(name: &str) -> Option<&'static ToolSpec> {
 
 /// Category for a specific call (some tools only reach the network when asked to).
 pub fn effective_category(spec: &ToolSpec, args: &Value) -> Category {
+    // an OSINT source that contacts the target itself (the web fingerprint) is active work, not a
+    // lookup: like a tool run, it always needs the analyst's approval (Mission 7)
+    if spec.name == "cyberhub_osint_discover" && args.get("provider").and_then(Value::as_str).and_then(crate::osint::providers::info).is_some_and(|p| p.contacts_target) {
+        return Category::RunTools;
+    }
     CONDITIONAL_CATEGORY
         .iter()
         .find(|(t, arg, _)| *t == spec.name && args.get(*arg).and_then(Value::as_bool) == Some(true))
@@ -555,6 +560,13 @@ mod tests {
             assert_eq!(tool(name).unwrap().category, cat, "{name}");
         }
         let cve = tool("cyberhub_lookup_cve").unwrap();
+        // Mission 7: the OSINT source that contacts the target needs approval like a tool run
+        let osint = tool("cyberhub_osint_discover").unwrap();
+        assert_eq!(effective_category(osint, &json!({"investigation_id": 1, "provider": "http"})), Category::RunTools);
+        assert!(!effective_category(osint, &json!({"provider": "http"})).allowed_policies().contains(&Policy::Allow));
+        for public in ["dns", "rdap", "crtsh", "github", "asn", "nvd", "threat_intel", "nonsense"] {
+            assert_eq!(effective_category(osint, &json!({"provider": public})), Category::ExternalLookup, "{public}");
+        }
         assert_eq!(effective_category(cve, &json!({"cve_id": "CVE-2021-44228"})), Category::Read);
         assert_eq!(effective_category(cve, &json!({"cve_id": "CVE-2021-44228", "live": true})), Category::ExternalLookup);
     }

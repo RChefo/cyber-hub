@@ -43,7 +43,7 @@ The page reads everything from the app: the catalog comes from the same definiti
 | Group | Tools | Permission category |
 |---|---|---|
 | Discovery | `cyberhub_get_status`, `cyberhub_list_modules`, `cyberhub_list_tools`, `cyberhub_get_tool_details`, `cyberhub_list_supported_providers` | read |
-| Projects and scope | `cyberhub_list_projects`, `cyberhub_get_project`, `cyberhub_get_project_scope`, `cyberhub_validate_target`, `cyberhub_list_findings`, `cyberhub_get_checklist` | read |
+| Projects and scope | `cyberhub_list_projects`, `cyberhub_get_project` (never the client's contacts, Mission 7), `cyberhub_get_project_scope`, `cyberhub_validate_target`, `cyberhub_list_findings`, `cyberhub_get_checklist` | read |
 | | `cyberhub_create_finding` (optionally with a CVSS vector and remediation), `cyberhub_set_checklist_item` | local write |
 | Execution | `cyberhub_preview_run`, `cyberhub_get_run_status`, `cyberhub_get_run_output`, `cyberhub_cancel_run`, `cyberhub_list_runs` | read |
 | | `cyberhub_run_tool` | run tools |
@@ -56,7 +56,7 @@ The page reads everything from the app: the catalog comes from the same definiti
 | Vulnerability intelligence | `cyberhub_lookup_cve`, `cyberhub_search_vulnerabilities` (external lookup with `live: true`), `cyberhub_get_vulnerability_details`, `cyberhub_score_cvss` | read |
 | Finding library | `cyberhub_list_finding_templates`, `cyberhub_get_finding_template` | read |
 | OSINT workspace | `cyberhub_osint_list_investigations`, `cyberhub_osint_get_investigation`, `cyberhub_osint_search_entities`, `cyberhub_osint_get_entity`, `cyberhub_osint_list_relationships`, `cyberhub_osint_find_path`, `cyberhub_osint_get_operation`, `cyberhub_osint_generate_report` | read |
-| | `cyberhub_osint_discover` (results wait for the user's review; clients cannot import them) | external lookup |
+| | `cyberhub_osint_discover` (results wait for the user's review; clients cannot import them) | external lookup; *run tools* for a source that contacts the target itself (the web fingerprint), which therefore always needs your approval (Mission 7) |
 | | `cyberhub_osint_propose_relationship` (stored as an unverified suggestion with low confidence) | local write |
 
 The OSINT tools were exercised with Claude Code 2.1.318 on Windows: all eight read tools, a refused discovery of a private address, a refused web fingerprint outside the project scope (both refused before any approval prompt), an approved DNS collection whose results stayed pending review, and an approved relationship proposal stored as inferred with low confidence and the client's rationale as evidence. The audit log recorded each call with its category and approval.
@@ -189,7 +189,7 @@ The configuration contains only the executable path. It carries no keys, tokens 
 * **Local files:** MCP clients cannot pass file paths. Runs that need target lists or other input files are started in Cyber Hub. Tool outputs show program file names and `<local file>` instead of absolute paths.
 * **Bridge frames** are authenticated by the handshake, not individually; the loopback connection is trusted for its lifetime.
 * **Live output** of a run is available through MCP for runs started through MCP. The stored, redacted output is available for every run once it ends.
-* **Approved operations continue if the client disconnects or cancels the call.** Requests that are still waiting for your decision are cancelled, and a call the client cancelled is never put before you later.
+* **Approved operations continue if the client disconnects or cancels the call.** Requests that are still waiting for your decision are cancelled, and a call the client cancelled is never put before you later. Cancellations are remembered per connection until the call has been handled (the newest 256 per connection), so one client cannot make Cyber Hub forget another client's cancellation (Mission 7).
 * **Unscoped tools:** tools that are not target-based scanners in the catalog (for example OpenSSL, hashcat, tshark) are not scope-checked. Their approval shows a warning saying so, and the native confirmation repeats it. Approval details and the native confirmation show the arguments exactly as the client sent them, unredacted, so nothing can be hidden from you; the audit log stores them redacted.
 * **Working folder:** tools run in a private folder in Cyber Hub's app data (`work`), so a relative file name in an argument never reads from or writes to the installation folder.
 * **Audit retention:** the newest 1,000 ordinary entries are kept. Entries tied to an approval or a run are kept separately (newest 5,000), so a client cannot push the record of approved actions out by flooding cheap calls.
