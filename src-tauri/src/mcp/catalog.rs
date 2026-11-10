@@ -46,7 +46,7 @@ impl Category {
         match self {
             Category::Read => "Read local data",
             Category::ExternalLookup => "External lookups (VirusTotal, threat intelligence, NVD, OSINT sources)",
-            Category::LocalWrite => "Create findings, save indicators, propose OSINT relationships",
+            Category::LocalWrite => "Create findings, save indicators, update checklists and ASVS statuses, review detection hits, propose relationships",
             Category::RunTools => "Run security tools",
             Category::FileUpload => "Upload files to VirusTotal",
             Category::Export => "Export reports",
@@ -400,6 +400,55 @@ pub static TOOLS: &[ToolSpec] = &[
             "relationship": { "type": "string", "enum": ["affects", "corresponds_to", "supported_by", "related_to", "possible_duplicate", "maps_to", "associated_with"] },
             "rationale": { "type": "string", "minLength": 10, "maxLength": 2000, "description": "Why the records are related, from data you read in Cyber Hub" }
         }), &["project_id", "source", "target", "relationship", "rationale"]) },
+    // ── detection and compliance
+    ToolSpec { name: "cyberhub_list_detection_rules", title: "Detection rules", group: "detection", category: Category::Read,
+        description: "The detection library: Sigma rules (logs) and YARA rule files (files), with their level, ATT&CK techniques, whether they can run, their tests and false positives. A rule is what could be detected, not evidence that anything happened.",
+        schema: || obj(json!({
+            "kind": { "type": "string", "enum": ["sigma", "yara"] },
+            "text": { "type": "string", "maxLength": 200, "description": "Words in the title, description, tags or log source" },
+            "technique": { "type": "string", "pattern": "^[Tt][0-9]{4}(\\.[0-9]{3})?$", "description": "Only rules mapped to this ATT&CK technique" },
+            "enabled": { "type": "boolean" },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+            "offset": { "type": "integer", "minimum": 0 }
+        }), &[]) },
+    ToolSpec { name: "cyberhub_get_detection_rule", title: "A detection rule", group: "detection", category: Category::Read,
+        description: "One rule of the detection library: its content (Sigma YAML or YARA), the problems found when it was read, its versions, its tests on samples with their expectations, and the analyst's feedback. Use it to explain what a rule looks for.",
+        schema: || obj(json!({ "rule_id": { "type": "integer", "minimum": 1, "description": "From cyberhub_list_detection_rules" } }), &["rule_id"]) },
+    ToolSpec { name: "cyberhub_list_detection_hits", title: "Detection hits of a project", group: "detection", category: Category::Read,
+        description: "Matches of the detection library's rules on a project's evidence, each with why it matched (Sigma: the fields and values; YARA: the strings and their offsets). Hits are leads to review, not findings. Values from logs and files are redacted.",
+        schema: || obj(json!({
+            "project_id": project_id(),
+            "status": { "type": "string", "enum": ["new", "promoted", "false_positive", "dismissed"] },
+            "rule_id": { "type": "integer", "minimum": 1 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+            "offset": { "type": "integer", "minimum": 0 }
+        }), &["project_id"]) },
+    ToolSpec { name: "cyberhub_review_detection_hit", title: "Review a detection hit", group: "detection", category: Category::LocalWrite,
+        description: "Mark a project's detection hit a false positive (recorded as feedback on the rule), dismiss it, or promote it to a finding under review with low confidence, linked to its evidence. Archived projects are refused. Requires the user's approval in Cyber Hub.",
+        schema: || obj(json!({
+            "project_id": project_id(),
+            "hit_id": { "type": "integer", "minimum": 1, "description": "From cyberhub_list_detection_hits" },
+            "action": { "type": "string", "enum": ["false_positive", "dismiss", "promote"] },
+            "note": { "type": "string", "maxLength": 500 }
+        }), &["project_id", "hit_id", "action"]) },
+    ToolSpec { name: "cyberhub_get_asvs_assessment", title: "ASVS assessment", group: "detection", category: Category::Read,
+        description: "A project's OWASP ASVS 5.0.0 assessments, or one assessment with its requirements (by status or chapter), notes, linked findings and evidence, the analyst's mappings and recent changes. A requirement is compliant only when the analyst said so.",
+        schema: || obj(json!({
+            "project_id": project_id(),
+            "assessment_id": { "type": "integer", "minimum": 1, "description": "Omit to list the project's assessments" },
+            "status": { "type": "string", "enum": ["not_assessed", "compliant", "non_compliant", "not_applicable", "needs_review"] },
+            "chapter": { "type": "string", "pattern": "^[Vv][0-9]{1,2}$", "description": "A chapter, for example V6" },
+            "include_above_level": { "type": "boolean", "description": "Also the requirements above the assessment's level" }
+        }), &["project_id"]) },
+    ToolSpec { name: "cyberhub_set_asvs_status", title: "Set an ASVS requirement's status", group: "detection", category: Category::LocalWrite,
+        description: "Set one requirement of a project's ASVS assessment to not_assessed, non_compliant, needs_review or not_applicable, with an optional note (a note that is not given stays). Only the analyst marks a requirement compliant, in Cyber Hub. Archived projects are refused. Requires the user's approval in Cyber Hub.",
+        schema: || obj(json!({
+            "project_id": project_id(),
+            "assessment_id": { "type": "integer", "minimum": 1, "description": "From cyberhub_get_asvs_assessment" },
+            "requirement": { "type": "string", "pattern": "^[Vv][0-9]{1,2}\\.[0-9]{1,2}\\.[0-9]{1,2}$", "description": "A requirement ID, for example V6.2.1" },
+            "status": { "type": "string", "enum": ["not_assessed", "non_compliant", "needs_review", "not_applicable"] },
+            "note": { "type": "string", "maxLength": 2000 }
+        }), &["project_id", "assessment_id", "requirement", "status"]) },
     ToolSpec { name: "cyberhub_get_approval_status", title: "Approval status", group: "approvals", category: Category::Read,
         description: "Status of a request that is waiting for the user's approval in Cyber Hub, and its result once decided.",
         schema: || obj(json!({ "approval_id": { "type": "string", "minLength": 8, "maxLength": 64 } }), &["approval_id"]) },
@@ -443,6 +492,7 @@ pub const GROUPS: &[(&str, &str)] = &[
     ("library", "Finding Library"),
     ("osint", "OSINT Workspace"),
     ("investigation", "Investigation"),
+    ("detection", "Detection & Compliance"),
     ("reports", "Reports & History"),
     ("approvals", "Approvals"),
 ];
@@ -478,7 +528,8 @@ mod tests {
                 assert!(s["properties"].get(r.as_str().unwrap()).is_some(), "{} requires an undefined property", t.name);
             }
         }
-        assert_eq!(TOOLS.len(), 55);
+        assert_eq!(TOOLS.len(), 61);
+        assert!(TOOLS.iter().all(|t| GROUPS.iter().any(|(g, _)| *g == t.group)), "every tool is in a listed group");
     }
 
     #[test]
@@ -495,6 +546,8 @@ mod tests {
             ("cyberhub_threat_intel_lookup", Category::ExternalLookup),
             ("cyberhub_osint_discover", Category::ExternalLookup),
             ("cyberhub_osint_propose_relationship", Category::LocalWrite),
+            ("cyberhub_review_detection_hit", Category::LocalWrite),
+            ("cyberhub_set_asvs_status", Category::LocalWrite),
         ] {
             assert_eq!(tool(name).unwrap().category, cat, "{name}");
         }

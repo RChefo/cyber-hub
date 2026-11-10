@@ -19,6 +19,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use super::approvals::{ApprovalStatus, Decision, Detail, NewRequest};
 use super::assessment;
+use super::detection;
 use super::bridge::{Bridge, ConnCtx, DispatchFuture, Dispatcher};
 use super::catalog::{self, Category, Policy};
 use super::proto::ErrorBody;
@@ -319,6 +320,12 @@ struct CveArg {
 struct CveSearch {
     query: String,
     live: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuleArg {
+    rule_id: i64,
 }
 
 #[derive(Deserialize)]
@@ -940,6 +947,21 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
                 vec!["The test is in the bundled OWASP WSTG checklist".into(), "A linked finding belongs to the same project".into()],
             ))
         }
+        "cyberhub_set_asvs_status" => {
+            let a: detection::AsvsSet = parse(args)?;
+            let (project, details) = db.with(|c| detection::describe_asvs_set(c, &a)).map_err(app_err)?;
+            Ok((
+                format!("Set an ASVS requirement's status in {project}"),
+                details.into_iter().map(|(k, v)| d(&k, v)).collect(),
+                Some(a.project_id),
+                vec!["The requirement is in the bundled ASVS 5.0.0".into(), "The assessment belongs to the project".into(), "A client cannot mark a requirement compliant".into()],
+            ))
+        }
+        "cyberhub_review_detection_hit" => {
+            let a: detection::HitReview = parse(args)?;
+            let (project, details) = db.with(|c| detection::describe_hit_review(c, &a)).map_err(app_err)?;
+            Ok((format!("Review a detection hit in {project}"), details.into_iter().map(|(k, v)| d(&k, v)).collect(), Some(a.project_id), vec!["The hit belongs to the project and was not promoted yet".into()]))
+        }
         "cyberhub_save_indicator" => {
             let a: SaveIndicator = parse(args)?;
             let ind = crate::ti::indicator::detect(&a.indicator).map_err(|e| err("validation", e))?;
@@ -1193,6 +1215,30 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
         "cyberhub_get_checklist" => {
             let a: assessment::ChecklistQuery = parse(args)?;
             db.with(|c| assessment::checklist(c, &a)).map_err(app_err)
+        }
+        "cyberhub_list_detection_rules" => {
+            let a: detection::RulesQuery = opt_obj(args)?;
+            db.with(|c| detection::rules(c, &a)).map_err(app_err)
+        }
+        "cyberhub_get_detection_rule" => {
+            let a: RuleArg = parse(args)?;
+            db.with(|c| detection::rule(c, a.rule_id)).map_err(app_err)
+        }
+        "cyberhub_list_detection_hits" => {
+            let a: detection::HitsQuery = parse(args)?;
+            db.with(|c| detection::hits(c, &a)).map_err(app_err)
+        }
+        "cyberhub_get_asvs_assessment" => {
+            let a: detection::AsvsQuery = parse(args)?;
+            db.with(|c| detection::asvs_view(c, &a)).map_err(app_err)
+        }
+        "cyberhub_set_asvs_status" => {
+            let a: detection::AsvsSet = parse(args)?;
+            db.with(|c| detection::set_asvs(c, &a)).map_err(app_err)
+        }
+        "cyberhub_review_detection_hit" => {
+            let a: detection::HitReview = parse(args)?;
+            db.with(|c| detection::review_hit(c, &a)).map_err(app_err)
         }
         "cyberhub_set_checklist_item" => {
             let a: assessment::ChecklistSet = parse(args)?;

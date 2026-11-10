@@ -30,7 +30,7 @@ MCP has its own page in the sidebar (Integrations → MCP). The switch at the to
 | Overview | Server state, transport (STDIO), local bridge address, connected clients, catalog size, waiting approvals, recent activity |
 | Approvals | The Approval Center: every waiting request with the client, action, project, target, the checks Cyber Hub ran, and time left; Approve and Decline; recent decisions from the audit log |
 | Clients | Connected clients (from the running bridge) and clients seen before (from the audit log), with self-reported name and version, last activity, request counts and the latest result |
-| Tools | All 55 tools from the server catalog, grouped as below, with permission category, whether they ask you under the current policy, availability and parameters |
+| Tools | All 61 tools from the server catalog, grouped as below, with permission category, whether they ask you under the current policy, availability and parameters |
 | Resources & prompts | The resources, the scope template and the prompts, with their parameters |
 | Permissions | The policy for each category (below) |
 | Activity | The audit log, filterable by client, permission category and status, with redacted arguments per entry |
@@ -38,7 +38,7 @@ MCP has its own page in the sidebar (Integrations → MCP). The switch at the to
 
 The page reads everything from the app: the catalog comes from the same definitions `cyberhub-mcp` advertises, and clients and activity come from the bridge and the `mcp_audit` table. MCP settings are no longer in Settings.
 
-## Tools (55)
+## Tools (61)
 
 | Group | Tools | Permission category |
 |---|---|---|
@@ -62,6 +62,8 @@ The page reads everything from the app: the catalog comes from the same definiti
 The OSINT tools were exercised with Claude Code 2.1.318 on Windows: all eight read tools, a refused discovery of a private address, a refused web fingerprint outside the project scope (both refused before any approval prompt), an approved DNS collection whose results stayed pending review, and an approved relationship proposal stored as inferred with low confidence and the client's rationale as evidence. The audit log recorded each call with its category and approval.
 | Investigation | `cyberhub_search_records` (archived projects only with `include_archived`), `cyberhub_get_related_records`, `cyberhub_list_record_relationships`, `cyberhub_get_attack_matrix` | read |
 | | `cyberhub_correlate_project` (stores suggestions only), `cyberhub_propose_record_relationship` (stored as an unconfirmed suggestion with low confidence) | local write |
+| Detection and compliance | `cyberhub_list_detection_rules`, `cyberhub_get_detection_rule`, `cyberhub_list_detection_hits`, `cyberhub_get_asvs_assessment` | read |
+| | `cyberhub_review_detection_hit` (false positive, dismiss, or promote to a finding under review), `cyberhub_set_asvs_status` (never *compliant*) | local write |
 | Reports and history | `cyberhub_generate_report`, `cyberhub_get_activity`, `cyberhub_get_run_details` | read |
 | | `cyberhub_export_report` | export |
 | Approvals | `cyberhub_get_approval_status` | read |
@@ -80,6 +82,14 @@ The investigation tools (Mission 3) give a client the same view of a project's r
 * Relationships come with their origin and verification: `verified` is confirmed by the analyst, `inferred` is a suggestion. `cyberhub_get_attack_matrix` keeps techniques that findings name (leads) apart from the analyst's assessments and from imported layers; its result says so.
 * A client can run correlation and propose relationships, each after your approval. Both only add suggestions to the review queue: a proposal is stored as `suggested`, `inferred`, low confidence, with the client's name and rationale, and becomes a fact only when you accept it in Cyber Hub. Clients cannot accept, reject or link records themselves, and cannot change ATT&CK assessments.
 * Both write tools refuse archived projects, before the approval and when it is carried out.
+
+The detection and compliance tools (Mission 4) let a client explain rules and matches and summarize an ASVS assessment, without speaking for the analyst:
+* `cyberhub_list_detection_rules` and `cyberhub_get_detection_rule` return the Sigma and YARA library: content, problems, versions, tests and feedback. Their result says that coverage is not evidence that a technique was used.
+* `cyberhub_list_detection_hits` returns a project's hits with why each matched: Sigma fields and values, or YARA strings with their offsets. Values from logs and files pass through the credential redaction first, and the result says that a hit is a lead, not a finding.
+* `cyberhub_review_detection_hit` marks a hit a false positive (feedback on the rule), dismisses it, or promotes it to a finding under review with low confidence. A hit of another project, or one already promoted, is refused before an approval is shown.
+* `cyberhub_get_asvs_assessment` lists a project's assessments, or one with its requirements by status or chapter, and gives the standard's attribution.
+* `cyberhub_set_asvs_status` sets *not assessed*, *non-compliant*, *needs review* or *not applicable*, and is recorded as made by an MCP client. **A client cannot mark a requirement compliant**: the schema leaves the value out, and Cyber Hub refuses it before any approval. Compliance is the analyst's call, in the ASVS tab.
+* Both write tools refuse archived projects and wait for your approval.
 
 Arguments are JSON objects with strict schemas; unknown fields are rejected, and every value is validated again in Rust. `cyberhub_run_tool` takes a catalog tool ID, a project and an argument list. No shell is involved (pipes and redirection have no effect), and the program is always the detected catalog executable. Arguments that refer to local files (target lists such as `-iL`, wordlists, request or configuration files) are refused for MCP clients; pass targets directly, or start file-based runs in Cyber Hub. `cyberhub_cancel_run` stops only runs started through MCP. Threat-intelligence results keep each provider's own verdict and scores; there is no combined score.
 

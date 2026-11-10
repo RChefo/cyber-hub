@@ -11,6 +11,7 @@ pub mod assessment;
 pub mod bridge;
 pub mod catalog;
 pub mod client;
+pub mod detection;
 pub mod ops;
 pub mod prompts;
 pub mod proto;
