@@ -11,7 +11,7 @@ import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { CaptureReport, CaptureScan, FindingInput, LogScan, UtilityModule } from "@/lib/types";
 import { cn, pluralize } from "@/lib/utils";
-import { beaconFinding, beaconLine, captureFinding, captureSpan, dnsLeadFinding, formatBytes, logFinding } from "../lib/triage";
+import { beaconFinding, beaconLine, captureFinding, captureSpan, chainFinding, chainLine, dnsLeadFinding, formatBytes, logFinding } from "../lib/triage";
 import { PrivacyNote } from "./shared";
 
 /** Where recorded findings come from: the utility, what it analysed, the file's token from the
@@ -331,6 +331,7 @@ export function LogTool() {
   const [scan, setScan] = useState<LogScan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [pickedChains, setPickedChains] = useState<Set<number>>(new Set());
   const run = async (what: "text" | "file") => {
     setBusy(what);
     setError(null);
@@ -339,6 +340,7 @@ export function LogTool() {
       if (r) {
         setScan(r);
         setPicked(new Set(r.report.detections.filter((d) => d.severity === "high" || d.severity === "medium").map((d) => d.rule)));
+        setPickedChains(new Set());
       }
     } catch (e) {
       setScan(null);
@@ -425,6 +427,57 @@ export function LogTool() {
                   </div>
                 </div>
               ))}
+            </section>
+          )}
+          {r.kind === "windows" && (r.chains?.length ?? 0) > 0 && (
+            <section className="flex flex-col gap-2" aria-label="Process chains">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="flex-1 text-[13.5px] font-medium">Process chains ({r.chains!.length})</h3>
+                <RecordBar
+                  picked={pickedChains.size}
+                  build={(pid) => r.chains!.filter((_, i) => pickedChains.has(i)).map((c) => chainFinding(pid, scan.file, c))}
+                  onDone={() => setPickedChains(new Set())}
+                  source={{ module: "evtx_triage", subject: scan.file, token: scan.token, report: () => r }}
+                />
+              </div>
+              <p className="text-[12px] text-muted">Parent → child relationships from process creation events (Security 4688, Sysmon 1) that are rare in normal use. Each shows what the log says, why it was flagged, and what it may mean; recording one makes a finding under review.</p>
+              {r.chains!.map((c, i) => (
+                <div key={`${c.pattern}:${i}`} className={cn("flex items-start gap-2.5 rounded-[8px] px-2.5 py-2", pickedChains.has(i) ? "bg-accent-soft/40" : "bg-white/[0.02]")}>
+                  <Pick label={`Select ${c.title} on ${c.computer}`} selected={pickedChains.has(i)} onToggle={() => setPickedChains((p) => (p.has(i) ? new Set([...p].filter((x) => x !== i)) : new Set([...p, i])))} />
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <SeverityBadge severity={c.severity} />
+                      <span className="text-[13px] font-medium">{c.title}</span>
+                      <span className="text-[12px] text-muted">{c.computer}</span>
+                      {c.technique && (
+                        <ToneChip tone="accent" dot={false} className="text-[11px]">
+                          ATT&CK {c.technique}
+                        </ToneChip>
+                      )}
+                    </div>
+                    <div className="text-[11.5px] text-muted">Observed</div>
+                    <pre className="max-h-48 overflow-auto rounded-[6px] bg-black/20 px-2 py-1.5 font-mono text-[11px] whitespace-pre-wrap break-all">{c.processes.map(chainLine).join("\n")}</pre>
+                    <p className="text-[12.5px]">
+                      <span className="text-muted">Why it was flagged: </span>
+                      {c.why}
+                    </p>
+                    <p className="text-[12.5px]">
+                      <span className="text-muted">Hypotheses to test: </span>
+                      {c.hypotheses}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
+          {r.kind === "windows" && (r.logons?.length ?? 0) > 0 && (
+            <section className="flex flex-col gap-1.5" aria-label="Logons per account">
+              <h3 className="text-[13.5px] font-medium">Logons per account</h3>
+              <p className="text-[12px] text-muted">As the log records them (4624, 4625); user and service accounts, not computer or system identities. Facts to hunt from, not detections.</p>
+              <Table
+                head={["Account", "Logons", "Failures", "Logon types", "Busiest sources", "First", "Last"]}
+                rows={r.logons!.map((l) => [l.account, l.logons.toLocaleString(), l.failures.toLocaleString(), l.types.map(([t, n]) => `${t}: ${n}`).join(", ") || "—", l.sources.map(([s, n]) => `${s} (${n})`).join(", "), l.first.slice(0, 19), l.last.slice(0, 19)])}
+              />
             </section>
           )}
           {r.kind === "windows" ? (

@@ -86,6 +86,27 @@ pub struct Report {
     /// Windows event logs: the computers that wrote the events
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub computers: Vec<String>,
+    /// Windows event logs: flagged parent → child process relationships (Mission 6)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub chains: Vec<crate::sectools::proc_chains::ProcessChain>,
+    /// Windows event logs: logons and failures per user account, as observed (Mission 6)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub logons: Vec<AccountLogons>,
+}
+
+/// One account's logons in a Windows event log (4624 and 4625), as observed: no judgement.
+#[derive(Debug, Clone, Serialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountLogons {
+    pub account: String,
+    pub logons: u64,
+    pub failures: u64,
+    /// logon type → count, for successful logons ("3", "10"…)
+    pub types: Vec<(String, u64)>,
+    /// the busiest sources (address or workstation) with their counts, at most five
+    pub sources: Vec<(String, u64)>,
+    pub first: String,
+    pub last: String,
 }
 
 static WEB: Lazy<Regex> = Lazy::new(|| Regex::new(r#"^(\S+) \S+ \S+ \[([^\]]+)\] "([^"]*)" (\d{3}) (\S+)(?: "([^"]*)" "([^"]*)")?"#).expect("valid pattern"));

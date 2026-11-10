@@ -2216,6 +2216,48 @@ export interface LogReport {
   events?: { id: number; channel: string; name: string; count: number }[];
   /** Windows event logs: the computers that wrote the events */
   computers?: string[];
+  /** Windows event logs: flagged parent → child process relationships (Mission 6) */
+  chains?: ProcessChain[];
+  /** Windows event logs: logons and failures per user account, as observed (Mission 6) */
+  logons?: AccountLogons[];
+}
+
+/** One process of a chain, as the log has it. */
+export interface ChainProcess {
+  role: "ancestor" | "flagged" | "descendant";
+  /** generations from the flagged process (negative for its ancestors) */
+  depth: number;
+  time: string;
+  /** the event record that started it (0: known only by name, it started before the log) */
+  record: number;
+  eventId: number;
+  pid: string;
+  image: string;
+  commandLine: string;
+  user: string;
+}
+
+/** A flagged parent → child process relationship: what the log says, why it was flagged, and what it may mean. */
+export interface ProcessChain {
+  pattern: string;
+  title: string;
+  severity: "high" | "medium";
+  technique?: string;
+  why: string;
+  hypotheses: string;
+  computer: string;
+  processes: ChainProcess[];
+}
+
+export interface AccountLogons {
+  account: string;
+  logons: number;
+  failures: number;
+  /** [logon type, count] */
+  types: [string, number][];
+  sources: [string, number][];
+  first: string;
+  last: string;
 }
 
 /* ───────────── ATT&CK matrix (docs/DATA_MODEL.md#attck-matrix-schema-23) ───────────── */

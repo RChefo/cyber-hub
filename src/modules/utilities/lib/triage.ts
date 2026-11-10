@@ -1,4 +1,4 @@
-import type { CaptureBeacon, CaptureDnsLead, CaptureIssue, FindingInput, LogDetection } from "@/lib/types";
+import type { CaptureBeacon, CaptureDnsLead, CaptureIssue, ChainProcess, FindingInput, LogDetection, ProcessChain } from "@/lib/types";
 
 const cap = (s: string, n = 200) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
@@ -89,6 +89,36 @@ export function logFinding(projectId: number, file: string, d: LogDetection): Fi
       : `Rule ${d.rule} (log triage). Matches are attempts; check the responses before treating them as successful.`,
     remediation: d.remediation,
     tags: d.technique ? ["logs", "windows", d.technique.split(" ")[0]] : ["logs"],
+  };
+}
+
+/** One process of a chain as a line: who started what, when, from which event record. */
+export function chainLine(p: ChainProcess): string {
+  const name = p.image.split(/[\\/]/).pop() || p.image;
+  const indent = p.depth < 0 ? "" : "  ".repeat(p.depth + 1);
+  const where = p.record ? `${p.time} · record ${p.record} · ${p.eventId === 1 ? "Sysmon 1" : `event ${p.eventId}`} · PID ${p.pid}` : "started before the log (known only by name)";
+  const cmd = p.commandLine && p.commandLine !== p.image ? ` — ${p.commandLine}` : "";
+  return `${indent}${p.role === "flagged" ? "▶ " : ""}${name} (${where}${p.user ? ` · ${p.user}` : ""})${cmd}`;
+}
+
+/** A flagged process chain as a finding under review: observed facts, the derived signal and the
+ *  hypotheses stay in separate parts of the text, and only a technique the chain shows is tagged. */
+export function chainFinding(projectId: number, file: string, c: ProcessChain): FindingInput {
+  const flagged = c.processes.find((p) => p.role === "flagged");
+  const parent = [...c.processes].reverse().find((p) => p.role === "ancestor");
+  const name = (p?: ChainProcess) => (p ? p.image.split(/[\\/]/).pop() || p.image : "?");
+  return {
+    projectId,
+    title: cap(`${c.title}: ${name(parent)} → ${name(flagged)} (${file})`),
+    severity: c.severity,
+    status: "under_review",
+    category: "Log analysis",
+    confidence: "low",
+    description: `Observed in ${file} on ${c.computer}:\n${c.processes.map((p) => `- ${chainLine(p)}`).join("\n")}\n\nWhy it was flagged (derived): ${c.why}\n\nHypotheses to test: ${c.hypotheses}`,
+    affectedTarget: c.computer || file,
+    technicalDetails: `Pattern ${c.pattern} (Windows event log process chains).${c.technique ? ` MITRE ATT&CK: ${c.technique}.` : " No ATT&CK technique is claimed: the relationship alone does not show one."} A chain is a lead for the investigation, not proof of a compromise.`,
+    remediation: "Confirm or rule out the hypotheses from the evidence: the documents, requests or services named above, and what the flagged process did next.",
+    tags: ["logs", "windows", "process-chain", ...(c.technique ? [c.technique.split(" ")[0]] : [])],
   };
 }
 

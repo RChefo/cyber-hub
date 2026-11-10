@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 use super::evtx::{self, Event};
-use super::logs::{Detection, EventCount, Report, Source};
+use super::logs::{AccountLogons, Detection, EventCount, Report, Source};
 
 const MAX_EVENTS: u64 = 5_000_000;
 const MAX_KEYS: usize = 100_000;
@@ -196,9 +196,30 @@ struct State {
     counts: HashMap<(u32, String), u64>,
     /// process images by (computer, process ID), for 4688 events that name no parent
     procs: HashMap<(String, u64), String>,
+    /// processes linked to their parents (Mission 6)
+    tree: crate::sectools::proc_chains::Tree,
+    /// logons per account (Mission 6)
+    logons: HashMap<String, Logons>,
     computers: BTreeSet<String>,
     first: String,
     last: String,
+}
+
+#[derive(Default)]
+struct Logons {
+    shown: String,
+    logons: u64,
+    failures: u64,
+    types: BTreeMap<String, u64>,
+    sources: HashMap<String, u64>,
+    first: String,
+    last: String,
+}
+
+/// Service identities that log on all the time; the summary is about people and service accounts.
+fn system_identity(user: &str) -> bool {
+    let u = user.to_ascii_uppercase();
+    user.ends_with('$') || user.is_empty() || user == "-" || matches!(u.as_str(), "SYSTEM" | "LOCAL SERVICE" | "NETWORK SERVICE" | "ANONYMOUS LOGON") || u.starts_with("DWM-") || u.starts_with("UMFD-")
 }
 
 fn short(s: &str, n: usize) -> String {
@@ -229,6 +250,41 @@ fn file_of(path: &str) -> String {
 }
 
 impl State {
+    fn logon(&mut self, ev: &Event, ok: bool) {
+        let g = |k: &str| ev.get(k);
+        let user = g("TargetUserName");
+        if system_identity(user) {
+            return;
+        }
+        let shown = account(g("TargetDomainName"), user);
+        let key = shown.to_ascii_lowercase();
+        if self.logons.len() >= MAX_KEYS && !self.logons.contains_key(&key) {
+            return;
+        }
+        let l = self.logons.entry(key).or_default();
+        if l.shown.is_empty() {
+            l.shown = shown;
+        }
+        if ok {
+            l.logons += 1;
+            *l.types.entry(g("LogonType").to_string()).or_default() += 1;
+        } else {
+            l.failures += 1;
+        }
+        let source = [g("IpAddress"), g("WorkstationName")].into_iter().find(|s| !s.is_empty() && *s != "-").unwrap_or("local");
+        if l.sources.len() < 200 || l.sources.contains_key(source) {
+            *l.sources.entry(source.to_string()).or_default() += 1;
+        }
+        if !ev.time.is_empty() {
+            if l.first.is_empty() || ev.time < l.first {
+                l.first = ev.time.clone();
+            }
+            if ev.time > l.last {
+                l.last = ev.time.clone();
+            }
+        }
+    }
+
     fn hit(&mut self, rule: &Rule, who: &str, ev: &Event, what: &str) {
         let h = self.hits.entry(rule.id).or_default();
         h.count += 1;
@@ -270,6 +326,7 @@ impl State {
             }
             (4719, "security") => self.hit(&AUDIT_POLICY, &account(g("SubjectDomainName"), g("SubjectUserName")), ev, &format!("audit policy changed: {} {}", g("CategoryId"), g("AuditPolicyChanges"))),
             (4625, "security") => {
+                self.logon(ev, false);
                 let source = [g("IpAddress"), g("WorkstationName")].into_iter().find(|s| !s.is_empty() && *s != "-" && *s != "::1" && *s != "127.0.0.1").unwrap_or("local").to_string();
                 if self.failures.len() < MAX_KEYS || self.failures.contains_key(&source) {
                     *self.failures.entry(source.clone()).or_default() += 1;
@@ -284,6 +341,7 @@ impl State {
                 }
             }
             (4624, "security") => {
+                self.logon(ev, true);
                 let ip = g("IpAddress");
                 let user = account(g("TargetDomainName"), g("TargetUserName"));
                 if !ip.is_empty() && ip != "-" && self.failures.get(ip).copied().unwrap_or(0) >= 5 && !g("TargetUserName").ends_with('$') {
@@ -348,9 +406,30 @@ impl State {
                     "" => hexnum(g("ProcessId")).and_then(|p| self.procs.get(&(ev.computer.clone(), p))).cloned().unwrap_or_default(),
                     p => p.to_string(),
                 };
+                // the new process's account (Windows 10 and later), else the creator's
+                let user = if g("TargetUserName").is_empty() || g("TargetUserName") == "-" { account(g("SubjectDomainName"), g("SubjectUserName")) } else { account(g("TargetDomainName"), g("TargetUserName")) };
+                let pid = hexnum(g("NewProcessId")).map(|p| p.to_string()).unwrap_or_default();
+                let creator = hexnum(g("ProcessId")).map(|p| p.to_string()).unwrap_or_default();
+                self.tree.add(crate::sectools::proc_chains::Start { computer: &ev.computer, time: &ev.time, record: ev.record_id, event_id: 4688, key: pid.clone(), parent_key: creator, parent_image: &parent, parent_command: "", pid, image, command: g("CommandLine"), user: &user });
                 self.process(ev, image, g("CommandLine"), &parent, &account(g("SubjectDomainName"), g("SubjectUserName")));
             }
-            (1, _) if sysmon => self.process(ev, g("Image"), g("CommandLine"), g("ParentImage"), g("User")),
+            (1, _) if sysmon => {
+                self.tree.add(crate::sectools::proc_chains::Start {
+                    computer: &ev.computer,
+                    time: &ev.time,
+                    record: ev.record_id,
+                    event_id: 1,
+                    key: g("ProcessGuid").to_ascii_lowercase(),
+                    parent_key: g("ParentProcessGuid").to_ascii_lowercase(),
+                    parent_image: g("ParentImage"),
+                    parent_command: g("ParentCommandLine"),
+                    pid: g("ProcessId").to_string(),
+                    image: g("Image"),
+                    command: g("CommandLine"),
+                    user: g("User"),
+                });
+                self.process(ev, g("Image"), g("CommandLine"), g("ParentImage"), g("User"))
+            }
             (4104, _) if channel.contains("powershell") => {
                 let text = g("ScriptBlockText");
                 let path = if g("Path").is_empty() { "interactive" } else { g("Path") };
@@ -491,6 +570,25 @@ impl State {
         if summary.records >= MAX_EVENTS {
             warnings.push(format!("Only the first {MAX_EVENTS} events were read"));
         }
+        let tree = std::mem::take(&mut self.tree);
+        if tree.dropped > 0 {
+            warnings.push(format!("{} process starts past the first 100,000 were not linked into chains", tree.dropped));
+        }
+        if tree.unreported > 0 {
+            warnings.push(format!("{} more flagged process relationships are not listed (50 per pattern, 200 in all)", tree.unreported));
+        }
+        let chains = tree.finish();
+        let mut logons: Vec<AccountLogons> = std::mem::take(&mut self.logons)
+            .into_values()
+            .map(|l| {
+                let mut sources: Vec<(String, u64)> = l.sources.into_iter().collect();
+                sources.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+                sources.truncate(5);
+                AccountLogons { account: l.shown, logons: l.logons, failures: l.failures, types: l.types.into_iter().collect(), sources, first: l.first, last: l.last }
+            })
+            .collect();
+        logons.sort_by(|a, b| (b.logons + b.failures).cmp(&(a.logons + a.failures)).then_with(|| a.account.cmp(&b.account)));
+        logons.truncate(100);
         Report {
             kind: "windows".into(),
             lines: summary.records + summary.damaged_records,
@@ -502,6 +600,8 @@ impl State {
             warnings,
             events,
             computers: self.computers.into_iter().collect(),
+            chains,
+            logons,
         }
     }
 }
