@@ -1334,6 +1334,39 @@ pub(crate) const MIGRATIONS: &[&str] = &[
         rules INTEGER NOT NULL DEFAULT 0
     );
     "#,
+    // 30 — WSTG exceptions (docs/DATA_MODEL.md#risk-acceptance-schema-27): a risk acceptance can
+    // also cover a WSTG test that failed (kind 'wstg': ref_id is the project, requirement the test).
+    // SQLite cannot widen a CHECK in place, so the items table is copied with its rowids into a new
+    // one. No table refers to it; the triggers that name it are dropped first and recreated.
+    r#"
+    DROP TRIGGER risk_items_findings_deleted;
+    DROP TRIGGER risk_items_vulnerabilities_deleted;
+    DROP TRIGGER risk_items_asvs_deleted;
+    CREATE TABLE risk_acceptance_items_v30 (
+        acceptance_id INTEGER NOT NULL REFERENCES risk_acceptances(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('finding','vulnerability','asvs','wstg')),
+        ref_id INTEGER NOT NULL,
+        requirement TEXT NOT NULL DEFAULT '',
+        added_at TEXT NOT NULL,
+        removed_at TEXT,
+        removed_reason TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (acceptance_id, kind, ref_id, requirement)
+    );
+    INSERT INTO risk_acceptance_items_v30 (rowid, acceptance_id, kind, ref_id, requirement, added_at, removed_at, removed_reason)
+        SELECT rowid, acceptance_id, kind, ref_id, requirement, added_at, removed_at, removed_reason FROM risk_acceptance_items;
+    DROP TABLE risk_acceptance_items;
+    ALTER TABLE risk_acceptance_items_v30 RENAME TO risk_acceptance_items;
+    CREATE INDEX idx_risk_acceptance_items_ref ON risk_acceptance_items(kind, ref_id);
+    CREATE TRIGGER risk_items_findings_deleted AFTER DELETE ON findings BEGIN
+        DELETE FROM risk_acceptance_items WHERE kind = 'finding' AND ref_id = OLD.id;
+    END;
+    CREATE TRIGGER risk_items_vulnerabilities_deleted AFTER DELETE ON vulnerabilities BEGIN
+        DELETE FROM risk_acceptance_items WHERE kind = 'vulnerability' AND ref_id = OLD.id;
+    END;
+    CREATE TRIGGER risk_items_asvs_deleted AFTER DELETE ON asvs_assessments BEGIN
+        DELETE FROM risk_acceptance_items WHERE kind = 'asvs' AND ref_id = OLD.id;
+    END;
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a

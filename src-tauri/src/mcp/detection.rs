@@ -113,7 +113,7 @@ pub fn risk_view(c: &Connection, project_id: i64) -> AppResult<Value> {
         "acceptances": crate::workspace::risk::list(c, project_id)?,
         "summary": crate::workspace::risk::summary(c, project_id)?,
         "acceptedWithoutRecord": crate::workspace::risk::uncovered_findings(c, project_id)?.into_iter().map(|(id, title)| json!({ "findingId": id, "title": title })).collect::<Vec<_>>(),
-        "note": "An accepted risk is not remediated: it stays a risk, accepted by its owner until the expiry. Only the analyst records, renews or revokes an acceptance, in Cyber Hub.",
+        "note": "An accepted risk is not remediated: it stays a risk, accepted by its owner until the expiry. An exception does not make an ASVS requirement compliant or a WSTG test passed. Only the analyst records, renews or revokes an acceptance, in Cyber Hub.",
     });
     redact_value(&mut v);
     Ok(v)

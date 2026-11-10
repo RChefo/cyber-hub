@@ -1,8 +1,9 @@
 //! Risk acceptance (Mission 5; docs/DATA_MODEL.md#risk-acceptance-schema-27).
 //!
 //! A risk acceptance records who accepted which risk, why, with which compensating controls,
-//! who approved it and until when. It covers findings, vulnerabilities and ASVS requirements (an
-//! exception for a requirement the project does not meet).
+//! who approved it and until when. It covers findings, vulnerabilities, ASVS requirements (an
+//! exception for a requirement the project does not meet) and, since Mission 6, WSTG tests that
+//! failed (an exception for a test result; the test stays failed).
 //!
 //! * A finding or a vulnerability becomes an accepted risk **only** through an active, unexpired
 //!   acceptance that covers it. The checks sit where every status change goes through
@@ -199,8 +200,33 @@ fn describe(c: &Connection, it: &ItemRef) -> AppResult<(i64, String, String)> {
                 .unwrap_or_else(|| "not_assessed".into());
             Ok((project, status, format!("ASVS {}", req.id)))
         }
-        other => Err(validation(format!("An acceptance covers findings, vulnerabilities or ASVS requirements, not '{other}'"))),
+        // the checklist is per project: ref_id is the project, requirement the WSTG test
+        "wstg" => {
+            let exists: bool = c.query_row("SELECT EXISTS (SELECT 1 FROM projects WHERE id = ?1)", params![it.ref_id], |r| r.get(0))?;
+            if !exists {
+                return Err(AppError::NotFound(format!("project {}", it.ref_id)));
+            }
+            let test = wstg_test(&it.requirement)?;
+            let status: String = c
+                .query_row("SELECT status FROM checklist_items WHERE project_id = ?1 AND test_id = ?2", params![it.ref_id, test], |r| r.get(0))
+                .optional()?
+                .unwrap_or_else(|| "not_started".into());
+            Ok((it.ref_id, status, test))
+        }
+        other => Err(validation(format!("An acceptance covers findings, vulnerabilities, ASVS requirements or WSTG tests, not '{other}'"))),
     }
+}
+
+/// A WSTG test id of the bundled checklist, as the catalog spells it.
+fn wstg_test(id: &str) -> AppResult<String> {
+    let id = id.trim();
+    crate::methodology::catalog()
+        .categories
+        .iter()
+        .flat_map(|c| c.tests.iter())
+        .find(|t| t.id.eq_ignore_ascii_case(id))
+        .map(|t| t.id.clone())
+        .ok_or_else(|| validation(format!("{} is not a test of the bundled WSTG checklist", id.chars().take(40).collect::<String>())))
 }
 
 /// The active, unexpired acceptance covering an item, if any: (id, expires_at).
@@ -237,7 +263,11 @@ pub fn release(c: &Connection, kind: &str, ref_id: i64, requirement: &str, why: 
             "UPDATE risk_acceptance_items SET removed_at = ?5, removed_reason = ?4 WHERE acceptance_id = ?1 AND kind = ?2 AND ref_id = ?3 AND requirement = ?6",
             params![id, kind, ref_id, why, ts, requirement],
         )?;
-        let label = if kind == "asvs" { format!("ASVS {requirement}") } else { format!("{kind} #{ref_id}") };
+        let label = match kind {
+            "asvs" => format!("ASVS {requirement}"),
+            "wstg" => requirement.to_string(),
+            _ => format!("{kind} #{ref_id}"),
+        };
         record(c, *id, "item_removed", &format!("{label}: {why}"), source)?;
     }
     Ok(ids.len())
@@ -248,6 +278,7 @@ fn acceptable(kind: &str, status: &str) -> Result<(), String> {
         "finding" if matches!(status, "resolved" | "false_positive") => Err(format!("it is {}: there is no risk left to accept", status.replace('_', " "))),
         "vulnerability" if matches!(status, "resolved" | "false_positive" | "mitigated") => Err(format!("it is {}: there is no risk left to accept", status.replace('_', " "))),
         "asvs" if status != "non_compliant" => Err("an exception is for a requirement assessed as non-compliant".into()),
+        "wstg" if status != "failed" => Err("an exception is for a test that failed".into()),
         _ => Ok(()),
     }
 }
@@ -284,7 +315,11 @@ pub fn create(c: &Connection, project_id: i64, d: &Draft, items: &[ItemRef], sou
     record(&tx, id, "created", &format!("{} item{}; owner {}, approved by {} on {}, until {}", items.len(), if items.len() == 1 { "" } else { "s" }, f.owner, f.approver, f.approved_at, f.expires_at), source)?;
     let note = note_for(id, &f);
     for (it, status, label) in described {
-        let requirement = if it.kind == "asvs" { crate::workspace::asvs::requirement(&it.requirement).map(|r| r.id.to_string()).unwrap_or_default() } else { String::new() };
+        let requirement = match it.kind.as_str() {
+            "asvs" => crate::workspace::asvs::requirement(&it.requirement).map(|r| r.id.to_string()).unwrap_or_default(),
+            "wstg" => wstg_test(&it.requirement)?,
+            _ => String::new(),
+        };
         release(&tx, &it.kind, it.ref_id, &requirement, &format!("moved to acceptance #{id}"), source)?;
         tx.execute(
             "INSERT INTO risk_acceptance_items (acceptance_id, kind, ref_id, requirement, added_at) VALUES (?1, ?2, ?3, ?4, ?5)

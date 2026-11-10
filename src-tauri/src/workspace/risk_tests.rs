@@ -233,3 +233,114 @@ fn moving_documenting_and_deleting_items() {
     })
     .unwrap();
 }
+
+fn wstg(test: &str) -> ItemRef {
+    ItemRef { kind: "wstg".into(), ref_id: 1, requirement: test.into() }
+}
+
+fn check(c: &Connection, test: &str, status: &str, source: &str) -> AppResult<()> {
+    crate::methodology::set(c, 1, test, status, "", crate::methodology::Link::Keep, source).map(|_| ())
+}
+
+fn test_status(c: &Connection, test: &str) -> String {
+    c.query_row("SELECT status FROM checklist_items WHERE project_id = 1 AND test_id = ?1", params![test], |r| r.get(0)).unwrap()
+}
+
+/// Mission 6: a WSTG test that failed can have a documented exception. The test stays failed,
+/// every path that changes its result ends the exception, and nothing marks it passed.
+#[test]
+fn a_failed_wstg_test_can_have_an_exception_that_never_passes_it() {
+    let db = setup();
+    db.with(|c| {
+        // only a failed test of the bundled checklist, of this project, can be excepted
+        check(c, "WSTG-ATHN-03", "passed", "user")?;
+        let err = create(c, 1, &draft(60), &[wstg("WSTG-ATHN-03")], "user").unwrap_err().to_string();
+        assert!(err.contains("a test that failed"), "{err}");
+        let err = create(c, 1, &draft(60), &[wstg("WSTG-ATHN-04")], "user").unwrap_err().to_string();
+        assert!(err.contains("a test that failed"), "not started is not failed: {err}");
+        let err = create(c, 1, &draft(60), &[wstg("WSTG-NOPE-99")], "user").unwrap_err().to_string();
+        assert!(err.contains("not a test of the bundled WSTG checklist"), "{err}");
+        let other = ItemRef { kind: "wstg".into(), ref_id: 2, requirement: "WSTG-ATHN-03".into() };
+        assert!(create(c, 1, &draft(60), &[other], "user").unwrap_err().to_string().contains("not part of this project"));
+
+        check(c, "WSTG-ATHN-03", "failed", "user")?;
+        check(c, "WSTG-SESS-02", "failed", "user")?;
+        // the id is matched as the catalog spells it
+        let id = create(c, 1, &draft(60), &[wstg("wstg-athn-03"), wstg("WSTG-SESS-02")], "user")?;
+        assert_eq!(test_status(c, "WSTG-ATHN-03"), "failed", "an exception is not a pass");
+        assert!(cover(c, "wstg", 1, "WSTG-ATHN-03")?.is_some_and(|(a, _, _)| a == id));
+        let acc = get(c, id)?;
+        let labels: Vec<(String, String)> = acc.items.iter().map(|i| (i.label.clone(), i.status.clone())).collect();
+        assert_eq!(labels, [("WSTG-ATHN-03".to_string(), "failed".to_string()), ("WSTG-SESS-02".to_string(), "failed".to_string())]);
+        assert!(crate::methodology::coverage(c, 1)?.failed == 2, "coverage still counts both as failed");
+
+        // the analyst's retest (the UI path) ends one exception, with the reason
+        check(c, "WSTG-ATHN-03", "passed", "user")?;
+        let acc = get(c, id)?;
+        let left = acc.items.iter().find(|i| i.requirement == "WSTG-ATHN-03").unwrap();
+        assert!(left.removed_at.is_some() && left.removed_reason.contains("now passed"), "{}", left.removed_reason);
+        // an MCP client's change goes through the same rule
+        let set = crate::mcp::assessment::ChecklistSet { project_id: 1, test_id: "WSTG-SESS-02".into(), status: "not_applicable".into(), note: None, finding_id: None, unlink_finding: false };
+        crate::mcp::assessment::set_checklist(c, &set)?;
+        let acc = get(c, id)?;
+        let left = acc.items.iter().find(|i| i.requirement == "WSTG-SESS-02").unwrap();
+        assert!(left.removed_at.is_some() && left.removed_reason.contains("not applicable"), "{}", left.removed_reason);
+        let sources: Vec<String> = history(c, id)?.into_iter().filter(|e| e.action == "item_removed").map(|e| e.source).collect();
+        assert_eq!(sources, ["user", "mcp"]);
+        // failing again does not bring the exception back: a new acceptance is needed
+        check(c, "WSTG-ATHN-03", "failed", "user")?;
+        assert!(cover(c, "wstg", 1, "WSTG-ATHN-03")?.is_none());
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn an_expired_or_revoked_wstg_exception_is_flagged_and_changes_no_result() {
+    let db = setup();
+    db.with(|c| {
+        check(c, "WSTG-CRYP-01", "failed", "user")?;
+        let id = create(c, 1, &draft(60), &[wstg("WSTG-CRYP-01")], "user")?;
+        c.execute("UPDATE risk_acceptances SET expires_at = ?2 WHERE id = ?1", params![id, day(-1)])?;
+        assert_eq!(get(c, id)?.standing, "expired");
+        assert_eq!(summary(c, 1)?.expired, 1);
+        assert_eq!(test_status(c, "WSTG-CRYP-01"), "failed", "expiry never changes a result");
+        revoke(c, id, "the TLS migration slipped again", "user")?;
+        assert_eq!(test_status(c, "WSTG-CRYP-01"), "failed", "revoking never changes a result either");
+        assert!(get(c, id)?.items.iter().all(|i| i.removed_at.is_some()));
+        // the report says what the exception is and is not
+        let md = crate::workspace::report::markdown(c, 1, &crate::workspace::report::ReportOptions::default(), "2026-11-10")?;
+        assert!(!md.contains("## Risk acceptances and exceptions"), "a revoked acceptance alone is not listed as a section");
+        check(c, "WSTG-CRYP-02", "failed", "user")?;
+        create(c, 1, &draft(30), &[wstg("WSTG-CRYP-02")], "user")?;
+        let md = crate::workspace::report::markdown(c, 1, &crate::workspace::report::ReportOptions::default(), "2026-11-10")?;
+        assert!(md.contains("## Risk acceptances and exceptions"), "{md}");
+        assert!(md.contains("WSTG-CRYP-02 (test failed, exception)"));
+        assert!(md.contains("excepted WSTG tests stay failed"));
+        assert!(md.contains("One failed test has a documented exception and stays failed"));
+        assert!(md.contains("1 revoked acceptance is not listed."));
+        let html = crate::workspace::report::render(c, 1, &crate::workspace::report::ReportOptions::default(), "2026-11-10")?;
+        assert!(html.contains("Risk acceptances and exceptions") && html.contains("WSTG-CRYP-02 (test failed, exception)"));
+        Ok(())
+    })
+    .unwrap();
+}
+
+/// Migration 30 copied the items table: its triggers still drop the items of deleted records.
+#[test]
+fn the_items_table_keeps_its_triggers_after_migration_30() {
+    let db = setup();
+    db.with(|c| {
+        let f = finding(c, 1, "Weak TLS", "confirmed");
+        let id = create(c, 1, &draft(60), &[it("finding", f)], "user")?;
+        c.execute("DELETE FROM findings WHERE id = ?1", params![f])?;
+        let n: i64 = c.query_row("SELECT COUNT(*) FROM risk_acceptance_items WHERE acceptance_id = ?1", params![id], |r| r.get(0))?;
+        assert_eq!(n, 0);
+        let sql: String = c.query_row("SELECT sql FROM sqlite_master WHERE name = 'risk_acceptance_items'", [], |r| r.get(0))?;
+        assert!(sql.contains("'wstg'"));
+        let triggers: i64 = c.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'risk_items_%'", [], |r| r.get(0))?;
+        assert_eq!(triggers, 3);
+        Ok(())
+    })
+    .unwrap();
+}

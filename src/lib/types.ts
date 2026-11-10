@@ -839,7 +839,7 @@ export interface TaxiiSync {
 
 /** Risk acceptance (Mission 5): who accepted which risk, why, approved by whom, until when. */
 export type RiskStanding = "active" | "review_due" | "expired" | "revoked";
-export type RiskItemKind = "finding" | "vulnerability" | "asvs";
+export type RiskItemKind = "finding" | "vulnerability" | "asvs" | "wstg";
 
 export interface RiskItemRef {
   kind: RiskItemKind;

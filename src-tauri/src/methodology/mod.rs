@@ -152,6 +152,10 @@ pub fn set(c: &Connection, project_id: i64, test_id: &str, status: &str, note: &
         let by = if source == "mcp" { "by an MCP client" } else { "by the analyst" };
         crate::workspace::timeline::record(&tx, project_id, "checklist", &format!("Checklist {test_id}: {}", changes.join(", ")), by, Some("checklist"), None)?;
     }
+    // an exception covers a failed test; any other result ends it (Mission 6)
+    if old_status == "failed" && after.status != "failed" {
+        crate::workspace::risk::release(&tx, "wstg", project_id, test_id, &format!("the test is now {}", after.status.replace('_', " ")), source)?;
+    }
     tx.commit()?;
     Ok(after)
 }

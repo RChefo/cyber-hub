@@ -14,10 +14,10 @@ import type { Project, RiskAcceptance, RiskDraft, RiskItemRef } from "@/lib/type
 import { pluralize } from "@/lib/utils";
 import { addDays, draftProblems, expiryText, newDraft, RISK_STANDING, todayUtc } from "./risk";
 
-const ITEM_KIND: Record<string, string> = { finding: "Finding", vulnerability: "Vulnerability", asvs: "ASVS" };
+const ITEM_KIND: Record<string, string> = { finding: "Finding", vulnerability: "Vulnerability", asvs: "ASVS", wstg: "WSTG test" };
 
 /** Records a risk acceptance for `items`: the only way to make a finding or a vulnerability an
- * accepted risk, or to give an ASVS requirement an exception. */
+ * accepted risk, or to give a non-compliant ASVS requirement or a failed WSTG test an exception. */
 export function AcceptRiskModal({
   projectId,
   items,
@@ -184,7 +184,7 @@ function RevokeModal({ a, onClose }: { a: RiskAcceptance; onClose: () => void })
       isOpen
       onOpenChange={(o) => !o && onClose()}
       title="Revoke acceptance"
-      description={`The risk is no longer accepted. Findings it covers are reopened and vulnerabilities set open again${open.some((i) => i.kind === "asvs") ? "; ASVS requirements lose their exception" : ""}.`}
+      description={`The risk is no longer accepted. Findings it covers are reopened and vulnerabilities set open again${open.some((i) => i.kind === "asvs") ? "; ASVS requirements lose their exception" : ""}${open.some((i) => i.kind === "wstg") ? "; WSTG tests lose their exception and stay failed" : ""}.`}
       footer={
         <>
           <Button variant="tertiary" onPress={onClose}>

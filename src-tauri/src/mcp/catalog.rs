@@ -432,7 +432,7 @@ pub static TOOLS: &[ToolSpec] = &[
             "note": { "type": "string", "maxLength": 500 }
         }), &["project_id", "hit_id", "action"]) },
     ToolSpec { name: "cyberhub_list_risk_acceptances", title: "Risk acceptances", group: "detection", category: Category::Read,
-        description: "A project's risk register: each accepted risk with its justification, compensating controls, owner, approver, approval and expiry dates, standing (active, review_due, expired, revoked) and the findings, vulnerabilities and ASVS requirements it covers, plus findings marked accepted without a record. Read-only: only the analyst records, renews or revokes an acceptance, in Cyber Hub.",
+        description: "A project's risk register: each accepted risk with its justification, compensating controls, owner, approver, approval and expiry dates, standing (active, review_due, expired, revoked) and the findings, vulnerabilities, ASVS requirements and failed WSTG tests it covers (an exception never makes a requirement compliant or a test passed), plus findings marked accepted without a record. Read-only: only the analyst records, renews or revokes an acceptance, in Cyber Hub.",
         schema: || obj(json!({ "project_id": project_id() }), &["project_id"]) },
     ToolSpec { name: "cyberhub_get_asvs_assessment", title: "ASVS assessment", group: "detection", category: Category::Read,
         description: "A project's OWASP ASVS 5.0.0 assessments, or one assessment with its requirements (by status or chapter), notes, linked findings and evidence, the analyst's mappings and recent changes. A requirement is compliant only when the analyst said so.",

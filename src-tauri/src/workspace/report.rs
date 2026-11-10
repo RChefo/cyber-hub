@@ -208,6 +208,13 @@ struct Data {
     evidence: Vec<Vec<String>>,
     timeline: Vec<Vec<String>>,
     timeline_cut: bool,
+    /// risk acceptances and exceptions that are not revoked (Mission 6), and how many were revoked
+    risks: Vec<Vec<String>>,
+    risks_revoked: usize,
+    /// findings marked accepted risk without a covering acceptance: (id, title)
+    risks_undocumented: Vec<(i64, String)>,
+    /// failed WSTG tests under an exception
+    wstg_excepted: usize,
 }
 
 fn severity_ok(f: &Finding, o: &ReportOptions) -> bool {
@@ -296,6 +303,28 @@ fn collect(c: &Connection, project_id: i64, o: &ReportOptions, today: &str) -> A
         (vec![], false)
     };
     let summary = if !o.summary.trim().is_empty() { o.summary.trim().to_string() } else { p.description.trim().to_string() };
+    let acceptances = crate::workspace::risk::list(c, project_id)?;
+    let risks_revoked = acceptances.iter().filter(|a| a.standing == "revoked").count();
+    let standing = acceptances.iter().filter(|a| a.standing != "revoked");
+    let wstg_excepted = standing.clone().flat_map(|a| a.items.iter()).filter(|i| i.kind == "wstg" && i.removed_at.is_none()).count();
+    let risks: Vec<Vec<String>> = standing
+        .map(|a| {
+            let covers: Vec<String> = a
+                .items
+                .iter()
+                .filter(|i| i.removed_at.is_none())
+                .map(|i| match i.kind.as_str() {
+                    "finding" => format!("Finding #{} {} (accepted risk)", i.ref_id, i.label),
+                    "vulnerability" => format!("Vulnerability {} (accepted risk)", i.label),
+                    "asvs" => format!("{} (non-compliant, exception)", i.label),
+                    "wstg" => format!("{} (test failed, exception)", i.label),
+                    _ => i.label.clone(),
+                })
+                .collect();
+            vec![format!("#{} {}", a.id, a.title), label(&a.standing), a.owner.clone(), format!("{}, {}", a.approver, a.approved_at), a.expires_at.clone(), covers.join("; ")]
+        })
+        .collect();
+    let risks_undocumented = crate::workspace::risk::uncovered_findings(c, project_id)?;
     Ok(Data {
         title,
         o: o.clone(),
@@ -313,6 +342,10 @@ fn collect(c: &Connection, project_id: i64, o: &ReportOptions, today: &str) -> A
         evidence,
         timeline,
         timeline_cut,
+        risks,
+        risks_revoked,
+        risks_undocumented,
+        wstg_excepted,
         p,
     })
 }
@@ -347,8 +380,13 @@ fn figures(d: &Data) -> Vec<(i64, &'static str)> {
 fn checklist_line(d: &Data) -> Option<String> {
     let cov = &d.coverage;
     (cov.done() + cov.in_progress > 0).then(|| {
+        let excepted = match d.wstg_excepted {
+            0 => String::new(),
+            1 => " One failed test has a documented exception and stays failed (see Risk acceptances and exceptions).".into(),
+            n => format!(" {n} failed tests have a documented exception and stay failed (see Risk acceptances and exceptions)."),
+        };
         format!(
-            "OWASP Web Security Testing Guide: {} of {} tests have a result ({} passed, {} failed, {} not applicable); {} in progress.",
+            "OWASP Web Security Testing Guide: {} of {} tests have a result ({} passed, {} failed, {} not applicable); {} in progress.{excepted}",
             cov.done(),
             cov.total,
             cov.passed,
@@ -357,6 +395,22 @@ fn checklist_line(d: &Data) -> Option<String> {
             cov.in_progress
         )
     })
+}
+
+const RISKS_HEAD: &[&str] = &["Acceptance", "Standing", "Owner", "Approved", "Until", "Covers"];
+const RISKS_NOTE: &str = "Accepting a risk is not fixing it: covered findings and vulnerabilities stay accepted risks, excepted ASVS requirements stay non-compliant and excepted WSTG tests stay failed. An expired acceptance changes nothing by itself and is listed as expired until it is renewed or revoked.";
+
+/// The register's closing lines: revoked acceptances and findings accepted without a record.
+fn risk_notes(d: &Data) -> Vec<String> {
+    let mut out = Vec::new();
+    if d.risks_revoked > 0 {
+        out.push(format!("{} revoked acceptance{} not listed.", d.risks_revoked, if d.risks_revoked == 1 { " is" } else { "s are" }));
+    }
+    if !d.risks_undocumented.is_empty() {
+        let ids: Vec<String> = d.risks_undocumented.iter().map(|(id, _)| format!("#{id}")).collect();
+        out.push(format!("Marked accepted risk without a risk acceptance: finding{} {}.", if ids.len() == 1 { "" } else { "s" }, ids.join(", ")));
+    }
+    out
 }
 
 /// A finding's facts in report order (label, value); the severity comes first.
@@ -506,6 +560,16 @@ pub fn render(c: &Connection, project_id: i64, o: &ReportOptions, today: &str) -
             w.el("p", "muted", "No vulnerabilities tracked.");
         } else {
             w.table(VULNS_HEAD, d.vulnerabilities.clone());
+        }
+    }
+    if !d.risks.is_empty() || !d.risks_undocumented.is_empty() {
+        w.el("h2", "", "Risk acceptances and exceptions");
+        w.el("p", "muted", RISKS_NOTE);
+        if !d.risks.is_empty() {
+            w.table(RISKS_HEAD, d.risks.clone());
+        }
+        for line in risk_notes(&d) {
+            w.el("p", "muted", &line);
         }
     }
     if d.o.include_assets {
@@ -753,9 +817,28 @@ pub fn markdown(c: &Connection, project_id: i64, o: &ReportOptions, today: &str)
 
     for (on, head, cols, rows, empty) in [
         (d.o.include_vulnerabilities, "Vulnerabilities", VULNS_HEAD, &d.vulnerabilities, "No vulnerabilities tracked."),
+        (true, "Risk acceptances and exceptions", RISKS_HEAD, &d.risks, ""),
         (d.o.include_assets, "Assets", ASSETS_HEAD, &d.asset_rows, "No assets recorded."),
         (d.o.include_evidence, "Evidence register", EVIDENCE_HEAD, &d.evidence, "No evidence registered."),
     ] {
+        if head == "Risk acceptances and exceptions" {
+            if d.risks.is_empty() && d.risks_undocumented.is_empty() {
+                continue;
+            }
+            l.push(String::new());
+            l.push(format!("## {head}"));
+            l.push(String::new());
+            l.push(format!("_{RISKS_NOTE}_"));
+            if !rows.is_empty() {
+                l.push(String::new());
+                md_table(&mut l, cols, rows);
+            }
+            for line in risk_notes(&d) {
+                l.push(String::new());
+                l.push(md_line(&line));
+            }
+            continue;
+        }
         if on {
             l.push(String::new());
             l.push(format!("## {head}"));

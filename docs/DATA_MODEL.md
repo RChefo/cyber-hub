@@ -1,4 +1,4 @@
-# Project data model (schema 29)
+# Project data model (schema 30)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -314,7 +314,8 @@ Projects → *Checklist* tracks the engagement's coverage of the **OWASP Web Sec
 * **History.** Every change is recorded on the project timeline (type `checklist`): status, note, link and unlink, and whether the analyst or an MCP client made it.
 * **Coverage.** The tab shows how many tests have a result (passed, failed or not applicable) out of the whole catalog, with counts per status. Tests can be filtered by status and searched by ID, name, objective or note.
 * **Findings.** *Record finding* on a failed test opens the finding form with the test's name, category, the note and the test objectives, a reference to the WSTG page, and the tags `wstg` and the test ID. Saving links the finding to the test.
-* **Report.** The HTML report states the coverage under the engagement details (tests with a result, per status), once at least one test has a status.
+* **Exceptions** (Mission 6, schema 30): a failed test can get an exception, a risk acceptance covering it (see [Risk acceptance](#risk-acceptance-schema-27)). The test stays failed and is counted as failed. Any other result (retested and passed, not applicable…), from the tab or an MCP client, ends the exception with the reason; failing again needs a new acceptance.
+* **Report.** The HTML and Markdown reports state the coverage under the engagement details (tests with a result, per status, and how many failed tests have an exception), once at least one test has a status.
 * **Versions.** WSTG test IDs can change between guide versions. The bundled version is recorded in the data file, so a later update can map the IDs.
 
 ## API security (schema 20)
@@ -529,7 +530,8 @@ A risk acceptance records who accepted which risk, why, with which compensating 
   The standing is computed when read: *active*, *review due* (the review date has come), *expired* (past the expiry) or *revoked*.
 * **What it covers** (`risk_acceptance_items`):
   * findings and vulnerabilities of the project that are not resolved or false positives (vulnerabilities also not mitigated);
-  * non-compliant ASVS requirements of its assessments (their exceptions).
+  * non-compliant ASVS requirements of its assessments (their exceptions);
+  * failed WSTG tests of the project (their exceptions; schema 30 rebuilt the items table, keeping its rows and rowids, so that its `kind` can be `wstg`, with `ref_id` the project and `requirement` the test ID).
 
   An item already covered by another acceptance moves to the new one. When an item leaves, its row is kept with the date and the reason: the finding was reopened or fixed, the vulnerability verified, the requirement now compliant, the record deleted (removed by triggers), or the acceptance revoked.
 * **History** (`risk_acceptance_events`): created, items added and removed, renewed, revoked, with the source.
@@ -546,6 +548,7 @@ A risk acceptance records who accepted which risk, why, with which compensating 
   * Renewing records a new approval (approver, date) and expiry.
   * Revoking (with a reason) reopens what it covered and nothing else covers: findings become `reopened`, vulnerabilities `open`, and requirements lose the exception.
 * **Earlier data.** Findings marked accepted before schema 27 keep their status. The register lists them as accepted without a record, so an acceptance can document them without changing their status.
+* **Report** (Mission 6): the project report's *Risk acceptances and exceptions* section lists every acceptance that is not revoked, with its standing, owner, approver, expiry and what it covers, says that accepting is not fixing, and names findings marked accepted without a record.
 * **Timeline:** an acceptance and a revocation are recorded as `risk`.
 * **MCP:** `cyberhub_list_risk_acceptances` (read) returns the register, redacted.
 
