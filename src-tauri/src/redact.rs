@@ -39,6 +39,22 @@ static KEY_COLON: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(?i)\b([a-z0-9_.-]*(?:pass(?:word|wd)?|pwd|secret|token|api[-_]?key|apikey|credential|private[-_]?key)[a-z0-9_.-]*)("?\s*:\s*"?|\s+=\s*"?|"\s*=\s*"?)([^\s"',;&]+)"#).unwrap()
 });
 
+/// Redact secrets in every string of a JSON value; keys, numbers and structure are kept.
+/// Used for everything an MCP client receives (Mission 6).
+pub fn redact_json(v: &mut serde_json::Value) {
+    match v {
+        serde_json::Value::String(s) => {
+            let r = redact_text(s);
+            if r != *s {
+                *s = r;
+            }
+        }
+        serde_json::Value::Array(a) => a.iter_mut().for_each(redact_json),
+        serde_json::Value::Object(o) => o.values_mut().for_each(redact_json),
+        _ => {}
+    }
+}
+
 /// Redact secrets inside a free-form text (one argument, a command line, or output).
 pub fn redact_text(s: &str) -> String {
     let s = URL_USERINFO.replace_all(s, |c: &Captures| format!("{}:{MASK}@", &c[1]));

@@ -571,10 +571,34 @@ pub struct AppDispatcher {
     pub app: AppHandle,
 }
 
+/// Tools whose results are indicator values the client must get exactly (a URL, a hash, a
+/// provider's verdict on them), so that it can look them up or compare them again. Every other
+/// result has credential-like values masked.
+pub const EXACT_VALUES: &[&str] = &[
+    "cyberhub_get_saved_indicators",
+    "cyberhub_threat_intel_lookup",
+    "cyberhub_threat_intel_compare",
+    "cyberhub_vt_lookup",
+    "cyberhub_vt_lookup_hash",
+    "cyberhub_vt_get_analysis",
+    "cyberhub_vt_get_report",
+];
+
 impl Dispatcher for AppDispatcher {
     fn call(&self, conn: ConnCtx, tool: String, arguments: Value) -> DispatchFuture {
         let app = self.app.clone();
-        Box::pin(async move { handle(app, conn, tool, arguments).await })
+        Box::pin(async move {
+            // what a client receives goes on to its model provider: credential-like values in
+            // findings, notes, records and reports are masked, as for the in-app assistant
+            let exact = EXACT_VALUES.contains(&tool.as_str());
+            let mut r = handle(app, conn, tool, arguments).await;
+            match &mut r {
+                Ok(v) if !exact => redact::redact_json(v),
+                Err(e) => e.message = redact::redact_text(&e.message),
+                Ok(_) => {}
+            }
+            r
+        })
     }
 }
 
@@ -1809,6 +1833,35 @@ mod tests {
         let list = scrub_exec(json!([{"program": "/usr/bin/nmap", "args": ["--script-args-file=/home/me/a"]}]));
         assert_eq!(list[0]["program"], "nmap");
         assert_eq!(list[0]["args"][0], "<local file>");
+    }
+
+    #[test]
+    fn results_are_redacted_except_exact_indicator_values() {
+        let mut v = json!({
+            "findings": [{
+                "description": "The page leaks Authorization: Bearer abcdefabcdefabcdef0123456789 and password=hunter2hunter2",
+                "notes": ["db at postgres://admin:S3cretPass@db.internal/app", "key AKIAABCDEFGHIJKLMNOP"],
+                "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "target": "https://app.example.com/admin",
+                "id": 7
+            }],
+            "token": 5
+        });
+        crate::redact::redact_json(&mut v);
+        let s = v.to_string();
+        for secret in ["hunter2hunter2", "abcdefabcdefabcdef0123456789", "S3cretPass", "AKIAABCDEFGHIJKLMNOP"] {
+            assert!(!s.contains(secret), "{secret} is masked: {s}");
+        }
+        // what is not a credential is kept exactly: vectors, hashes, targets, keys and numbers
+        for kept in ["CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "https://app.example.com/admin", "\"id\":7", "\"token\":5"] {
+            assert!(s.contains(kept), "{kept} kept: {s}");
+        }
+        // the exemptions only read indicator values
+        for name in EXACT_VALUES {
+            let t = catalog::tool(name).unwrap_or_else(|| panic!("{name} is a tool"));
+            assert!(matches!(t.category, Category::Read | Category::ExternalLookup), "{name} only reads");
+        }
     }
 
     #[test]
