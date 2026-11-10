@@ -256,6 +256,7 @@ function Row({ id, item, project, archived, open, onToggle, onOpenFinding, onOpe
         <SelectInput aria-label={`Status of ${r.id}`} value={item.status} isDisabled={archived} onChange={(v) => void setStatus(v as AsvsStatus)} options={Object.entries(ASVS_STATUS).map(([k, s]) => ({ id: k, label: s.label }))} className={cn("w-40 shrink-0", st.tone === "danger" && "text-danger")} />
       </div>
       {open && <Details id={id} item={item} project={project} archived={archived} onSaveNote={(note) => void setStatus(item.status, note)} onOpenFinding={onOpenFinding} onOpenRisks={onOpenRisks} exception={exception} />}
+      {confirm.element}
     </div>
   );
 }

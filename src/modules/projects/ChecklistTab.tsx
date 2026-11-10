@@ -202,6 +202,7 @@ export function ChecklistTab({ projectId, archived = false, onOpenRisks }: { pro
           </>
         )}
       </AppModal>
+      {confirm.element}
       {excepting && (
         <AcceptRiskModal
           projectId={projectId}
