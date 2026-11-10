@@ -152,6 +152,33 @@ pub fn dialog_text(text: &str) -> String {
     out
 }
 
+/// One word of a command line that an analyst pastes into a shell (Mission 7): POSIX shells and
+/// PowerShell both read it back as exactly this word and run nothing else. Plain words (ASCII
+/// letters, digits and `_ + = : . / -`) stay as they are; anything else is single-quoted, and a
+/// quote inside (`'`, or one of the typographic quotes U+2018–U+201B that PowerShell also reads as
+/// `'`) is written as `'"q"'`: the quoted text ends, the quote follows in double quotes, the
+/// quoted text goes on.
+pub fn shell_word(a: &str) -> String {
+    if !a.is_empty() && a.chars().all(|c| c.is_ascii_alphanumeric() || "_+=:./-".contains(c)) {
+        return a.to_string();
+    }
+    let mut s = String::with_capacity(a.len() + 2);
+    s.push('\'');
+    for c in a.chars() {
+        if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+            s.push('\'');
+            s.push('"');
+            s.push(c);
+            s.push('"');
+            s.push('\'');
+        } else {
+            s.push(c);
+        }
+    }
+    s.push('\'');
+    s
+}
+
 /// Every raw HTML or image that a CommonMark parser (pulldown-cmark) finds in `md`: the tests of
 /// the Markdown reports check that collected or imported text never becomes markup (Mission 7).
 #[cfg(test)]

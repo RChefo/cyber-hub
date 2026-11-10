@@ -34,8 +34,11 @@ describe("raw requests", () => {
     expect(raw.split("\n").slice(0, 3)).toEqual(["PUT /v1/items/7?x=1 HTTP/1.1", "Host: api.example.com", "Authorization: Bearer t"]);
     const back = parseRawRequest(raw, targetOf(req.url));
     expect({ ...back, headers: back.headers.filter(([k]) => k !== "Host") }).toEqual(req);
-    expect(toCurl(req, true)).toBe("curl -sS -i -k -X PUT -H 'Authorization: Bearer t' --data-raw 'it'\\''s' 'https://api.example.com/v1/items/7?x=1'");
-    expect(toCurl({ method: "GET", url: "https://a.example.com/", headers: [], body: "" })).toBe("curl -sS -i 'https://a.example.com/'");
+    expect(toCurl(req, true)).toBe(`curl -sS -i -k -X PUT -H 'Authorization: Bearer t' --data-raw 'it'"'"'s' 'https://api.example.com/v1/items/7?x=1'`);
+    expect(toCurl({ method: "GET", url: "https://a.example.com/", headers: [], body: "" })).toBe("curl -sS -i https://a.example.com/");
+    // Mission 7: a path an imported API definition supplies cannot end the quoting in PowerShell
+    const hostile = toCurl({ method: "GET", url: "https://a.example.com/v1/users';calc;'\u2019;calc;\u2019", headers: [], body: "" });
+    expect(hostile).toBe(`curl -sS -i 'https://a.example.com/v1/users'"'"';calc;'"'"''"\u2019"';calc;'"\u2019"''`);
     expect(targetOf("not a url")).toBe("");
   });
 });

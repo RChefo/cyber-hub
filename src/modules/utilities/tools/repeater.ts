@@ -5,6 +5,7 @@
  */
 import { useSyncExternalStore } from "react";
 import type { HttpResponseOut } from "@/lib/types";
+import { shellQuote } from "@/lib/utils";
 
 export interface RepeaterRequest {
   method: string;
@@ -85,9 +86,7 @@ export function targetOf(url: string): string {
   }
 }
 
-const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-
-/** A cURL command for the request (POSIX shell quoting). */
+/** A cURL command for the request, quoted for POSIX shells and PowerShell alike (Mission 7). */
 export function toCurl(r: RepeaterRequest, insecure = false): string {
   const parts = ["curl", "-sS", "-i"];
   if (insecure) parts.push("-k");

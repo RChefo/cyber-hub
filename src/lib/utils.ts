@@ -89,11 +89,16 @@ export function placeholdersIn(template: string, style: "single" | "double" = "d
   return Array.from(new Set(Array.from(template.matchAll(re), (m) => m[1])));
 }
 
-/** Quote an argument for display in a POSIX-like shell preview. */
+/**
+ * Quote an argument for a command line that may be pasted into a shell (Mission 7): POSIX shells
+ * and PowerShell both read it back as exactly this word and run nothing else. Plain words (ASCII
+ * letters, digits and `_ + = : . / -`) stay as they are; anything else is single-quoted, and a
+ * quote inside (`'`, or one of the typographic quotes U+2018–U+201B that PowerShell also reads as
+ * `'`) is written as `'"q"'`. The backend quotes history lines the same way (`util::shell_word`).
+ */
 export function shellQuote(arg: string): string {
-  if (arg === "") return "''";
-  if (/^[\w@%+=:,./-]+$/.test(arg)) return arg;
-  return `'${arg.replace(/'/g, `'"'"'`)}'`;
+  if (/^[A-Za-z0-9_+=:./-]+$/.test(arg)) return arg;
+  return `'${arg.replace(/['\u2018-\u201B]/g, (q) => `'"${q}"'`)}'`;
 }
 
 /**
