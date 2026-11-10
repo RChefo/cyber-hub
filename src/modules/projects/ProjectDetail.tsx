@@ -21,6 +21,7 @@ import { ComponentsTab } from "./ComponentsTab";
 import { AssistantTab } from "./AssistantTab";
 import { AttackSurfaceTab } from "./AttackSurfaceTab";
 import { AutomationTab } from "./AutomationTab";
+import { AsvsTab } from "./AsvsTab";
 import { ChecklistTab } from "./ChecklistTab";
 import { EvidenceVault, ReportTab, ScopeExtras, TimelineTab, type TimelineRecord } from "./EngagementTabs";
 import { FindingsTab } from "./FindingsTab";
@@ -32,9 +33,9 @@ import { countBySeverity } from "./report";
 import { ScopeTab } from "./ScopeTab";
 import { VulnerabilitiesTab } from "./VulnerabilitiesTab";
 
-type TabId = "overview" | "scope" | "surface" | "apis" | "components" | "vulns" | "findings" | "checklist" | "analysis" | "investigation" | "assistant" | "automation" | "timeline" | "evidence" | "report" | "notes" | "commands";
+type TabId = "overview" | "scope" | "surface" | "apis" | "components" | "vulns" | "findings" | "checklist" | "asvs" | "analysis" | "investigation" | "assistant" | "automation" | "timeline" | "evidence" | "report" | "notes" | "commands";
 
-const TAB_IDS: TabId[] = ["overview", "scope", "surface", "apis", "components", "vulns", "findings", "checklist", "analysis", "investigation", "assistant", "automation", "timeline", "evidence", "report", "notes", "commands"];
+const TAB_IDS: TabId[] = ["overview", "scope", "surface", "apis", "components", "vulns", "findings", "checklist", "asvs", "analysis", "investigation", "assistant", "automation", "timeline", "evidence", "report", "notes", "commands"];
 
 function NotesTab({ project }: { project: Project }) {
   const [notes, setNotes] = useState(project.notes);
@@ -363,6 +364,7 @@ export function ProjectDetail({ id }: { id: number }) {
     { id: "vulns", label: "Vulnerabilities" },
     { id: "findings", label: `Findings (${f.length})` },
     { id: "checklist", label: "Checklist" },
+    { id: "asvs", label: "ASVS" },
     { id: "analysis", label: "Analysis" },
     { id: "investigation", label: "Investigation" },
     { id: "assistant", label: "Assistant" },
@@ -492,6 +494,9 @@ export function ProjectDetail({ id }: { id: number }) {
         </Tabs.Panel>
         <Tabs.Panel id="checklist">
           <ChecklistTab projectId={p.id} />
+        </Tabs.Panel>
+        <Tabs.Panel id="asvs">
+          <AsvsTab project={p} onOpenFinding={(id) => openRecordTab({ kind: "finding", id, sub: "" })} />
         </Tabs.Panel>
         <Tabs.Panel id="timeline">
           <TimelineTab

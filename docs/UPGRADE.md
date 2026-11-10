@@ -25,8 +25,9 @@ This document states exactly what an upgrade does, what was tested, and how far 
 | development: investigation layer | 22 |
 | development: ATT&CK matrix | 23 |
 | development: detection engineering | 24 |
+| development: OWASP ASVS assessments | 25 |
 
-The schema version is SQLite's `user_version`. Migrations 9–24 are listed in [DATA_MODEL.md](DATA_MODEL.md).
+The schema version is SQLite's `user_version`. Migrations 9–25 are listed in [DATA_MODEL.md](DATA_MODEL.md).
 * Migrations 9–12 add tables and columns, rebuild `findings` once to give it the new lifecycle, and map the old finding statuses: `open` becomes `new`, `reported` becomes `confirmed`, and every finding that was `reported` gets a history entry recording the mapping. Ids and all other columns are kept.
 * Migrations 13–18 only add tables (`scan_imports`, `finding_fingerprints`; `finding_templates`; `checklist_items`) and columns with defaults (`finding_fingerprints.host`; `findings.cvss_vector`, `findings.cvss_score`; `scope_events.repeats`), and change nothing that exists.
 * Migration 19 changes scope entries only, as described below.
@@ -34,6 +35,7 @@ The schema version is SQLite's `user_version`. Migrations 9–24 are listed in [
 * Migration 22 adds the investigation layer's tables (`relations`, `relation_events`), triggers that remove a deleted record's relationships, and provenance columns with defaults to `evidence` (`source_module`, `source_ref`, `tool`, `tool_version`, `collected_at`, `derived_from`, `verification`, `verified_at`). Existing evidence keeps its data and starts as `unverified` with no provenance. A test upgrades a populated schema-21 database and checks the data, the defaults, the triggers, `foreign_key_check` and `integrity_check`.
 * Migration 23 only adds tables (`attack_assessments`, the analyst's assessments of ATT&CK techniques; `attack_layers`, imported Navigator layers) and changes nothing that exists.
 * Migration 24 only adds tables (the detection library: rules, versions, collections, samples, expectations, tests, feedback, and per project the detection hits) and changes nothing that exists.
+* Migration 25 only adds tables (ASVS assessments with their statuses, links, mappings and history) and two triggers that remove a deleted finding's or evidence record's links, and changes nothing that exists.
 
 **Scope semantics from schema 18.** URL scope entries authorize only their paths, not their host (see [SECURITY.md](SECURITY.md#path-level-scope)). A project that relied on a URL entry for host-level operations, such as an Nmap scan of the URL's host, now needs the host, its domain or its address range added to the scope. The refusal says so.
 

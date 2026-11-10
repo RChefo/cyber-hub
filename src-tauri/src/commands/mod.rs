@@ -4,6 +4,7 @@ pub mod apisec;
 pub mod assistant;
 pub mod discovery;
 pub mod intel;
+pub mod asvs;
 pub mod attack;
 pub mod detections;
 pub mod investigation;

@@ -1,4 +1,4 @@
-# Project data model (schema 24)
+# Project data model (schema 25)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -462,6 +462,22 @@ Projects → *Investigation* → *ATT&CK* shows the techniques of a project in A
 **Projects** (*Investigation* → *Detections*): the enabled rules (of a collection when chosen) run on file evidence of the project. Matches are kept as **detection hits** (`detection_hits`: rule, version, level, techniques, evidence, the event's place and time, its fields, the explanation), at most 200 per rule and file, never twice. A hit is a lead: the analyst promotes it to a finding (status *under review*, confidence low, category Detection, tags `detection`, `sigma` and the techniques, linked to the evidence; the rule and version are in its technical details), marks it a false positive (recorded as feedback on the rule, with the project), or dismisses it. Each run is a `detection` event on the timeline. Archived projects take no run or decision.
 
 **ATT&CK:** the matrix shows the library's coverage (enabled rules that can run, per technique, and whether they are tested) as an overlay apart from what findings name and from the analyst's assessments; techniques that findings name or the analyst confirmed or suspects without a rule are marked as gaps. A project's open detection hits are counted per technique as leads. The coverage exports as a Navigator layer (format 4.5): score the number of rules, dark green when every rule is tested.
+
+## ASVS assessments (schema 25)
+
+Projects → *ASVS* assesses an application against the **OWASP Application Security Verification Standard 5.0.0**. The app bundles the standard's official JSON release unmodified (`src-tauri/catalog/asvs-5.0.0.json`; 17 chapters, 345 requirements: 70 at level 1, 183 at level 2, 92 at level 3). It is CC BY-SA 4.0: the tab, the report and [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) give the attribution. The logic is in `workspace/asvs.rs` and the commands in `commands/asvs.rs`. Nothing contacts a network.
+
+* **Assessments** (`asvs_assessments`): a project can hold several, each with a name, the ASVS version, a level (1, 2 or 3) and a scope. The level can change at any time. The requirements up to the level are counted; the others keep their statuses but are shown only on request and are not counted. Archived projects cannot start or change an assessment.
+* **Statuses** (`asvs_results`): *not assessed* (no row), *compliant*, *non-compliant*, *needs review* or *not applicable*, each with a note. **Only the analyst sets a status.** Nothing is derived from findings, scans or the absence of findings. Recording a finding does not change a status, and neither does fixing one. Progress is the share of the level's requirements that have a status.
+* **History** (`asvs_history`): every status change, with the previous and the new status, the note and who made it.
+* **Links** (`asvs_links`): findings and evidence of the same project. When a finding or an evidence record is deleted, triggers remove its links.
+* **Mappings** (`asvs_mappings`): the ASVS 5.0.0 release data maps no requirement to another framework, so every mapping is the analyst's own: OWASP WSTG, OWASP API Security Top 10, CWE, ATT&CK (checked against the bundled catalog), NIST SP 800-53 or other. The tab and the report label them as the analyst's.
+* **Findings:** *Record a finding* on a non-compliant or needs-review requirement creates a confirmed finding linked to the requirement:
+  * the title is "ASVS 5.0.0: requirement V… not met", and the category is the chapter;
+  * the description holds the requirement text and the note;
+  * the tags are `asvs`, the requirement ID and `asvs-l<level>`, and the source is `asvs`.
+* **Report:** *Export report* writes Markdown through a native save dialog. It has the totals per status, then every requirement of the level by chapter, with its status, note, findings and evidence. It also lists the analyst's mappings and ends with the attribution. It states that a requirement without a status is not assessed, whatever the findings.
+* **Timeline:** starting an assessment is recorded as `checklist`, and an export as `report`.
 
 ## Analysis
 

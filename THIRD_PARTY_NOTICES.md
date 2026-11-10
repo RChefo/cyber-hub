@@ -43,3 +43,10 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 * **Notice:** © 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.
 * **License:** MITRE hereby grants you a non-exclusive, royalty-free license to use ATT&CK® for research, development, and commercial purposes. Any copy you make for such purposes is authorized provided that you reproduce MITRE's copyright designation and this license in any such copy.
 * **Shown in the app:** the ATT&CK view names the ATT&CK version and this notice.
+
+## OWASP Application Security Verification Standard 5.0.0
+
+`src-tauri/catalog/asvs-5.0.0.json` is the requirement list of the OWASP Application Security Verification Standard 5.0.0 exactly as the project publishes it (release `v5.0.0_release`, asset `OWASP_Application_Security_Verification_Standard_5.0.0_en.json`, <https://github.com/OWASP/ASVS/releases/tag/v5.0.0_release>, retrieved 2026-11-10, SHA-256 `bcdbec214d70abcfad9284a31d4f9e5134305831d628aad3aa85d7e26626cb35`). It is not modified.
+
+* **Original work:** © OWASP Foundation and the ASVS contributors, licensed under the Creative Commons Attribution-ShareAlike 4.0 International License (<https://creativecommons.org/licenses/by-sa/4.0/>).
+* **Shown in the app:** the ASVS tab and the assessment report name the standard, its version and this license.

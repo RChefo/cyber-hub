@@ -1134,6 +1134,66 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     CREATE INDEX idx_detection_hits_evidence ON detection_hits(evidence_id);
     CREATE INDEX idx_detection_hits_finding ON detection_hits(finding_id);
     "#,
+    // 25 — OWASP ASVS assessments (docs/DATA_MODEL.md#asvs-assessments-schema-25): per project,
+    // assessments at a verification level, the status and note of each requirement, the findings
+    // and evidence linked to it, analyst-defined mappings to other frameworks, and every change.
+    r#"
+    CREATE TABLE asvs_assessments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        version TEXT NOT NULL,
+        level INTEGER NOT NULL CHECK (level BETWEEN 1 AND 3),
+        scope TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_asvs_assessments_project ON asvs_assessments(project_id);
+    CREATE TABLE asvs_results (
+        assessment_id INTEGER NOT NULL REFERENCES asvs_assessments(id) ON DELETE CASCADE,
+        requirement TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'not_assessed' CHECK (status IN ('not_assessed','compliant','non_compliant','not_applicable','needs_review')),
+        note TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (assessment_id, requirement)
+    );
+    CREATE TABLE asvs_links (
+        assessment_id INTEGER NOT NULL REFERENCES asvs_assessments(id) ON DELETE CASCADE,
+        requirement TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('finding','evidence')),
+        ref_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (assessment_id, requirement, kind, ref_id)
+    );
+    CREATE INDEX idx_asvs_links_ref ON asvs_links(kind, ref_id);
+    CREATE TABLE asvs_mappings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        assessment_id INTEGER NOT NULL REFERENCES asvs_assessments(id) ON DELETE CASCADE,
+        requirement TEXT NOT NULL,
+        framework TEXT NOT NULL CHECK (framework IN ('wstg','api_top10','cwe','attack','nist_800_53','other')),
+        reference TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        UNIQUE (assessment_id, requirement, framework, reference)
+    );
+    CREATE TABLE asvs_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        assessment_id INTEGER NOT NULL REFERENCES asvs_assessments(id) ON DELETE CASCADE,
+        requirement TEXT NOT NULL,
+        from_status TEXT NOT NULL,
+        to_status TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        actor TEXT NOT NULL,
+        at TEXT NOT NULL
+    );
+    CREATE INDEX idx_asvs_history ON asvs_history(assessment_id, id DESC);
+    CREATE TRIGGER asvs_links_findings_deleted AFTER DELETE ON findings BEGIN
+        DELETE FROM asvs_links WHERE kind = 'finding' AND ref_id = OLD.id;
+    END;
+    CREATE TRIGGER asvs_links_evidence_deleted AFTER DELETE ON evidence BEGIN
+        DELETE FROM asvs_links WHERE kind = 'evidence' AND ref_id = OLD.id;
+    END;
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a

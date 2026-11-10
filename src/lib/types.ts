@@ -2297,3 +2297,63 @@ export interface AttackRuleCoverage {
   runnable: boolean;
   tested: boolean;
 }
+
+
+/* ───────────── OWASP ASVS assessments (docs/DATA_MODEL.md#asvs-assessments-schema-25) ───────────── */
+
+export type AsvsStatus = "not_assessed" | "compliant" | "non_compliant" | "not_applicable" | "needs_review";
+
+export interface AsvsRequirement {
+  id: string;
+  chapter: string;
+  section: string;
+  text: string;
+  level: 1 | 2 | 3;
+}
+
+export interface AsvsCatalog {
+  name: string;
+  version: string;
+  source: string;
+  license: string;
+  chapters: { id: string; name: string; sections: { id: string; name: string }[] }[];
+  requirements: AsvsRequirement[];
+}
+
+export interface AsvsCounts {
+  total: number;
+  notAssessed: number;
+  compliant: number;
+  nonCompliant: number;
+  notApplicable: number;
+  needsReview: number;
+}
+
+export interface AsvsSummary {
+  id: number;
+  projectId: number;
+  name: string;
+  version: string;
+  level: 1 | 2 | 3;
+  scope: string;
+  counts: AsvsCounts;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AsvsItem {
+  requirement: AsvsRequirement;
+  inLevel: boolean;
+  status: AsvsStatus;
+  note: string;
+  updatedAt: string | null;
+  findings: { id: number; title: string; severity: Severity; status: string }[];
+  evidence: { id: number; title: string }[];
+  mappings: { id: number; framework: string; reference: string; note: string; origin: "analyst" }[];
+}
+
+export interface AsvsView {
+  summary: AsvsSummary;
+  items: AsvsItem[];
+  history: { requirement: string; fromStatus: AsvsStatus; toStatus: AsvsStatus; note: string; actor: string; at: string }[];
+}
