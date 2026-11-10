@@ -63,21 +63,13 @@ pub async fn system_info(app: AppHandle, db: State<'_, Db>, pm: State<'_, Proces
     })
 }
 
-/// Opens a new system terminal window (optionally in a directory). No command is
-/// passed to the terminal: the UI copies commands to the clipboard instead, so
-/// nothing runs without the user pressing Enter.
+/// Opens a new system terminal window in the home folder. No command is passed to the terminal:
+/// the UI copies commands to the clipboard instead, so nothing runs without the user pressing
+/// Enter. It takes no directory from the page (Mission 7): a network path there would make
+/// Windows connect to that host with the user's credentials.
 #[tauri::command]
-pub async fn open_terminal(cwd: Option<String>) -> AppResult<String> {
-    let dir = match cwd.as_deref().map(str::trim) {
-        Some(d) if !d.is_empty() => {
-            let p = PathBuf::from(d);
-            if !p.is_dir() {
-                return Err(validation("Directory does not exist"));
-            }
-            p
-        }
-        _ => dirs_home().unwrap_or_else(|| PathBuf::from(".")),
-    };
+pub async fn open_terminal() -> AppResult<String> {
+    let dir = dirs_home().filter(|d| !crate::util::is_network_or_device_path(&d.to_string_lossy())).unwrap_or_else(|| PathBuf::from("."));
 
     let spawn = |mut cmd: Command| -> std::io::Result<()> {
         cmd.current_dir(&dir).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
@@ -254,6 +246,13 @@ mod tests {
                 assert!(!other.contains(fun), "{fun} called elsewhere");
             }
         }
+    }
+
+    /// Mission 7: the terminal command takes nothing from the page (a directory there could be a
+    /// network path).
+    #[test]
+    fn the_terminal_takes_no_directory_from_the_page() {
+        assert!(include_str!("system.rs").contains(&["pub async fn open_terminal(", ") -> AppResult<String>"].concat()));
     }
 
     #[test]

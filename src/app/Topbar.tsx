@@ -98,7 +98,7 @@ export function Topbar() {
       <div className="flex items-center gap-1">
         <RunningIndicator />
         <Tooltip delay={400}>
-          <Button isIconOnly variant="ghost" size="sm" aria-label="Open system terminal" onPress={() => openTerminal(null)}>
+          <Button isIconOnly variant="ghost" size="sm" aria-label="Open system terminal" onPress={() => openTerminal()}>
             <SquareTerminal className="size-[17px]" strokeWidth={1.75} />
           </Button>
           <Tooltip.Content>Open system terminal</Tooltip.Content>
@@ -123,7 +123,7 @@ export function Topbar() {
               onAction={(key) => {
                 if (key === "settings") navigate("settings");
                 if (key === "runs") navigate("runs");
-                if (key === "terminal") openTerminal(null);
+                if (key === "terminal") openTerminal();
               }}
             >
               <Dropdown.Item id="settings" textValue="Preferences">

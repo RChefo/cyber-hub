@@ -94,6 +94,20 @@ fn may_contain_endpoint(line: &str) -> bool {
     line.contains('.') || line.contains(':') || line.to_ascii_lowercase().contains("localhost")
 }
 
+/// Why a target read from a file is refused, without naming the target: the page that asked must
+/// not learn a file's content (Mission 7). `reason` is `scope::check_target`'s message.
+fn refusal_without_value(reason: &str) -> &'static str {
+    if reason.contains("excluded") {
+        "it is excluded from the project scope, or its host has an excluded path"
+    } else if reason.contains("outside the authorized URLs") || reason.contains("authorized only for specific URLs") {
+        "its host is authorized only for specific URLs, and this use is outside them"
+    } else if reason.contains("backslash") || reason.contains("resolve differently") {
+        "it is written in a form that servers and tools read differently"
+    } else {
+        "it is not in the authorized project scope"
+    }
+}
+
 fn truncate(s: &str, n: usize) -> String {
     if s.chars().count() <= n {
         s.to_string()
@@ -157,8 +171,10 @@ pub fn validate_file(path: &Path, entries: &[ScopeEntry]) -> Result<(FileClass, 
                     }
                     parsed.push((no, t));
                 }
+                // only the line's number: the page that asked must not learn a file's content
+                // (a credentials file, for example), Mission 7
                 None if first_bad.is_none() => {
-                    first_bad = Some(format!("line {}: '{}' is not a valid target", no + 1, truncate(piece, 80)));
+                    first_bad = Some(format!("line {} is not", no + 1));
                 }
                 None => {}
             }
@@ -181,7 +197,7 @@ pub fn validate_file(path: &Path, entries: &[ScopeEntry]) -> Result<(FileClass, 
     }
     let mut out: Vec<Target> = Vec::new();
     for (no, t) in parsed {
-        scope::check_target(entries, &t).map_err(|e| format!("{shown} line {}: {e}", no + 1))?;
+        scope::check_target(entries, &t).map_err(|e| format!("{shown} line {}: the target there is refused: {} (the file's content is not repeated here; open it to see the line)", no + 1, refusal_without_value(&e)))?;
         if !out.contains(&t) {
             out.push(t);
         }
@@ -208,9 +224,10 @@ where
     I: Iterator<Item = std::io::Result<Vec<u8>>>,
 {
     let mut out = Vec::new();
+    // errors name the part of the request, never its content (Mission 7)
     if uri.contains("://") {
-        let t = scope::parse_target(uri).ok_or_else(|| format!("request-line target '{}' is not valid", truncate(uri, 80)))?;
-        scope::check_target(entries, &t)?;
+        let t = scope::parse_target(uri).ok_or("the request line's URL is not a valid target")?;
+        scope::check_target(entries, &t).map_err(|e| format!("the request line's URL is refused: {}", refusal_without_value(&e)))?;
         out.push(t);
     }
     let mut host: Option<String> = None;
@@ -229,17 +246,16 @@ where
         }
     }
     let host = host.ok_or("request has no Host header")?;
-    let shown = truncate(&host, 80);
     if host.contains(['/', '@', '?', '#', '\\']) || scope::parse_target(&host).is_none() {
-        return Err(format!("Host header '{shown}' is not a valid target"));
+        return Err("the Host header is not a valid target".into());
     }
     let urls = request_urls(&host, uri);
     if urls.is_empty() {
-        return Err(format!("Host header '{shown}' is not a valid target"));
+        return Err("the Host header is not a valid target".into());
     }
     // the file does not say whether the tool sends it over HTTPS or HTTP: both must be authorized
     for t in urls {
-        scope::check_target(entries, &t).map_err(|e| format!("{e} (a request file does not say whether it is sent over HTTPS or HTTP, so both must be in the scope; or pass the URL itself)"))?;
+        scope::check_target(entries, &t).map_err(|e| format!("the Host header and request path are refused: {} (a request file does not say whether it is sent over HTTPS or HTTP, so both must be in the scope; or pass the URL itself)", refusal_without_value(&e)))?;
         if !out.contains(&t) {
             out.push(t);
         }
@@ -281,6 +297,15 @@ pub fn resolve(args: &[String], explicit: &[String], entries: &[ScopeEntry], sna
             }
         }
         let Some((offset, value)) = value_of(arg) else { continue };
+        // even reading the metadata of `\\host\share\…` makes Windows connect to the host with the
+        // user's credentials: such values are refused before any file-system call (Mission 7)
+        if cfg!(windows) && crate::util::is_network_or_device_path(value) {
+            return Err(format!(
+                "Argument {} is a network or device path ({}). Cyber Hub does not open those, because Windows would connect to that host with your credentials; copy the file to this computer",
+                idx + 1,
+                truncate(value, 80)
+            ));
+        }
 
         if let Some(path) = existing_file(value) {
             let (class, targets) = validate_file(&path, entries)?;
@@ -376,6 +401,54 @@ mod tests {
         std::fs::create_dir_all(&d).unwrap();
         Tmp(d)
     }
+    /// Mission 7: an error about a target file never repeats the file's content, which a page could
+    /// otherwise read through `exec_validate`: only line numbers are given.
+    #[test]
+    fn target_file_errors_never_repeat_the_files_content() {
+        let d = tmpdir("leak");
+        // a credentials file with one endpoint-like line: refused, without its token
+        let npmrc = write(&d.0, "npmrc", b"//registry.npmjs.org/:_authToken=npm_FAKE0123456789abcdefFAKE0123456789ab\n");
+        let e = resolve(&["10.0.0.1".into(), npmrc], &[], &scope(), None).unwrap_err();
+        assert!(!e.contains("npm_FAKE") && !e.contains("_authToken") && e.contains("line 1"), "{e}");
+        // a target list naming a host outside the scope: its line, not the host
+        let list = write(&d.0, "targets.txt", b"10.0.0.5\nsecret-host.internal.example.org\n");
+        let e = resolve(&[list], &[], &scope(), None).unwrap_err();
+        assert!(!e.contains("secret-host") && e.contains("line 2"), "{e}");
+        // a raw request: neither the request line's URL nor the Host header is repeated
+        let req = write(&d.0, "req.txt", b"GET https://private-api.other.example/v1/?key=SECRETKEY HTTP/1.1\nHost: private-api.other.example\n\n");
+        let e = resolve(&[req], &[], &scope(), None).unwrap_err();
+        assert!(!e.contains("SECRETKEY") && !e.contains("private-api"), "{e}");
+        let req = write(&d.0, "req2.txt", b"GET /v1/ HTTP/1.1\nHost: hidden-vhost.other.example\n\n");
+        let e = resolve(&[req], &[], &scope(), None).unwrap_err();
+        assert!(!e.contains("hidden-vhost"), "{e}");
+        let req = write(&d.0, "req3.txt", b"GET /v1/ HTTP/1.1\nHost: not a host secret-word\n\n");
+        let e = resolve(&[req], &[], &scope(), None).unwrap_err();
+        assert!(!e.contains("secret-word"), "{e}");
+    }
+
+    /// Mission 7: network (UNC) and device paths, which make Windows connect to a host with the
+    /// user's credentials as soon as they are touched.
+    #[test]
+    fn network_and_device_paths_are_recognized() {
+        for p in [r"\\203.0.113.5\x", "//203.0.113.5/x", r"\\?\UNC\host\share\f", r"\\.\pipe\x", r"\\?\GLOBALROOT\Device\x", r"\??\UNC\host\x", r"\/host/x", r"/\host\x", r" \\host\x"] {
+            assert!(crate::util::is_network_or_device_path(p), "{p}");
+        }
+        for p in [r"C:\tools\targets.txt", "targets.txt", "/tmp/targets.txt", r".\list.txt", "https://example.com/x", "-iL", "10.0.0.1", r"C:\\double\\escaped.txt", ""] {
+            assert!(!crate::util::is_network_or_device_path(p), "{p}");
+        }
+    }
+
+    /// Mission 7: on Windows such an argument refuses the run before any file-system call (the
+    /// address is this computer's, so a regression contacts nothing else).
+    #[cfg(windows)]
+    #[test]
+    fn network_paths_in_arguments_are_refused_on_windows() {
+        for arg in [r"\\127.0.0.1\cyberhub-no-share\targets.txt", r"--input=\\127.0.0.1\cyberhub-no-share\t.txt", r"\\.\pipe\cyberhub-no-pipe"] {
+            let e = resolve(&["10.0.0.1".into(), arg.into()], &[], &scope(), None).unwrap_err();
+            assert!(e.contains("network or device path"), "{arg}: {e}");
+        }
+    }
+
     fn write(dir: &Path, name: &str, content: &[u8]) -> String {
         let p = dir.join(name);
         File::create(&p).unwrap().write_all(content).unwrap();
@@ -408,14 +481,14 @@ mod tests {
         // not say which one the tool uses)
         let inside = write(&t.0, "in.req", b"POST /api/v1/login HTTP/1.1\r\nHost: app.example.com\r\n\r\nuser=a");
         let err = resolve(&a(&["-r", &inside]), &[], &s, None).unwrap_err();
-        assert!(err.contains("http://app.example.com/api/v1/login") && err.contains("both must be in the scope"), "{err}");
+        assert!(err.contains("both must be in the scope") && err.contains("specific URLs") && !err.contains("/api/v1/login"), "{err}");
         let both = vec![e("https://app.example.com/api/", true), e("http://app.example.com/api/", true)];
         assert_eq!(
             resolve(&a(&["-r", &inside]), &[], &both, None).unwrap().checked,
             vec!["https://app.example.com/api/v1/login".to_string(), "http://app.example.com/api/v1/login".to_string()]
         );
         let outside = write(&t.0, "out.req", b"GET /admin HTTP/1.1\r\nHost: app.example.com\r\n\r\n");
-        assert!(resolve(&a(&["-r", &outside]), &[], &s, None).unwrap_err().contains("outside the authorized URLs"));
+        assert!(resolve(&a(&["-r", &outside]), &[], &s, None).unwrap_err().contains("authorized only for specific URLs"));
         let excluded = write(&t.0, "ex.req", b"GET /api/admin/x HTTP/1.1\r\nHost: app.example.com\r\n\r\n");
         assert!(resolve(&a(&["-r", &excluded]), &[], &s, None).unwrap_err().contains("excluded"));
         let port = write(&t.0, "port.req", b"GET /api/x HTTP/1.1\r\nHost: app.example.com:8443\r\n\r\n");
@@ -447,7 +520,7 @@ mod tests {
         let t = tmpdir("oos");
         let list = write(&t.0, "t.txt", b"10.0.0.5\n8.8.8.8\n");
         let err = resolve(&a(&["-iL", &list, "10.0.0.6"]), &[], &scope(), None).unwrap_err();
-        assert!(err.contains("8.8.8.8") && err.contains("line 2"), "{err}");
+        assert!(!err.contains("8.8.8.8") && err.contains("line 2") && err.contains("not in the authorized project scope"), "{err}");
     }
 
     #[test]

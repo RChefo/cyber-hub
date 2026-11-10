@@ -90,3 +90,14 @@ pub fn data_dir<R: tauri::Runtime, M: tauri::Manager<R>>(app: &M) -> tauri::Resu
     }
     app.path().app_data_dir()
 }
+
+/// Whether a value is a network (UNC) or device path for Windows: two leading separators of either
+/// kind (`\\host\share`, `//host/share`, `\\?\UNC\…`, `\\.\pipe\…`), or an NT object path
+/// (`\??\…`). Touching such a path, even reading its metadata, makes Windows connect to the host
+/// and authenticate with the user's credentials (NTLM), so Cyber Hub refuses these values on
+/// Windows before any file-system call (Mission 7).
+pub fn is_network_or_device_path(value: &str) -> bool {
+    let v = value.trim_start().as_bytes();
+    let sep = |c: u8| c == b'\\' || c == b'/';
+    (v.len() >= 2 && sep(v[0]) && sep(v[1])) || v.starts_with(b"\\??\\")
+}

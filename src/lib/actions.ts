@@ -59,9 +59,10 @@ export async function openResource(key: string, title: string, url: string) {
   }
 }
 
-export async function openTerminal(cwd?: string | null) {
+/** Open a terminal in the home folder (the backend takes no directory from the page). */
+export async function openTerminal() {
   try {
-    const name = await api.openTerminal(cwd);
+    const name = await api.openTerminal();
     notify.info(`Opened ${name}`);
   } catch (e) {
     notify.error("Could not open a terminal", e);
@@ -72,7 +73,7 @@ export async function openTerminal(cwd?: string | null) {
 export async function copyAndOpenTerminal(command: string, source: string, toolId?: string | null) {
   await copyCommand(command, source, toolId);
   try {
-    const name = await api.openTerminal(null);
+    const name = await api.openTerminal();
     notify.info(`Opened ${name}`, "The command is on your clipboard — paste it, review it, then press Enter.");
   } catch (e) {
     notify.error("Could not open a terminal", e);

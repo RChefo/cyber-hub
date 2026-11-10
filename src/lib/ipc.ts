@@ -512,5 +512,5 @@ export const api = {
 
   // system
   systemInfo: () => call<T.SystemInfo>("system_info"),
-  openTerminal: (cwd?: string | null) => call<string>("open_terminal", { cwd: cwd ?? null }),
+  openTerminal: () => call<string>("open_terminal"),
 };
