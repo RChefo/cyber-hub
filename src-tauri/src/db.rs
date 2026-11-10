@@ -1194,6 +1194,25 @@ pub(crate) const MIGRATIONS: &[&str] = &[
         DELETE FROM asvs_links WHERE kind = 'evidence' AND ref_id = OLD.id;
     END;
     "#,
+    // 26 — the lifecycle of saved indicators (docs/PROVIDERS.md#saved-indicators): source and its
+    // reliability, confidence, status and validity, and the history of every change.
+    r#"
+    ALTER TABLE ti_saved ADD COLUMN source TEXT NOT NULL DEFAULT '';
+    ALTER TABLE ti_saved ADD COLUMN reliability TEXT NOT NULL DEFAULT '' CHECK (reliability IN ('','A','B','C','D','E','F'));
+    ALTER TABLE ti_saved ADD COLUMN confidence INTEGER CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 100);
+    ALTER TABLE ti_saved ADD COLUMN status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked','false_positive'));
+    ALTER TABLE ti_saved ADD COLUMN valid_until TEXT;
+    ALTER TABLE ti_saved ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+    UPDATE ti_saved SET updated_at = created_at;
+    CREATE TABLE ti_saved_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        saved_id INTEGER NOT NULL REFERENCES ti_saved(id) ON DELETE CASCADE,
+        action TEXT NOT NULL,
+        detail TEXT NOT NULL DEFAULT '',
+        at TEXT NOT NULL
+    );
+    CREATE INDEX idx_ti_saved_events ON ti_saved_events(saved_id, id DESC);
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a

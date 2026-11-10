@@ -21,16 +21,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/app/store";
 import { StatusDot, ToneChip } from "@/components/ui/Badges";
 import { CopyButton } from "@/components/ui/Code";
-import { useConfirm } from "@/components/ui/Dialogs";
+import { AppModal, useConfirm } from "@/components/ui/Dialogs";
 import { EmptyBlock, ErrorBlock, InlineSpinner, QueryView } from "@/components/ui/Feedback";
-import { TextInput } from "@/components/ui/Fields";
+import { SelectInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
 import { PageHeader, Panel } from "@/components/ui/Panel";
 import { notify, openExternal } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { TiInvestigation, TiProviderResult, TiProviderStatus, TiSummary, VtDetected } from "@/lib/types";
+import type { TiInvestigation, TiProviderResult, TiProviderStatus, TiSavedIndicator, TiSavedStatus, TiSummary, VtDetected } from "@/lib/types";
 import { cn, debounce, formatRelative } from "@/lib/utils";
-import { availability, compareRows, correlate, LEVEL_META, sortResults, STATUS_META, summaryParts } from "./model";
+import { availability, compareRows, correlate, LEVEL_META, parseConfidence, RELIABILITY, savedStanding, sortResults, STATUS_META, summaryParts } from "./model";
 
 const KIND_LABEL: Record<string, string> = { ip: "IP address", domain: "Domain", url: "URL", file: "File hash" };
 
@@ -293,6 +293,88 @@ function ProviderPicker({ providers, selected, onToggle, kind }: { providers: Ti
   );
 }
 
+/** The lifecycle of a saved indicator: where it came from and how reliable that source is, how
+ * confident the analyst is, until when it is valid, and whether it was revoked or is a false
+ * positive; every change is kept in its history. */
+function SavedEditor({ item, onClose }: { item: TiSavedIndicator; onClose: () => void }) {
+  const { runtime } = useApp();
+  const history = useQuery(["ti"], () => api.tiSavedHistory(item.id), [item.id], runtime);
+  const [note, setNote] = useState(item.note);
+  const [source, setSource] = useState(item.source);
+  const [reliability, setReliability] = useState(item.reliability || "none");
+  const [confidence, setConfidence] = useState(item.confidence == null ? "" : String(item.confidence));
+  const [validUntil, setValidUntil] = useState(item.validUntil ?? "");
+  const [status, setStatus] = useState<TiSavedStatus>(item.status);
+  const [saving, setSaving] = useState(false);
+  const conf = parseConfidence(confidence);
+  const dateOk = !validUntil.trim() || /^\d{4}-\d{2}-\d{2}$/.test(validUntil.trim());
+  const save = async () => {
+    if (conf == null || !dateOk) return;
+    setSaving(true);
+    try {
+      await api.tiSavedUpdate(item.id, { note, source, reliability: reliability === "none" ? "" : reliability, confidence: conf, validUntil: validUntil.trim(), status });
+      invalidate("ti");
+      notify.success("Indicator updated", item.indicator);
+      onClose();
+    } catch (e) {
+      notify.error("The indicator was not updated", e);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <AppModal
+      isOpen
+      onOpenChange={(o) => !o && onClose()}
+      title={item.indicator}
+      description={`Saved ${new Date(item.createdAt).toLocaleString()}. Expired, revoked and false-positive indicators stay saved for the record, but are not shown as current intelligence and are exported to STIX as such.`}
+      footer={
+        <div className="flex w-full justify-end gap-2">
+          <Button size="sm" variant="tertiary" onPress={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" variant="primary" onPress={() => void save()} isPending={saving} isDisabled={conf == null || !dateOk}>
+            Save
+          </Button>
+        </div>
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <TextInput label="Source" value={source} onChange={setSource} placeholder="Report, feed, case or colleague" />
+        <SelectInput label="Source reliability" value={reliability} onChange={setReliability} options={[{ id: "none", label: "Not judged" }, ...RELIABILITY]} />
+        <TextInput label="Confidence (0–100)" value={confidence} onChange={setConfidence} placeholder="Empty: not set" error={conf == null ? "A whole number from 0 to 100" : undefined} />
+        <TextInput label="Valid until" value={validUntil} onChange={setValidUntil} placeholder="YYYY-MM-DD, empty: no expiry" error={dateOk ? undefined : "A date as YYYY-MM-DD"} />
+        <SelectInput
+          label="Status"
+          value={status}
+          onChange={(v) => setStatus(v as TiSavedStatus)}
+          options={[
+            { id: "active", label: "Active" },
+            { id: "revoked", label: "Revoked (no longer valid)" },
+            { id: "false_positive", label: "False positive" },
+          ]}
+        />
+      </div>
+      <TextAreaInput label="Note" value={note} onChange={setNote} rows={2} />
+      <section className="flex flex-col gap-1 text-[12.5px]">
+        <h3 className="font-medium">History</h3>
+        {(history.data ?? []).length === 0 ? (
+          <span className="text-muted">No change recorded yet (indicators saved before this version have no history).</span>
+        ) : (
+          <ul className="flex flex-col gap-0.5">
+            {(history.data ?? []).map((h, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="w-28 shrink-0 text-muted">{formatRelative(h.at)}</span>
+                <span>{h.action === "saved" ? "Saved" : h.detail}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </AppModal>
+  );
+}
+
 export default function ThreatIntelPage() {
   const { runtime, navigate, route } = useApp();
   const overview = useQuery(["ti"], api.tiProviders, [], runtime);
@@ -307,6 +389,7 @@ export default function ThreatIntelPage() {
     }
   };
   const confirm = useConfirm();
+  const [editing, setEditing] = useState<TiSavedIndicator | null>(null);
 
   const [query, setQuery] = useState(route.params?.q ?? "");
   const [detected, setDetected] = useState<{ ok: VtDetected | null; error: string | null }>({ ok: null, error: null });
@@ -581,20 +664,35 @@ export default function ThreatIntelPage() {
             <QueryView query={saved} rows={3} isEmpty={(d) => d.length === 0} empty={<EmptyBlock compact icon={Bookmark} title="Nothing saved yet" />}>
               {(items) => (
                 <ul className="flex flex-col gap-0.5">
-                  {items.map((it) => (
-                    <li key={it.id}>
-                      <button type="button" onClick={() => pivot(it.indicator)} className="flex w-full flex-col rounded-lg px-2.5 py-2 text-left outline-none hover:bg-white/[0.03] focus-visible:ring-2 focus-visible:ring-focus">
-                        <span className="truncate font-mono text-[12.5px]">{it.indicator}</span>
-                        <span className="text-[11.5px] text-muted">
-                          {KIND_LABEL[it.kind]} · saved {formatRelative(it.createdAt)}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
+                  {items.map((it) => {
+                    const standing = savedStanding(it);
+                    return (
+                      <li key={it.id} className="flex items-start gap-1">
+                        <button type="button" onClick={() => pivot(it.indicator)} className="flex min-w-0 flex-1 flex-col rounded-lg px-2.5 py-2 text-left outline-none hover:bg-white/[0.03] focus-visible:ring-2 focus-visible:ring-focus">
+                          <span className={cn("truncate font-mono text-[12.5px]", it.effective !== "active" && "text-muted line-through decoration-white/30")}>{it.indicator}</span>
+                          <span className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted">
+                            <ToneChip tone={standing.tone} dot={false} className="text-[10.5px]">
+                              {standing.label}
+                            </ToneChip>
+                            {it.confidence != null && <span>confidence {it.confidence} ({it.confidenceLabel})</span>}
+                            {it.source && <span className="truncate">from {it.source}{it.reliability ? ` (${it.reliability})` : ""}</span>}
+                            <span>
+                              {KIND_LABEL[it.kind]} · saved {formatRelative(it.createdAt)}
+                            </span>
+                          </span>
+                        </button>
+                        <Button size="sm" variant="ghost" className="mt-1 h-7" aria-label={`Edit ${it.indicator}`} onPress={() => setEditing(it)}>
+                          Edit
+                        </Button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </QueryView>
           </Panel>
+
+          {editing && <SavedEditor key={editing.id} item={editing} onClose={() => setEditing(null)} />}
 
           <Panel
             title="Recent searches"

@@ -8,6 +8,7 @@ pub mod abusech;
 pub mod abuseipdb;
 pub mod http;
 pub mod indicator;
+pub mod lifecycle;
 pub mod limit;
 pub mod model;
 pub mod otx;

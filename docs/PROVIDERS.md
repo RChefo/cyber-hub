@@ -32,11 +32,29 @@ ThreatFox was not in the original list. It was added because it uses the same fr
 * The summary lists which providers reported what. It is a grouping, not a score.
 * Each result shows its source (live or cache), retrieval time and a link to the provider's own page.
 
+## Saved indicators
+
+*Saved indicators* on the Threat Intel page keep each indicator with its lifecycle (`src-tauri/src/ti/lifecycle.rs`; schema 26). *Edit* on an indicator changes the following, and every change is recorded in its history (`ti_saved_events`):
+
+* **Source** (up to 300 characters): the report, feed, case or colleague the indicator came from. The time it was saved is its collection time.
+* **Source reliability** on the Admiralty scale: A completely reliable, B usually reliable, C fairly reliable, D not usually reliable, E unreliable, F cannot be judged; or not judged.
+* **Confidence** from 0 to 100, as in STIX 2.1, read as none (0), low (1–29), medium (30–69) or high (70–100).
+* **Valid until**, a date. Past it the indicator reads as *expired*. Expiry is computed when the list is read, so nothing has to run for indicators to age.
+* **Status:** active, revoked (no longer valid), or false positive.
+
+Expired, revoked and false-positive indicators stay saved for the record, but are not presented as current intelligence:
+* The Analysis tab says where each saved indicator stands, for example "expired 2026-10-31: no longer current" or "marked a false positive".
+* An analyst's false positive outweighs a provider's cached verdict: the indicator is no longer flagged, and the verdict stays visible.
+* An expired or revoked save hides no provider verdict.
+
+Saved intelligence never flags an indicator by itself.
+
 ## STIX 2.1 export
 
 *Saved indicators* → *STIX 2.1* writes every saved indicator as a STIX 2.1 `indicator` in one `bundle`, through a native save dialog (`src-tauri/src/ti/stix.rs`).
 
 * **Patterns.** `[ipv4-addr:value = '…']`, `[ipv6-addr:value = '…']`, `[domain-name:value = '…']`, `[url:value = '…']`, and `[file:hashes.MD5 / 'SHA-1' / 'SHA-256' / 'SHA-512' = '…']` by hash length. String literals escape only `\` and `'`, as the patterning language requires. A hash of another length is reported and left out.
 * **Identifiers.** Indicator IDs are UUIDv5 values derived from the indicator (a fixed Cyber Hub namespace), so exporting the same indicator again gives the same ID and an importing platform updates one object. The bundle ID is a random UUIDv4. `created`, `modified` and `valid_from` are the time the indicator was saved, in UTC with milliseconds.
-* **Content.** The description is the analyst's note. No provider verdicts are claimed: `indicator_types`, labels and confidence are left out, so the bundle states only what the analyst saved.
+* **Content.** The description is the analyst's note. No provider verdicts are claimed: `indicator_types` and labels are left out, so the bundle states only what the analyst saved.
+* **Lifecycle.** The analyst's confidence becomes `confidence`. *Valid until* becomes `valid_until` (the end of that day, UTC). Revoked indicators and false positives get `revoked: true`, and a false positive says so in its description. The source becomes an external reference whose description gives its reliability. An indicator whose validity ended before it was saved is not exported and is named in the result, since STIX requires `valid_until` to be later than `valid_from`.
 

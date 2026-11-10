@@ -75,6 +75,8 @@ pub fn indicator_of(raw: &str) -> Option<(&'static str, String)> {
 struct Collector {
     map: BTreeMap<(&'static str, String), Vec<Sighting>>,
     flagged: BTreeSet<(&'static str, String)>,
+    /// saved indicators the analyst marked false positives
+    dismissed: BTreeSet<(&'static str, String)>,
 }
 
 impl Collector {
@@ -147,7 +149,6 @@ pub fn correlate(c: &Connection, project_id: i64) -> AppResult<Vec<Indicator>> {
     // cached threat intelligence and saved indicators for exactly these indicators
     let mut ti: HashMap<(&'static str, String), Vec<TiVerdict>> = HashMap::new();
     let mut ti_st = c.prepare("SELECT provider, data, fetched_at FROM ti_cache WHERE indicator_key = ?1 AND found = 1")?;
-    let mut saved_st = c.prepare("SELECT id, note FROM ti_saved WHERE indicator = ?1")?;
     let keys: Vec<(&'static str, String)> = col.map.keys().cloned().collect();
     for key in &keys {
         let ti_kind = match key.0 {
@@ -165,8 +166,13 @@ pub fn correlate(c: &Connection, project_id: i64) -> AppResult<Vec<Indicator>> {
             }
             ti.entry(key.clone()).or_default().push(TiVerdict { provider, label: verdict["label"].as_str().unwrap_or("").to_string(), level, fetched_at: at });
         }
-        if let Some((id, note)) = saved_st.query_row(params![key.1], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))).optional()? {
-            col.map.get_mut(key).expect("known key").push(sighting("saved", if note.is_empty() { "Saved indicator".into() } else { note }, Some("ti_saved"), Some(id)));
+        // a saved indicator says where it stands: expired, revoked and false positives are not
+        // current, and the analyst's false positive outweighs a provider's verdict
+        if let Some(s) = crate::ti::lifecycle::find(c, &key.1)? {
+            if s.effective == "false_positive" {
+                col.dismissed.insert(key.clone());
+            }
+            col.map.get_mut(key).expect("known key").push(sighting("saved", crate::ti::lifecycle::sighting_detail(&s), Some("ti_saved"), Some(s.id)));
         }
     }
 
@@ -175,7 +181,7 @@ pub fn correlate(c: &Connection, project_id: i64) -> AppResult<Vec<Indicator>> {
         .into_iter()
         .map(|(key, sightings)| {
             let sources = sightings.iter().map(|s| s.source).collect::<BTreeSet<_>>().len();
-            Indicator { flagged: col.flagged.contains(&key), ti: ti.remove(&key).unwrap_or_default(), kind: key.0, value: key.1, sightings, sources }
+            Indicator { flagged: col.flagged.contains(&key) && !col.dismissed.contains(&key), ti: ti.remove(&key).unwrap_or_default(), kind: key.0, value: key.1, sightings, sources }
         })
         .collect();
     out.sort_by(|a, b| b.flagged.cmp(&a.flagged).then(b.sources.cmp(&a.sources)).then(a.value.cmp(&b.value)));
@@ -453,6 +459,18 @@ mod tests {
             let file = list.iter().find(|i| i.value == sha).expect("analysed file");
             assert_eq!((file.kind, file.flagged, file.sightings[0].source, file.sightings[0].ref_kind), ("file_hash", true, "evidence", Some("evidence")));
             assert!(!list.iter().any(|i| i.value == "cd".repeat(32)), "an imported report's hash is not an indicator");
+
+            // a saved indicator says where it stands; the analyst's false positive outweighs the provider
+            c.execute("INSERT INTO ti_saved (kind, indicator, note, created_at, updated_at) VALUES ('ip','203.0.113.7','Scanner','t','t')", [])?;
+            let id = c.last_insert_rowid();
+            let saved = |list: &[Indicator]| list.iter().find(|i| i.value == "203.0.113.7").map(|i| (i.flagged, i.sightings.iter().find(|s| s.source == "saved").map(|s| s.detail.clone()).unwrap_or_default())).unwrap();
+            assert_eq!(saved(&correlate(c, 1)?), (true, "Scanner".to_string()));
+            crate::ti::lifecycle::update(c, id, &crate::ti::lifecycle::Changes { valid_until: Some("2020-01-31".into()), ..Default::default() })?;
+            assert_eq!(saved(&correlate(c, 1)?), (true, "Scanner · expired 2020-01-31: no longer current".to_string()), "a stale save does not hide a provider's verdict");
+            crate::ti::lifecycle::update(c, id, &crate::ti::lifecycle::Changes { status: Some("false_positive".into()), ..Default::default() })?;
+            let (flagged, detail) = saved(&correlate(c, 1)?);
+            assert!(!flagged && detail == "Scanner · marked a false positive", "{detail}");
+            assert_eq!(correlate(c, 1)?.iter().find(|i| i.value == "203.0.113.7").unwrap().ti.len(), 1, "the provider's verdict stays visible");
             Ok(())
         })
         .unwrap();

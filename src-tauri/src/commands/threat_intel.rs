@@ -25,6 +25,7 @@ use crate::db::Db;
 use crate::error::{validation, AppError, AppResult};
 use crate::ti::http::ApiError;
 use crate::ti::indicator::{self, Indicator, Kind};
+use crate::ti::lifecycle;
 use crate::ti::limit::RateLimiter;
 use crate::ti::model::{Level, Parsed, ProviderResult, Report, Status};
 use crate::ti::{abusech, abuseipdb, otx, shodan, KeyId, ProviderId};
@@ -510,23 +511,10 @@ pub async fn ti_cache_clear(db: State<'_, Db>) -> AppResult<()> {
     })
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SavedIndicator {
-    pub id: i64,
-    pub kind: String,
-    pub indicator: String,
-    pub note: String,
-    pub created_at: String,
-}
-
+/// Saved indicators with their source, reliability, confidence, status and validity.
 #[tauri::command]
-pub async fn ti_saved_list(db: State<'_, Db>) -> AppResult<Vec<SavedIndicator>> {
-    db.with(|c| {
-        let mut stmt = c.prepare("SELECT id, kind, indicator, note, created_at FROM ti_saved ORDER BY created_at DESC")?;
-        let rows = stmt.query_map([], |r| Ok(SavedIndicator { id: r.get(0)?, kind: r.get(1)?, indicator: r.get(2)?, note: r.get(3)?, created_at: r.get(4)? }))?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
-    })
+pub async fn ti_saved_list(db: State<'_, Db>) -> AppResult<Vec<lifecycle::Saved>> {
+    db.with(lifecycle::list)
 }
 
 #[tauri::command]
@@ -534,13 +522,34 @@ pub async fn ti_saved_add(db: State<'_, Db>, query: String, note: String) -> App
     let ind = indicator::detect(&query).map_err(AppError::Validation)?;
     let note = clean("Note", &note, 500, false)?;
     db.with(|c| {
-        c.execute(
-            "INSERT INTO ti_saved (kind, indicator, note, created_at) VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(indicator) DO UPDATE SET note = excluded.note",
-            params![ind.kind.as_str(), ind.value, note, now()],
+        let tx = c.unchecked_transaction()?;
+        let existed = lifecycle::find(&tx, &ind.value)?;
+        let ts = now();
+        tx.execute(
+            "INSERT INTO ti_saved (kind, indicator, note, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)
+             ON CONFLICT(indicator) DO UPDATE SET note = excluded.note, updated_at = excluded.updated_at",
+            params![ind.kind.as_str(), ind.value, note, ts],
         )?;
+        match existed {
+            None => lifecycle::record(&tx, tx.last_insert_rowid(), "saved", "")?,
+            Some(s) if s.note != note => lifecycle::record(&tx, s.id, "updated", "note changed")?,
+            Some(_) => {}
+        }
+        tx.commit()?;
         Ok(())
     })
+}
+
+/// Changes the source, reliability, confidence, status, validity or note of a saved indicator;
+/// every change is recorded in its history.
+#[tauri::command]
+pub async fn ti_saved_update(db: State<'_, Db>, id: i64, changes: lifecycle::Changes) -> AppResult<lifecycle::Saved> {
+    db.with(|c| lifecycle::update(c, id, &changes))
+}
+
+#[tauri::command]
+pub async fn ti_saved_history(db: State<'_, Db>, id: i64) -> AppResult<Vec<lifecycle::Event>> {
+    db.with(|c| lifecycle::history(c, id))
 }
 
 #[tauri::command]
@@ -706,15 +715,25 @@ pub struct StixExport {
 /// Saves the saved indicators as a STIX 2.1 bundle through a native save dialog. None when cancelled.
 #[tauri::command]
 pub async fn ti_saved_export_stix(app: AppHandle) -> AppResult<Option<StixExport>> {
-    let rows: Vec<(String, String, String, String)> = app.state::<Db>().with(|c| {
-        let mut stmt = c.prepare("SELECT kind, indicator, note, created_at FROM ti_saved ORDER BY created_at")?;
-        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect::<Result<Vec<_>, _>>()?;
-        Ok(rows)
-    })?;
+    let mut rows: Vec<lifecycle::Saved> = app.state::<Db>().with(lifecycle::list)?;
+    rows.reverse();
     if rows.is_empty() {
         return Err(validation("There are no saved indicators to export"));
     }
-    let items: Vec<crate::ti::stix::Saved> = rows.iter().map(|(k, v, n, t)| crate::ti::stix::Saved { kind: k, value: v, note: n, saved_at: t }).collect();
+    let items: Vec<crate::ti::stix::Saved> = rows
+        .iter()
+        .map(|s| crate::ti::stix::Saved {
+            kind: &s.kind,
+            value: &s.indicator,
+            note: &s.note,
+            saved_at: &s.created_at,
+            source: &s.source,
+            reliability: &s.reliability,
+            confidence: s.confidence,
+            valid_until: s.valid_until.as_deref(),
+            status: &s.status,
+        })
+        .collect();
     let (bundle, skipped) = crate::ti::stix::bundle(&items);
     let exported = items.len() - skipped.len();
     if exported == 0 {

@@ -389,6 +389,8 @@ export const api = {
   tiSavedList: () => call<T.TiSavedIndicator[]>("ti_saved_list"),
   tiSavedAdd: (query: string, note = "") => call<void>("ti_saved_add", { query, note }),
   tiSavedRemove: (query: string) => call<void>("ti_saved_remove", { query }),
+  tiSavedUpdate: (id: number, changes: T.TiSavedChanges) => call<T.TiSavedIndicator>("ti_saved_update", { id, changes }),
+  tiSavedHistory: (id: number) => call<{ action: string; detail: string; at: string }[]>("ti_saved_history", { id }),
   /** writes through a native save dialog; returns the file name or null when cancelled */
   tiExport: (query: string, format: "md" | "json") => call<string | null>("ti_export", { query, format }),
 

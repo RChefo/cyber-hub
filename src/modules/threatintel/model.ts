@@ -2,6 +2,40 @@ import type { TiLevel, TiProviderResult, TiProviderStatus, TiStatus, TiSummary, 
 
 export type Tone = "default" | "accent" | "success" | "warning" | "danger";
 
+/** Source reliability, the Admiralty (NATO) scale. */
+export const RELIABILITY: { id: string; label: string }[] = [
+  { id: "A", label: "A · Completely reliable" },
+  { id: "B", label: "B · Usually reliable" },
+  { id: "C", label: "C · Fairly reliable" },
+  { id: "D", label: "D · Not usually reliable" },
+  { id: "E", label: "E · Unreliable" },
+  { id: "F", label: "F · Reliability cannot be judged" },
+];
+
+/** How a saved indicator stands, in a word and a tone: expired, revoked and false positives are
+ * kept for the record, not as current intelligence. */
+export function savedStanding(s: { effective: string; validUntil: string | null }): { label: string; tone: "default" | "warning" | "success" | "danger" } {
+  switch (s.effective) {
+    case "expired":
+      return { label: `expired ${s.validUntil ?? ""}`.trim(), tone: "warning" };
+    case "revoked":
+      return { label: "revoked", tone: "default" };
+    case "false_positive":
+      return { label: "false positive", tone: "default" };
+    default:
+      return { label: s.validUntil ? `valid until ${s.validUntil}` : "active", tone: "success" };
+  }
+}
+
+/** A confidence typed by the analyst: 0–100, empty for none (-1 clears it); null when invalid. */
+export function parseConfidence(text: string): number | null {
+  const t = text.trim();
+  if (!t) return -1;
+  if (!/^\d{1,3}$/.test(t)) return null;
+  const n = Number(t);
+  return n <= 100 ? n : null;
+}
+
 export const LEVEL_META: Record<TiLevel, { tone: Tone; label: string }> = {
   malicious: { tone: "danger", label: "Malicious" },
   suspicious: { tone: "warning", label: "Suspicious" },

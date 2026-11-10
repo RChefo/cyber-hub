@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TiProviderResult, TiReport } from "@/lib/types";
-import { availability, compareRows, correlate, sortResults, summaryParts } from "./model";
+import { availability, compareRows, correlate, parseConfidence, RELIABILITY, savedStanding, sortResults, summaryParts } from "./model";
 
 const report = (over: Partial<TiReport>): TiReport => ({
   verdict: null,
@@ -96,5 +96,20 @@ describe("availability", () => {
     const rejected = availability({ configured: true, enabled: true, health: { state: "rejected", message: "x", at, quota: null } });
     expect(rejected.label).toBe("Credentials rejected");
     expect(rejected.detail).toMatch(/application owner/);
+  });
+});
+
+describe("saved indicator lifecycle", () => {
+  it("says how an indicator stands", () => {
+    expect(savedStanding({ effective: "active", validUntil: null })).toEqual({ label: "active", tone: "success" });
+    expect(savedStanding({ effective: "active", validUntil: "2026-12-31" }).label).toBe("valid until 2026-12-31");
+    expect(savedStanding({ effective: "expired", validUntil: "2026-10-01" })).toEqual({ label: "expired 2026-10-01", tone: "warning" });
+    expect(savedStanding({ effective: "false_positive", validUntil: null }).label).toBe("false positive");
+    expect(savedStanding({ effective: "revoked", validUntil: "2027-01-01" }).label).toBe("revoked");
+  });
+
+  it("reads a confidence and knows the reliability scale", () => {
+    expect(["", " 0 ", "85", "100", "101", "-5", "8.5", "high"].map(parseConfidence)).toEqual([-1, 0, 85, 100, null, null, null, null]);
+    expect(RELIABILITY.map((r) => r.id).join("")).toBe("ABCDEF");
   });
 });

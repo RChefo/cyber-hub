@@ -1361,12 +1361,39 @@ export interface TiHistoryEntry {
   searchedAt: string;
 }
 
+export type TiSavedStatus = "active" | "revoked" | "false_positive";
+
+/** A saved indicator with its lifecycle (docs/PROVIDERS.md#saved-indicators). */
 export interface TiSavedIndicator {
   id: number;
   kind: VtKind;
   indicator: string;
   note: string;
+  source: string;
+  /** A–F (Admiralty scale), "" when not judged */
+  reliability: string;
+  /** 0–100 (STIX 2.1) */
+  confidence: number | null;
+  confidenceLabel: "none" | "low" | "medium" | "high" | null;
+  status: TiSavedStatus;
+  /** the status today: an active indicator past its validity is expired */
+  effective: TiSavedStatus | "expired";
+  /** YYYY-MM-DD */
+  validUntil: string | null;
+  /** when it was saved (the collection time) */
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface TiSavedChanges {
+  note?: string;
+  source?: string;
+  reliability?: string;
+  /** -1 clears it */
+  confidence?: number;
+  status?: TiSavedStatus;
+  /** "" clears it */
+  validUntil?: string;
 }
 
 /* ─────────────── MCP integration ─────────────── */

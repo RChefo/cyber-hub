@@ -458,6 +458,8 @@ pub fn run() {
             threat_intel::ti_saved_export_stix,
             threat_intel::ti_saved_add,
             threat_intel::ti_saved_remove,
+            threat_intel::ti_saved_update,
+            threat_intel::ti_saved_history,
             threat_intel::ti_export,
             // MCP integration (MCP page; not reachable from MCP clients)
             mcp_commands::mcp_status,

@@ -8,7 +8,11 @@
 //! (UUIDv4), as the specification recommends. Timestamps are UTC with millisecond precision.
 //!
 //! Only what the analyst saved is exported, with their note as the description. No provider
-//! verdicts are claimed: `indicator_types` is left out.
+//! verdicts are claimed: `indicator_types` is left out. The lifecycle goes with it: `confidence`
+//! (0–100), `valid_until` (the end of the day the analyst named), `revoked` for revoked indicators
+//! and false positives, and the source as an external reference with its reliability. An
+//! indicator whose validity ended before it was saved is not exported: STIX requires
+//! `valid_until` to be later than `valid_from`.
 
 use serde_json::{json, Value};
 use sha1::{Digest, Sha1};
@@ -80,12 +84,19 @@ pub fn stix_time(ts: &str) -> String {
         .to_string()
 }
 
-/// One saved indicator: (kind, value, note, saved at).
+/// One saved indicator and its lifecycle.
 pub struct Saved<'a> {
     pub kind: &'a str,
     pub value: &'a str,
     pub note: &'a str,
     pub saved_at: &'a str,
+    pub source: &'a str,
+    pub reliability: &'a str,
+    pub confidence: Option<i64>,
+    /// YYYY-MM-DD
+    pub valid_until: Option<&'a str>,
+    /// active, revoked or false_positive
+    pub status: &'a str,
 }
 
 /// The bundle, and the indicators that could not be expressed as patterns.
@@ -98,6 +109,11 @@ pub fn bundle(items: &[Saved]) -> (Value, Vec<String>) {
             continue;
         };
         let t = stix_time(it.saved_at);
+        let until = it.valid_until.filter(|d| !d.is_empty()).map(|d| format!("{d}T23:59:59.999Z"));
+        if until.as_deref().is_some_and(|u| u <= t.as_str()) {
+            skipped.push(format!("{} (its validity ended before it was saved)", it.value));
+            continue;
+        }
         let mut o = json!({
             "type": "indicator",
             "spec_version": "2.1",
@@ -111,7 +127,21 @@ pub fn bundle(items: &[Saved]) -> (Value, Vec<String>) {
             "valid_from": t,
         });
         let note = it.note.trim();
-        o["description"] = json!(if note.is_empty() { "Saved in Cyber Hub".to_string() } else { format!("{note} (saved in Cyber Hub)") });
+        let fp = if it.status == "false_positive" { " Marked a false positive." } else { "" };
+        o["description"] = json!(if note.is_empty() { format!("Saved in Cyber Hub.{fp}") } else { format!("{note} (saved in Cyber Hub).{fp}") });
+        if let Some(c) = it.confidence {
+            o["confidence"] = json!(c.clamp(0, 100));
+        }
+        if let Some(u) = until {
+            o["valid_until"] = json!(u);
+        }
+        if it.status != "active" {
+            o["revoked"] = json!(true);
+        }
+        if !it.source.trim().is_empty() {
+            let reliability = crate::ti::lifecycle::RELIABILITY.iter().find(|(k, _)| *k == it.reliability).map(|(k, l)| format!("source reliability {k} ({l})"));
+            o["external_references"] = json!([{ "source_name": it.source.trim(), "description": reliability.unwrap_or_else(|| "where the indicator came from".into()) }]);
+        }
         objects.push(o);
     }
     (json!({ "type": "bundle", "id": format!("bundle--{}", uuid_v4()), "objects": objects }), skipped)
@@ -146,8 +176,8 @@ mod tests {
     #[test]
     fn bundles_have_stable_indicator_ids_and_required_properties() {
         let items = [
-            Saved { kind: "domain", value: "evil.example.com", note: "Phishing kit", saved_at: "2026-11-08T22:37:41Z" },
-            Saved { kind: "file", value: "1234", note: "", saved_at: "2026-11-08T22:37:41Z" },
+            saved("domain", "evil.example.com", "Phishing kit"),
+            saved("file", "1234", ""),
         ];
         let (a, skipped) = bundle(&items);
         let (b, _) = bundle(&items);
@@ -161,8 +191,36 @@ mod tests {
             assert!(o.get(key).is_some(), "{key} is required");
         }
         assert_eq!(o["created"], "2026-11-08T22:37:41.000Z");
-        assert_eq!(o["description"], "Phishing kit (saved in Cyber Hub)");
+        assert_eq!(o["description"], "Phishing kit (saved in Cyber Hub).");
         assert!(o["id"].as_str().unwrap().starts_with("indicator--"));
         assert!(o.get("indicator_types").is_none(), "no verdict is claimed");
+        for key in ["confidence", "valid_until", "revoked", "external_references"] {
+            assert!(o.get(key).is_none(), "{key} only when the analyst set it");
+        }
+    }
+
+    fn saved<'a>(kind: &'a str, value: &'a str, note: &'a str) -> Saved<'a> {
+        Saved { kind, value, note, saved_at: "2026-11-08T22:37:41Z", source: "", reliability: "", confidence: None, valid_until: None, status: "active" }
+    }
+
+    #[test]
+    fn the_lifecycle_goes_with_the_indicator() {
+        let items = [
+            Saved { source: "Vendor report 41", reliability: "B", confidence: Some(85), valid_until: Some("2026-12-31"), ..saved("domain", "evil.example.com", "C2") },
+            Saved { status: "false_positive", ..saved("ip", "198.51.100.7", "") },
+            Saved { status: "revoked", source: "Feed", ..saved("ip", "198.51.100.8", "") },
+            Saved { valid_until: Some("2026-11-01"), ..saved("ip", "198.51.100.9", "") },
+        ];
+        let (b, skipped) = bundle(&items);
+        assert_eq!(skipped, vec!["198.51.100.9 (its validity ended before it was saved)".to_string()]);
+        let o = &b["objects"];
+        assert_eq!((o[0]["confidence"].as_i64(), o[0]["valid_until"].as_str()), (Some(85), Some("2026-12-31T23:59:59.999Z")));
+        assert!(o[0]["valid_until"].as_str().unwrap() > o[0]["valid_from"].as_str().unwrap());
+        assert_eq!(o[0]["external_references"][0]["source_name"], "Vendor report 41");
+        assert_eq!(o[0]["external_references"][0]["description"], "source reliability B (Usually reliable)");
+        assert!(o[0].get("revoked").is_none());
+        assert_eq!((o[1]["revoked"].as_bool(), o[1]["description"].as_str()), (Some(true), Some("Saved in Cyber Hub. Marked a false positive.")));
+        assert_eq!(o[2]["revoked"], true);
+        assert_eq!(o[2]["external_references"][0]["description"], "where the indicator came from");
     }
 }
