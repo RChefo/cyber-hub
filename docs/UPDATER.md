@@ -125,13 +125,13 @@ If the old private key was **compromised**, do steps 1–3 immediately, and trea
 
 ## The release workflow
 
-`.github/workflows/release.yml` (never run yet) — triggered by pushing a tag `vX.Y.Z` or by a manual run naming an existing tag (manual runs stop at a draft by default):
+`.github/workflows/release.yml` (never run yet) — triggered by pushing a tag `vX.Y.Z` or by a manual run naming an existing tag. **Building, signing and uploading happen only while the repository variable `RELEASE_PUBLISHING` is `enabled`**; without it a tag push only runs *validate*. A tag push always stops at a **draft**; a release becomes public only by a manual run with *draft* unchecked and the tag typed again in *confirm*, or by publishing the reviewed draft by hand:
 
 1. **validate** (no secrets): the tag is `vMAJOR.MINOR.PATCH`; `package.json`, `tauri.conf.json` and `Cargo.toml` carry that version; the commit is on `main` or a `release/*` branch; the updater configuration is intact (public key present, `requireSignedVersion` on, updater artifacts on, no `dangerous*` option); no private key file is committed; release notes exist (`docs/releases/X.Y.Z.md`, otherwise the annotated tag message); no release exists for the tag yet; typecheck, frontend and release-script tests, frontend build, `cargo test`, clippy with warnings denied, `npm audit`, `cargo audit`.
 2. **build** (environment `release`, the only job with the signing secrets, read-only token): Windows (NSIS, MSI) and Linux on Ubuntu 22.04 (AppImage, deb, rpm), `tauri build` with the repository's feed compiled in; every package must have its `.sig`.
-3. **publish** (environment `release`, `contents: write`): generates `latest.json` with `scripts/updater-manifest.mjs`, **validates it** (every entry points to a file that exists, HTTPS, the file name survives the upload, supported platform keys only, the signature verifies against the public key in `tauri.conf.json` and names the release's version, all five package types present), writes `SHA256SUMS.txt`, uploads everything to a **draft** release, checks every asset arrived and that GitHub's SHA-256 digest of every uploaded file equals `SHA256SUMS.txt` (the website shows those digests as the download checksums, see WEBSITE.md), and only then publishes it (tag pushes) or leaves the draft (manual runs with *draft* checked).
+3. **publish** (environment `release`, `contents: write`): generates `latest.json` with `scripts/updater-manifest.mjs`, **validates it** (every entry points to a file that exists, HTTPS, the file name survives the upload, supported platform keys only, the signature verifies against the public key in `tauri.conf.json` and names the release's version, all five package types present), writes `SHA256SUMS.txt`, uploads everything to a **draft** release, checks every asset arrived and that GitHub's SHA-256 digest of every uploaded file equals `SHA256SUMS.txt` (the website shows those digests as the download checksums, see WEBSITE.md), and leaves it a draft. Only the manual run described above makes it public, after all of these checks.
 
-Hardening: workflow-level `permissions: {}` with per-job grants; actions pinned to commit SHAs; `persist-credentials: false`; no caches; secrets only as step environment variables; no `pull_request` trigger.
+Hardening: workflow-level `permissions: {}` with per-job grants; actions pinned to commit SHAs; Rust (1.99.1), Node (22.12.0) and cargo-audit (0.22.2) pinned by exact version, the same as `ci.yml`; a timeout on every job; `persist-credentials: false`; no caches; secrets only as step environment variables, only in jobs of the `release` environment; no `pull_request` trigger. `src-tauri/src/ci_tests.rs` fails if any of this, the release switch or the publish condition is removed.
 
 Normal CI (`ci.yml`) never needs the signing key, never runs `tauri build` and never publishes.
 
@@ -168,8 +168,9 @@ node scripts/updater-manifest.mjs validate --manifest latest.json --assets <fold
 2. Create the environment **release** (Settings → Environments) with required reviewers, and restrict it to tags `v*`.
 3. Add the two secrets to that environment (see [Release secrets](#release-secrets)).
 4. Back up the private key file and its password offline.
-5. For each release: bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`; write `docs/releases/X.Y.Z.md`; merge to `main` or a `release/*` branch; push the tag `vX.Y.Z`.
-6. **Set up Windows Authenticode code signing** for the installers and executables before distributing anything (separate from update signing). Without it SmartScreen warns on download, and in the staging test Microsoft Defender quarantined an unsigned updated build as a machine-learning false positive. Not part of this setup.
+5. Only when the environment, its reviewers and its secrets are in place, set the repository variable `RELEASE_PUBLISHING` to `enabled` (Settings → Secrets and variables → Actions → Variables). Remove it again to stop all building and publishing.
+6. For each release: bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`; write `docs/releases/X.Y.Z.md`; merge to `main` or a `release/*` branch; push the tag `vX.Y.Z`. Review the draft the run leaves, then publish it by hand, or start the workflow manually for a new tag with *draft* unchecked and the tag typed again in *confirm*.
+7. **Set up Windows Authenticode code signing** for the installers and executables before distributing anything (separate from update signing). Without it SmartScreen warns on download, and in the staging test Microsoft Defender quarantined an unsigned updated build as a machine-learning false positive. Not part of this setup.
 
 ## Testing
 

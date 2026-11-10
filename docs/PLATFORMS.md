@@ -46,18 +46,35 @@ Cyber Hub is under active development. It is not released or distributed, and no
 
 **Updater (Windows 11, staging):** a disposable NSIS installation of a test build updated from 0.1.0 to 0.2.0 through a local feed, with signature, version-binding, downgrade, TLS, cancellation, install-guard and data-preservation checks (details and the untested parts in [UPDATER.md](UPDATER.md#testing)).
 
-`.github/workflows/release.yml` builds, signs and publishes releases. It has never run.
+`.github/workflows/release.yml` builds, signs and publishes releases. It has never run. Since Mission 6:
+* it builds and uploads nothing unless the repository variable `RELEASE_PUBLISHING` is `enabled`;
+* a tag push stops at a draft;
+* its toolchains are pinned like `ci.yml`'s.
+
+See [UPDATER.md](UPDATER.md#the-release-workflow).
 
 `.github/workflows/ci.yml` (Mission 5) runs no packaging. It has not run yet because the repository has not been pushed. It has four jobs:
-* **Windows and Ubuntu 24.04:** typecheck, frontend tests, the frontend build, clippy with warnings as errors, `cargo test --locked`, a check that the fuzz entry points compile, the sidecar staging and `npm audit`. The tests include database upgrades from every schema and the hostile-input sweep.
+* **Windows (`windows-2022` image) and Ubuntu 24.04:** typecheck, frontend tests, the frontend build, clippy with warnings as errors, `cargo test --locked`, a check that the fuzz entry points compile, the sidecar staging and `npm audit`. The tests include database upgrades from every schema and the hostile-input sweep.
 * **Debian 12:** a container job running the frontend checks and `cargo test --locked`.
-* **Audit:** `cargo audit` and a gitleaks scan of the whole history.
+* **Audit:** `cargo audit`, a gitleaks scan of the whole history, and actionlint (1.7.7, checksum-verified) over both workflows, including shellcheck on their scripts.
 * **MSRV:** `cargo check --all-targets` with Rust 1.90.0.
 
 It is deterministic:
 * actions are pinned by commit and the Debian image by digest;
 * Rust (1.99.1), Node (22.12.0), cargo-audit (0.22.2) and gitleaks (8.30.1, checksum-verified) are pinned by exact version;
-* a test (`ci_tests.rs`) fails if a workflow stops parsing, an action loses its commit pin, or one of these checks disappears.
+* runner images are exact (no `*-latest`), and every job has a timeout;
+* a test (`ci_tests.rs`) fails if a workflow stops parsing, an action loses its commit pin, a toolchain, runner or tool floats, a job loses its timeout, or one of these checks disappears.
+  * For `release.yml`, it also fails if the top-level permissions grow, secrets appear outside the `release` environment, the release switch or the publish condition goes, or a second step can make a release public.
+
+**First run of the workflows** (owner's steps; nothing has been pushed):
+1. Create the GitHub repository, private until a release, and push `release/v0.1.0`. A push starts `ci.yml`: the jobs `verify` (Windows and Ubuntu), `debian`, `audit` and `msrv`.
+2. Before that push, set these under Settings → Actions → General:
+   * *Workflow permissions* to **Read repository contents** (both workflows ask for what they need per job);
+   * optionally, *Allow select actions*, limited to `actions/checkout`, `actions/setup-node`, `actions/upload-artifact`, `actions/download-artifact`, `dtolnay/rust-toolchain` and `Swatinem/rust-cache`.
+3. Expect the first run to download the toolchains and dependencies. Nothing in it needs a secret.
+   * The `audit` job scans the whole history with gitleaks; known false positives are listed in `.gitleaksignore`.
+   * If a job fails only on GitHub, compare its tool versions with the pins above before changing code.
+4. Leave `RELEASE_PUBLISHING` unset until the `release` environment, its reviewers and its secrets exist ([UPDATER.md](UPDATER.md#owner-setup)). Until then a version tag only runs the release checks.
 
 ### Reproducing the Linux GUI tests
 
