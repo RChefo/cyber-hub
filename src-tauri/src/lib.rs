@@ -35,6 +35,7 @@ mod yaml;
 #[cfg(feature = "fuzzing")]
 pub mod fuzzing;
 mod native_prompt;
+mod window_fit;
 #[cfg(test)]
 mod hostile;
 #[cfg(test)]
@@ -83,6 +84,11 @@ pub fn run() {
         // signed updates; driven only by the backend (`updates`), no permission for the web view
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // the window is created hidden: sized for the screen it opens on, then shown
+            if let Some(w) = app.get_webview_window("main") {
+                let c = app.config().app.windows.iter().find(|c| c.label == "main").map_or((1440.0, 900.0), |c| (c.width, c.height));
+                window_fit::apply(&w, c);
+            }
             let dir = util::data_dir(app)?;
             std::fs::create_dir_all(&dir)?;
             // The data folder holds the database (projects, findings, investigations and evidence):

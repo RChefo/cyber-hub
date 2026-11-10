@@ -4,6 +4,7 @@ import { dragRegion } from "@/lib/dragRegion";
 import { api } from "@/lib/ipc";
 import { useQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
+import { sidebarCollapsed, useNarrowWindow } from "@/lib/viewport";
 import BranchedMenu from "@/components/vendor/reactbits/BranchedMenu";
 import { NAV_GROUPS, SETTINGS_ITEM, type NavItem, type PageId } from "./routes";
 import { useApp } from "./store";
@@ -49,7 +50,10 @@ function NavLink({ item, collapsed, badge }: { item: NavItem; collapsed: boolean
 
 export function Sidebar() {
   const { prefs, setPref, runtime, route, navigate } = useApp();
-  const collapsed = prefs["ui.sidebarCollapsed"] === true;
+  // icons only when the user chose it, or when the window is too narrow for labels (scaled screens)
+  const narrow = useNarrowWindow();
+  const preferCollapsed = prefs["ui.sidebarCollapsed"] === true;
+  const collapsed = sidebarCollapsed(narrow ? 0 : Number.POSITIVE_INFINITY, preferCollapsed);
   // MCP requests waiting for approval (refreshed whenever the approval listener sees a change)
   const mcpPending = useQuery(["mcp"], api.mcpPending, [], runtime).data?.length ?? 0;
 
@@ -125,16 +129,19 @@ export function Sidebar() {
 
       <div className="flex flex-col gap-0.5 px-2.5 pt-1 pb-3">
         <NavLink item={SETTINGS_ITEM} collapsed={collapsed} />
-        <Button
-          variant="ghost"
-          size="sm"
-          className={cn("h-8 justify-start gap-2.5 px-2.5 text-[13px] font-normal text-muted", collapsed && "justify-center px-0")}
-          onPress={() => setPref("ui.sidebarCollapsed", !collapsed)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? <PanelLeftOpen className="size-[17px]" strokeWidth={1.75} /> : <PanelLeftClose className="size-[17px]" strokeWidth={1.75} />}
-          {!collapsed && "Collapse"}
-        </Button>
+        {/* a narrow window keeps icons only, so there is nothing to expand */}
+        {!narrow && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn("h-8 justify-start gap-2.5 px-2.5 text-[13px] font-normal text-muted", collapsed && "justify-center px-0")}
+            onPress={() => setPref("ui.sidebarCollapsed", !preferCollapsed)}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <PanelLeftOpen className="size-[17px]" strokeWidth={1.75} /> : <PanelLeftClose className="size-[17px]" strokeWidth={1.75} />}
+            {!collapsed && "Collapse"}
+          </Button>
+        )}
       </div>
     </aside>
   );

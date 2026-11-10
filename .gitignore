@@ -40,3 +40,6 @@ Thumbs.db
 
 # local design reference (third-party screenshot, not part of the product)
 docs/reference/
+
+# QA probe output (screenshots, results)
+scripts/qa/out/

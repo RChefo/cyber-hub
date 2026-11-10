@@ -160,6 +160,12 @@ sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-
 | Updates (Settings → Updates) | NSIS (per-user) and MSI packages update themselves. The NSIS path was tested end to end against a local staging feed; MSI updates were not (they need administrator approval). Unsigned builds were quarantined by Microsoft Defender after the update (ML false positive): Authenticode signing is required before distribution. See UPDATER.md | AppImage, deb and rpm are supported by the updater plugin (deb/rpm ask for an administrator password through `pkexec`, zenity/kdialog + sudo or terminal sudo; AppImage needs a writable folder). **No Linux format was tested** |
 | Tool working directory | `%APPDATA%\dev.cyberhub.workstation\work` | `~/.local/share/dev.cyberhub.workstation/work` (mode 0700) |
 
+### Display scaling and window size (Mission 7)
+
+* The window is created hidden and sized for the work area of the monitor it opens on (`src-tauri/src/window_fit.rs`): the configured 1440 × 900 window when it fits, otherwise 94 % of the work area, maximized below 1024 × 640 logical pixels. The minimum is 800 × 480 logical pixels, which fits a 1920 × 1080 screen at 200 % under the Windows taskbar and the GNOME and KDE panels; a smaller screen lowers it to the screen.
+* Below 1024 logical pixels the sidebar shows icons only, whatever the collapse preference (`src/lib/viewport.ts`).
+* Checked with `scripts/qa/layout-probe.mjs` (DevTools device emulation in the Windows development build): every page, every project tab and the finding form at 1920 × 1040 (100 %), 1536 × 826 (125 %), 1280 × 688 (150 %), 960 × 516 and 960 × 496 (200 %) and 800 × 480, with no horizontal overflow and no unreachable content. This is emulated scaling; a physical HiDPI screen is on the release checklist (docs/release/).
+
 ### Unsupported or limited functionality
 
 * Tools that need elevated privileges or capture drivers (SYN/UDP/OS scans, packet capture, wireless) fail with the tool's own error; Cyber Hub never elevates.
