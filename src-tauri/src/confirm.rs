@@ -37,7 +37,7 @@ mod imp {
     use tauri::{AppHandle, Manager};
     use windows_sys::Win32::Foundation::{HWND, LPARAM, WPARAM};
     use windows_sys::Win32::UI::Controls::{
-        TaskDialogIndirect, TASKDIALOGCONFIG, TASKDIALOGCONFIG_0, TASKDIALOG_BUTTON, TDCBF_CANCEL_BUTTON, TDF_ALLOW_DIALOG_CANCELLATION, TDF_CALLBACK_TIMER, TDF_POSITION_RELATIVE_TO_WINDOW, TDF_SIZE_TO_CONTENT, TDM_ENABLE_BUTTON, TDN_CREATED, TDN_TIMER,
+        TaskDialogIndirect, TASKDIALOGCONFIG, TASKDIALOGCONFIG_0, TASKDIALOG_BUTTON, TDCBF_CANCEL_BUTTON, TDF_ALLOW_DIALOG_CANCELLATION, TDF_CALLBACK_TIMER, TDF_POSITION_RELATIVE_TO_WINDOW, TDF_SIZE_TO_CONTENT, TDM_ENABLE_BUTTON, TDN_BUTTON_CLICKED, TDN_CREATED, TDN_TIMER,
         TD_WARNING_ICON,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{SendMessageW, IDCANCEL};
@@ -60,6 +60,10 @@ mod imp {
         } else if msg == TDN_TIMER && !enabled.load(Ordering::Relaxed) && wparam as u64 >= super::APPROVE_DELAY_MS {
             enabled.store(true, Ordering::Relaxed);
             unsafe { SendMessageW(hwnd, TDM_ENABLE_BUTTON as u32, APPROVE as WPARAM, 1) };
+        } else if msg == TDN_BUTTON_CLICKED && wparam as i32 == APPROVE && !enabled.load(Ordering::Relaxed) {
+            // a click on the approving button while it is disabled (only a synthetic one can
+            // arrive) does not close the dialog: S_FALSE (Mission 7)
+            return 1;
         }
         0
     }
@@ -95,6 +99,19 @@ mod imp {
         let (title, label) = (title.to_string(), label.to_string());
         // a task dialog runs its own message loop: never on the async runtime's threads
         tauri::async_runtime::spawn_blocking(move || show(parent as HWND, &title, &message, &label)).await.unwrap_or(false)
+    }
+
+    /// Mission 7: while the approving button is disabled, a click on it (only a synthetic one can
+    /// arrive, such as TDM_CLICK_BUTTON) keeps the dialog open; Cancel always closes it.
+    #[test]
+    fn an_early_click_on_approve_keeps_the_dialog_open() {
+        let enabled = AtomicBool::new(false);
+        let data = &enabled as *const AtomicBool as isize;
+        let click = |button: i32| unsafe { callback(null_mut(), TDN_BUTTON_CLICKED as u32, button as WPARAM, 0, data) };
+        assert_eq!(click(APPROVE), 1, "S_FALSE: the dialog stays open");
+        assert_eq!(click(2), 0, "Cancel closes it");
+        enabled.store(true, Ordering::Relaxed);
+        assert_eq!(click(APPROVE), 0, "after the delay, approving closes it");
     }
 }
 
