@@ -1524,7 +1524,7 @@ pub fn check_supported(version: i64) -> AppResult<()> {
     let latest = MIGRATIONS.len() as i64;
     if version > latest {
         return Err(AppError::Internal(format!(
-            "This database was written by a newer version of Cyber Hub (schema {version}; this version supports up to {latest}).              Install the newer version again, or restore a backup made before the upgrade (data folder, backups)."
+            "This database was written by a newer version of Cyber Hub (schema {version}; this version supports up to {latest}). It was not changed. Install that newer version again, or restore a backup made before the upgrade: the backups folder in the data folder keeps a copy taken before every upgrade."
         )));
     }
     Ok(())
@@ -2000,6 +2000,8 @@ mod tests {
         }
         let err = Db::open(&path).err().expect("refused");
         assert!(err.to_string().contains("newer version"), "{err}");
+        // Mission 7: it says the database was not changed and how to get back, in one readable sentence
+        assert!(err.to_string().contains("It was not changed") && err.to_string().contains("backups folder") && !err.to_string().contains("  "), "{err}");
         let v: i64 = Connection::open(&path).unwrap().query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert_eq!(v, MIGRATIONS.len() as i64 + 1);
         for ext in ["", "-wal", "-shm"] {

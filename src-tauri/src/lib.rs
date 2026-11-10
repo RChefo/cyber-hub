@@ -36,6 +36,7 @@ mod yaml;
 pub mod fuzzing;
 mod native_prompt;
 mod window_fit;
+mod startup_error;
 #[cfg(test)]
 mod hostile;
 #[cfg(test)]
@@ -84,122 +85,12 @@ pub fn run() {
         // signed updates; driven only by the backend (`updates`), no permission for the web view
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            // the window is created hidden: sized for the screen it opens on, then shown
-            if let Some(w) = app.get_webview_window("main") {
-                let c = app.config().app.windows.iter().find(|c| c.label == "main").map_or((1440.0, 900.0), |c| (c.width, c.height));
-                window_fit::apply(&w, c);
+            // a start that fails (a database from a newer version, for example) says why in a
+            // native message box: Tauri would panic with the error, and a release build has no
+            // console to show it (Mission 7)
+            if let Err(e) = setup_app(app) {
+                startup_error::fail(&e.to_string());
             }
-            let dir = util::data_dir(app)?;
-            std::fs::create_dir_all(&dir)?;
-            // The data folder holds the database (projects, findings, investigations and evidence):
-            // only the user may enter it, whatever the umask made of it (on Windows the profile
-            // folder is already private to the user)
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
-            }
-            // Tools inherit Cyber Hub's working directory, and relative file names in arguments are
-            // validated against it. Use a private folder, so a relative name never resolves to (or
-            // writes into) the installation folder or wherever the app happened to be started.
-            let work = dir.join("work");
-            std::fs::create_dir_all(&work)?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                std::fs::set_permissions(&work, std::fs::Permissions::from_mode(0o700))?;
-            }
-            std::env::set_current_dir(&work)?;
-            // a restore staged before the restart replaces the database before it is opened; a
-            // restored database that does not open is set aside and the previous one goes back
-            let db_path = dir.join(restore::DB_NAME);
-            let mut restoring = restore::swap_pending(&dir);
-            let database = match db::Db::open(&db_path) {
-                Ok(d) => d,
-                Err(e) => match restoring.as_mut().filter(|s| !s.done()) {
-                    Some(swap) => {
-                        restore::undo(&dir, swap, &e)?;
-                        db::Db::open(&db_path)?
-                    }
-                    None => return Err(e.into()),
-                },
-            };
-            let restored = restoring.as_mut().map(|s| {
-                if s.done() {
-                    return s.outcome().clone();
-                }
-                // a restored database does not turn the MCP bridge on by itself
-                s.outcome_mut().mcp_turned_off = database
-                    .with(|c| Ok(c.execute("UPDATE user_preferences SET value = 'false' WHERE key = ?1 AND value = 'true'", [mcp::ops::ENABLED_PREF])?))
-                    .is_ok_and(|n| n > 0);
-                // nor makes Cyber Hub read files the analyst never chose on this computer
-                s.outcome_mut().wordlists_dropped = database.with(|c| Ok(restore::untrust_paths(c)?)).unwrap_or(0);
-                restore::finish(&dir, s)
-            });
-            if let Some(o) = &restored {
-                let (title, detail) = match (&o.error, o.ok) {
-                    (None, _) => (
-                        "Database restored",
-                        format!(
-                            "{}; the previous database is kept in {}{}",
-                            o.source,
-                            o.kept_in.as_deref().unwrap_or("backups"),
-                            if o.wordlists_dropped > 0 { format!("; {} wordlists indexed by reference were removed with the extra wordlist folder", o.wordlists_dropped) } else { String::new() }
-                        ),
-                    ),
-                    (Some(e), true) => ("Database restored with a warning", e.clone()),
-                    (Some(e), false) => (if o.retry { "Database restore postponed" } else { "Database restore failed" }, e.clone()),
-                };
-                let _ = database.with(|c| activity::log(c, "restore", title, &detail, None, None, None));
-            }
-            // no evidence sweep at a start that restored or tried to restore a backup
-            let skip_sweep = restored.is_some() || restore::sorting_evidence(&dir);
-            app.manage(workspace_commands::RestoreState::new(restored));
-            tools::sync_catalog(&database)?;
-            app.manage(database);
-            app.manage(process::ProcessManager::default());
-            app.manage(virustotal::VtState::new()?);
-            app.manage(threat_intel::TiState::new()?);
-            app.manage(std::sync::Arc::new(mcp::bridge::Bridge::default()));
-            app.manage(mcp::ops::LiveRuns::default());
-            app.manage(std::sync::Arc::new(osint::discovery::OsintState::default()));
-            app.manage(osint_commands::ImportState::default());
-            app.manage(workspace_commands::ScanImports::default());
-            app.manage(crate::commands::utility_record::PickedFiles::default());
-            app.manage(std::sync::Arc::new(updates::Updates::load(&app.state::<db::Db>())));
-            // evidence files (content-addressed, private folder); leftovers of an interrupted copy
-            // and files no record refers to any more are removed
-            let evidence = std::sync::Arc::new(workspace::evidence::EvidenceStore::new(dir.join("evidence")));
-            // not while a restore is in progress, nor right after one: some files belong to the
-            // previous database
-            if skip_sweep {
-                eprintln!("Cyber Hub: evidence folder not swept at this start (database restore)");
-            } else if let Err(e) = evidence.sweep(&app.state::<db::Db>()) {
-                eprintln!("Cyber Hub: evidence folder not checked: {e}");
-            }
-            app.manage(evidence);
-            app.manage(discovery_commands::DiscoveryState::default());
-            app.manage(workflow_commands::WorkflowState::default());
-            app.manage(assistant_commands::AssistantState::default());
-            // collections interrupted by a crash or exit are marked as such
-            osint::discovery::recover_interrupted(&app.state::<db::Db>());
-            // remove target-file snapshots left behind by a crash
-            tools::clean_runtime_dir(app.handle());
-            // MCP bridge: off unless the user turned it on on the MCP page
-            let enabled = mcp_commands::enabled_pref(&app.state::<db::Db>());
-            let _ = std::fs::remove_dir_all(dir.join("mcp")); // stale connection files from a crash
-            if enabled {
-                let handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    if let Err(e) = mcp_commands::start_bridge(&handle).await {
-                        eprintln!("Cyber Hub: MCP bridge not started: {e}");
-                    }
-                });
-            }
-            // automatic update checks (off the startup path; nothing is installed without approval)
-            updates::start_scheduler(app.handle().clone());
-            // scheduled workflows (passive steps only) while Cyber Hub runs
-            workflow_commands::start_scheduler(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -594,10 +485,136 @@ pub fn run() {
             system::open_terminal,
         ])
         .build(tauri::generate_context!())
-        .expect("error while building Cyber Hub")
+        // a start that fails (a database from a newer version, for example) says why in a native
+        // message box instead of closing without a word (Mission 7)
+        .unwrap_or_else(|e| startup_error::fail(&e.to_string()))
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 shutdown(app);
             }
         });
+}
+
+/// Everything Cyber Hub does before its window appears: data folder, database (with a restore
+/// staged before the restart), MCP bridge and schedulers. An error here ends the start with a
+/// native message box (`startup_error`).
+fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+        // the window is created hidden: sized for the screen it opens on, then shown
+        if let Some(w) = app.get_webview_window("main") {
+            let c = app.config().app.windows.iter().find(|c| c.label == "main").map_or((1440.0, 900.0), |c| (c.width, c.height));
+            window_fit::apply(&w, c);
+        }
+        let dir = util::data_dir(app)?;
+        std::fs::create_dir_all(&dir)?;
+        // The data folder holds the database (projects, findings, investigations and evidence):
+        // only the user may enter it, whatever the umask made of it (on Windows the profile
+        // folder is already private to the user)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
+        }
+        // Tools inherit Cyber Hub's working directory, and relative file names in arguments are
+        // validated against it. Use a private folder, so a relative name never resolves to (or
+        // writes into) the installation folder or wherever the app happened to be started.
+        let work = dir.join("work");
+        std::fs::create_dir_all(&work)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&work, std::fs::Permissions::from_mode(0o700))?;
+        }
+        std::env::set_current_dir(&work)?;
+        // a restore staged before the restart replaces the database before it is opened; a
+        // restored database that does not open is set aside and the previous one goes back
+        let db_path = dir.join(restore::DB_NAME);
+        let mut restoring = restore::swap_pending(&dir);
+        let database = match db::Db::open(&db_path) {
+            Ok(d) => d,
+            Err(e) => match restoring.as_mut().filter(|s| !s.done()) {
+                Some(swap) => {
+                    restore::undo(&dir, swap, &e)?;
+                    db::Db::open(&db_path)?
+                }
+                // the native message box says it, with the data folder (Mission 7)
+                None => return Err(format!("{e}\n\nData folder: {}", dir.display()).into()),
+            },
+        };
+        let restored = restoring.as_mut().map(|s| {
+            if s.done() {
+                return s.outcome().clone();
+            }
+            // a restored database does not turn the MCP bridge on by itself
+            s.outcome_mut().mcp_turned_off = database
+                .with(|c| Ok(c.execute("UPDATE user_preferences SET value = 'false' WHERE key = ?1 AND value = 'true'", [mcp::ops::ENABLED_PREF])?))
+                .is_ok_and(|n| n > 0);
+            // nor makes Cyber Hub read files the analyst never chose on this computer
+            s.outcome_mut().wordlists_dropped = database.with(|c| Ok(restore::untrust_paths(c)?)).unwrap_or(0);
+            restore::finish(&dir, s)
+        });
+        if let Some(o) = &restored {
+            let (title, detail) = match (&o.error, o.ok) {
+                (None, _) => (
+                    "Database restored",
+                    format!(
+                        "{}; the previous database is kept in {}{}",
+                        o.source,
+                        o.kept_in.as_deref().unwrap_or("backups"),
+                        if o.wordlists_dropped > 0 { format!("; {} wordlists indexed by reference were removed with the extra wordlist folder", o.wordlists_dropped) } else { String::new() }
+                    ),
+                ),
+                (Some(e), true) => ("Database restored with a warning", e.clone()),
+                (Some(e), false) => (if o.retry { "Database restore postponed" } else { "Database restore failed" }, e.clone()),
+            };
+            let _ = database.with(|c| activity::log(c, "restore", title, &detail, None, None, None));
+        }
+        // no evidence sweep at a start that restored or tried to restore a backup
+        let skip_sweep = restored.is_some() || restore::sorting_evidence(&dir);
+        app.manage(workspace_commands::RestoreState::new(restored));
+        tools::sync_catalog(&database)?;
+        app.manage(database);
+        app.manage(process::ProcessManager::default());
+        app.manage(virustotal::VtState::new()?);
+        app.manage(threat_intel::TiState::new()?);
+        app.manage(std::sync::Arc::new(mcp::bridge::Bridge::default()));
+        app.manage(mcp::ops::LiveRuns::default());
+        app.manage(std::sync::Arc::new(osint::discovery::OsintState::default()));
+        app.manage(osint_commands::ImportState::default());
+        app.manage(workspace_commands::ScanImports::default());
+        app.manage(crate::commands::utility_record::PickedFiles::default());
+        app.manage(std::sync::Arc::new(updates::Updates::load(&app.state::<db::Db>())));
+        // evidence files (content-addressed, private folder); leftovers of an interrupted copy
+        // and files no record refers to any more are removed
+        let evidence = std::sync::Arc::new(workspace::evidence::EvidenceStore::new(dir.join("evidence")));
+        // not while a restore is in progress, nor right after one: some files belong to the
+        // previous database
+        if skip_sweep {
+            eprintln!("Cyber Hub: evidence folder not swept at this start (database restore)");
+        } else if let Err(e) = evidence.sweep(&app.state::<db::Db>()) {
+            eprintln!("Cyber Hub: evidence folder not checked: {e}");
+        }
+        app.manage(evidence);
+        app.manage(discovery_commands::DiscoveryState::default());
+        app.manage(workflow_commands::WorkflowState::default());
+        app.manage(assistant_commands::AssistantState::default());
+        // collections interrupted by a crash or exit are marked as such
+        osint::discovery::recover_interrupted(&app.state::<db::Db>());
+        // remove target-file snapshots left behind by a crash
+        tools::clean_runtime_dir(app.handle());
+        // MCP bridge: off unless the user turned it on on the MCP page
+        let enabled = mcp_commands::enabled_pref(&app.state::<db::Db>());
+        let _ = std::fs::remove_dir_all(dir.join("mcp")); // stale connection files from a crash
+        if enabled {
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = mcp_commands::start_bridge(&handle).await {
+                    eprintln!("Cyber Hub: MCP bridge not started: {e}");
+                }
+            });
+        }
+        // automatic update checks (off the startup path; nothing is installed without approval)
+        updates::start_scheduler(app.handle().clone());
+        // scheduled workflows (passive steps only) while Cyber Hub runs
+        workflow_commands::start_scheduler(app.handle().clone());
+        Ok(())
 }
