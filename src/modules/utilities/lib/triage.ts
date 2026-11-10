@@ -109,7 +109,8 @@ export function chainFinding(projectId: number, file: string, c: ProcessChain): 
   const name = (p?: ChainProcess) => (p ? p.image.split(/[\\/]/).pop() || p.image : "?");
   return {
     projectId,
-    title: cap(`${c.title}: ${name(parent)} → ${name(flagged)} (${file})`),
+    // two chains of one pattern in one file differ by the record that started the flagged process
+    title: cap(`${c.title}: ${name(parent)} → ${name(flagged)} (${file}${flagged?.record ? `, record ${flagged.record}` : ""})`),
     severity: c.severity,
     status: "under_review",
     category: "Log analysis",

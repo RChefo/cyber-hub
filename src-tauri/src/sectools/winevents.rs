@@ -588,6 +588,9 @@ impl State {
             })
             .collect();
         logons.sort_by(|a, b| (b.logons + b.failures).cmp(&(a.logons + a.failures)).then_with(|| a.account.cmp(&b.account)));
+        if logons.len() > 100 {
+            warnings.push(format!("Logons per account: the 100 busiest of {} accounts are listed", logons.len()));
+        }
         logons.truncate(100);
         Report {
             kind: "windows".into(),

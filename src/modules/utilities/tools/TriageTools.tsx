@@ -26,6 +26,22 @@ export interface RecordSource {
 /** Project choice and "Record as findings" for the selected entries (each title once). `project`
  * preselects a project, such as the one a request was sent for. With a `source`, the backend
  * records the findings together with their evidence and a timeline event, in one step. */
+/** Windows logon types (4624/4625 LogonType) by name; unknown codes stay as written. */
+const LOGON_TYPES: Record<string, string> = {
+  "2": "interactive",
+  "3": "network",
+  "4": "batch",
+  "5": "service",
+  "7": "unlock",
+  "8": "network cleartext",
+  "9": "new credentials",
+  "10": "remote interactive",
+  "11": "cached interactive",
+  "12": "cached remote interactive",
+  "13": "cached unlock",
+};
+const logonType = (t: string) => (LOGON_TYPES[t] ? `${LOGON_TYPES[t]} (${t})` : t);
+
 export function RecordBar({ build, picked, onDone, project, source }: { build: (projectId: number) => FindingInput[]; picked: number; onDone: () => void; project?: number | null; source?: RecordSource }) {
   const { runtime } = useApp();
   const projects = useQuery(["projects"], () => api.projectsList(), [], runtime);
@@ -383,7 +399,11 @@ export function LogTool() {
             </p>
           ))}
           {r.detections.length === 0 ? (
-            <EmptyBlock compact icon={ScrollText} title="Nothing suspicious found" description={r.kind === "windows" ? "None of the Windows event detections matched." : "No attack pattern, scan or password guessing was matched."} />
+            (r.chains?.length ?? 0) > 0 ? (
+              <p className="text-[12.5px] text-muted">None of the Windows event detections matched; the process chains below were flagged.</p>
+            ) : (
+              <EmptyBlock compact icon={ScrollText} title="Nothing suspicious found" description={r.kind === "windows" ? "None of the Windows event detections matched." : "No attack pattern, scan or password guessing was matched."} />
+            )
           ) : (
             <section className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -443,7 +463,7 @@ export function LogTool() {
               <p className="text-[12px] text-muted">Parent → child relationships from process creation events (Security 4688, Sysmon 1) that are rare in normal use. Each shows what the log says, why it was flagged, and what it may mean; recording one makes a finding under review.</p>
               {r.chains!.map((c, i) => (
                 <div key={`${c.pattern}:${i}`} className={cn("flex items-start gap-2.5 rounded-[8px] px-2.5 py-2", pickedChains.has(i) ? "bg-accent-soft/40" : "bg-white/[0.02]")}>
-                  <Pick label={`Select ${c.title} on ${c.computer}`} selected={pickedChains.has(i)} onToggle={() => setPickedChains((p) => (p.has(i) ? new Set([...p].filter((x) => x !== i)) : new Set([...p, i])))} />
+                  <Pick label={`Select ${c.title} on ${c.computer}${c.processes.find((p) => p.role === "flagged")?.record ? `, record ${c.processes.find((p) => p.role === "flagged")!.record}` : ""}`} selected={pickedChains.has(i)} onToggle={() => setPickedChains((p) => (p.has(i) ? new Set([...p].filter((x) => x !== i)) : new Set([...p, i])))} />
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <SeverityBadge severity={c.severity} />
@@ -476,7 +496,7 @@ export function LogTool() {
               <p className="text-[12px] text-muted">As the log records them (4624, 4625); user and service accounts, not computer or system identities. Facts to hunt from, not detections.</p>
               <Table
                 head={["Account", "Logons", "Failures", "Logon types", "Busiest sources", "First", "Last"]}
-                rows={r.logons!.map((l) => [l.account, l.logons.toLocaleString(), l.failures.toLocaleString(), l.types.map(([t, n]) => `${t}: ${n}`).join(", ") || "—", l.sources.map(([s, n]) => `${s} (${n})`).join(", "), l.first.slice(0, 19), l.last.slice(0, 19)])}
+                rows={r.logons!.map((l) => [l.account, l.logons.toLocaleString(), l.failures.toLocaleString(), l.types.map(([t, n]) => `${logonType(t)}: ${n}`).join(", ") || "—", l.sources.map(([s, n]) => `${s} (${n})`).join(", "), l.first.slice(0, 19), l.last.slice(0, 19)])}
               />
             </section>
           )}

@@ -278,6 +278,13 @@ fn process_chains_are_bounded_and_logons_are_summarized_per_account() {
     assert_eq!(ann.types, [("10".to_string(), 1), ("3".to_string(), 2)]);
     assert_eq!(ann.sources[0], ("10.0.0.5".to_string(), 2));
     assert_eq!((ann.first.as_str(), ann.last.as_str()), ("2026-11-09T09:00:00Z", "2026-11-09T10:02:00Z"));
+    assert!(r.warnings.iter().all(|w| !w.contains("Logons per account")), "nothing was cut: {:?}", r.warnings);
+
+    // more than 100 accounts: the busiest 100 are listed, and the report says so
+    let many: Vec<_> = (0..130u64).map(|i| at(sec(4624, &[("TargetUserName", &format!("user{i}")), ("TargetDomainName", "CORP"), ("IpAddress", "10.0.0.5"), ("LogonType", "3")]), i + 1, "2026-11-09T10:00:00Z")).collect();
+    let r = run(&many);
+    assert_eq!(r.logons.len(), 100);
+    assert!(r.warnings.iter().any(|w| w.contains("the 100 busiest of 130 accounts")), "{:?}", r.warnings);
 }
 
 /// Mission 6: process chains on the public EVTX-ATTACK-SAMPLES files (set CYBERHUB_EVTX_DIR).

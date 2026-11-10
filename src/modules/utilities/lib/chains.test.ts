@@ -28,7 +28,7 @@ describe("process chains (Mission 6)", () => {
   it("become findings under review that keep facts, signal and hypotheses apart", () => {
     const f = chainFinding(7, "Security.evtx", chain("T1505.003 Server Software Component: Web Shell"));
     expect(f).toMatchObject({ projectId: 7, status: "under_review", confidence: "low", severity: "high", affectedTarget: "WEB01.corp.example" });
-    expect(f.title).toBe("Web server process started a shell or a discovery command: w3wp.exe → cmd.exe (Security.evtx)");
+    expect(f.title).toBe("Web server process started a shell or a discovery command: w3wp.exe → cmd.exe (Security.evtx, record 20)");
     const [observed, why, hypotheses] = f.description!.split("\n\n");
     expect(observed.startsWith("Observed in Security.evtx on WEB01.corp.example:")).toBe(true);
     expect(why).toBe("Why it was flagged (derived): A web server worker started a command interpreter.");
