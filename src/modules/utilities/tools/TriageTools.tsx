@@ -23,9 +23,6 @@ export interface RecordSource {
   report?: () => unknown;
 }
 
-/** Project choice and "Record as findings" for the selected entries (each title once). `project`
- * preselects a project, such as the one a request was sent for. With a `source`, the backend
- * records the findings together with their evidence and a timeline event, in one step. */
 /** Windows logon types (4624/4625 LogonType) by name; unknown codes stay as written. */
 const LOGON_TYPES: Record<string, string> = {
   "2": "interactive",
@@ -42,6 +39,9 @@ const LOGON_TYPES: Record<string, string> = {
 };
 const logonType = (t: string) => (LOGON_TYPES[t] ? `${LOGON_TYPES[t]} (${t})` : t);
 
+/** Project choice and "Record as findings" for the selected entries (each title once). `project`
+ * preselects a project, such as the one a request was sent for. With a `source`, the backend
+ * records the findings together with their evidence and a timeline event, in one step. */
 export function RecordBar({ build, picked, onDone, project, source }: { build: (projectId: number) => FindingInput[]; picked: number; onDone: () => void; project?: number | null; source?: RecordSource }) {
   const { runtime } = useApp();
   const projects = useQuery(["projects"], () => api.projectsList(), [], runtime);
@@ -398,6 +398,28 @@ export function LogTool() {
               {w}
             </p>
           ))}
+          {(r.detections.length > 0 || (r.kind === "windows" && (r.chains?.length ?? 0) > 0)) && (
+            // one bar records the selected detections and process chains together (Mission 7)
+            <div className="flex flex-wrap items-center gap-2 rounded-[8px] bg-white/[0.03] px-2.5 py-2">
+              <span className="flex-1 text-[12.5px] text-muted">
+                {picked.size + pickedChains.size > 0
+                  ? `${pluralize(picked.size, "detection")} and ${pluralize(pickedChains.size, "process chain")} selected`
+                  : "Select detections or process chains below to record them as findings"}
+              </span>
+              <RecordBar
+                picked={picked.size + pickedChains.size}
+                build={(pid) => [
+                  ...r.detections.filter((d) => picked.has(d.rule)).map((d) => logFinding(pid, scan.file, d)),
+                  ...(r.chains ?? []).filter((_, i) => pickedChains.has(i)).map((c) => chainFinding(pid, scan.file, c)),
+                ]}
+                onDone={() => {
+                  setPicked(new Set());
+                  setPickedChains(new Set());
+                }}
+                source={{ module: r.kind === "windows" ? "evtx_triage" : "log_triage", subject: scan.file, token: scan.token, report: () => r }}
+              />
+            </div>
+          )}
           {r.detections.length === 0 ? (
             (r.chains?.length ?? 0) > 0 ? (
               <p className="text-[12.5px] text-muted">None of the Windows event detections matched; the process chains below were flagged.</p>
@@ -409,12 +431,6 @@ export function LogTool() {
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="flex-1 text-[13.5px] font-medium">Detections ({r.detections.length})</h3>
                 {sources.length > 0 && <CopyButton text={sources.join("\n")} label={r.kind === "windows" ? "Copy sources" : "Copy source addresses"} />}
-                <RecordBar
-                  picked={picked.size}
-                  build={(pid) => r.detections.filter((d) => picked.has(d.rule)).map((d) => logFinding(pid, scan.file, d))}
-                  onDone={() => setPicked(new Set())}
-                  source={{ module: r.kind === "windows" ? "evtx_triage" : "log_triage", subject: scan.file, token: scan.token, report: () => r }}
-                />
               </div>
               {r.detections.map((d) => (
                 <div key={d.rule} className={cn("flex items-start gap-2.5 rounded-[8px] px-2.5 py-2", picked.has(d.rule) ? "bg-accent-soft/40" : "bg-white/[0.02]")}>
@@ -453,12 +469,6 @@ export function LogTool() {
             <section className="flex flex-col gap-2" aria-label="Process chains">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="flex-1 text-[13.5px] font-medium">Process chains ({r.chains!.length})</h3>
-                <RecordBar
-                  picked={pickedChains.size}
-                  build={(pid) => r.chains!.filter((_, i) => pickedChains.has(i)).map((c) => chainFinding(pid, scan.file, c))}
-                  onDone={() => setPickedChains(new Set())}
-                  source={{ module: "evtx_triage", subject: scan.file, token: scan.token, report: () => r }}
-                />
               </div>
               <p className="text-[12px] text-muted">Parent → child relationships from process creation events (Security 4688, Sysmon 1) that are rare in normal use. Each shows what the log says, why it was flagged, and what it may mean; recording one makes a finding under review.</p>
               {r.chains!.map((c, i) => (
