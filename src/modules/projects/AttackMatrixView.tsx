@@ -45,6 +45,7 @@ function Cell({ tech, entry, layerId, sub, onOpen }: { tech: AttackTechnique; en
       <span className="flex items-center gap-1 text-[10.5px] text-muted">
         <span className="font-mono">{tech.id}</span>
         {entry && entry.observed.length > 0 && <span title="Findings that name it">· {entry.observed.length}</span>}
+        {state !== "none" && <span className="text-foreground/80">· {STATE_STYLE[state].word}</span>}
         <span className="flex-1" />
         {mark && (
           <span className={cn("rounded px-1 font-mono text-[10px]", mark.enabled ? "bg-success/25 text-success" : "bg-white/10 text-muted")}>{mark.score != null ? mark.score : "✓"}</span>
@@ -69,6 +70,9 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
   const [domain, setDomain] = useState<AttackDomain>("enterprise-attack");
   const catalog = useQuery(["attack"], () => api.attackCatalog(domain), [domain], runtime);
   const matrix = useQuery(["attack", "findings", "relations"], () => api.attackMatrix(project.id, domain), [project.id, domain], runtime);
+  // how many techniques of each matrix have data, shown in the switch (Mission 7, #62)
+  const domainCounts = useQuery(["attack", "findings", "relations"], () => api.attackDomainCounts(project.id), [project.id], runtime);
+  const countOf = (d: string) => domainCounts.data?.find(([id]) => id === d)?.[1];
   const [onlyData, setOnlyData] = useState(true);
   const [filter, setFilter] = useState("");
   const [layerId, setLayerId] = useState<Overlay>(null);
@@ -138,7 +142,7 @@ export function AttackMatrixView({ project, archived, onOpen }: { project: Proje
           setOpen(null);
         }}
         ariaLabel="ATT&CK matrix"
-        options={ATTACK_DOMAINS.map((d) => ({ id: d.id, label: d.label }))}
+        options={ATTACK_DOMAINS.map((d) => ({ id: d.id, label: countOf(d.id) === undefined ? d.label : `${d.label} · ${countOf(d.id)}` }))}
       />
       <Panel
         title={`ATT&CK ${domainLabel(domain)} matrix`}

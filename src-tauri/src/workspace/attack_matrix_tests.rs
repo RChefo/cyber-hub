@@ -181,6 +181,21 @@ fn detection_rules_are_coverage_and_their_matches_are_leads() {
 /// Mission 6: Mobile and ICS are matrices of their own. Findings, assessments and layers land in
 /// the domain whose catalog knows their technique; exports name their domain and version; sets of
 /// different domains are never compared.
+/// Mission 7 (#62): the matrix switch shows how many techniques of each domain have data.
+#[test]
+fn each_domain_counts_its_techniques_with_data() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'Fleet', 'active', 't', 't')", [])?;
+        assert_eq!(domain_counts(c, 1)?, vec![("enterprise-attack".to_string(), 0), ("mobile-attack".to_string(), 0), ("ics-attack".to_string(), 0)]);
+        c.execute("INSERT INTO findings (id, project_id, title, severity, status, tags, created_at, updated_at) VALUES (1, 1, 'APK', 'high', 'confirmed', '[\"T1404\"]', 't', 't'), (2, 1, 'PowerShell', 'medium', 'confirmed', '[\"T1059.001\", \"T1003\"]', 't', 't')", [])?;
+        assess(c, 1, "T0800", Some("hypothesis"), "low", "", "user")?;
+        assert_eq!(domain_counts(c, 1)?, vec![("enterprise-attack".to_string(), 2), ("mobile-attack".to_string(), 1), ("ics-attack".to_string(), 1)]);
+        Ok(())
+    })
+    .unwrap();
+}
+
 #[test]
 fn mobile_and_ics_are_separate_matrices() {
     let db = Db::open_in_memory().unwrap();

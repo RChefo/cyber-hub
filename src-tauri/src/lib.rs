@@ -284,6 +284,7 @@ pub fn run() {
             crate::commands::utility_record::utility_record,
             crate::commands::attack::attack_catalog,
             crate::commands::attack::attack_matrix,
+            crate::commands::attack::attack_domain_counts,
             crate::commands::attack::attack_technique_history,
             crate::commands::attack::attack_compare,
             crate::commands::attack::attack_snapshots,

@@ -81,6 +81,12 @@ pub async fn attack_matrix(db: State<'_, Db>, project_id: i64, domain: Option<St
     db.with(|c| matrix::matrix_for(c, project_id, d))
 }
 
+/// How many techniques of each domain have data in the project (the matrix switch shows them).
+#[tauri::command]
+pub async fn attack_domain_counts(db: State<'_, Db>, project_id: i64) -> AppResult<Vec<(String, usize)>> {
+    db.with(|c| matrix::domain_counts(c, project_id))
+}
+
 /// Sets the analyst's assessment of a technique (confirmed, hypothesis, ruled_out), or removes it
 /// when `status` is null.
 #[tauri::command]

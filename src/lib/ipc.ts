@@ -230,6 +230,7 @@ export const api = {
   yaraScanFile: (token: string, collectionId: number | null) => call<T.YaraTriageScan>("yara_scan_file", { token, collectionId }),
   attackCoverageExport: (projectId: number, domain?: T.AttackDomain) => call<string | null>("attack_coverage_export", { projectId, domain: domain ?? null }),
   attackCatalog: (domain?: T.AttackDomain) => call<T.AttackCatalog>("attack_catalog", { domain: domain ?? null }),
+  attackDomainCounts: (projectId: number) => call<[string, number][]>("attack_domain_counts", { projectId }),
   attackMatrix: (projectId: number, domain?: T.AttackDomain) => call<T.AttackMatrix>("attack_matrix", { projectId, domain: domain ?? null }),
   attackTechniqueHistory: (projectId: number, technique: string) => call<T.AttackHistoryEntry[]>("attack_technique_history", { projectId, technique }),
   attackCompare: (projectId: number, a: string, b: string, domain?: T.AttackDomain) => call<T.AttackComparison>("attack_compare", { projectId, a, b, domain: domain ?? null }),

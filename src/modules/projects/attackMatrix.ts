@@ -4,12 +4,13 @@ import type { AttackCatalog, AttackDomain, AttackEntry, AttackMatrix, AttackTact
  * (leads); only an assessment confirms, suspects or rules one out; a layer is an overlay. */
 export type TechniqueState = "confirmed" | "hypothesis" | "ruled_out" | "observed" | "linked" | "none";
 
-export const STATE_STYLE: Record<Exclude<TechniqueState, "none">, { label: string; color: string; hint: string }> = {
-  confirmed: { label: "Confirmed", color: "#c62828", hint: "You confirmed adversary activity" },
-  hypothesis: { label: "Hypothesis", color: "#f9a825", hint: "You suspect it; not confirmed" },
-  ruled_out: { label: "Ruled out", color: "#90a4ae", hint: "You checked and ruled it out" },
-  observed: { label: "Named by findings", color: "#ef6c00", hint: "Tool output maps to it: leads, not confirmed activity" },
-  linked: { label: "Linked by hand", color: "#64b5f6", hint: "A record is linked to it" },
+/** `word`: the state written in each cell, so states are told apart without colour (Mission 7). */
+export const STATE_STYLE: Record<Exclude<TechniqueState, "none">, { label: string; word: string; color: string; hint: string }> = {
+  confirmed: { label: "Confirmed", word: "confirmed", color: "#c62828", hint: "You confirmed adversary activity" },
+  hypothesis: { label: "Hypothesis", word: "hypothesis", color: "#f9a825", hint: "You suspect it; not confirmed" },
+  ruled_out: { label: "Ruled out", word: "ruled out", color: "#90a4ae", hint: "You checked and ruled it out" },
+  observed: { label: "Named by findings", word: "lead", color: "#ef6c00", hint: "Tool output maps to it: leads, not confirmed activity" },
+  linked: { label: "Linked by hand", word: "linked", color: "#64b5f6", hint: "A record is linked to it" },
 };
 
 export function stateOf(e: AttackEntry | undefined): TechniqueState {

@@ -199,6 +199,13 @@ pub fn matrix(c: &Connection, project_id: i64) -> AppResult<Matrix> {
     matrix_for(c, project_id, attack::ENTERPRISE)
 }
 
+/// How many techniques of each ATT&CK domain have data in a project (named by findings, linked,
+/// assessed or in a layer): the matrix switch shows them, so the analyst sees where data is before
+/// switching (Mission 7, backlog #62).
+pub fn domain_counts(c: &Connection, project_id: i64) -> AppResult<Vec<(String, usize)>> {
+    [attack::ENTERPRISE, "mobile-attack", "ics-attack"].iter().map(|d| Ok((d.to_string(), matrix_for(c, project_id, d)?.entries.len()))).collect()
+}
+
 /// [`matrix`] for one ATT&CK domain: only the techniques of that domain (an ID no catalog knows is
 /// shown with Enterprise), its assessments, layers, coverage and matches.
 pub fn matrix_for(c: &Connection, project_id: i64, domain: &str) -> AppResult<Matrix> {

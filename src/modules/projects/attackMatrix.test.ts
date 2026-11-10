@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AttackCatalog, AttackEntry, AttackMatrix } from "@/lib/types";
-import { ATTACK_DOMAINS, buildColumns, domainLabel, gaps, mitreUrl, outside, stateOf } from "./attackMatrix";
+import { ATTACK_DOMAINS, buildColumns, domainLabel, gaps, mitreUrl, outside, stateOf, STATE_STYLE } from "./attackMatrix";
 
 const catalog: AttackCatalog = {
   domain: "enterprise-attack",
@@ -71,5 +71,14 @@ describe("ATT&CK domains (Mission 6)", () => {
   it("offers Enterprise, Mobile and ICS, Enterprise first", () => {
     expect(ATTACK_DOMAINS.map((d) => d.id)).toEqual(["enterprise-attack", "mobile-attack", "ics-attack"]);
     expect([domainLabel("mobile-attack"), domainLabel("ics-attack"), domainLabel("enterprise-attack")]).toEqual(["Mobile", "ICS", "Enterprise"]);
+  });
+});
+
+describe("technique states (Mission 7)", () => {
+  it("are written in every cell, not told apart by colour only", () => {
+    const words = Object.values(STATE_STYLE).map((s) => s.word);
+    expect(words.every((w) => w.length > 0)).toBe(true);
+    expect(new Set(words).size).toBe(words.length);
+    expect(STATE_STYLE.observed.word).toBe("lead");
   });
 });
