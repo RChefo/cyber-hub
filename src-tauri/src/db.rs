@@ -1292,6 +1292,33 @@ fn keep_url_exclusions(c: &Connection) -> AppResult<()> {
 }
 
 /// Backups kept in `<data dir>/backups` (the newest ones; older copies are removed).
+/// Applies the migrations after the database's current version, up to `target`. Each one runs
+/// in its own transaction together with the new `user_version`, so an interruption or a failure
+/// leaves the database at the last complete version, and the next start continues from there.
+fn migrate_to(conn: &Connection, target: i64) -> AppResult<()> {
+    let current: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    for (idx, sql) in MIGRATIONS.iter().enumerate() {
+        let version = (idx + 1) as i64;
+        if version <= current || version > target {
+            continue;
+        }
+        if REBUILD_MIGRATIONS.contains(&version) {
+            run_rebuild(conn, version, sql)?;
+            continue;
+        }
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch(sql)?;
+        if version == 19 {
+            keep_url_exclusions(&tx)?;
+        }
+        #[cfg(test)]
+        upgrade_tests::before_commit(version)?;
+        tx.execute_batch(&format!("PRAGMA user_version = {version}"))?;
+        tx.commit()?;
+    }
+    Ok(())
+}
+
 pub const BACKUPS_KEPT: usize = 3;
 
 /// A database written by a newer version is never changed by an older one: its tables and
@@ -1442,26 +1469,7 @@ impl Db {
     }
 
     fn migrate(&self) -> AppResult<()> {
-        self.with(|conn| {
-            let current: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-            for (idx, sql) in MIGRATIONS.iter().enumerate() {
-                let version = (idx + 1) as i64;
-                if version > current {
-                    if REBUILD_MIGRATIONS.contains(&version) {
-                        run_rebuild(conn, version, sql)?;
-                        continue;
-                    }
-                    let tx = conn.unchecked_transaction()?;
-                    tx.execute_batch(sql)?;
-                    if version == 19 {
-                        keep_url_exclusions(&tx)?;
-                    }
-                    tx.execute_batch(&format!("PRAGMA user_version = {version}"))?;
-                    tx.commit()?;
-                }
-            }
-            Ok(())
-        })
+        self.with(|conn| migrate_to(conn, MIGRATIONS.len() as i64))
     }
 
     pub fn with<T>(&self, f: impl FnOnce(&Connection) -> AppResult<T>) -> AppResult<T> {
@@ -1476,6 +1484,10 @@ impl Db {
         self.with(|c| Ok(c.query_row("PRAGMA user_version", [], |r| r.get(0))?))
     }
 }
+
+#[cfg(test)]
+#[path = "db_upgrade_tests.rs"]
+mod upgrade_tests;
 
 #[cfg(test)]
 mod tests {
