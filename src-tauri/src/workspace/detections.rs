@@ -14,7 +14,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::detection::events::{Event, Sample};
-use crate::detection::sigma::{self, Checked, Explanation, Issue};
+use crate::detection::sigma::{self, Checked, Issue};
+use crate::detection::yara;
 use crate::error::{validation, AppError, AppResult};
 use crate::util::now;
 
@@ -84,6 +85,36 @@ pub fn upsert_sigma(c: &Connection, content: &str, checked: &Checked, source: &s
         runnable: checked.rule.is_some(),
     };
     upsert(c, "sigma", &key, content, &row, source, note, checked.errors())
+}
+
+/// The library key of a YARA rule file: its file name. Importing a file of the same name again
+/// records a new version when the content changed.
+pub fn yara_key(file_name: &str) -> String {
+    format!("file:{}", file_name.trim().to_lowercase())
+}
+
+/// Adds a YARA rule file, or a new version of the file with the same key. A file that does not
+/// compile is kept with its problems and cannot run.
+pub fn upsert_yara(c: &Connection, key: &str, file_name: &str, content: &str, checked: &yara::Checked, source: &str, note: &str) -> AppResult<Imported> {
+    let m = &checked.meta;
+    let title = if m.rules.is_empty() { file_name.trim().to_string() } else { yara::title(m) };
+    if title.is_empty() {
+        return Err(validation("A YARA file needs a name"));
+    }
+    let row = Fields {
+        title: &title,
+        status: "",
+        level: &m.level,
+        description: &m.description,
+        author: &m.author,
+        logsource: "files",
+        techniques: &serde_json::to_string(&m.techniques).unwrap_or_default(),
+        tags: &serde_json::to_string(&m.tags).unwrap_or_default(),
+        meta: &serde_json::to_string(m).unwrap_or_else(|_| "{}".into()),
+        issues: &serde_json::to_string(&checked.issues).unwrap_or_else(|_| "[]".into()),
+        runnable: checked.scanner.is_some(),
+    };
+    upsert(c, "yara", key, content, &row, source, note, checked.errors())
 }
 
 /// The stored fields of a rule.
@@ -424,7 +455,11 @@ pub struct SampleRow {
 }
 
 pub fn sample_add(c: &Connection, sha: &str, file_name: &str, kind: &str, size: i64, events: i64) -> AppResult<i64> {
-    if let Some(id) = c.query_row("SELECT id FROM detection_samples WHERE sha256 = ?1", params![sha], |r| r.get(0)).optional()? {
+    if let Some((id, old)) = c.query_row("SELECT id, kind FROM detection_samples WHERE sha256 = ?1", params![sha], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))).optional()? {
+        // the same file added again as a log: Sigma rules can use it too
+        if old == "file" && kind != "file" {
+            c.execute("UPDATE detection_samples SET kind = ?2, events = ?3 WHERE id = ?1", params![id, kind, events])?;
+        }
         return Ok(id);
     }
     c.execute("INSERT INTO detection_samples (sha256, file_name, kind, size, events, added_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)", params![sha, file_name, kind, size, events, now()])?;
@@ -465,7 +500,8 @@ pub struct Match {
     pub time: String,
     pub label: String,
     pub fields: Vec<(String, String)>,
-    pub explanation: Explanation,
+    /// a Sigma explanation (selections), or a YARA one (`"kind": "yara"`, strings and offsets)
+    pub explanation: Value,
 }
 
 pub fn event_summary(ev: &Event) -> Vec<(String, String)> {
@@ -495,7 +531,7 @@ pub fn run(rule: &sigma::Rule, sample: &Sample) -> RunResult {
         if let Some(x) = rule.evaluate(ev) {
             out.matched += 1;
             if out.matches.len() < MAX_MATCHES {
-                out.matches.push(Match { position: ev.position.clone(), time: ev.time.clone(), label: ev.label(), fields: event_summary(ev), explanation: x });
+                out.matches.push(Match { position: ev.position.clone(), time: ev.time.clone(), label: ev.label(), fields: event_summary(ev), explanation: serde_json::to_value(&x).unwrap_or(Value::Null) });
             }
         }
     }
@@ -512,6 +548,37 @@ pub fn run(rule: &sigma::Rule, sample: &Sample) -> RunResult {
         out.notes.push(format!("{} matches; the first {MAX_MATCHES} are listed", out.matched));
     }
     out
+}
+
+/// What YARA rules did on one file: each rule that matched is a match, placed by its name.
+pub fn yara_result(scan: &yara::Scan, file: &str) -> RunResult {
+    let matches: Vec<Match> = scan
+        .matches
+        .iter()
+        .map(|m| {
+            let strings: usize = m.strings.iter().map(|s| s.count).sum();
+            let mut fields = vec![("file".to_string(), file.to_string()), ("rule".to_string(), m.rule.clone())];
+            if !m.tags.is_empty() {
+                fields.push(("tags".into(), m.tags.join(", ")));
+            }
+            fields.extend(m.metas.iter().take(20).map(|(k, v)| (format!("meta.{k}"), v.chars().take(300).collect())));
+            Match {
+                position: format!("rule {}", m.rule),
+                time: String::new(),
+                label: if strings == 0 { format!("{} (its condition holds without strings)", m.rule) } else { format!("{} ({} string match{})", m.rule, strings, if strings == 1 { "" } else { "es" }) },
+                fields,
+                explanation: yara::explanation(m),
+            }
+        })
+        .collect();
+    let mut notes = Vec::new();
+    if scan.timed_out {
+        notes.push(format!("The scan stopped after {} s: rules that would have matched later are missing", yara::SCAN_TIMEOUT.as_secs()));
+    }
+    if scan.more > 0 {
+        notes.push(format!("{} more rules matched; the first {} are listed", scan.more, matches.len()));
+    }
+    RunResult { events: 1, in_source: 1, matched: matches.len() + scan.more, matches, notes }
 }
 
 /// Stores a test run. A test passes when it does what the sample's expectation says.
@@ -534,8 +601,9 @@ pub fn record_test(c: &Connection, rule_id: i64, version: i64, sample_id: i64, r
     Ok(c.query_row("SELECT id, version, sample_id, expect, events, matched, passed, ran_at FROM detection_tests WHERE id = ?1", params![id], test_row)?)
 }
 
-/// The stored rule for a run: its id, version, title, level, techniques and compiled form.
+/// The stored rule for a run: its kind, id, version, title, level, techniques and content.
 pub struct Stored {
+    pub kind: String,
     pub id: i64,
     pub version: i64,
     pub title: String,
@@ -545,17 +613,17 @@ pub struct Stored {
 }
 
 pub fn stored(c: &Connection, id: i64) -> AppResult<Stored> {
-    c.query_row("SELECT id, version, title, level, techniques, content FROM detection_rules WHERE id = ?1 AND kind = 'sigma'", params![id], |r| {
-        Ok(Stored { id: r.get(0)?, version: r.get(1)?, title: r.get(2)?, level: r.get(3)?, techniques: serde_json::from_str(&r.get::<_, String>(4)?).unwrap_or_default(), content: r.get(5)? })
+    c.query_row("SELECT id, version, title, level, techniques, content, kind FROM detection_rules WHERE id = ?1", params![id], |r| {
+        Ok(Stored { id: r.get(0)?, version: r.get(1)?, title: r.get(2)?, level: r.get(3)?, techniques: serde_json::from_str(&r.get::<_, String>(4)?).unwrap_or_default(), content: r.get(5)?, kind: r.get(6)? })
     })
     .optional()?
-    .ok_or_else(|| AppError::NotFound(format!("Sigma rule {id}")))
+    .ok_or_else(|| AppError::NotFound(format!("detection rule {id}")))
 }
 
-/// The enabled Sigma rules that can run (of one collection when given).
+/// The enabled rules that can run, Sigma and YARA (of one collection when given).
 pub fn runnable(c: &Connection, collection: Option<i64>) -> AppResult<Vec<Stored>> {
     let ids: Vec<i64> = c
-        .prepare("SELECT id FROM detection_rules r WHERE kind = 'sigma' AND enabled = 1 AND runnable = 1 AND (?1 IS NULL OR EXISTS (SELECT 1 FROM detection_collection_rules cr WHERE cr.rule_id = r.id AND cr.collection_id = ?1)) ORDER BY id")?
+        .prepare("SELECT id FROM detection_rules r WHERE enabled = 1 AND runnable = 1 AND (?1 IS NULL OR EXISTS (SELECT 1 FROM detection_collection_rules cr WHERE cr.rule_id = r.id AND cr.collection_id = ?1)) ORDER BY id")?
         .query_map(params![collection], |r| r.get(0))?
         .collect::<Result<_, _>>()?;
     ids.into_iter().map(|id| stored(c, id)).collect()
@@ -564,9 +632,21 @@ pub fn runnable(c: &Connection, collection: Option<i64>) -> AppResult<Vec<Stored
 /// Compiles a stored Sigma rule (it was valid when stored; a failure here means the content is
 /// no longer runnable).
 pub fn compile(s: &Stored) -> AppResult<sigma::Rule> {
+    if s.kind != "sigma" {
+        return Err(validation(format!("“{}” is not a Sigma rule", s.title)));
+    }
     let mut v = sigma::read(&s.content).map_err(validation)?;
     let c = v.pop().ok_or_else(|| validation("The rule is empty"))?;
     c.rule.ok_or_else(|| validation(format!("“{}” cannot run: {}", s.title, c.issues.iter().filter(|i| i.level != "warning").map(|i| i.message.as_str()).collect::<Vec<_>>().join("; "))))
+}
+
+/// Compiles a stored YARA rule file on its own.
+pub fn compile_yara(s: &Stored) -> AppResult<boreal::Scanner> {
+    if s.kind != "yara" {
+        return Err(validation(format!("“{}” is not a YARA rule file", s.title)));
+    }
+    let c = yara::check(&s.content);
+    c.scanner.ok_or_else(|| validation(format!("“{}” cannot run: {}", s.title, c.issues.iter().filter(|i| i.level == "error").map(|i| i.message.as_str()).collect::<Vec<_>>().join("; "))))
 }
 
 /* ───────────────────────── feedback ───────────────────────── */
@@ -664,43 +744,42 @@ pub struct HitPage {
     pub counts: BTreeMap<String, i64>,
 }
 
+const HIT_COLS: &str = "h.id, h.rule_id, h.rule_title, h.rule_version, h.rule_level, h.techniques, h.evidence_id, COALESCE(e.title, ''), h.position, h.event_time, h.event, h.explanation, h.status, h.finding_id, h.created_at";
+
+fn hit_row(r: &rusqlite::Row) -> rusqlite::Result<HitRow> {
+    Ok(HitRow {
+        id: r.get(0)?,
+        rule_id: r.get(1)?,
+        rule_title: r.get(2)?,
+        rule_version: r.get(3)?,
+        rule_level: r.get(4)?,
+        techniques: serde_json::from_str(&r.get::<_, String>(5)?).unwrap_or_default(),
+        evidence_id: r.get(6)?,
+        evidence: r.get(7)?,
+        position: r.get(8)?,
+        event_time: r.get(9)?,
+        event: serde_json::from_str(&r.get::<_, String>(10)?).unwrap_or(Value::Null),
+        explanation: serde_json::from_str(&r.get::<_, String>(11)?).unwrap_or(Value::Null),
+        status: r.get(12)?,
+        finding_id: r.get(13)?,
+        created_at: r.get(14)?,
+    })
+}
+
 pub fn hits_list(c: &Connection, project_id: i64, f: &HitFilter) -> AppResult<HitPage> {
     let wheres = "h.project_id = ?1 AND (?2 IS NULL OR h.status = ?2) AND (?3 IS NULL OR h.rule_id = ?3)";
     let total: i64 = c.query_row(&format!("SELECT COUNT(*) FROM detection_hits h WHERE {wheres}"), params![project_id, f.status, f.rule_id], |r| r.get(0))?;
     let mut st = c.prepare(&format!(
-        "SELECT h.id, h.rule_id, h.rule_title, h.rule_version, h.rule_level, h.techniques, h.evidence_id, COALESCE(e.title, ''), h.position, h.event_time, h.event, h.explanation, h.status, h.finding_id, h.created_at
-         FROM detection_hits h LEFT JOIN evidence e ON e.id = h.evidence_id WHERE {wheres}
+        "SELECT {HIT_COLS} FROM detection_hits h LEFT JOIN evidence e ON e.id = h.evidence_id WHERE {wheres}
          ORDER BY CASE h.rule_level WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, h.id LIMIT ?4 OFFSET ?5"
     ))?;
-    let items = st
-        .query_map(params![project_id, f.status, f.rule_id, f.limit.unwrap_or(100).clamp(1, 500), f.offset.unwrap_or(0).max(0)], |r| {
-            Ok(HitRow {
-                id: r.get(0)?,
-                rule_id: r.get(1)?,
-                rule_title: r.get(2)?,
-                rule_version: r.get(3)?,
-                rule_level: r.get(4)?,
-                techniques: serde_json::from_str(&r.get::<_, String>(5)?).unwrap_or_default(),
-                evidence_id: r.get(6)?,
-                evidence: r.get(7)?,
-                position: r.get(8)?,
-                event_time: r.get(9)?,
-                event: serde_json::from_str(&r.get::<_, String>(10)?).unwrap_or(Value::Null),
-                explanation: serde_json::from_str(&r.get::<_, String>(11)?).unwrap_or(Value::Null),
-                status: r.get(12)?,
-                finding_id: r.get(13)?,
-                created_at: r.get(14)?,
-            })
-        })?
-        .collect::<Result<_, _>>()?;
+    let items = st.query_map(params![project_id, f.status, f.rule_id, f.limit.unwrap_or(100).clamp(1, 500), f.offset.unwrap_or(0).max(0)], hit_row)?.collect::<Result<_, _>>()?;
     let counts = c.prepare("SELECT status, COUNT(*) FROM detection_hits WHERE project_id = ?1 GROUP BY status")?.query_map(params![project_id], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?;
     Ok(HitPage { items, total, counts })
 }
 
 fn hit(c: &Connection, id: i64) -> AppResult<HitRow> {
-    let project: i64 = c.query_row("SELECT project_id FROM detection_hits WHERE id = ?1", params![id], |r| r.get(0)).optional()?.ok_or_else(|| AppError::NotFound(format!("detection hit {id}")))?;
-    let page = hits_list(c, project, &HitFilter { limit: Some(500), ..Default::default() })?;
-    page.items.into_iter().find(|h| h.id == id).ok_or_else(|| AppError::NotFound(format!("detection hit {id}")))
+    c.query_row(&format!("SELECT {HIT_COLS} FROM detection_hits h LEFT JOIN evidence e ON e.id = h.evidence_id WHERE h.id = ?1"), params![id], hit_row).optional()?.ok_or_else(|| AppError::NotFound(format!("detection hit {id}")))
 }
 
 /// Marks a hit a false positive (recorded as feedback on the rule), dismissed, or new again.
@@ -743,6 +822,9 @@ pub fn hit_promote(c: &Connection, id: i64) -> AppResult<i64> {
     crate::workspace::relations::require_open(c, project_id)?;
     if let Some(f) = h.finding_id {
         return Ok(f);
+    }
+    if h.explanation.get("kind").and_then(Value::as_str) == Some("yara") {
+        return promote_yara(c, id, project_id, &h);
     }
     let fields = h.event.get("fields").and_then(Value::as_array).cloned().unwrap_or_default();
     let get = |name: &str| fields.iter().find(|p| p.get(0).and_then(Value::as_str).is_some_and(|k| k.eq_ignore_ascii_case(name))).and_then(|p| p.get(1).and_then(Value::as_str)).map(str::to_string);
@@ -793,12 +875,83 @@ pub fn hit_promote(c: &Connection, id: i64) -> AppResult<i64> {
     Ok(fid)
 }
 
+/// A YARA hit as a finding under review, linked to the file it matched.
+fn promote_yara(c: &Connection, id: i64, project_id: i64, h: &HitRow) -> AppResult<i64> {
+    let x = &h.explanation;
+    let rule = x.get("rule").and_then(Value::as_str).unwrap_or("");
+    let sha: Option<String> = match h.evidence_id {
+        Some(e) => c.query_row("SELECT sha256 FROM evidence WHERE id = ?1", params![e], |r| r.get(0)).optional()?.flatten(),
+        None => None,
+    };
+    let why: Vec<String> = x
+        .get("strings")
+        .and_then(Value::as_array)
+        .map(|v| {
+            v.iter()
+                .map(|s| {
+                    let first = s.get("matches").and_then(|m| m.get(0));
+                    format!(
+                        "{} matched {} time{}, first at offset {}: {}",
+                        s.get("id").and_then(Value::as_str).unwrap_or("?"),
+                        s.get("count").and_then(Value::as_u64).unwrap_or(0),
+                        if s.get("count").and_then(Value::as_u64) == Some(1) { "" } else { "s" },
+                        first.and_then(|m| m.get("offset")).and_then(Value::as_u64).map(|o| format!("0x{o:x}")).unwrap_or_default(),
+                        first.and_then(|m| m.get("text")).and_then(Value::as_str).unwrap_or("")
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let file = if h.evidence.is_empty() { "the evidence file".to_string() } else { h.evidence.clone() };
+    let description = format!(
+        "The YARA rule {} of “{}” (version {}) matched {}{}.\n\nWhy it matched:\n{}\n\nA rule match is a lead: confirm it from the file before treating the file as malicious.",
+        rule,
+        h.rule_title,
+        h.rule_version,
+        file,
+        sha.as_deref().map(|s| format!(" (SHA-256 {s})")).unwrap_or_default(),
+        if why.is_empty() { "- its condition holds on the file's properties (no string was needed)".to_string() } else { why.iter().map(|w| format!("- {w}")).collect::<Vec<_>>().join("\n") }
+    );
+    let mut tags = vec!["detection".to_string(), "yara".to_string()];
+    tags.extend(h.techniques.iter().cloned());
+    let input = crate::commands::projects::FindingInput {
+        project_id,
+        title: format!("YARA {rule} ({file})").chars().take(200).collect(),
+        severity: finding_severity(&h.rule_level).into(),
+        status: "under_review".into(),
+        category: "Detection".into(),
+        confidence: Some("low".into()),
+        description,
+        affected_target: file.chars().take(500).collect(),
+        technical_details: format!(
+            "YARA rule file #{} “{}”, version {}, rule {}.{}",
+            h.rule_id.unwrap_or(0),
+            h.rule_title,
+            h.rule_version,
+            rule,
+            if h.techniques.is_empty() { String::new() } else { format!(" MITRE ATT&CK: {}.", h.techniques.join(", ")) }
+        ),
+        tags,
+        ..Default::default()
+    };
+    let tx = c.unchecked_transaction()?;
+    let fid = crate::commands::projects::finding_write(&tx, &input, "detection", true)?;
+    if let Some(eid) = h.evidence_id {
+        crate::workspace::findings::link(&tx, fid, "evidence", eid, "detection")?;
+    }
+    tx.execute("UPDATE detection_hits SET status = 'promoted', finding_id = ?2 WHERE id = ?1", params![id, fid])?;
+    tx.commit()?;
+    Ok(fid)
+}
+
 /* ───────────────────────── ATT&CK coverage ───────────────────────── */
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Coverage {
     pub rule_id: i64,
+    /// sigma or yara
+    pub kind: String,
     pub title: String,
     pub enabled: bool,
     pub runnable: bool,
@@ -806,19 +959,19 @@ pub struct Coverage {
     pub tested: bool,
 }
 
-/// The library's Sigma rules per ATT&CK technique: detection coverage, which says nothing about
-/// whether a technique was used.
+/// The library's rules (Sigma, and YARA files whose metadata names techniques) per ATT&CK
+/// technique: detection coverage, which says nothing about whether a technique was used.
 pub fn coverage(c: &Connection) -> AppResult<BTreeMap<String, Vec<Coverage>>> {
-    let rows: Vec<(i64, String, String, bool, bool)> = c
-        .prepare("SELECT id, title, techniques, enabled, runnable FROM detection_rules WHERE kind = 'sigma' AND techniques <> '[]'")?
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?
+    let rows: Vec<(i64, String, String, String, bool, bool)> = c
+        .prepare("SELECT id, kind, title, techniques, enabled, runnable FROM detection_rules WHERE techniques <> '[]'")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))?
         .collect::<Result<_, _>>()?;
     let mut out: BTreeMap<String, Vec<Coverage>> = BTreeMap::new();
-    for (id, title, techniques, enabled, runnable) in rows {
+    for (id, kind, title, techniques, enabled, runnable) in rows {
         let (passed, failed) = test_state(c, id)?;
         let tested = passed > 0 && failed == 0;
         for t in serde_json::from_str::<Vec<String>>(&techniques).unwrap_or_default() {
-            out.entry(t).or_default().push(Coverage { rule_id: id, title: title.clone(), enabled, runnable, tested });
+            out.entry(t).or_default().push(Coverage { rule_id: id, kind: kind.clone(), title: title.clone(), enabled, runnable, tested });
         }
     }
     Ok(out)

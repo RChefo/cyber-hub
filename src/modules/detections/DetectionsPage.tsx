@@ -10,10 +10,16 @@ import { PageHeader, Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
 import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { DetectionImportReport, DetectionRuleDetail, DetectionRuleSummary, DetectionTestOutcome } from "@/lib/types";
+import type { DetectionImportReport, DetectionRuleDetail, DetectionRuleSummary, DetectionTestOutcome, YaraMeta } from "@/lib/types";
 import { cn, formatRelative, pluralize } from "@/lib/utils";
+import { formatBytes } from "@/modules/utilities/lib/triage";
 import { Segmented } from "@/modules/utilities/tools/shared";
-import { diffLines, explain, LEVEL_TONE, RULE_TEMPLATE, runState, testsLabel } from "./detections";
+import { diffLines, explain, LEVEL_TONE, RULE_TEMPLATE, runState, testsLabel, YARA_TEMPLATE } from "./detections";
+
+type Kind = "sigma" | "yara";
+/** A rule being written: new (no id) or a new version of a library entry. */
+type Draft = { content: string; kind: Kind; id?: number };
+const KIND_LABEL: Record<Kind, string> = { sigma: "Sigma", yara: "YARA" };
 
 const KEYS = ["detections"] as const;
 
@@ -22,23 +28,24 @@ function importSummary(r: DetectionImportReport): string {
   return [`${n("added")} added`, `${n("updated")} new versions`, `${n("unchanged")} unchanged`, r.failed.length ? `${r.failed.length} not read: ${r.failed.slice(0, 2).map(([f, e]) => `${f}: ${e}`).join("; ")}` : null].filter(Boolean).join(", ");
 }
 
-/** Detections: a library of Sigma rules with versions, collections, tests on log samples with
- * expectations, feedback, and their ATT&CK coverage. */
+/** Detections: a library of Sigma and YARA rules with versions, collections, tests on log and
+ * file samples with expectations, feedback, and their ATT&CK coverage. */
 export default function DetectionsPage() {
   const { runtime } = useApp();
   const [text, setText] = useState("");
   const [level, setLevel] = useState("all");
+  const [kind, setKind] = useState("all");
   const [enabled, setEnabled] = useState("all");
   const [collection, setCollection] = useState("all");
   const [selected, setSelected] = useState<number | null>(null);
-  const [writing, setWriting] = useState<string | null>(null);
+  const [writing, setWriting] = useState<Draft | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const engine = useQuery([...KEYS], () => api.detectionEngine(), [], runtime);
   const collections = useQuery([...KEYS], () => api.detectionCollections(), [], runtime);
   const samples = useQuery([...KEYS], () => api.detectionSamples(), [], runtime);
   const filter = useMemo(
-    () => ({ text: text.trim() || null, level: level === "all" ? null : level, enabled: enabled === "all" ? null : enabled === "on", collection: collection === "all" ? null : Number(collection), limit: 300 }),
-    [text, level, enabled, collection],
+    () => ({ text: text.trim() || null, kind: kind === "all" ? null : kind, level: level === "all" ? null : level, enabled: enabled === "all" ? null : enabled === "on", collection: collection === "all" ? null : Number(collection), limit: 300 }),
+    [text, kind, level, enabled, collection],
   );
   const rules = useQuery([...KEYS], () => api.detectionRulesList(filter), [filter], runtime);
 
@@ -62,13 +69,13 @@ export default function DetectionsPage() {
         notify.error("The rules were not imported", e);
       }
     });
-  const addSample = () =>
-    act("sample", async () => {
+  const addSample = (file: boolean) =>
+    act(file ? "file" : "sample", async () => {
       try {
-        const s = await api.detectionSampleAdd();
+        const s = await api.detectionSampleAdd(file ? "file" : undefined);
         if (!s) return;
         invalidate("detections");
-        notify.success(`Sample added: ${s.fileName}`, `${s.kind.toUpperCase()}, ${pluralize(s.events, "event")}`);
+        notify.success(`Sample added: ${s.fileName}`, s.kind === "file" ? `File, ${formatBytes(s.size)}` : `${s.kind.toUpperCase()}, ${pluralize(s.events, "event")}`);
       } catch (e) {
         notify.error("The sample was not added", e);
       }
@@ -78,18 +85,22 @@ export default function DetectionsPage() {
     <div>
       <PageHeader
         title="Detections"
-        description={`Sigma rules (specification v${engine.data?.spec ?? "2.1.0"}) with versions, collections and tests on your own log samples. A rule match is a lead: in a project it stays a detection hit until you promote it to a finding. Rules are data; nothing in a rule or a sample is run.`}
+        description={`Sigma rules (specification v${engine.data?.spec ?? "2.1.0"}) for logs and YARA rules (${engine.data?.yara.engine ?? "boreal"}) for files, with versions, collections and tests on your own samples. A rule match is a lead: in a project it stays a detection hit until you promote it to a finding. Rules are data; nothing in a rule or a sample is run.`}
         actions={
           <>
-            <Button variant="secondary" size="sm" onPress={() => void addSample()} isPending={busy === "sample"} isDisabled={!runtime}>
+            <Button variant="secondary" size="sm" onPress={() => void addSample(false)} isPending={busy === "sample"} isDisabled={!runtime}>
               <FileUp className="size-3.5" />
               Add log sample…
+            </Button>
+            <Button variant="secondary" size="sm" onPress={() => void addSample(true)} isPending={busy === "file"} isDisabled={!runtime}>
+              <FileUp className="size-3.5" />
+              Add file sample…
             </Button>
             <Button variant="secondary" size="sm" onPress={() => void importRules()} isPending={busy === "import"} isDisabled={!runtime}>
               <Upload className="size-3.5" />
               Import rules…
             </Button>
-            <Button variant="primary" size="sm" onPress={() => setWriting(RULE_TEMPLATE)} isDisabled={!runtime}>
+            <Button variant="primary" size="sm" onPress={() => setWriting({ content: RULE_TEMPLATE, kind: "sigma" })} isDisabled={!runtime}>
               <Plus className="size-3.5" />
               New rule
             </Button>
@@ -103,6 +114,7 @@ export default function DetectionsPage() {
             toolbar={
               <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
                 <SearchInput value={text} onChange={setText} placeholder="Find a rule" className="min-w-[160px] flex-1" />
+                <SelectInput aria-label="Kind" value={kind} onChange={setKind} options={[{ id: "all", label: "Sigma and YARA" }, { id: "sigma", label: "Sigma" }, { id: "yara", label: "YARA" }]} className="w-40" />
                 <SelectInput aria-label="Level" value={level} onChange={setLevel} options={[{ id: "all", label: "All levels" }, ...["critical", "high", "medium", "low", "informational"].map((l) => ({ id: l, label: l }))]} className="w-36" />
                 <SelectInput aria-label="Enabled" value={enabled} onChange={setEnabled} options={[{ id: "all", label: "Any state" }, { id: "on", label: "Enabled" }, { id: "off", label: "Disabled" }]} className="w-32" />
                 {(collections.data?.length ?? 0) > 0 && (
@@ -116,7 +128,7 @@ export default function DetectionsPage() {
             ) : !rules.data ? (
               <LoadingRows rows={5} />
             ) : rules.data.items.length === 0 ? (
-              <EmptyBlock compact icon={ScanSearch} title={rules.data.total === 0 && !filter.text ? "No rules yet" : "No rule matches"} description="Import Sigma rule files (.yml) or write a rule. SigmaHQ's repository publishes thousands under the Detection Rule License." />
+              <EmptyBlock compact icon={ScanSearch} title={rules.data.total === 0 && !filter.text ? "No rules yet" : "No rule matches"} description="Import Sigma rule files (.yml) or YARA rule files (.yar), or write one. SigmaHQ's and Neo23x0's signature-base repositories publish thousands under the Detection Rule License." />
             ) : (
               <ul className="flex flex-col gap-1">
                 {rules.data.items.map((r) => (
@@ -126,9 +138,9 @@ export default function DetectionsPage() {
             )}
           </Panel>
           <Collections />
-          <Panel title={`Log samples${samples.data ? ` (${samples.data.length})` : ""}`} description="Kept by content hash in Cyber Hub's data folder, to test rules again after every change.">
+          <Panel title={`Samples${samples.data ? ` (${samples.data.length})` : ""}`} description="Kept by content hash in Cyber Hub's data folder, to test rules again after every change. Files are only read, never opened or run.">
             {(samples.data ?? []).length === 0 ? (
-              <span className="text-[12.5px] text-muted">No sample yet: add an EVTX file, a JSON or JSON Lines export, or a text log.</span>
+              <span className="text-[12.5px] text-muted">No sample yet: add an EVTX file, a JSON or JSON Lines export or a text log for Sigma rules, or any file for YARA rules.</span>
             ) : (
               <ul className="flex flex-col gap-1 text-[12.5px]">
                 {(samples.data ?? []).map((s) => (
@@ -137,7 +149,7 @@ export default function DetectionsPage() {
                       {s.kind.toUpperCase()}
                     </ToneChip>
                     <span className="min-w-0 flex-1 truncate">{s.fileName}</span>
-                    <span className="text-muted">{pluralize(s.events, "event")}</span>
+                    <span className="text-muted">{s.kind === "file" ? formatBytes(s.size) : pluralize(s.events, "event")}</span>
                   </li>
                 ))}
               </ul>
@@ -149,6 +161,18 @@ export default function DetectionsPage() {
               <p className="mt-1.5">Modifiers: {engine.data.modifiers.join(", ")}.</p>
               <p className="mt-1">Refused with the reason: {engine.data.unsupported.join("; ")}.</p>
               <p className="mt-1">Windows log sources mapped to channels and event IDs: {[...engine.data.services, ...engine.data.categories].join(", ")}. Other log sources run against every event, and the result says so.</p>
+            </details>
+          )}
+          {engine.data?.yara && (
+            <details className="text-[12.5px] text-muted">
+              <summary className="cursor-pointer">What the YARA engine supports</summary>
+              <p className="mt-1.5">
+                {engine.data.yara.engine}: text, hex and regular-expression strings with their modifiers, conditions, private and global rules, and the modules {engine.data.yara.modules.join(", ")}.
+              </p>
+              <p className="mt-1">Not available: {engine.data.yara.unsupported.join("; ")}.</p>
+              <p className="mt-1">
+                Limits: rule files of {engine.data.yara.limits.ruleFileKb / 1024} MB and {engine.data.yara.limits.stringsPerRule.toLocaleString()} strings per rule; files of {engine.data.yara.limits.fileMb} MB; a scan stops after {engine.data.yara.limits.scanSeconds} s. Conditions nesting deeper than 64 levels are refused before they are read.
+              </p>
             </details>
           )}
         </div>
@@ -164,7 +188,7 @@ export default function DetectionsPage() {
       </div>
       {writing != null && (
         <RuleEditor
-          initial={writing}
+          draft={writing}
           onClose={() => setWriting(null)}
           onSaved={(id) => {
             setWriting(null);
@@ -186,6 +210,11 @@ function RuleRow({ r, active, onOpen }: { r: DetectionRuleSummary; active: boole
           <ToneChip tone={LEVEL_TONE[r.level] ?? "default"} dot={false} className="text-[11px]">
             {r.level || "no level"}
           </ToneChip>
+          {r.kind === "yara" && (
+            <ToneChip tone="accent" dot={false} className="text-[10.5px]">
+              YARA
+            </ToneChip>
+          )}
           <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{r.title}</span>
           <span className="text-[11px] text-muted">v{r.version}</span>
         </span>
@@ -282,15 +311,16 @@ function Collections() {
   );
 }
 
-function RuleEditor({ initial, onClose, onSaved }: { initial: string; onClose: () => void; onSaved: (id: number) => void }) {
-  const [text, setText] = useState(initial);
+function RuleEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () => void; onSaved: (id: number) => void }) {
+  const [kind, setKind] = useState<Kind>(draft.kind);
+  const [text, setText] = useState(draft.content);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [report, setReport] = useState<DetectionImportReport | null>(null);
   const save = async () => {
     setSaving(true);
     try {
-      const r = await api.detectionRuleSave(text, note.trim() || undefined);
+      const r = await api.detectionRuleSave(text, note.trim() || undefined, kind, draft.id);
       setReport(r);
       invalidate("detections", "attack");
       if (r.failed.length === 0 && r.imported[0]) {
@@ -308,8 +338,14 @@ function RuleEditor({ initial, onClose, onSaved }: { initial: string; onClose: (
       isOpen
       onOpenChange={(o) => !o && onClose()}
       size="lg"
-      title="Write a Sigma rule"
-      description="Saved rules are checked against the specification. A rule with the id of a rule in the library becomes its next version."
+      title={draft.id != null ? `Edit the ${KIND_LABEL[kind]} rule${kind === "yara" ? "s" : ""}` : kind === "yara" ? "Write YARA rules" : "Write a Sigma rule"}
+      description={
+        kind === "yara"
+          ? draft.id != null
+            ? "Saving makes the next version of this rule file. Rules are compiled by boreal when saved; includes are refused."
+            : "A new rule file is named after its first rule. Rules are compiled by boreal when saved; includes are refused."
+          : "Saved rules are checked against the specification. A rule with the id of a rule in the library becomes its next version."
+      }
       footer={
         <div className="flex w-full items-center gap-2">
           <TextInput aria-label="What changed" value={note} onChange={setNote} placeholder="What changed (kept with the version)" className="flex-1" />
@@ -322,13 +358,27 @@ function RuleEditor({ initial, onClose, onSaved }: { initial: string; onClose: (
         </div>
       }
     >
-      <TextAreaInput label="Rule (YAML)" value={text} onChange={setText} rows={20} mono />
+      {draft.id == null && (
+        <Segmented
+          value={kind}
+          onChange={(k: Kind) => {
+            if (text === RULE_TEMPLATE || text === YARA_TEMPLATE || !text.trim()) setText(k === "yara" ? YARA_TEMPLATE : RULE_TEMPLATE);
+            setKind(k);
+          }}
+          ariaLabel="Rule kind"
+          options={[
+            { id: "sigma", label: "Sigma (logs)" },
+            { id: "yara", label: "YARA (files)" },
+          ]}
+        />
+      )}
+      <TextAreaInput label={kind === "yara" ? "Rules (YARA)" : "Rule (YAML)"} value={text} onChange={setText} rows={20} mono />
       {report && report.failed.length > 0 && <ErrorBlock message={report.failed.map(([f, e]) => `${f}: ${e}`).join("\n")} />}
     </AppModal>
   );
 }
 
-function RuleView({ id, onDeleted, onEdit }: { id: number; onDeleted: () => void; onEdit: (content: string) => void }) {
+function RuleView({ id, onDeleted, onEdit }: { id: number; onDeleted: () => void; onEdit: (draft: Draft) => void }) {
   const { runtime } = useApp();
   const confirm = useConfirm();
   const q = useQuery(["detections"], () => api.detectionRuleGet(id), [id], runtime);
@@ -341,7 +391,7 @@ function RuleView({ id, onDeleted, onEdit }: { id: number; onDeleted: () => void
   return (
     <Panel
       title={s.title}
-      description={[`Sigma · version ${s.version}`, s.status && `status ${s.status}`, s.logsource, `updated ${formatRelative(s.updatedAt)}`].filter(Boolean).join(" · ")}
+      description={[`${KIND_LABEL[s.kind]} · version ${s.version}`, s.status && `status ${s.status}`, s.logsource, `updated ${formatRelative(s.updatedAt)}`].filter(Boolean).join(" · ")}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <SwitchInput
@@ -352,7 +402,7 @@ function RuleView({ id, onDeleted, onEdit }: { id: number; onDeleted: () => void
               invalidate("detections", "attack");
             }}
           />
-          <Button size="sm" variant="tertiary" onPress={() => onEdit(d.content)}>
+          <Button size="sm" variant="tertiary" onPress={() => onEdit(s.kind === "yara" ? { content: d.content, kind: "yara", id: s.id } : { content: d.content, kind: "sigma" })}>
             Edit
           </Button>
           <Button
@@ -415,16 +465,39 @@ function Overview({ d }: { d: DetectionRuleDetail }) {
   const collections = useQuery(["detections"], () => api.detectionCollections(), [], runtime);
   const m = d.meta as { description?: string; author?: string; references?: string[]; falsepositives?: string[]; tags?: string[]; tactics?: string[]; techniques?: string[] };
   const levelTone: Record<string, "danger" | "warning" | "default"> = { error: "danger", unsupported: "warning", warning: "default" };
+  const yara = d.summary.kind === "yara" ? (d.meta as unknown as YaraMeta) : null;
   return (
     <div className="flex flex-col gap-3 text-[12.5px]">
       {m.description && <p>{m.description}</p>}
+      {yara && yara.rules.length > 0 && (
+        <section className="flex flex-col gap-1">
+          <h3 className="text-[13px] font-medium">
+            {pluralize(yara.rules.length, "rule")}
+            {yara.imports.length > 0 && <span className="font-normal text-muted"> · modules {yara.imports.join(", ")}</span>}
+          </h3>
+          <ul className="flex flex-col gap-0.5">
+            {yara.rules.slice(0, 100).map((r) => (
+              <li key={r.name} className="flex flex-wrap items-center gap-1.5">
+                <span className="font-mono text-[12px]">{r.name}</span>
+                {r.private && <span className="text-muted">private (never reported)</span>}
+                {r.global && <span className="text-muted">global (applies to every rule of the file)</span>}
+                {r.tags.map((t) => (
+                  <ToneChip key={t} tone="default" dot={false} className="text-[10.5px]">
+                    {t}
+                  </ToneChip>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <div className="flex flex-wrap gap-1.5">
         {(m.techniques ?? []).map((t) => (
           <ToneChip key={t} tone="accent" dot={false} className="text-[11px]">
             ATT&CK {t}
           </ToneChip>
         ))}
-        {(m.tags ?? []).filter((t) => !/^attack\.t\d/i.test(t)).map((t) => (
+        {(yara ? [] : (m.tags ?? [])).filter((t) => !/^attack\.t\d/i.test(t)).map((t) => (
           <ToneChip key={t} tone="default" dot={false} className="text-[11px]">
             {t}
           </ToneChip>
@@ -432,7 +505,7 @@ function Overview({ d }: { d: DetectionRuleDetail }) {
       </div>
       {d.issues.length > 0 && (
         <section className="flex flex-col gap-1">
-          <h3 className="text-[13px] font-medium">Checked against the specification</h3>
+          <h3 className="text-[13px] font-medium">{yara ? "Compiled by boreal" : "Checked against the specification"}</h3>
           {d.issues.map((i, n) => (
             <div key={n} className="flex items-start gap-2">
               <ToneChip tone={levelTone[i.level]} dot={false} className="shrink-0 text-[10.5px]">
@@ -520,14 +593,14 @@ function Versions({ d }: { d: DetectionRuleDetail }) {
   );
 }
 
-function Outcome({ o }: { o: DetectionTestOutcome }) {
+function Outcome({ o, kind }: { o: DetectionTestOutcome; kind: Kind }) {
   const r = o.result;
   return (
     <div className="flex flex-col gap-1.5 rounded-[8px] bg-white/[0.03] px-3 py-2 text-[12.5px]">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{o.sample.fileName}</span>
         <span className="text-muted">
-          {pluralize(r.matched, "match", "matches")} in {pluralize(r.inSource, "event")} of the log source ({r.events} read)
+          {kind === "yara" ? `${pluralize(r.matched, "rule")} matched the file` : `${pluralize(r.matched, "match", "matches")} in ${pluralize(r.inSource, "event")} of the log source (${r.events} read)`}
         </span>
         {o.test.passed != null && (
           <ToneChip tone={o.test.passed ? "success" : "danger"} dot={false} className="text-[11px]">
@@ -570,6 +643,7 @@ function Tests({ d }: { d: DetectionRuleDetail }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [add, setAdd] = useState<string | null>(null);
   const known = new Set(d.samples.map((s) => s.sampleId));
+  const yara = d.summary.kind === "yara";
   const run = async (key: string, fn: () => Promise<DetectionTestOutcome[]>) => {
     setBusy(key);
     try {
@@ -583,7 +657,10 @@ function Tests({ d }: { d: DetectionRuleDetail }) {
   };
   return (
     <div className="flex flex-col gap-3 text-[12.5px]">
-      <p className="text-muted">Test the rule on log samples and say what it should do on each: a test passes when the rule matches a sample it should match, and stays silent on one it should not. Re-test after every change.</p>
+      <p className="text-muted">
+        {yara ? "Test the rules on samples (any file) " : "Test the rule on log samples "}
+        and say what it should do on each: a test passes when the rule matches a sample it should match, and stays silent on one it should not. Re-test after every change.
+      </p>
       {d.samples.map((s) => (
         <div key={s.sampleId} className="flex flex-wrap items-center gap-2">
           <span className="min-w-0 flex-1 truncate">{s.fileName}</span>
@@ -617,7 +694,7 @@ function Tests({ d }: { d: DetectionRuleDetail }) {
           aria-label="Sample to test"
           value={add}
           onChange={setAdd}
-          options={(samples.data ?? []).filter((s) => !known.has(s.id)).map((s) => ({ id: String(s.id), label: `${s.fileName} (${s.kind}, ${s.events} events)` }))}
+          options={(samples.data ?? []).filter((s) => !known.has(s.id) && (yara || s.kind !== "file")).map((s) => ({ id: String(s.id), label: s.kind === "file" ? `${s.fileName} (file, ${formatBytes(s.size)})` : `${s.fileName} (${s.kind}, ${s.events} events)` }))}
           placeholder="Test on another sample…"
           className="min-w-[260px] flex-1"
         />
@@ -634,7 +711,7 @@ function Tests({ d }: { d: DetectionRuleDetail }) {
       </div>
       {!d.summary.runnable && <span className="text-danger">The rule cannot run: see the problems in its overview.</span>}
       {outcomes.map((o) => (
-        <Outcome key={o.test.id} o={o} />
+        <Outcome key={o.test.id} o={o} kind={d.summary.kind} />
       ))}
     </div>
   );

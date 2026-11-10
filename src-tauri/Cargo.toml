@@ -58,6 +58,8 @@ quick-xml = "0.42"
 toml = "1"
 # Terraform configuration (HCL) for the cloud infrastructure-as-code checks
 hcl-rs = "0.20"
+# YARA rules (pure Rust, no JIT): no process scanning, memory maps or signature verification
+boreal = { version = "1.4.0", default-features = false, features = ["hash", "object", "authenticode"] }
 # PE and ELF headers for the static file triage (no Mach-O, archives or TE)
 goblin = { version = "0.10", default-features = false, features = ["std", "elf32", "elf64", "pe32", "pe64", "endian_fd"] }
 regex = "1.13.1"

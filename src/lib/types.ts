@@ -2218,10 +2218,32 @@ export interface DetectionHitDetail {
   value: string;
 }
 
-export interface DetectionExplanation {
+export interface SigmaExplanation {
+  kind?: undefined;
   condition: string;
   selections: { name: string; matched: boolean; hits: DetectionHitDetail[] }[];
 }
+
+/** A string of a YARA rule that matched: how often (boreal counts up to 1,000), and the first matches. */
+export interface YaraStringHit {
+  id: string;
+  count: number;
+  matches: { offset: number; length: number; text: string; hex: string; xor: number | null }[];
+}
+
+export interface YaraExplanation {
+  kind: "yara";
+  rule: string;
+  tags: string[];
+  metas: [string, string][];
+  strings: YaraStringHit[];
+  /** matches counted per string */
+  limit: number;
+  /** matches kept per string */
+  kept: number;
+}
+
+export type DetectionExplanation = SigmaExplanation | YaraExplanation;
 
 export interface DetectionMatch {
   position: string;
@@ -2252,7 +2274,7 @@ export interface DetectionImportReport {
 }
 
 export interface DetectionProjectRun {
-  files: { evidenceId: number; title: string; kind: string; events: number; error: string | null }[];
+  files: { evidenceId: number; title: string; kind: string; events: number; scanned: boolean; error: string | null; notes: string[] }[];
   rules: number;
   results: { ruleId: number; title: string; matched: number; new: number; notes: string[] }[];
   newHits: number;
@@ -2288,10 +2310,44 @@ export interface DetectionEngine {
   unsupported: string[];
   categories: string[];
   services: string[];
+  yara: { engine: string; modules: string[]; unsupported: string[]; limits: { ruleFileKb: number; stringsPerRule: number; scanSeconds: number; fileMb: number; matchesPerString: number } };
+}
+
+/** What a YARA rule file says about itself (`meta` of a YARA library entry). */
+export interface YaraMeta {
+  rules: { name: string; tags: string[]; metas: [string, string][]; private: boolean; global: boolean }[];
+  imports: string[];
+  description: string;
+  author: string;
+  level: string;
+  references: string[];
+  techniques: string[];
+  tags: string[];
+}
+
+/** A YARA rule of the library that matched the file File Triage analysed. */
+export interface YaraTriageMatch {
+  ruleId: number;
+  title: string;
+  version: number;
+  level: string;
+  techniques: string[];
+  rule: string;
+  tags: string[];
+  metas: [string, string][];
+  strings: YaraStringHit[];
+}
+
+export interface YaraTriageScan {
+  files: number;
+  matches: YaraTriageMatch[];
+  failed: [string, string][];
+  notes: string[];
 }
 
 export interface AttackRuleCoverage {
   ruleId: number;
+  kind: "sigma" | "yara";
   title: string;
   enabled: boolean;
   runnable: boolean;

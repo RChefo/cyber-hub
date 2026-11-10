@@ -17,8 +17,9 @@ import { Segmented } from "@/modules/utilities/tools/shared";
 
 const LOGLIKE = /\.(evtx|json|jsonl|ndjson|log|txt)$/i;
 
-/** Projects → Investigation → Detections: the library's rules run on the project's log evidence,
- * and their matches (hits) kept for review: a hit is a lead until it becomes a finding. */
+/** Projects → Investigation → Detections: the library's rules run on the project's evidence (Sigma
+ * on logs, YARA on any file), and their matches (hits) kept for review: a hit is a lead until it
+ * becomes a finding. */
 export function DetectionHitsView({ project, archived, onOpen }: { project: Project; archived: boolean; onOpen: (r: RecordRef) => void }) {
   const { runtime } = useApp();
   const [status, setStatus] = useState<"new" | "promoted" | "false_positive" | "dismissed" | "all">("new");
@@ -37,7 +38,7 @@ export function DetectionHitsView({ project, archived, onOpen }: { project: Proj
   return (
     <Panel
       title="Detection hits"
-      description="Matches of the detection library's enabled Sigma rules on this project's log evidence. A hit is a lead: promote it to a finding (under review) once you confirm it, or mark it a false positive, which is recorded as feedback on the rule."
+      description="Matches of the detection library's enabled rules on this project's evidence: Sigma rules on logs, YARA rules on any file. A hit is a lead: promote it to a finding (under review) once you confirm it, or mark it a false positive, which is recorded as feedback on the rule."
       actions={
         <Button size="sm" variant="primary" onPress={() => setRunning(true)} isDisabled={!runtime || archived}>
           <Play className="size-3.5" />
@@ -63,7 +64,7 @@ export function DetectionHitsView({ project, archived, onOpen }: { project: Proj
         ) : !hits.data ? (
           <LoadingRows rows={4} />
         ) : hits.data.items.length === 0 ? (
-          <EmptyBlock compact icon={ScanSearch} title={status === "new" ? "Nothing to review" : "No hit here"} description="Run the library's rules on the project's EVTX, JSON or text logs. Add rules on the Detections page." />
+          <EmptyBlock compact icon={ScanSearch} title={status === "new" ? "Nothing to review" : "No hit here"} description="Run the library's rules on the project's evidence: Sigma rules on EVTX, JSON or text logs, YARA rules on any file. Add rules on the Detections page." />
         ) : (
           <ul className="flex flex-col gap-1.5">
             {hits.data.items.map((h) => (
@@ -102,6 +103,11 @@ function HitRow({ h, archived, onSet, onPromote, onOpenFinding }: { h: Detection
         <ToneChip tone={LEVEL_TONE[h.ruleLevel] ?? "default"} dot={false} className="text-[11px]">
           {h.ruleLevel || "no level"}
         </ToneChip>
+        {h.explanation?.kind === "yara" && (
+          <ToneChip tone="accent" dot={false} className="text-[10.5px]">
+            YARA
+          </ToneChip>
+        )}
         <span className="font-medium">{h.ruleTitle}</span>
         <span className="text-muted">v{h.ruleVersion}</span>
         {h.techniques.slice(0, 3).map((t) => (
@@ -169,7 +175,11 @@ function RunModal({ project, onClose }: { project: Project; onClose: () => void 
       const r = await api.detectionProjectRun(project.id, [...chosen], collection === "all" ? null : Number(collection));
       invalidate("detections", "attack", "projects");
       const failed = r.files.filter((f) => f.error);
-      notify.success(`${pluralize(r.newHits, "new hit")} from ${pluralize(r.results.length, "rule")}`, [`${pluralize(r.rules, "rule")} ran on ${pluralize(r.files.length - failed.length, "file")}`, failed.length ? `not read: ${failed.map((f) => `${f.title} (${f.error})`).join("; ")}` : null].filter(Boolean).join(" · "));
+      const notes = r.files.flatMap((f) => f.notes.map((n) => `${f.title}: ${n}`));
+      notify.success(
+        `${pluralize(r.newHits, "new hit")} from ${pluralize(r.results.length, "rule")}`,
+        [`${pluralize(r.rules, "rule")} ran on ${pluralize(r.files.length - failed.length, "file")}`, failed.length ? `not read: ${failed.map((f) => `${f.title} (${f.error})`).join("; ")}` : null, notes.length ? notes.slice(0, 3).join("; ") : null].filter(Boolean).join(" · "),
+      );
       onClose();
     } catch (e) {
       notify.error("The rules did not run", e);
@@ -182,7 +192,7 @@ function RunModal({ project, onClose }: { project: Project; onClose: () => void 
       isOpen
       onOpenChange={(o) => !o && onClose()}
       title="Run detection rules"
-      description="The enabled rules of the library (or of one collection) run on the chosen evidence files. Matches become hits to review; nothing becomes a finding by itself."
+      description="The enabled rules of the library (or of one collection) run on the chosen evidence files: Sigma rules on the logs, YARA rules on every file. Logs are chosen first; add other files for YARA. Matches become hits to review; nothing becomes a finding by itself. No file is opened or run."
       footer={
         <div className="flex w-full justify-end gap-2">
           <Button size="sm" variant="tertiary" onPress={onClose}>
@@ -199,7 +209,7 @@ function RunModal({ project, onClose }: { project: Project; onClose: () => void 
           <SelectInput label="Rules" value={collection} onChange={setCollection} options={[{ id: "all", label: "All enabled rules" }, ...(collections.data ?? []).map((c) => ({ id: String(c.id), label: `Collection: ${c.name}` }))]} />
         )}
         {files.length === 0 ? (
-          <span className="text-muted">The evidence vault holds no file. Add an EVTX, JSON or text log in the Evidence tab, or record a log triage with its file.</span>
+          <span className="text-muted">The evidence vault holds no file. Add a log or a file in the Evidence tab, or record a triage with its file.</span>
         ) : (
           <ul className="flex flex-col gap-1">
             {files.map((f) => (

@@ -83,7 +83,7 @@ fn tests_check_expectations_and_flag_broad_rules() {
         let r = run(&rule, &sample(spray.clone()));
         assert_eq!((r.events, r.in_source, r.matched), (30, 30, 30));
         assert!(r.notes.iter().any(|n| n.contains("too broad")), "{:?}", r.notes);
-        assert_eq!(r.matches[0].explanation.selections[0].hits[0].field, "EventID");
+        assert_eq!(r.matches[0].explanation["selections"][0]["hits"][0]["field"], "EventID");
         let quiet = run(&rule, &sample(vec![ev("4624", "a"), ev("4634", "b")]));
         assert_eq!(quiet.matched, 0);
         // expectations make tests pass or fail
@@ -158,4 +158,104 @@ fn rule_files_split_into_documents() {
     let docs = documents("# header\ntitle: a\n---\n\n---\ntitle: b\n...\n");
     assert_eq!(docs.len(), 2);
     assert!(docs[0].contains("title: a") && docs[1].contains("title: b"));
+}
+
+const YARA: &str = r#"
+private rule IsMz { condition: uint16(0) == 0x5A4D }
+rule Demo_Dropper : dropper
+{
+    meta:
+        description = "Dropper strings of the demo sample"
+        author = "Cyber Hub tests"
+        severity = "high"
+        mitre_attack = "T1105"
+    strings:
+        $url = "http://evil.example/stage2" ascii wide
+        $mutex = "Global\\DemoMutex"
+    condition:
+        IsMz and any of them
+}
+"#;
+
+fn import_yara(c: &Connection, name: &str, text: &str) -> Imported {
+    let checked = crate::detection::yara::check(text);
+    upsert_yara(c, &yara_key(name), name, text, &checked, name, "").unwrap()
+}
+
+#[test]
+fn yara_files_are_versioned_tested_and_promoted() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'IR', 'active', 't', 't')", [])?;
+        c.execute("INSERT INTO evidence (id, project_id, kind, title, source, sha256, size, file_name, created_at) VALUES (9, 1, 'file', 'invoice.exe', 'user', 'cd', 10, 'invoice.exe', 't')", [])?;
+        let a = import_yara(c, "Dropper.yar", YARA);
+        assert_eq!((a.outcome, a.title.as_str(), a.errors), ("added", "Demo_Dropper", 0));
+        assert_eq!(import_yara(c, "dropper.yar", YARA).outcome, "unchanged", "the same file name and content");
+        let b = import_yara(c, "dropper.yar", &YARA.replace("any of them", "all of them"));
+        assert_eq!((b.id, b.outcome, b.version), (a.id, "updated", 2), "the same file name is a new version");
+        let d = get(c, a.id)?;
+        assert_eq!((d.summary.kind.as_str(), d.summary.level.as_str(), d.summary.logsource.as_str()), ("yara", "high", "files"));
+        assert_eq!(d.summary.techniques, vec!["T1105"]);
+        assert_eq!(d.meta["rules"].as_array().map(Vec::len), Some(2));
+        // a file that does not compile is kept with its problem and cannot run
+        let broken = import_yara(c, "broken.yar", "rule Broken { condition: $nothing }");
+        assert_eq!((broken.title.as_str(), broken.errors), ("broken.yar", 1));
+        assert!(!get(c, broken.id)?.summary.runnable);
+        assert_eq!(list(c, &ListFilter { kind: Some("yara".into()), ..Default::default() })?.total, 2);
+        assert_eq!(runnable(c, None)?.iter().map(|s| s.kind.as_str()).collect::<Vec<_>>(), vec!["yara"]);
+
+        // a test on a file sample
+        let s = stored(c, a.id)?;
+        assert!(compile(&s).is_err(), "a YARA file is not a Sigma rule");
+        let scanner = compile_yara(&s)?;
+        let mut file = b"MZ\x90\x00".to_vec();
+        file.extend_from_slice(b"..h\0t\0t\0p\0:\0/\0/\0e\0v\0i\0l\0.\0e\0x\0a\0m\0p\0l\0e\0/\0s\0t\0a\0g\0e\x002\0..Global\\DemoMutex");
+        let r = yara_result(&crate::detection::yara::scan(&scanner, &file), "invoice.exe");
+        assert_eq!((r.events, r.matched), (1, 1));
+        assert_eq!(r.matches[0].position, "rule Demo_Dropper");
+        assert_eq!(r.matches[0].explanation["strings"].as_array().map(Vec::len), Some(2), "all of them matched");
+        let sid = sample_add(c, "ef", "invoice.exe", "file", file.len() as i64, 0)?;
+        set_expect(c, a.id, sid, "match")?;
+        assert_eq!(record_test(c, a.id, s.version, sid, &r)?.passed, Some(true));
+        let clean = yara_result(&crate::detection::yara::scan(&scanner, b"MZ nothing here"), "clean.exe");
+        assert_eq!(clean.matched, 0);
+
+        // hits in a project, promoted to a finding linked to the file
+        assert_eq!(hits_store(c, 1, &s, 9, &r.matches)?, (1, 0));
+        assert_eq!(hits_store(c, 1, &s, 9, &r.matches)?, (0, 1), "the same rule on the same file is one hit");
+        let hit = hits_list(c, 1, &HitFilter::default())?.items.remove(0);
+        assert_eq!(hit.explanation["kind"], "yara");
+        let fid = hit_promote(c, hit.id)?;
+        let (title, status, tags, description, details): (String, String, String, String, String) =
+            c.query_row("SELECT title, status, tags, description, technical_details FROM findings WHERE id = ?1", params![fid], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?;
+        assert_eq!((title.as_str(), status.as_str()), ("YARA Demo_Dropper (invoice.exe)", "under_review"));
+        assert!(tags.contains("yara") && tags.contains("T1105") && !tags.contains("sigma"), "{tags}");
+        assert!(description.contains("$url matched 1 time, first at offset 0x6") && description.contains("SHA-256 cd"), "{description}");
+        assert!(details.contains("version 2, rule Demo_Dropper"), "{details}");
+        assert_eq!(crate::workspace::findings::links(c, fid)?.iter().map(|l| (l.kind.as_str(), l.ref_id)).collect::<Vec<_>>(), vec![("evidence", 9)]);
+
+        // coverage counts YARA files that name techniques
+        let cov = coverage(c)?;
+        assert_eq!(cov["T1105"].iter().map(|x| (x.kind.as_str(), x.tested)).collect::<Vec<_>>(), vec![("yara", true)]);
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn any_hit_can_be_reviewed_however_many_the_project_has() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'IR', 'active', 't', 't')", [])?;
+        for i in 0..600 {
+            c.execute("INSERT INTO detection_hits (project_id, rule_title, rule_version, rule_level, position, created_at) VALUES (1, 'r', 1, ?1, ?2, 't')", params![if i == 0 { "low" } else { "high" }, format!("record {i}")])?;
+        }
+        let first: i64 = c.query_row("SELECT MIN(id) FROM detection_hits", [], |r| r.get(0))?;
+        assert!(!hits_list(c, 1, &HitFilter { limit: Some(500), ..Default::default() })?.items.iter().any(|h| h.id == first), "it is past the first page");
+        hit_set(c, first, "dismissed", "noise")?;
+        assert_eq!(hit(c, first)?.status, "dismissed");
+        assert!(hit(c, 999_999).is_err());
+        Ok(())
+    })
+    .unwrap();
 }

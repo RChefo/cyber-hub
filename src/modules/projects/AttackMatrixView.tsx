@@ -431,6 +431,7 @@ function TechniqueModal({ id, project, archived, catalog, matrix, onClose, onOpe
               {entry.rules.map((r) => (
                 <li key={r.ruleId} className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                  <span className="text-[11px] text-muted">{r.kind === "yara" ? "YARA" : "Sigma"}</span>
                   <ToneChip tone={r.enabled && r.runnable ? "success" : "default"} dot={false} className="text-[11px]">
                     {!r.runnable ? "cannot run" : r.enabled ? "enabled" : "disabled"}
                   </ToneChip>
@@ -443,7 +444,7 @@ function TechniqueModal({ id, project, archived, catalog, matrix, onClose, onOpe
               ))}
             </ul>
           ) : (
-            <span className="text-muted">No rule: a gap in detection coverage. Write or import a Sigma rule tagged with this technique.</span>
+            <span className="text-muted">No rule: a gap in detection coverage. Write or import a Sigma rule tagged with this technique, or a YARA rule whose metadata names it.</span>
           )}
           {entry && entry.hits > 0 && <span className="text-warning">{pluralize(entry.hits, "detection hit")} in this project to review (Investigation → Detections).</span>}
         </section>

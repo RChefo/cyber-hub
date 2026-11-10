@@ -1,4 +1,5 @@
-import type { BinaryCapability, BinaryReport, FindingInput } from "@/lib/types";
+import type { BinaryCapability, BinaryReport, FindingInput, Severity, YaraTriageMatch } from "@/lib/types";
+import { yaraString } from "@/modules/detections/detections";
 import { type IocKind, extractIocs } from "./ioc";
 import { formatBytes } from "./triage";
 
@@ -18,6 +19,28 @@ export function stringIndicators(strings: string[]): { kind: IocKind; label: str
 /** "3 of 5" hardening measures. */
 export function hardeningSummary(r: Pick<BinaryReport, "hardening">): string {
   return `${r.hardening.filter((h) => h.present).length} of ${r.hardening.length}`;
+}
+
+const YARA_SEVERITY: Record<string, Severity> = { critical: "critical", high: "high", medium: "medium", low: "low" };
+
+/** The finding a YARA match becomes when the analyst records it: under review, with low
+ * confidence, since a rule match is a lead; the title names the rule and the file. */
+export function yaraFinding(projectId: number, file: string, r: BinaryReport, m: YaraTriageMatch): FindingInput {
+  const why = m.strings.length ? m.strings.map((s) => `- ${yaraString(s)}`).join("\n") : "- its condition holds on the file's properties (no string was needed)";
+  const description = m.metas.find(([k]) => k.toLowerCase() === "description")?.[1];
+  return {
+    projectId,
+    title: `YARA ${m.rule} (${file})`.slice(0, 200),
+    severity: YARA_SEVERITY[m.level] ?? "info",
+    status: "under_review",
+    category: "Detection",
+    confidence: "low",
+    description: `The YARA rule ${m.rule} of “${m.title}” (version ${m.version}) matched ${file}.${description ? `\n\nThe rule: ${description}` : ""}\n\nFile: ${file} (${formatBytes(r.size)}), SHA-256 ${r.sha256}, MD5 ${r.md5}.\n\nWhy it matched:\n${why}\n\nA rule match is a lead: confirm it from the file before treating the file as malicious.`,
+    affectedTarget: file,
+    technicalDetails: `YARA rule file #${m.ruleId} “${m.title}”, version ${m.version}, rule ${m.rule}.${m.techniques.length ? ` MITRE ATT&CK: ${m.techniques.join(", ")}.` : ""} The file was read, not run.`,
+    remediation: "Analyse the file in an isolated environment and look up its hashes in threat intelligence before trusting, quarantining or removing it.",
+    tags: ["detection", "yara", ...m.techniques],
+  };
 }
 
 /** The finding a capability becomes; the title names the file, so it is recorded once. */

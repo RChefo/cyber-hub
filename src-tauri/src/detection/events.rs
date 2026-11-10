@@ -95,6 +95,9 @@ pub fn read(mut input: impl Read) -> Result<Sample, String> {
     let mut head = [0u8; 64];
     let n = read_head(&mut input, &mut head)?;
     let kind = kind_of(&head[..n]);
+    if kind == Kind::Text && head[..n].contains(&0) {
+        return Err("The file holds binary data, not a log (UTF-16 text logs are not read: save them as UTF-8)".into());
+    }
     let chained = std::io::Cursor::new(head[..n].to_vec()).chain(input);
     match kind {
         Kind::Evtx => read_evtx(chained),
@@ -337,6 +340,8 @@ mod tests {
         assert_eq!(kind_of(b"  \n{\"a\":1}"), Kind::Json);
         assert_eq!(kind_of(b"\xEF\xBB\xBF[{}]"), Kind::Json);
         assert_eq!(kind_of(b"Nov  9 13:46:00 web1 sshd[1]: x"), Kind::Text);
+        assert!(read(&b"MZ\x90\x00\x03\x00\x00\x00\x04\x00"[..]).unwrap_err().contains("binary data"));
+        assert!(read(&b"\xff\xfeN\x00o\x00v\x00"[..]).unwrap_err().contains("UTF-16"));
 
         let lines = "{\"winlog\":{\"channel\":\"Security\",\"event_data\":{\"Image\":\"C:\\\\x.exe\",\"User\":\"a\"}},\"@timestamp\":\"2026-11-09T10:00:00Z\"}\n\nnot json\n{\"Image\":\"b\"}\n";
         let s = read(lines.as_bytes()).unwrap();

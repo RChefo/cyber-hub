@@ -72,6 +72,12 @@ fn lookup(app: &AppHandle, token: &str) -> AppResult<PickedFile> {
     q.iter().find(|(t, _)| t == token).map(|(_, p)| p.clone()).ok_or_else(|| validation("The analysed file is no longer known; analyse it again"))
 }
 
+/// The file behind a token: its path, the name it is shown by, and the SHA-256 that was analysed.
+pub fn picked(app: &AppHandle, token: &str) -> AppResult<(PathBuf, String, Option<String>)> {
+    let p = lookup(app, token)?;
+    Ok((p.path, p.file_name, p.sha256))
+}
+
 /// The SHA-256 of a file that fits the evidence vault, None when it is larger.
 pub fn file_sha256(path: &Path) -> AppResult<Option<String>> {
     if std::fs::metadata(path)?.len() > evidence::MAX_FILE {

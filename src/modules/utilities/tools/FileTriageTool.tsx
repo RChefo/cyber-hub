@@ -1,18 +1,132 @@
 import { Button } from "@heroui/react";
-import { FileScan, Radar, ShieldCheck } from "lucide-react";
+import { FileScan, Radar, ScanSearch, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useApp } from "@/app/store";
 import { SeverityBadge, ToneChip } from "@/components/ui/Badges";
 import { CopyButton } from "@/components/ui/Code";
 import { EmptyBlock, ErrorBlock } from "@/components/ui/Feedback";
-import { SearchInput } from "@/components/ui/Fields";
+import { SearchInput, SelectInput } from "@/components/ui/Fields";
 import { api, errorMessage } from "@/lib/ipc";
-import type { BinaryScan } from "@/lib/types";
-import { cn } from "@/lib/utils";
-import { capabilityFinding, hardeningSummary, stringIndicators } from "../lib/binary";
+import { useQuery } from "@/lib/query";
+import type { BinaryScan, YaraTriageScan } from "@/lib/types";
+import { cn, pluralize } from "@/lib/utils";
+import { LEVEL_TONE, yaraString } from "@/modules/detections/detections";
+import { capabilityFinding, hardeningSummary, stringIndicators, yaraFinding } from "../lib/binary";
 import { formatBytes } from "../lib/triage";
 import { PrivacyNote } from "./shared";
 import { Pick, RecordBar, Table } from "./TriageTools";
+
+/** The triaged file scanned with the detection library's enabled YARA rules (of a collection when
+ * chosen). Matches are leads: the analyst records the ones that matter as findings under review,
+ * with the file as evidence. */
+function YaraSection({ scan }: { scan: BinaryScan }) {
+  const { runtime, navigate } = useApp();
+  const collections = useQuery(["detections"], () => api.detectionCollections(), [], runtime);
+  const library = useQuery(["detections"], () => api.detectionRulesList({ kind: "yara", enabled: true, limit: 1 }), [], runtime);
+  const [collection, setCollection] = useState("all");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<YaraTriageScan | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const key = (m: { ruleId: number; rule: string }) => `${m.ruleId}:${m.rule}`;
+  const token = scan.token;
+  const none = library.data?.total === 0;
+  const run = async () => {
+    if (!token) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const s = await api.yaraScanFile(token, collection === "all" ? null : Number(collection));
+      setResult(s);
+      setPicked(new Set(s.matches.map(key)));
+    } catch (e) {
+      setResult(null);
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!token) return null;
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="flex-1 text-[13.5px] font-medium">YARA rules{result ? ` (${pluralize(result.matches.length, "match", "matches")})` : ""}</h3>
+        {(collections.data?.length ?? 0) > 0 && (
+          <SelectInput aria-label="YARA rules to run" value={collection} onChange={setCollection} options={[{ id: "all", label: "All enabled YARA rules" }, ...(collections.data ?? []).map((c) => ({ id: String(c.id), label: `Collection: ${c.name}` }))]} className="w-56" />
+        )}
+        <Button size="sm" variant="tertiary" onPress={() => void run()} isPending={busy} isDisabled={!runtime || none}>
+          <ScanSearch className="size-3.5" />
+          Scan with YARA rules
+        </Button>
+      </div>
+      {none && (
+        <p className="text-[12.5px] text-muted">
+          The detection library has no enabled YARA rule.{" "}
+          <button type="button" className="text-accent hover:underline" onClick={() => navigate("detections")}>
+            Import YARA rules in Detections
+          </button>
+          .
+        </p>
+      )}
+      {error && <ErrorBlock message={error} />}
+      {result && (
+        <div className="flex flex-col gap-2">
+          {result.notes.map((n) => (
+            <p key={n} className="rounded-[8px] bg-warning-soft px-2.5 py-1.5 text-[12.5px] text-warning-soft-foreground">
+              {n}
+            </p>
+          ))}
+          {result.failed.length > 0 && <p className="text-[12.5px] text-warning">Not run: {result.failed.map(([t, why]) => `${t} (${why})`).join("; ")}</p>}
+          {result.matches.length === 0 ? (
+            <p className="text-[12.5px] text-muted">No rule matched ({pluralize(result.files, "rule file")} ran). A file no rule matches is not shown to be harmless.</p>
+          ) : (
+            <>
+              <div className="flex justify-end">
+                <RecordBar
+                  picked={picked.size}
+                  build={(pid) => result.matches.filter((m) => picked.has(key(m))).map((m) => yaraFinding(pid, scan.file, scan.report, m))}
+                  onDone={() => setPicked(new Set())}
+                  source={{ module: "file_triage", subject: scan.file, token, report: () => ({ ...scan.report, strings: scan.report.strings.slice(0, 2000), yara: result }) }}
+                />
+              </div>
+              {result.matches.map((m) => (
+                <div key={key(m)} className={cn("flex items-start gap-2.5 rounded-[8px] px-2.5 py-2", picked.has(key(m)) ? "bg-accent-soft/40" : "bg-white/[0.02]")}>
+                  <Pick label={`Select ${m.rule}`} selected={picked.has(key(m))} onToggle={() => setPicked((p) => (p.has(key(m)) ? new Set([...p].filter((x) => x !== key(m))) : new Set([...p, key(m)])))} />
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 text-[12.5px]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ToneChip tone={LEVEL_TONE[m.level] ?? "default"} dot={false} className="text-[11px]">
+                        {m.level || "no level"}
+                      </ToneChip>
+                      <span className="font-mono text-[13px] font-medium">{m.rule}</span>
+                      <span className="text-muted">
+                        {m.title} · v{m.version}
+                      </span>
+                      {m.techniques.map((t) => (
+                        <ToneChip key={t} tone="accent" dot={false} className="text-[11px]">
+                          ATT&CK {t}
+                        </ToneChip>
+                      ))}
+                      {m.tags.map((t) => (
+                        <ToneChip key={t} tone="default" dot={false} className="text-[10.5px]">
+                          {t}
+                        </ToneChip>
+                      ))}
+                    </div>
+                    {m.metas.find(([k]) => k.toLowerCase() === "description") && <p className="text-muted">{m.metas.find(([k]) => k.toLowerCase() === "description")?.[1]}</p>}
+                    <ul className="flex flex-col gap-0.5 font-mono text-[11.5px] break-all">
+                      {m.strings.length === 0 ? <li className="font-sans text-muted">Its condition holds on the file's properties; no string was needed.</li> : m.strings.slice(0, 8).map((s) => <li key={s.id}>{yaraString(s)}</li>)}
+                      {m.strings.length > 8 && <li className="font-sans text-muted">and {pluralize(m.strings.length - 8, "more string")}</li>}
+                    </ul>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
 
 /** Security utility: static triage of a PE or ELF file (hashes, sections, imports, capabilities, strings). */
 export function FileTriageTool() {
@@ -149,6 +263,7 @@ export function FileTriageTool() {
                 ))}
               </section>
             ))}
+          <YaraSection key={scan.token ?? scan.file} scan={scan} />
           {r.sections.length > 0 && (
             <section className="flex flex-col gap-1.5">
               <h3 className="text-[13.5px] font-medium">Sections</h3>

@@ -1,4 +1,4 @@
-import type { DetectionExplanation, DetectionRuleSummary } from "@/lib/types";
+import type { DetectionExplanation, DetectionRuleSummary, YaraExplanation, YaraStringHit } from "@/lib/types";
 
 export type Tone = "default" | "accent" | "success" | "warning" | "danger";
 
@@ -23,6 +23,23 @@ detection:
 falsepositives:
     - Administration scripts
 level: medium
+`;
+
+/** A YARA rule file to start from: metadata, strings and a condition. */
+export const YARA_TEMPLATE = `rule Short_Name_Of_What_It_Finds
+{
+    meta:
+        description = "What the rule finds and why it matters"
+        author = ""
+        date = "${new Date().toISOString().slice(0, 10)}"
+        severity = "medium"
+        mitre_attack = "T1105"
+    strings:
+        $text = "stage2.example" ascii wide nocase
+        $hex = { 4D 5A 90 00 }
+    condition:
+        $hex at 0 and $text
+}
 `;
 
 export const LEVEL_TONE: Record<string, Tone> = { critical: "danger", high: "danger", medium: "warning", low: "accent", informational: "default" };
@@ -66,11 +83,25 @@ export function diffLines(before: string, after: string): DiffLine[] {
   return out;
 }
 
-/** Why an event matched, as sentences: the selections that matched with their values, and the
- * ones that did not (filters the condition excludes). */
-export function explain(x: DetectionExplanation): string[] {
+export function isYara(x: DetectionExplanation | null | undefined): x is YaraExplanation {
+  return x?.kind === "yara";
+}
+
+/** One string of a YARA match as a sentence: how often, where first, and what. */
+export function yaraString(s: YaraStringHit, limit = 1000): string {
+  const first = s.matches[0];
+  const times = s.count >= limit ? `at least ${limit.toLocaleString()} times` : s.count === 1 ? "once" : `${s.count} times`;
+  return `${s.id} matched ${times}${first ? `, first at offset 0x${first.offset.toString(16)}: ${first.text}${first.xor != null ? ` (xor key 0x${first.xor.toString(16)})` : ""}` : ""}`;
+}
+
+/** Why an event (Sigma) or a file (YARA) matched, as sentences: for Sigma the selections that
+ * matched with their values and the ones that did not (filters the condition excludes); for YARA
+ * the strings that matched, with their first offset. */
+export function explain(x: DetectionExplanation | null | undefined): string[] {
+  if (!x) return [];
+  if (isYara(x)) return x.strings.length ? x.strings.map((s) => yaraString(s, x.limit)) : ["The condition holds on the file's properties (size, header values or modules); no string was needed."];
   const out: string[] = [];
-  for (const s of x.selections) {
+  for (const s of x.selections ?? []) {
     if (s.matched) for (const h of s.hits) out.push(`${s.name}: ${h.condition} — the event has ${h.value}`);
     else out.push(`${s.name}: did not match`);
   }

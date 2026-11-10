@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BinaryReport } from "@/lib/types";
-import { capabilityFinding, hardeningSummary, stringIndicators } from "./binary";
+import { capabilityFinding, hardeningSummary, stringIndicators, yaraFinding } from "./binary";
 
 const report = (over: Partial<BinaryReport> = {}): BinaryReport => ({
   format: "PE32+",
@@ -46,5 +46,28 @@ describe("file triage helpers", () => {
     expect(found.map((k) => k.kind)).toContain("url");
     expect(found.find((k) => k.kind === "url")?.values).toContain("http://203.0.113.9/stage2.bin");
     expect(found.find((k) => k.kind === "email")?.values).toEqual(["ops@example.com"]);
+  });
+});
+
+describe("YARA matches as findings", () => {
+  it("are leads under review that name the rule, the file and why", () => {
+    const f = yaraFinding(4, "invoice.exe", report(), {
+      ruleId: 12,
+      title: "Demo_Dropper",
+      version: 2,
+      level: "high",
+      techniques: ["T1105"],
+      rule: "Demo_Dropper",
+      tags: ["dropper"],
+      metas: [["description", "Dropper strings"]],
+      strings: [{ id: "$url", count: 2, matches: [{ offset: 16, length: 10, text: "stage2", hex: "73", xor: null }] }],
+    });
+    expect(f.title).toBe("YARA Demo_Dropper (invoice.exe)");
+    expect([f.status, f.confidence, f.severity, f.category]).toEqual(["under_review", "low", "high", "Detection"]);
+    expect(f.tags).toEqual(["detection", "yara", "T1105"]);
+    expect(f.description).toContain("$url matched 2 times, first at offset 0x10: stage2");
+    expect(f.description).toContain(`SHA-256 ${"2".repeat(64)}`);
+    expect(f.technicalDetails).toContain("YARA rule file #12 “Demo_Dropper”, version 2, rule Demo_Dropper. MITRE ATT&CK: T1105.");
+    expect(yaraFinding(4, "a", report(), { ruleId: 1, title: "t", version: 1, level: "", techniques: [], rule: "R", tags: [], metas: [], strings: [] }).severity).toBe("info");
   });
 });

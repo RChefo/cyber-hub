@@ -295,6 +295,7 @@ pub fn run() {
             crate::commands::detections::detection_hit_promote,
             crate::commands::detections::detection_rule_export,
             crate::commands::detections::detection_collection_export,
+            crate::commands::detections::yara_scan_file,
             workspace_commands::evidence_list,
             workspace_commands::evidence_text,
             workspace_commands::evidence_add_text,

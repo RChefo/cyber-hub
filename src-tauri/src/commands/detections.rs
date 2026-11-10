@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, State};
@@ -15,7 +15,7 @@ use tauri::{AppHandle, Manager, State};
 use crate::commands::workspace::main_window_dialog;
 use crate::db::Db;
 use crate::detection::events::{self, Sample};
-use crate::detection::sigma;
+use crate::detection::{sigma, yara};
 use crate::error::{validation, AppError, AppResult};
 use crate::workspace::detections::{self as lib, Imported, RunResult, SampleRow, TestRow};
 use crate::workspace::evidence::EvidenceStore;
@@ -27,10 +27,13 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> AppResult<T> + Send + '
     tauri::async_runtime::spawn_blocking(f).await.map_err(|e| AppError::Internal(format!("the task failed: {e}")))?
 }
 
-/// The Sigma engine: specification version, supported modifiers, mapped log sources.
+/// The rule engines: Sigma (specification version, modifiers, mapped log sources) and, under
+/// `yara`, YARA (modules, what is refused, limits).
 #[tauri::command]
 pub async fn detection_engine() -> AppResult<serde_json::Value> {
-    Ok(sigma::capabilities())
+    let mut v = sigma::capabilities();
+    v["yara"] = yara::capabilities();
+    Ok(v)
 }
 
 /// Saves the detection library's ATT&CK coverage as a Navigator layer through a native dialog.
@@ -94,12 +97,43 @@ fn import_sigma(c: &rusqlite::Connection, name: &str, text: &str, note: &str, re
     }
 }
 
-/// Imports Sigma rule files chosen in a native dialog; a rule already in the library (same id)
-/// gets a new version when its content changed.
+/// Stores a YARA rule file (all its rules together, so private and global rules keep working).
+fn import_yara(c: &rusqlite::Connection, name: &str, text: &str, note: &str, report: &mut ImportReport) {
+    let checked = yara::check(text);
+    match lib::upsert_yara(c, &lib::yara_key(name), name, text, &checked, name, note) {
+        Ok(r) => report.imported.push(r),
+        Err(e) => report.failed.push((name.into(), e.to_string())),
+    }
+}
+
+/// Whether a rule file is YARA or Sigma: by its extension, otherwise by its content.
+fn rule_kind(name: &str, text: &str) -> &'static str {
+    let lower = name.to_ascii_lowercase();
+    if lower.ends_with(".yar") || lower.ends_with(".yara") {
+        return "yara";
+    }
+    if lower.ends_with(".yml") || lower.ends_with(".yaml") {
+        return "sigma";
+    }
+    if !yara::declared(text).is_empty() || text.lines().any(|l| l.trim_start().starts_with("import \"")) {
+        "yara"
+    } else {
+        "sigma"
+    }
+}
+
+/// Imports Sigma and YARA rule files chosen in a native dialog. A Sigma rule already in the
+/// library (same id), or a YARA file of the same name, gets a new version when its content
+/// changed.
 #[tauri::command]
 pub async fn detection_rules_import(app: AppHandle) -> AppResult<Option<ImportReport>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
-    main_window_dialog(&app, "Import detection rules").add_filter("Sigma rules", &["yml", "yaml"]).add_filter("All files", &["*"]).pick_files(move |f| {
+    main_window_dialog(&app, "Import detection rules")
+        .add_filter("Detection rules", &["yml", "yaml", "yar", "yara"])
+        .add_filter("Sigma rules", &["yml", "yaml"])
+        .add_filter("YARA rules", &["yar", "yara"])
+        .add_filter("All files", &["*"])
+        .pick_files(move |f| {
         let _ = tx.send(f.map(|v| v.into_iter().filter_map(|p| p.into_path().ok()).collect::<Vec<PathBuf>>()));
     });
     let Some(paths) = rx.await.ok().flatten() else { return Ok(None) };
@@ -112,15 +146,24 @@ pub async fn detection_rules_import(app: AppHandle) -> AppResult<Option<ImportRe
         let mut report = ImportReport::default();
         for p in paths {
             let name = crate::workspace::evidence::display_name(&p.to_string_lossy());
-            let text = match read_limited(&p, sigma::MAX_RULE_BYTES as u64) {
+            let text = match read_limited(&p, yara::MAX_RULE_BYTES as u64) {
                 Ok(t) => t,
                 Err(e) => {
                     report.failed.push((name, e.to_string()));
                     continue;
                 }
             };
+            let kind = rule_kind(&name, &text);
+            if kind == "sigma" && text.len() > sigma::MAX_RULE_BYTES {
+                report.failed.push((name, format!("A Sigma rule file is at most {} KB", sigma::MAX_RULE_BYTES / 1024)));
+                continue;
+            }
             db.with(|c| {
-                import_sigma(c, &name, &text, "", &mut report);
+                if kind == "yara" {
+                    import_yara(c, &name, &text, "", &mut report);
+                } else {
+                    import_sigma(c, &name, &text, "", &mut report);
+                }
                 Ok(())
             })?;
         }
@@ -142,12 +185,65 @@ fn read_limited(p: &Path, max: u64) -> AppResult<String> {
     }
     let mut s = String::new();
     std::fs::File::open(p)?.take(max).read_to_string(&mut s).map_err(|_| validation("The file is not UTF-8 text"))?;
-    Ok(s)
+    Ok(match s.strip_prefix('\u{feff}') {
+        Some(rest) => rest.to_string(),
+        None => s,
+    })
 }
 
-/// Adds rules written or edited in the app (a rule with an existing id becomes its new version).
+/// Reads a whole file of at most `max` bytes (a YARA scan needs the bytes in memory).
+fn read_bytes(p: &Path, max: u64) -> AppResult<Vec<u8>> {
+    let meta = std::fs::metadata(p)?;
+    if !meta.is_file() || meta.len() > max {
+        return Err(validation(format!("YARA rules scan files of at most {} MB", max / 1024 / 1024)));
+    }
+    let mut data = Vec::with_capacity(meta.len() as usize);
+    std::fs::File::open(p)?.take(max + 1).read_to_end(&mut data)?;
+    if data.len() as u64 > max {
+        return Err(validation("The file grew past the size limit while it was read"));
+    }
+    Ok(data)
+}
+
+/// Adds rules written or edited in the app. A Sigma rule with an existing id becomes its new
+/// version; a YARA file edited from the library (`id`) becomes that file's new version, and a new
+/// YARA file is named after its first rule.
 #[tauri::command]
-pub async fn detection_rule_save(db: State<'_, Db>, content: String, note: Option<String>) -> AppResult<ImportReport> {
+pub async fn detection_rule_save(db: State<'_, Db>, content: String, note: Option<String>, kind: Option<String>, id: Option<i64>) -> AppResult<ImportReport> {
+    if kind.as_deref() == Some("yara") {
+        if content.len() > yara::MAX_RULE_BYTES {
+            return Err(validation("The rule file is too large"));
+        }
+        let note = note.unwrap_or_else(|| "Edited in Cyber Hub".into());
+        return db.with(|c| {
+            let (key, name) = match id {
+                Some(id) => {
+                    let (k, key): (String, String) = c.query_row("SELECT kind, rule_key FROM detection_rules WHERE id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?))).optional()?.ok_or_else(|| AppError::NotFound(format!("detection rule {id}")))?;
+                    if k != "yara" {
+                        return Err(validation("The rule being edited is not a YARA file"));
+                    }
+                    let name = key.strip_prefix("file:").unwrap_or(&key).to_string();
+                    (key, name)
+                }
+                None => {
+                    let first = yara::declared(&content).into_iter().next().ok_or_else(|| validation("Write at least one rule: rule Name { condition: … }"))?;
+                    let name = format!("{first}.yar");
+                    let key = lib::yara_key(&name);
+                    if c.query_row("SELECT 1 FROM detection_rules WHERE kind = 'yara' AND rule_key = ?1", params![key], |_| Ok(())).optional()?.is_some() {
+                        return Err(validation(format!("The library has a YARA file named {name}: edit it, or name the first rule differently")));
+                    }
+                    (key, name)
+                }
+            };
+            let checked = yara::check(&content);
+            let mut report = ImportReport::default();
+            match lib::upsert_yara(c, &key, &name, &content, &checked, "written in Cyber Hub", &note) {
+                Ok(r) => report.imported.push(r),
+                Err(e) => report.failed.push((name, e.to_string())),
+            }
+            Ok(report)
+        });
+    }
     if content.len() > sigma::MAX_RULE_BYTES {
         return Err(validation("The rule is too large"));
     }
@@ -259,11 +355,16 @@ pub async fn detection_samples(db: State<'_, Db>) -> AppResult<Vec<SampleRow>> {
     db.with(lib::samples)
 }
 
-/// Adds a log sample (EVTX, JSON or JSON Lines, or a text log) chosen in a native dialog.
+/// Adds a sample chosen in a native dialog: a log (EVTX, JSON or JSON Lines, or a text log) for
+/// Sigma rules, or with `kind` "file" any file for YARA rules. A file sample is only read, never
+/// opened by another program.
 #[tauri::command]
-pub async fn detection_sample_add(app: AppHandle) -> AppResult<Option<SampleRow>> {
+pub async fn detection_sample_add(app: AppHandle, kind: Option<String>) -> AppResult<Option<SampleRow>> {
+    let file = kind.as_deref() == Some("file");
     let (tx, rx) = tokio::sync::oneshot::channel();
-    main_window_dialog(&app, "Add a log sample").add_filter("Logs", &["evtx", "json", "jsonl", "ndjson", "log", "txt"]).add_filter("All files", &["*"]).pick_file(move |f| {
+    let dialog = main_window_dialog(&app, if file { "Add a file sample" } else { "Add a log sample" });
+    let dialog = if file { dialog.add_filter("All files", &["*"]) } else { dialog.add_filter("Logs", &["evtx", "json", "jsonl", "ndjson", "log", "txt"]).add_filter("All files", &["*"]) };
+    dialog.pick_file(move |f| {
         let _ = tx.send(f.and_then(|p| p.into_path().ok()));
     });
     let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
@@ -272,9 +373,13 @@ pub async fn detection_sample_add(app: AppHandle) -> AppResult<Option<SampleRow>
     blocking(move || {
         let name = crate::workspace::evidence::display_name(&path.to_string_lossy());
         let (sha, size) = store_sample(&dir, &path)?;
-        let sample = read_sample(&dir.join(&sha))?;
         let db = handle.state::<Db>();
-        let id = db.with(|c| lib::sample_add(c, &sha, &name, kind_name(sample.kind), size as i64, sample.events.len() as i64))?;
+        let id = if file {
+            db.with(|c| lib::sample_add(c, &sha, &name, "file", size as i64, 0))?
+        } else {
+            let sample = read_sample(&dir.join(&sha))?;
+            db.with(|c| lib::sample_add(c, &sha, &name, kind_name(sample.kind), size as i64, sample.events.len() as i64))?
+        };
         db.with(|c| lib::sample(c, id)).map(Some)
     })
     .await
@@ -304,13 +409,21 @@ fn test_one(app: &AppHandle, rule_id: i64, sample_id: i64) -> AppResult<TestOutc
             .ok();
         Ok((lib::stored(c, rule_id)?, lib::sample(c, sample_id)?, previous))
     })?;
-    let rule = lib::compile(&stored)?;
     let path = samples_dir(app)?.join(&sample_row.sha256);
     if !path.exists() {
         return Err(validation(format!("The sample {} is missing from the sample store", sample_row.file_name)));
     }
-    let sample = read_sample(&path)?;
-    let result = lib::run(&rule, &sample);
+    let result = if stored.kind == "yara" {
+        let scanner = lib::compile_yara(&stored)?;
+        let data = read_bytes(&path, yara::MAX_SCAN_BYTES)?;
+        lib::yara_result(&yara::scan(&scanner, &data), &sample_row.file_name)
+    } else {
+        if sample_row.kind == "file" {
+            return Err(validation(format!("{} is a file sample for YARA rules; a Sigma rule runs on log samples (EVTX, JSON, text)", sample_row.file_name)));
+        }
+        let rule = lib::compile(&stored)?;
+        lib::run(&rule, &read_sample(&path)?)
+    };
     let test = db.with(|c| lib::record_test(c, rule_id, stored.version, sample_id, &result))?;
     Ok(TestOutcome { sample: sample_row, previous, test, result })
 }
@@ -346,9 +459,15 @@ pub async fn detection_feedback_add(db: State<'_, Db>, rule_id: i64, project_id:
 pub struct FileRun {
     pub evidence_id: i64,
     pub title: String,
+    /// the log kind when Sigma rules read it, otherwise "file"
     pub kind: String,
     pub events: usize,
+    /// YARA rules scanned the file
+    pub scanned: bool,
+    /// why nothing ran on the file
     pub error: Option<String>,
+    /// what did not run on it, and why
+    pub notes: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -370,8 +489,9 @@ pub struct ProjectRun {
     pub new_hits: usize,
 }
 
-/// Runs the enabled rules (of a collection when given) over log files in the project's evidence
-/// vault. Matches are stored as detection hits for review, never as findings.
+/// Runs the enabled rules (of a collection when given) over files in the project's evidence vault:
+/// Sigma rules over the logs, YARA rules over every file. Matches are stored as detection hits for
+/// review, never as findings.
 #[tauri::command]
 pub async fn detection_project_run(app: AppHandle, project_id: i64, evidence_ids: Vec<i64>, collection_id: Option<i64>) -> AppResult<ProjectRun> {
     if evidence_ids.is_empty() || evidence_ids.len() > 50 {
@@ -394,54 +514,106 @@ pub async fn detection_project_run(app: AppHandle, project_id: i64, evidence_ids
             Ok((records, lib::runnable(c, collection_id)?))
         })?;
         if rules.is_empty() {
-            return Err(validation("No enabled rule can run: import Sigma rules or enable them first"));
+            return Err(validation("No enabled rule can run: import Sigma or YARA rules, or enable them first"));
         }
-        let compiled: Vec<(lib::Stored, sigma::Rule)> = rules.into_iter().filter_map(|s| lib::compile(&s).ok().map(|r| (s, r))).collect();
+        let (sigma_rules, yara_rules): (Vec<lib::Stored>, Vec<lib::Stored>) = rules.into_iter().partition(|s| s.kind == "sigma");
+        let compiled: Vec<(lib::Stored, sigma::Rule)> = sigma_rules.into_iter().filter_map(|s| lib::compile(&s).ok().map(|r| (s, r))).collect();
+        let ylib = (!yara_rules.is_empty()).then(|| yara::library(&yara_rules.iter().map(|s| (s.id, s.content.as_str())).collect::<Vec<_>>()));
         let mut files = Vec::new();
-        let mut totals: Vec<RuleRun> = compiled.iter().map(|(s, _)| RuleRun { rule_id: s.id, title: s.title.clone(), matched: 0, new: 0, notes: vec![] }).collect();
-        for rec in &records {
-            let Some(path) = store.file_path(rec) else {
-                files.push(FileRun { evidence_id: rec.id, title: rec.title.clone(), kind: String::new(), events: 0, error: Some("the stored file is missing".into()) });
-                continue;
-            };
-            let sample = match read_sample(&path) {
-                Ok(s) => s,
-                Err(e) => {
-                    files.push(FileRun { evidence_id: rec.id, title: rec.title.clone(), kind: String::new(), events: 0, error: Some(e.to_string()) });
-                    continue;
-                }
-            };
-            files.push(FileRun { evidence_id: rec.id, title: rec.title.clone(), kind: kind_name(sample.kind).into(), events: sample.events.len(), error: None });
-            for (i, (s, rule)) in compiled.iter().enumerate() {
-                let r = lib::run(rule, &sample);
-                if r.matched == 0 {
-                    continue;
-                }
-                let (new, _) = db.with(|c| lib::hits_store(c, project_id, s, rec.id, &r.matches))?;
-                totals[i].matched += r.matched;
-                totals[i].new += new;
-                for n in r.notes {
-                    if !totals[i].notes.contains(&n) {
-                        totals[i].notes.push(n);
-                    }
+        let mut totals: Vec<RuleRun> = compiled.iter().map(|(s, _)| s).chain(yara_rules.iter()).map(|s| RuleRun { rule_id: s.id, title: s.title.clone(), matched: 0, new: 0, notes: vec![] }).collect();
+        let note = |t: &mut RuleRun, n: String| {
+            if !t.notes.contains(&n) {
+                t.notes.push(n);
+            }
+        };
+        if let Some(l) = &ylib {
+            for (id, why) in &l.failed {
+                if let Some(t) = totals.iter_mut().find(|t| t.rule_id == *id) {
+                    note(t, format!("Not run: {why}"));
                 }
             }
+        }
+        for rec in &records {
+            let Some(path) = store.file_path(rec) else {
+                files.push(FileRun { evidence_id: rec.id, title: rec.title.clone(), kind: String::new(), events: 0, scanned: false, error: Some("the stored file is missing".into()), notes: vec![] });
+                continue;
+            };
+            let mut file = FileRun { evidence_id: rec.id, title: rec.title.clone(), kind: String::new(), events: 0, scanned: false, error: None, notes: vec![] };
+            let mut problems = Vec::new();
+            if !compiled.is_empty() {
+                match read_sample(&path) {
+                    Ok(sample) => {
+                        file.kind = kind_name(sample.kind).into();
+                        file.events = sample.events.len();
+                        for (i, (s, rule)) in compiled.iter().enumerate() {
+                            let r = lib::run(rule, &sample);
+                            if r.matched == 0 {
+                                continue;
+                            }
+                            let (new, _) = db.with(|c| lib::hits_store(c, project_id, s, rec.id, &r.matches))?;
+                            totals[i].matched += r.matched;
+                            totals[i].new += new;
+                            for n in r.notes {
+                                note(&mut totals[i], n);
+                            }
+                        }
+                    }
+                    Err(e) => problems.push(format!("Sigma rules did not run: {e}")),
+                }
+            }
+            if let Some(l) = &ylib {
+                match read_bytes(&path, yara::MAX_SCAN_BYTES) {
+                    Ok(data) => {
+                        file.scanned = true;
+                        if file.kind.is_empty() {
+                            file.kind = "file".into();
+                        }
+                        let scan = yara::scan(&l.scanner, &data);
+                        if scan.timed_out {
+                            file.notes.push(format!("The YARA scan stopped after {} s: rules that would have matched later are missing", yara::SCAN_TIMEOUT.as_secs()));
+                        }
+                        let mut by_rule: std::collections::BTreeMap<i64, Vec<yara::RuleMatch>> = Default::default();
+                        for m in scan.matches {
+                            if let Some(id) = yara::namespace_id(&m.namespace).filter(|id| !l.failed.iter().any(|f| f.0 == *id)) {
+                                by_rule.entry(id).or_default().push(m);
+                            }
+                        }
+                        for (id, matches) in by_rule {
+                            let Some(s) = yara_rules.iter().find(|s| s.id == id) else { continue };
+                            let r = lib::yara_result(&yara::Scan { matches, timed_out: scan.timed_out, more: 0 }, &rec.title);
+                            let (new, _) = db.with(|c| lib::hits_store(c, project_id, s, rec.id, &r.matches))?;
+                            if let Some(t) = totals.iter_mut().find(|t| t.rule_id == id) {
+                                t.matched += r.matched;
+                                t.new += new;
+                            }
+                        }
+                    }
+                    Err(e) => problems.push(format!("YARA rules did not run: {e}")),
+                }
+            }
+            if file.kind.is_empty() {
+                file.error = Some(problems.join("; "));
+            } else {
+                file.notes.extend(problems);
+            }
+            files.push(file);
         }
         let results: Vec<RuleRun> = totals.into_iter().filter(|r| r.matched > 0).collect();
         let new_hits = results.iter().map(|r| r.new).sum();
         let read_files = files.iter().filter(|f| f.error.is_none()).count();
+        let rule_count = compiled.len() + yara_rules.len();
         let _ = db.with(|c| {
             timeline::record(
                 c,
                 project_id,
                 "detection",
-                &format!("Detection run: {} rules on {} file{}", compiled.len(), read_files, if read_files == 1 { "" } else { "s" }),
-                &format!("{} rules matched, {} new hits", results.len(), new_hits),
+                &format!("Detection run: {} rules on {} file{}", rule_count, read_files, if read_files == 1 { "" } else { "s" }),
+                &format!("{} rule{} matched, {} new hit{}", results.len(), if results.len() == 1 { "" } else { "s" }, new_hits, if new_hits == 1 { "" } else { "s" }),
                 None,
                 None,
             )
         });
-        Ok(ProjectRun { files, rules: compiled.len(), results, new_hits })
+        Ok(ProjectRun { files, rules: rule_count, results, new_hits })
     })
     .await
 }
@@ -461,6 +633,82 @@ pub async fn detection_hit_promote(db: State<'_, Db>, id: i64) -> AppResult<i64>
     db.with(|c| lib::hit_promote(c, id))
 }
 
+/* ───────────────────────── File Triage ───────────────────────── */
+
+/// A YARA rule that matched the triaged file, with the library file it comes from.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TriageMatch {
+    pub rule_id: i64,
+    pub title: String,
+    pub version: i64,
+    pub level: String,
+    pub techniques: Vec<String>,
+    pub rule: String,
+    pub tags: Vec<String>,
+    pub metas: Vec<(String, String)>,
+    pub strings: Vec<yara::StringHit>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TriageScan {
+    /// rule files run
+    pub files: usize,
+    pub matches: Vec<TriageMatch>,
+    /// rule files that did not compile: (title, why)
+    pub failed: Vec<(String, String)>,
+    pub notes: Vec<String>,
+}
+
+/// Scans the file File Triage analysed (named by its token) with the library's enabled YARA rules,
+/// of a collection when given. The file must still have the SHA-256 that was analysed. Nothing is
+/// recorded: a match becomes a finding only when the analyst records it.
+#[tauri::command]
+pub async fn yara_scan_file(app: AppHandle, token: String, collection_id: Option<i64>) -> AppResult<TriageScan> {
+    let (path, name, sha) = crate::commands::utility_record::picked(&app, &token)?;
+    let handle = app.clone();
+    blocking(move || {
+        let db = handle.state::<Db>();
+        let rules: Vec<lib::Stored> = db.with(|c| lib::runnable(c, collection_id))?.into_iter().filter(|s| s.kind == "yara").collect();
+        if rules.is_empty() {
+            return Err(validation(if collection_id.is_some() { "The collection has no enabled YARA rule that can run" } else { "No enabled YARA rule: import YARA rules in Detections first" }));
+        }
+        let data = read_bytes(&path, yara::MAX_SCAN_BYTES)?;
+        if let Some(expected) = &sha {
+            let actual: String = Sha256::digest(&data).iter().map(|b| format!("{b:02x}")).collect();
+            if &actual != expected {
+                return Err(validation("The file changed since it was analysed: analyse it again"));
+            }
+        }
+        let l = yara::library(&rules.iter().map(|s| (s.id, s.content.as_str())).collect::<Vec<_>>());
+        let scan = yara::scan(&l.scanner, &data);
+        let mut notes = Vec::new();
+        if scan.timed_out {
+            notes.push(format!("The scan stopped after {} s: rules that would have matched later are missing", yara::SCAN_TIMEOUT.as_secs()));
+        }
+        if scan.more > 0 {
+            notes.push(format!("{} more rules matched; the first {} are listed", scan.more, scan.matches.len()));
+        }
+        let matches: Vec<TriageMatch> = scan
+            .matches
+            .into_iter()
+            .filter_map(|m| {
+                let id = yara::namespace_id(&m.namespace)?;
+                if l.failed.iter().any(|f| f.0 == id) {
+                    return None;
+                }
+                let s = rules.iter().find(|s| s.id == id)?;
+                Some(TriageMatch { rule_id: id, title: s.title.clone(), version: s.version, level: s.level.clone(), techniques: s.techniques.clone(), rule: m.rule, tags: m.tags, metas: m.metas, strings: m.strings })
+            })
+            .collect();
+        let failed = l.failed.iter().map(|(id, why)| (rules.iter().find(|s| s.id == *id).map(|s| s.title.clone()).unwrap_or_default(), why.clone())).collect();
+        let _ = db.with(|c| crate::commands::activity::log(c, "scan", "YARA scan in File Triage", &format!("{name}: {} rule files, {} rules matched", rules.len(), matches.len()), None, None, None));
+        Ok(TriageScan { files: rules.len(), matches, failed, notes })
+    })
+    .await
+}
+
 /* ───────────────────────── export ───────────────────────── */
 
 fn file_name_for(title: &str) -> String {
@@ -473,12 +721,22 @@ fn file_name_for(title: &str) -> String {
     }
 }
 
-/// Saves a rule's current version as a .yml file through a native dialog.
+/// The file extension and dialog filter of a rule kind.
+fn export_format(kind: &str) -> (&'static str, &'static str) {
+    if kind == "yara" {
+        ("yar", "YARA rules")
+    } else {
+        ("yml", "Sigma rule")
+    }
+}
+
+/// Saves a rule's current version as a .yml (Sigma) or .yar (YARA) file through a native dialog.
 #[tauri::command]
 pub async fn detection_rule_export(app: AppHandle, id: i64) -> AppResult<Option<String>> {
     let s = app.state::<Db>().with(|c| lib::stored(c, id))?;
+    let (ext, label) = export_format(&s.kind);
     let (tx, rx) = tokio::sync::oneshot::channel();
-    main_window_dialog(&app, "Export a detection rule").set_file_name(format!("{}.yml", file_name_for(&s.title))).add_filter("Sigma rule", &["yml", "yaml"]).save_file(move |f| {
+    main_window_dialog(&app, "Export a detection rule").set_file_name(format!("{}.{ext}", file_name_for(&s.title))).add_filter(label, &[ext]).save_file(move |f| {
         let _ = tx.send(f.and_then(|f| f.into_path().ok()));
     });
     let Some(path) = rx.await.ok().flatten() else { return Ok(None) };
@@ -486,16 +744,16 @@ pub async fn detection_rule_export(app: AppHandle, id: i64) -> AppResult<Option<
     Ok(path.file_name().map(|n| n.to_string_lossy().to_string()))
 }
 
-/// Writes every Sigma rule of a collection as its own .yml file into a folder chosen in a native
-/// dialog; existing files are never overwritten.
+/// Writes every rule of a collection as its own file (.yml for Sigma, .yar for YARA) into a
+/// folder chosen in a native dialog; existing files are never overwritten.
 #[tauri::command]
 pub async fn detection_collection_export(app: AppHandle, id: i64) -> AppResult<Option<usize>> {
     let rules = app.state::<Db>().with(|c| {
-        let ids: Vec<i64> = c.prepare("SELECT r.id FROM detection_collection_rules cr JOIN detection_rules r ON r.id = cr.rule_id WHERE cr.collection_id = ?1 AND r.kind = 'sigma' ORDER BY r.title")?.query_map(params![id], |r| r.get(0))?.collect::<Result<_, _>>()?;
+        let ids: Vec<i64> = c.prepare("SELECT r.id FROM detection_collection_rules cr JOIN detection_rules r ON r.id = cr.rule_id WHERE cr.collection_id = ?1 ORDER BY r.title")?.query_map(params![id], |r| r.get(0))?.collect::<Result<_, _>>()?;
         ids.into_iter().map(|i| lib::stored(c, i)).collect::<AppResult<Vec<_>>>()
     })?;
     if rules.is_empty() {
-        return Err(validation("The collection has no Sigma rule"));
+        return Err(validation("The collection has no rule"));
     }
     let (tx, rx) = tokio::sync::oneshot::channel();
     main_window_dialog(&app, "Export the collection into a folder").pick_folder(move |f| {
@@ -506,10 +764,11 @@ pub async fn detection_collection_export(app: AppHandle, id: i64) -> AppResult<O
         let mut written = 0;
         for s in rules {
             let base = file_name_for(&s.title);
-            let mut path = dir.join(format!("{base}.yml"));
+            let (ext, _) = export_format(&s.kind);
+            let mut path = dir.join(format!("{base}.{ext}"));
             let mut n = 2;
             while path.exists() {
-                path = dir.join(format!("{base}-{n}.yml"));
+                path = dir.join(format!("{base}-{n}.{ext}"));
                 n += 1;
             }
             std::fs::OpenOptions::new().write(true).create_new(true).open(&path)?.write_all(s.content.as_bytes())?;
@@ -539,6 +798,15 @@ mod tests {
         assert_eq!(file_name_for("Encoded PowerShell / -enc"), "encoded_powershell___-enc");
         assert_eq!(file_name_for("../../etc/passwd"), "etc_passwd");
         assert_eq!(file_name_for("✓✓"), "rule");
+        assert_eq!(rule_kind("rules.YAR", ""), "yara");
+        assert_eq!(rule_kind("rules.yml", "rule X { condition: true }"), "sigma", "the extension decides");
+        assert_eq!(rule_kind("rules.txt", "private rule X { condition: true }"), "yara");
+        assert_eq!(rule_kind("rules.txt", "title: x\nlogsource: {}\n"), "sigma");
+        let bom = dir.join("bom.yar");
+        std::fs::write(&bom, b"\xEF\xBB\xBFrule X { condition: true }").unwrap();
+        assert!(read_limited(&bom, 1000).unwrap().starts_with("rule X"), "a byte-order mark is dropped");
+        assert!(read_bytes(&bom, 10).is_err(), "larger than the limit");
+        assert_eq!(read_bytes(&bom, 1000).unwrap().len(), 29, "the bytes as they are, mark included");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
