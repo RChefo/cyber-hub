@@ -3,7 +3,7 @@ import { ChevronDown, FileDown, FileUp, History, Link2, Pencil, Plus, ShieldAler
 import { useEffect, useMemo, useState } from "react";
 import { FINDING_STATUS_META, SeverityBadge, ToneChip } from "@/components/ui/Badges";
 import { AppModal, useConfirm } from "@/components/ui/Dialogs";
-import { EmptyBlock } from "@/components/ui/Feedback";
+import { EmptyBlock, ErrorBlock } from "@/components/ui/Feedback";
 import { SearchInput, SelectInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
 import { Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
@@ -258,7 +258,10 @@ function FindingDetailModal({ finding, onClose }: { finding: Finding | null; onC
     <AppModal isOpen={!!finding} onOpenChange={(o) => !o && onClose()} title={finding.title} description={`Recorded ${formatDateTime(finding.createdAt)} by ${finding.source}`} size="lg">
       <section>
         <h3 className="mb-1.5 text-[12.5px] font-medium text-muted">Linked records</h3>
-        {!links.data ? (
+        {/* a failed query says so, with a Retry, instead of loading forever (Mission 7) */}
+        {links.error && !links.data ? (
+          <ErrorBlock message={links.error} onRetry={links.reload} />
+        ) : !links.data ? (
           <LoadingRowsInline />
         ) : links.data.length === 0 ? (
           <p className="text-[12.5px] text-muted">None. Findings created from vulnerabilities or OSINT entities are linked automatically.</p>
@@ -279,7 +282,9 @@ function FindingDetailModal({ finding, onClose }: { finding: Finding | null; onC
       </section>
       <section>
         <h3 className="mb-1.5 text-[12.5px] font-medium text-muted">History</h3>
-        {!history.data ? (
+        {history.error && !history.data ? (
+          <ErrorBlock message={history.error} onRetry={history.reload} />
+        ) : !history.data ? (
           <LoadingRowsInline />
         ) : (
           <ol className="flex flex-col gap-1 text-[12.5px]">

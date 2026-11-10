@@ -190,8 +190,10 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
                 <span className="w-24 shrink-0 text-muted">{KIND_LABEL[e.kind]}</span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-foreground">{e.title}</div>
-                  <div className="truncate text-muted">
-                    {[e.fileName, formatSize(e.size), e.sha256 ? `SHA-256 ${e.sha256.slice(0, 16)}…` : null, formatRelative(e.createdAt)].filter(Boolean).join(" · ")}
+                  <div className="flex min-w-0 items-center gap-1 text-muted">
+                    <span className="truncate">{[e.fileName, formatSize(e.size), e.sha256 ? `SHA-256 ${e.sha256.slice(0, 16)}…` : null, formatRelative(e.createdAt)].filter(Boolean).join(" · ")}</span>
+                    {/* the whole hash, to compare or look up (Mission 7) */}
+                    {e.sha256 && <CopyButton text={e.sha256} label="Copy SHA-256" />}
                   </div>
                   {provenanceLine(e) && <div className="truncate text-[11.5px] text-muted">{provenanceLine(e)}</div>}
                 </div>
