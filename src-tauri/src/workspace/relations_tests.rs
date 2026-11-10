@@ -245,15 +245,23 @@ fn concurrent_correlation_and_review_keep_one_row_per_pair() {
                 }
             });
         }
+        // at least 20 rounds, and on until something was accepted: under load the correlation
+        // threads may not have suggested anything during the first rounds
         s.spawn(|| {
-            for _ in 0..20 {
-                db.with(|c| {
-                    for r in list(c, p, &Filter { review: Some("pending".into()), limit: Some(3), ..Default::default() })?.items {
-                        review(c, r.id, "accept", "", "user")?;
-                    }
-                    Ok(())
-                })
-                .unwrap();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            let (mut rounds, mut accepted) = (0, 0);
+            while rounds < 20 || (accepted == 0 && std::time::Instant::now() < deadline) {
+                accepted += db
+                    .with(|c| {
+                        let pending = list(c, p, &Filter { review: Some("pending".into()), limit: Some(3), ..Default::default() })?.items;
+                        for r in &pending {
+                            review(c, r.id, "accept", "", "user")?;
+                        }
+                        Ok(pending.len())
+                    })
+                    .unwrap();
+                rounds += 1;
+                std::thread::yield_now();
             }
         });
     });
