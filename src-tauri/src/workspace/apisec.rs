@@ -612,17 +612,17 @@ fn walk_postman(
         }
         let key = (method.clone(), path.clone());
         let e = found.entry(key).or_insert_with(|| Endpoint { method: method.clone(), path: path.clone(), summary: short(&text_of(item.get("name")), 200), ..Default::default() });
-        if !server.is_empty() && !e.servers.contains(&server) {
-            e.servers.push(server);
-        }
+        push_unique(&mut e.servers, server);
+        // at most MAX_FIELDS parameters per endpoint, as for HAR (Mission 6: a URL with tens of
+        // thousands of query names took a linear search per name)
         for q in query {
-            if !e.params.iter().any(|p| p.name == q && p.location == "query") {
+            if e.params.len() < MAX_FIELDS && !e.params.iter().any(|p| p.name == q && p.location == "query") {
                 e.params.push(Param { name: q, location: "query".into(), ..Default::default() });
             }
         }
         for seg in path.split('/').filter(|s| s.starts_with('{') && s.ends_with('}') && s.len() > 2) {
             let name = seg[1..seg.len() - 1].to_string();
-            if !e.params.iter().any(|p| p.name == name && p.location == "path") {
+            if e.params.len() < MAX_FIELDS && !e.params.iter().any(|p| p.name == name && p.location == "path") {
                 e.params.push(Param { name, location: "path".into(), required: true, ..Default::default() });
             }
         }
@@ -647,7 +647,7 @@ fn walk_postman(
         }
         if alternative.is_empty() {
             e.anonymous = true;
-        } else if !e.auth.contains(&alternative) {
+        } else if e.auth.len() < MAX_FIELDS && !e.auth.contains(&alternative) {
             e.auth.push(alternative);
         }
         if let Some(body) = req.get("body") {
@@ -663,7 +663,7 @@ fn walk_postman(
                     push_unique(&mut e.body_types, if mode == "urlencoded" { "application/x-www-form-urlencoded".into() } else { "multipart/form-data".into() });
                     for f in body.get(mode).and_then(Value::as_array).into_iter().flatten() {
                         let n = text_of(f.get("key"));
-                        if !n.is_empty() && !e.params.iter().any(|p| p.name == n && p.location == "form") {
+                        if !n.is_empty() && e.params.len() < MAX_FIELDS && !e.params.iter().any(|p| p.name == n && p.location == "form") {
                             e.params.push(Param { name: n, location: "form".into(), ..Default::default() });
                         }
                     }
@@ -675,8 +675,10 @@ fn walk_postman(
     }
 }
 
+/// Adds `s` once, keeping at most MAX_FIELDS values (servers, body fields, media types,
+/// responses of one endpoint), so each check stays a short search.
 fn push_unique(v: &mut Vec<String>, s: String) {
-    if !s.is_empty() && !v.contains(&s) {
+    if !s.is_empty() && v.len() < MAX_FIELDS && !v.contains(&s) {
         v.push(s);
     }
 }
@@ -882,7 +884,7 @@ fn har(root: &Value) -> ApiSpec {
         }
         if alternative.is_empty() {
             e.anonymous = true;
-        } else if !e.auth.contains(&alternative) {
+        } else if e.auth.len() < MAX_FIELDS && !e.auth.contains(&alternative) {
             e.auth.push(alternative);
         }
         let status = text_of(entry.pointer("/response/status"));

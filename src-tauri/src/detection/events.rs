@@ -3,6 +3,7 @@
 //! Everything is read locally and bounded: at most [`MAX_EVENTS`] events per sample, and long
 //! values are cut.
 
+use std::collections::HashSet;
 use std::io::{BufRead, Read};
 
 use serde::Serialize;
@@ -36,6 +37,12 @@ impl Event {
     }
     fn push(&mut self, k: String, v: String) {
         if self.fields.len() < MAX_FIELDS && !self.fields.iter().any(|(x, _)| x.eq_ignore_ascii_case(&k)) {
+            self.fields.push((k, cut(v)));
+        }
+    }
+    /// [`Event::push`] for a key the caller already knows is new (it keeps its own set).
+    fn push_new(&mut self, k: String, v: String) {
+        if self.fields.len() < MAX_FIELDS {
             self.fields.push((k, cut(v)));
         }
     }
@@ -251,29 +258,42 @@ fn event_of(v: &Value, position: String) -> Event {
     let mut flat: Vec<(String, String)> = Vec::new();
     flatten("", v, &mut flat, 0);
     let mut ev = Event { position, ..Default::default() };
-    for k in ["@timestamp", "timestamp", "TimeCreated", "time", "eventTime", "UtcTime"] {
-        if let Some((_, t)) = flat.iter().find(|(f, _)| f.eq_ignore_ascii_case(k) || f.to_ascii_lowercase().ends_with(&format!(".{}", k.to_ascii_lowercase()))) {
-            ev.time = t.clone();
+    // every key lowercased once (Mission 6: the lookups below lowercased and formatted strings
+    // for each pair of fields, and searched lists linearly)
+    let lower: Vec<String> = flat.iter().map(|(f, _)| f.to_ascii_lowercase()).collect();
+    for k in ["@timestamp", "timestamp", "timecreated", "time", "eventtime", "utctime"] {
+        let suffix = format!(".{k}");
+        if let Some(i) = lower.iter().position(|f| f == k || f.ends_with(&suffix)) {
+            ev.time = flat[i].1.clone();
             break;
         }
     }
     // leaf names, unless ambiguous
     let mut leaf: Vec<(String, String)> = Vec::new();
-    let mut ambiguous: Vec<String> = Vec::new();
+    let mut leaf_names: HashSet<String> = HashSet::new();
+    let mut ambiguous: HashSet<String> = HashSet::new();
     for (k, val) in &flat {
         if let Some((_, name)) = k.rsplit_once('.') {
-            if leaf.iter().any(|(l, _)| l.eq_ignore_ascii_case(name)) {
-                ambiguous.push(name.to_ascii_lowercase());
+            let low = name.to_ascii_lowercase();
+            if leaf_names.contains(&low) {
+                ambiguous.insert(low);
             } else {
+                leaf_names.insert(low);
                 leaf.push((name.to_string(), val.clone()));
             }
         }
     }
-    for (k, val) in flat.iter().cloned() {
-        ev.push(k, val);
+    let mut seen: HashSet<String> = HashSet::new();
+    for (i, (k, val)) in flat.iter().enumerate() {
+        if seen.insert(lower[i].clone()) {
+            ev.push_new(k.clone(), val.clone());
+        }
     }
-    for (k, val) in leaf.into_iter().filter(|(k, _)| !ambiguous.contains(&k.to_ascii_lowercase())) {
-        ev.push(k, val);
+    for (k, val) in leaf {
+        let low = k.to_ascii_lowercase();
+        if !ambiguous.contains(&low) && seen.insert(low) {
+            ev.push_new(k, val);
+        }
     }
     ev
 }

@@ -252,15 +252,41 @@ mod ocsf;
 
 /* ───────────────────────── helpers ───────────────────────── */
 
-/// At most `max` characters, cut on a character boundary, with an ellipsis when cut.
+/// At most `max` characters, cut on a character boundary, with an ellipsis when cut. Only the
+/// first `max` characters are looked at, so a long value costs no more than a short one.
 pub fn trunc(s: &str, max: usize) -> String {
     let s = s.trim();
-    if s.chars().count() <= max {
+    if s.char_indices().nth(max).is_none() {
         return s.to_string();
     }
-    let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
+    let cut = s.char_indices().nth(max.saturating_sub(1)).map_or(s.len(), |(i, _)| i);
+    let mut out = s[..cut].to_string();
     out.push('…');
     out
+}
+
+/// The longest prefix of `s` of at most `max` bytes that ends on a character boundary.
+fn cut_at(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        return s;
+    }
+    let mut i = max;
+    while !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    &s[..i]
+}
+
+/// The longest host name DNS allows (RFC 1035); IP addresses are shorter.
+pub const MAX_HOST: usize = 253;
+
+/// A host as a scanner reported it, or None when it cannot be one: blank, or longer than any host
+/// name can be. Such a value is never copied into the findings that name it: they stay without a
+/// host, and the import reports them as outside the scope, as it always has for findings without
+/// a usable host (Mission 6: one long `ReportHost` name was copied into every finding of a
+/// .nessus file, gigabytes from a small file).
+fn usable_host(s: &str) -> Option<String> {
+    (!s.trim().is_empty() && s.len() <= MAX_HOST).then(|| s.to_string())
 }
 
 /// Plain text from the small HTML fragments scanners write (ZAP, Burp): tags dropped, block ends
@@ -347,7 +373,7 @@ fn severity_word(s: &str) -> &'static str {
     }
 }
 
-fn fingerprint(parts: &[&str]) -> String {
+pub(crate) fn fingerprint(parts: &[&str]) -> String {
     let mut h = Sha256::new();
     for p in parts {
         h.update(p.trim().to_lowercase().as_bytes());
@@ -463,11 +489,11 @@ pub fn detect(text: &str) -> Result<Format, String> {
             if v.get("site").is_some() && (v.get("@programName").is_some() || v.get("@version").is_some() || v["site"].is_array()) {
                 return Ok(Format::Zap);
             }
-            let first = if v.is_array() { v.get(0).cloned().unwrap_or(Value::Null) } else { v.clone() };
+            let first: &Value = if v.is_array() { v.get(0).unwrap_or(&Value::Null) } else { &v };
             if first.get("template-id").is_some() || first.get("templateID").is_some() {
                 return Ok(Format::Nuclei);
             }
-            if ocsf::finding_class(&first).is_some() {
+            if ocsf::finding_class(first).is_some() {
                 return Ok(Format::Ocsf);
             }
             if v.as_array().is_some_and(|a| a.is_empty()) {
@@ -596,7 +622,7 @@ fn element(e: &quick_xml::events::BytesStart) -> El {
     let mut attrs = BTreeMap::new();
     for a in e.attributes().flatten() {
         let k = a.key.local_name().into_inner().to_string();
-        let v = a.normalized_value(quick_xml::XmlVersion::default()).map(|v| v.to_string()).unwrap_or_default();
+        let v = a.normalized_value(quick_xml::XmlVersion::default()).map(|v| cut_at(&v, MAX_ELEMENT_TEXT).to_string()).unwrap_or_default();
         attrs.insert(k, v);
     }
     El { name: e.local_name().into_inner().to_string(), attrs, text: String::new() }
@@ -604,8 +630,9 @@ fn element(e: &quick_xml::events::BytesStart) -> El {
 
 fn push_text(stack: &mut [El], t: &str) {
     if let Some(el) = stack.last_mut() {
-        if el.text.len() < MAX_ELEMENT_TEXT {
-            el.text.push_str(t);
+        let room = MAX_ELEMENT_TEXT.saturating_sub(el.text.len());
+        if room > 0 {
+            el.text.push_str(cut_at(t, room));
         }
     }
 }
@@ -876,13 +903,19 @@ fn parse_nessus(text: &str) -> Parsed {
     // walk_xml only warns when the document broke off or nested too deeply
     p.incomplete |= !warnings.is_empty();
     p.warnings.extend(warnings);
+    let mut hostless = 0usize;
     for (h, items) in done {
-        let ip = h.props.get("host-ip").cloned().filter(|x| !x.is_empty()).unwrap_or_else(|| h.name.clone());
-        let fqdn = h.props.get("host-fqdn").cloned().filter(|x| !x.is_empty()).or_else(|| (crate::osint::normalize::ip(&h.name).is_err()).then(|| h.name.clone()));
+        let name = usable_host(&h.name);
+        let ip = h.props.get("host-ip").and_then(|x| usable_host(x)).or_else(|| name.clone()).unwrap_or_default();
+        let fqdn = h.props.get("host-fqdn").and_then(|x| usable_host(x)).or_else(|| name.clone().filter(|n| crate::osint::normalize::ip(n).is_err()));
         let is_ip = crate::osint::normalize::ip(&ip).is_ok();
-        let scope_host = ip.clone();
+        // findings without a usable host are outside any scope (see `usable_host`)
+        let scope_host = (!ip.is_empty()).then(|| ip.clone());
+        if scope_host.is_none() && !h.name.trim().is_empty() {
+            hostless += items.len();
+        }
         if is_ip {
-            p.push_asset("ip", &ip, &scope_host, json!({ "names": fqdn.iter().collect::<Vec<_>>() }));
+            p.push_asset("ip", &ip, &ip, json!({ "names": fqdn.iter().collect::<Vec<_>>() }));
         }
         if let Some(n) = fqdn.as_ref() {
             p.push_asset("name", n, n, json!({ "addresses": if is_ip { json!([ip]) } else { json!([]) } }));
@@ -895,9 +928,9 @@ fn parse_nessus(text: &str) -> Parsed {
             let plugin = get("pluginID");
             let svc = (port > 0 && is_ip).then(|| format!("{}:{port}/{proto}", bracket(&ip)));
             if let Some(svc) = svc.as_ref() {
-                p.push_asset("service", svc, &scope_host, json!({ "service": get("svc_name"), "names": fqdn.iter().collect::<Vec<_>>() }));
+                p.push_asset("service", svc, &ip, json!({ "service": get("svc_name"), "names": fqdn.iter().collect::<Vec<_>>() }));
             }
-            let shown_host = fqdn.clone().filter(|_| !is_ip).unwrap_or_else(|| ip.clone());
+            let shown_host = fqdn.clone().filter(|_| !is_ip).unwrap_or_else(|| if ip.is_empty() { "(no usable host)".into() } else { ip.clone() });
             let target = if port > 0 { format!("{}:{port}/{proto}", bracket(&shown_host)) } else { shown_host.clone() };
             let synopsis = field("synopsis");
             let desc = field("description");
@@ -923,7 +956,7 @@ fn parse_nessus(text: &str) -> Parsed {
                 confidence: "medium",
                 asset: svc.clone().map(|s| ("service", s)).or_else(|| is_ip.then(|| ("ip", ip.clone()))),
                 target: trunc(&target, 500),
-                host: Some(scope_host.clone()),
+                host: scope_host.clone(),
                 description: trunc(&description, 50_000),
                 remediation: if solution.eq_ignore_ascii_case("n/a") { String::new() } else { trunc(&solution, 50_000) },
                 technical: trunc(&redact_text(technical.trim()), 50_000),
@@ -936,6 +969,9 @@ fn parse_nessus(text: &str) -> Parsed {
                 network: true,
             });
         }
+    }
+    if hostless > 0 {
+        p.warnings.push(format!("{hostless} findings name a host longer than {MAX_HOST} characters, which is not a host name or address; they are kept without a host and count as outside the scope"));
     }
     p
 }
@@ -1008,12 +1044,12 @@ fn parse_burp(text: &str) -> Parsed {
         let host_url = get("host");
         let path = get("path");
         let location = get("location");
-        let host = host_of(&host_url);
-        let origin = origin_of(&host_url);
+        let host = host_of(&host_url).filter(|h| h.len() <= MAX_HOST);
+        let origin = host.as_ref().and_then(|_| origin_of(&host_url));
         if let (Some(o), Some(h)) = (origin.as_ref(), host.as_ref()) {
             p.push_asset("http_service", o, h, json!({ "sources": ["burp"] }));
         }
-        if !ip.is_empty() {
+        if usable_host(&ip).is_some() {
             if let Some(h) = host.as_ref() {
                 p.push_asset("ip", &ip, &ip, json!({ "names": [h] }));
             }
@@ -1212,18 +1248,56 @@ fn sarif_level(level: &str) -> &'static str {
     }
 }
 
+/// What a SARIF rule gives each of its results, read once per rule (Mission 6: the texts were
+/// copied and the help URL redacted again for every result, minutes for a rule with long texts).
+struct SarifRule {
+    /// short description or name, at most 200 characters (None when both are empty)
+    title: Option<String>,
+    /// full description or help text, at most 2,000 characters
+    text: String,
+    score: Option<f64>,
+    default_level: String,
+    cwe: Option<String>,
+    /// the first tags that are not `external/…`
+    tags: Vec<String>,
+    /// the help URL, redacted and cut as a reference is stored
+    help: Option<String>,
+    confidence: &'static str,
+}
+
+fn sarif_rule(r: &Value) -> SarifRule {
+    let short = trunc(&{ let t = s(&r["shortDescription"], "text"); if t.is_empty() { s(r, "name") } else { t } }, 200);
+    let tags = strings(r["properties"].get("tags"));
+    SarifRule {
+        title: (!short.is_empty()).then_some(short),
+        text: trunc(&{ let t = s(&r["fullDescription"], "text"); if t.is_empty() { s(&r["help"], "text") } else { t } }, 2_000),
+        score: r["properties"].get("security-severity").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|t| t.parse().ok()))),
+        default_level: trunc(&s(&r["defaultConfiguration"], "level"), 40),
+        cwe: tags.iter().find_map(|t| t.to_lowercase().strip_prefix("external/cwe/cwe-").map(|n| format!("CWE-{}", trunc(n, 20)))),
+        tags: tags.into_iter().filter(|t| !t.starts_with("external/")).take(4).map(|t| trunc(&t, 40)).collect(),
+        help: Some(s(r, "helpUri")).filter(|u| u.starts_with("http")).map(|u| clean_text(&redact_text(&u), 2_000)),
+        confidence: match s(&r["properties"], "precision").as_str() {
+            "very-high" | "high" => "high",
+            "low" => "low",
+            _ => "medium",
+        },
+    }
+}
+
 fn parse_sarif(text: &str) -> Result<Parsed, String> {
     let v: Value = serde_json::from_str(text).map_err(|e| format!("The SARIF file is not valid JSON: {e}"))?;
-    let runs = v.get("runs").and_then(Value::as_array).cloned().unwrap_or_default();
-    let tool = runs.first().map(|r| s(&r["tool"]["driver"], "name")).filter(|n| !n.is_empty()).unwrap_or_else(|| "SARIF".into());
+    let runs: &[Value] = v.get("runs").and_then(Value::as_array).map_or(&[], Vec::as_slice);
+    // the tool name is part of every result's fingerprint and tags: read once, bounded
+    let tool = runs.first().map(|r| trunc(&s(&r["tool"]["driver"], "name"), 200)).filter(|n| !n.is_empty()).unwrap_or_else(|| "SARIF".into());
     let mut p = Parsed::new(Format::Sarif, &trunc(&tool, 60));
     let mut skipped_kinds = 0usize;
     let mut skipped_suppressed = 0usize;
-    for run in &runs {
+    for run in runs {
         let driver = &run["tool"]["driver"];
-        let run_tool = { let n = s(driver, "name"); if n.is_empty() { tool.clone() } else { n } };
-        let rules: Vec<Value> = driver.get("rules").and_then(Value::as_array).cloned().unwrap_or_default();
-        let rule_by_id: BTreeMap<String, &Value> = rules.iter().map(|r| (s(r, "id"), r)).collect();
+        let run_tool = { let n = trunc(&s(driver, "name"), 200); if n.is_empty() { tool.clone() } else { n } };
+        let rules: Vec<SarifRule> = driver.get("rules").and_then(Value::as_array).map_or(&[][..], Vec::as_slice).iter().map(sarif_rule).collect();
+        let rule_ids: Vec<String> = driver.get("rules").and_then(Value::as_array).map_or(&[][..], Vec::as_slice).iter().map(|r| s(r, "id")).collect();
+        let rule_by_id: BTreeMap<&str, usize> = rule_ids.iter().enumerate().map(|(i, id)| (id.as_str(), i)).collect();
         for res in run.get("results").and_then(Value::as_array).into_iter().flatten() {
             // SARIF 2.1.0 §3.27.9: `pass` and `notApplicable` are not problems; other kinds
             // than `fail` (the default) carry no severity
@@ -1241,8 +1315,14 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
                 skipped_suppressed += 1;
                 continue;
             }
+            // past the limit, results are only counted
+            if p.findings.len() >= MAX_FINDINGS {
+                p.truncated += 1;
+                p.incomplete = true;
+                continue;
+            }
             let rule_id = { let r = s(res, "ruleId"); if r.is_empty() { res.get("rule").map(|x| s(x, "id")).unwrap_or_default() } else { r } };
-            let rule = res.get("ruleIndex").and_then(Value::as_u64).and_then(|i| rules.get(i as usize)).or_else(|| rule_by_id.get(&rule_id).copied());
+            let rule = res.get("ruleIndex").and_then(Value::as_u64).and_then(|i| rules.get(i as usize)).or_else(|| rule_by_id.get(rule_id.as_str()).map(|i| &rules[*i]));
             let message = s(&res["message"], "text");
             let loc = &res["locations"][0]["physicalLocation"];
             let uri = s(&loc["artifactLocation"], "uri");
@@ -1252,35 +1332,30 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
                 (false, Some(l)) => format!("{uri}:{l}"),
                 (false, None) => uri.clone(),
             };
-            let score = rule.and_then(|r| r["properties"].get("security-severity")).and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|t| t.parse().ok())));
-            let level = { let l = s(res, "level"); if l.is_empty() { rule.map(|r| s(&r["defaultConfiguration"], "level")).unwrap_or_default() } else { l } };
+            let score = rule.and_then(|r| r.score);
+            let level = { let l = s(res, "level"); if l.is_empty() { rule.map(|r| r.default_level.clone()).unwrap_or_default() } else { l } };
             let severity = if !kind.is_empty() && kind != "fail" {
                 "info"
             } else {
                 score.map(security_severity).unwrap_or_else(|| sarif_level(if level.is_empty() { "warning" } else { &level }))
             };
-            let title = rule.map(|r| { let t = s(&r["shortDescription"], "text"); if t.is_empty() { s(r, "name") } else { t } }).filter(|t| !t.is_empty()).unwrap_or_else(|| if rule_id.is_empty() { trunc(&message, 120) } else { rule_id.clone() });
+            let title = rule.and_then(|r| r.title.clone()).unwrap_or_else(|| if rule_id.is_empty() { trunc(&message, 120) } else { rule_id.clone() });
             // the rule's text repeats for each of its results: capped so a small file cannot expand to gigabytes
-            let rule_text = trunc(&rule.map(|r| { let t = s(&r["fullDescription"], "text"); if t.is_empty() { s(&r["help"], "text") } else { t } }).unwrap_or_default(), 2_000);
+            let rule_text = rule.map(|r| r.text.clone()).unwrap_or_default();
             // DAST tools write URLs as locations: those are network targets and are scope-checked
             let url_location = uri.contains("://");
             let description = [message.as_str(), rule_text.as_str()].iter().filter(|x| !x.is_empty()).copied().collect::<Vec<_>>().join("\n\n");
             let partial = res.get("partialFingerprints").or_else(|| res.get("fingerprints")).and_then(Value::as_object).and_then(|m| m.values().next()).and_then(Value::as_str).unwrap_or("").to_string();
             let line_s = line.map(|l| l.to_string()).unwrap_or_default();
             let fp = if partial.is_empty() { fingerprint(&["sarif", &run_tool, &rule_id, &uri, &line_s]) } else { fingerprint(&["sarif", &run_tool, &rule_id, &uri, &partial]) };
-            let tags: Vec<String> = rule.map(|r| strings(r["properties"].get("tags"))).unwrap_or_default();
-            let cwe = tags.iter().find_map(|t| t.to_lowercase().strip_prefix("external/cwe/cwe-").map(|n| format!("CWE-{n}")));
-            let help_uri = rule.map(|r| s(r, "helpUri")).filter(|u| u.starts_with("http"));
+            let cwe = rule.and_then(|r| r.cwe.clone());
+            let help_uri = rule.and_then(|r| r.help.clone());
             let snippet = s(&loc["region"]["snippet"], "text");
             p.push_finding(ImportedFinding {
                 rule_id: rule_id.clone(),
                 title: trunc(&title, 200),
                 severity,
-                confidence: match rule.map(|r| s(&r["properties"], "precision")).as_deref() {
-                    Some("very-high") | Some("high") => "high",
-                    Some("low") => "low",
-                    _ => "medium",
-                },
+                confidence: rule.map_or("medium", |r| r.confidence),
                 asset: None,
                 target: trunc(&target, 500),
                 host: if url_location { host_of(&uri) } else { None },
@@ -1290,7 +1365,7 @@ fn parse_sarif(text: &str) -> Result<Parsed, String> {
                 references: help_uri.into_iter().collect(),
                 cve: String::new(),
                 category: trunc(&cwe.unwrap_or_default(), 100),
-                tags: tool_tags(&run_tool, tags.into_iter().filter(|t| !t.starts_with("external/")).take(4)),
+                tags: tool_tags(&run_tool, rule.map(|r| r.tags.clone()).unwrap_or_default()),
                 cvss: String::new(),
                 fingerprint: fp,
                 network: url_location,
@@ -1380,7 +1455,7 @@ fn parse_openvas(text: &str) -> Parsed {
     // walk_xml only warns when the document broke off or nested too deeply
     p.incomplete |= !warnings.is_empty();
     p.warnings.extend(warnings);
-    let (mut low_qod, mut debug) = (0usize, 0usize);
+    let (mut low_qod, mut debug, mut hostless) = (0usize, 0usize, 0usize);
     for r in results {
         let get = |k: &str| r.get(k).cloned().unwrap_or_default();
         let threat = get("threat");
@@ -1405,11 +1480,12 @@ fn parse_openvas(text: &str) -> Parsed {
             low_qod += 1;
             continue;
         }
-        let host = get("host");
-        if host.is_empty() {
+        let raw_host = get("host");
+        let Some(host) = usable_host(&raw_host) else {
+            hostless += usize::from(!raw_host.is_empty());
             continue;
-        }
-        let hostname = get("hostname");
+        };
+        let hostname = usable_host(&get("hostname")).unwrap_or_default();
         let port = get("port");
         let (number, proto) = port.split_once('/').map(|(n, pr)| (n.parse::<u16>().ok(), pr.to_string())).unwrap_or((None, String::new()));
         let is_ip = crate::osint::normalize::ip(&host).is_ok();
@@ -1472,6 +1548,9 @@ fn parse_openvas(text: &str) -> Parsed {
     }
     if low_qod > 0 {
         p.warnings.push(format!("{low_qod} results with a quality of detection below {MIN_QOD}% were not read (Greenbone hides them by default)"));
+    }
+    if hostless > 0 {
+        p.warnings.push(format!("{hostless} results name a host longer than {MAX_HOST} characters, which is not a host name or address; they were not read"));
     }
     if debug > 0 {
         p.warnings.push(format!("{debug} debug results were not read"));

@@ -33,10 +33,13 @@ const MAX_EXTRACTED: usize = 500;
 /// Indicators found in free text (no relationships: their meaning is unknown).
 pub fn extract(text: &str) -> Vec<(EntityType, String)> {
     let mut out: Vec<(EntityType, String)> = vec![];
+    // the normalized keys kept so far: each candidate is normalized once (Mission 6: every
+    // candidate normalized all the kept ones again)
+    let mut keys: std::collections::HashSet<(EntityType, String)> = std::collections::HashSet::new();
     let mut push = |t: EntityType, v: &str| {
         if out.len() < MAX_EXTRACTED {
             if let Ok(n) = normalize::normalize(t, v) {
-                if !out.iter().any(|(ot, ov)| *ot == t && normalize::normalize(*ot, ov).map(|x| x.key) == Ok(n.key.clone())) {
+                if keys.insert((t, n.key)) {
                     out.push((t, v.to_string()));
                 }
             }
@@ -66,7 +69,12 @@ pub fn extract(text: &str) -> Vec<(EntityType, String)> {
         }
     }
     for m in DOMAIN_RE.find_iter(text) {
-        let inside = |spans: &[std::ops::Range<usize>]| spans.iter().any(|s| s.start <= m.start() && m.end() <= s.end);
+        // spans come in order and do not overlap: the one that could hold the match is found by
+        // binary search (a scan of every URL per domain was quadratic in long tool output)
+        let inside = |spans: &[std::ops::Range<usize>]| {
+            let i = spans.partition_point(|s| s.start <= m.start());
+            i > 0 && m.end() <= spans[i - 1].end
+        };
         if inside(&url_spans) || inside(&email_spans) {
             continue;
         }

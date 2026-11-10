@@ -36,6 +36,26 @@ export function parseRawHeaders(raw: string): { status?: string; headers: Header
 
 const get = (h: HeaderList, name: string) => h.filter(([k]) => k.toLowerCase() === name).map(([, v]) => v);
 
+/** Script directives whose sources decide what scripts may run (CSP Level 3). */
+const SCRIPT_DIRECTIVES = new Set(["default-src", "script-src", "script-src-elem", "script-src-attr"]);
+
+/**
+ * Whether a script directive (or default-src) allows any origin (`*`), a whole scheme (`http:`,
+ * `https:`) or `data:` URLs. Each directive is read once, so the time is linear in the policy's
+ * length: a regex with a backtracking `[^;]*` took seconds on a long policy a server could send.
+ */
+export function weakScriptSources(csp: string): boolean {
+  for (const directive of csp.split(";")) {
+    const [name = "", ...sources] = directive.trim().split(/\s+/);
+    if (!SCRIPT_DIRECTIVES.has(name.toLowerCase())) continue;
+    for (const src of sources) {
+      const s = src.toLowerCase();
+      if (s === "*" || s === "http:" || s === "https:" || s.startsWith("data:")) return true;
+    }
+  }
+  return false;
+}
+
 export function analyzeHeaders(headers: HeaderList, opts: { https?: boolean } = {}): HeaderCheck[] {
   const checks: HeaderCheck[] = [];
   const one = (n: string) => get(headers, n)[0];
@@ -67,7 +87,7 @@ export function analyzeHeaders(headers: HeaderList, opts: { https?: boolean } = 
     const issues: string[] = [];
     if (/'unsafe-inline'/i.test(csp) && !/'nonce-|'sha(256|384|512)-|'strict-dynamic'/i.test(csp)) issues.push("'unsafe-inline' without nonces or hashes");
     if (/'unsafe-eval'/i.test(csp)) issues.push("'unsafe-eval' allows eval()");
-    if (/(script-src|default-src)[^;]*(\s\*(\s|;|$)|\shttps?:(\s|;|$)|\sdata:)/i.test(csp)) issues.push("script sources allow wildcard, scheme-only or data: origins");
+    if (weakScriptSources(csp)) issues.push("script sources allow wildcard, scheme-only or data: origins");
     if (!/default-src|script-src/i.test(csp)) issues.push("no default-src or script-src");
     if (!/object-src\s+'none'/i.test(csp) && !/default-src\s+'none'/i.test(csp)) issues.push("object-src is not 'none'");
     checks.push({ id: "csp", title: "Content-Security-Policy", level: issues.length ? "warn" : "pass", value: csp, detail: issues.length ? `Weaknesses: ${issues.join("; ")}.` : "Present with no common weaknesses detected." });

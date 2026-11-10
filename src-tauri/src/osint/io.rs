@@ -683,29 +683,45 @@ pub fn apply(c: &Connection, doc: &Document, into: Option<i64>, graph_name: &str
         }
     };
     // evidence groups: each evidence record becomes one observation with the entities and
-    // relationships it supports; elements without evidence share one "import" evidence
+    // relationships it supports; elements without evidence share one "import" evidence. An id
+    // that names no record joins that group too: it was a group of its own with the same
+    // synthetic evidence, one full ingest per listed id (Mission 6). Each element joins each
+    // group once, however often the file lists the id.
     let entity_idx: HashMap<&str, &XEntity> = doc.entities.iter().map(|e| (e.id.as_str(), e)).collect();
+    let evidence_idx: HashMap<&str, &XEvidence> = doc.evidence.iter().map(|e| (e.id.as_str(), e)).collect();
     type Group<'a> = (Vec<&'a XEntity>, Vec<(&'a XRelationship, Strength)>);
     let mut by_evidence: BTreeMap<String, Group> = BTreeMap::new();
     let import_key = "\u{0}import".to_string();
+    let group_of = |id: &str| if evidence_idx.contains_key(id) { id.to_string() } else { import_key.clone() };
     for e in &doc.entities {
+        let mut keys: HashSet<String> = HashSet::new();
         if e.evidence.is_empty() {
-            by_evidence.entry(import_key.clone()).or_default().0.push(e);
+            keys.insert(import_key.clone());
         }
         for ev in &e.evidence {
-            by_evidence.entry(ev.clone()).or_default().0.push(e);
+            let k = group_of(ev);
+            if keys.insert(k.clone()) {
+                by_evidence.entry(k).or_default().0.push(e);
+            }
+        }
+        if e.evidence.is_empty() {
+            by_evidence.entry(import_key.clone()).or_default().0.push(e);
         }
     }
     for r in &doc.relationships {
         if r.evidence.is_empty() {
             by_evidence.entry(import_key.clone()).or_default().1.push((r, Strength::Corroborating));
         }
+        let mut keys: HashSet<String> = HashSet::new();
         for (ev, st) in &r.evidence {
-            by_evidence.entry(ev.clone()).or_default().1.push((r, Strength::parse(st).unwrap_or(Strength::Corroborating)));
+            let k = group_of(ev);
+            if keys.insert(k.clone()) {
+                by_evidence.entry(k).or_default().1.push((r, Strength::parse(st).unwrap_or(Strength::Corroborating)));
+            }
         }
     }
-    let evidence_idx: HashMap<&str, &XEvidence> = doc.evidence.iter().map(|e| (e.id.as_str(), e)).collect();
     let mut new_ids: HashMap<String, i64> = HashMap::new();
+    let mut deferred = ingest::Deferred::default();
     for (key, (ents, rels)) in by_evidence {
         let evidence = match evidence_idx.get(key.as_str()) {
             Some(e) => EvidenceInput {
@@ -721,12 +737,18 @@ pub fn apply(c: &Connection, doc: &Document, into: Option<i64>, graph_name: &str
             },
             None => EvidenceInput { kind: "import".into(), source: "import".into(), reference: None, observed_at: None, summary: format!("Imported from {file_label} without recorded evidence"), data: json!({}), strength: Strength::Corroborating, operation_id: None, execution_id: None },
         };
-        // entities of this group plus relationship endpoints
-        let mut local: Vec<&XEntity> = ents.clone();
+        // entities of this group plus relationship endpoints (each once, found through a set)
+        let mut local: Vec<&XEntity> = Vec::with_capacity(ents.len());
+        let mut in_local: HashSet<&str> = HashSet::new();
+        for e in ents.iter().copied() {
+            if in_local.insert(e.id.as_str()) {
+                local.push(e);
+            }
+        }
         for (r, _) in &rels {
             for id in [&r.source, &r.target] {
                 if let Some(e) = entity_idx.get(id.as_str()) {
-                    if !local.iter().any(|x| x.id == e.id) {
+                    if in_local.insert(e.id.as_str()) {
                         local.push(e);
                     }
                 }
@@ -758,7 +780,7 @@ pub fn apply(c: &Connection, doc: &Document, into: Option<i64>, graph_name: &str
                 Some(RelationshipInput { source: s, target: t, rel_type: r.rel_type.clone(), strength: *st, origin: if inferred { Origin::Inferred } else { Origin::Observed }, metadata })
             })
             .collect();
-        let summary = ingest::ingest(c, inv, &Observation { evidence, entities: inputs, relationships })?;
+        let summary = ingest::ingest_deferred(c, inv, &Observation { evidence, entities: inputs, relationships }, &mut deferred)?;
         let _ = summary;
         // map file ids → database ids
         for e in &local {
@@ -771,6 +793,7 @@ pub fn apply(c: &Connection, doc: &Document, into: Option<i64>, graph_name: &str
             }
         }
     }
+    deferred.finish(c)?;
     let name = if graph_name.trim().is_empty() { doc.graph.name.clone() } else { graph_name.to_string() };
     let graph = store::graph_create(c, inv, &name.chars().take(120).collect::<String>(), &format!("Imported from {file_label}"), false)?;
     let nodes: Vec<GraphNodeState> = doc
@@ -782,12 +805,13 @@ pub fn apply(c: &Connection, doc: &Document, into: Option<i64>, graph_name: &str
             Some(GraphNodeState { entity_id: id, x: n.x.filter(|v| v.is_finite() && v.abs() < 1e7), y: n.y.filter(|v| v.is_finite() && v.abs() < 1e7), pinned: n.pinned, hidden: n.hidden, group: n.group.clone().map(|g| g.chars().take(64).collect()) })
         })
         .chain(new_ids.values().map(|id| GraphNodeState { entity_id: *id, x: None, y: None, pinned: false, hidden: false, group: None }))
-        .fold(Vec::<GraphNodeState>::new(), |mut acc, n| {
-            if !acc.iter().any(|x| x.entity_id == n.entity_id) {
+        .fold((Vec::<GraphNodeState>::new(), HashSet::<i64>::new()), |(mut acc, mut seen), n| {
+            if seen.insert(n.entity_id) {
                 acc.push(n);
             }
-            acc
-        });
+            (acc, seen)
+        })
+        .0;
     let workspace = if doc.graph.workspace.is_object() && doc.graph.workspace.to_string().len() < store::MAX_WORKSPACE_BYTES { doc.graph.workspace.clone() } else { json!({}) };
     store::graph_save(c, graph, &store::GraphSave { base_revision: 0, nodes, removed: vec![], workspace, version_label: Some(format!("Imported from {file_label}")), manual_version: true, base_state_revision: None, force: false })?;
     ingest::event(c, inv, "import", &format!("Graph \"{name}\" imported from {file_label}: {} entities, {} relationships", new_ids.len(), doc.relationships.len()), Some("import"), None, None, None, Some(graph), json!({}))?;

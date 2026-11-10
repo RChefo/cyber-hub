@@ -586,8 +586,40 @@ pub fn event(c: &Connection, inv: i64, kind: &str, summary: &str, source: Option
     Ok(())
 }
 
+/// Confidence recomputation postponed to the end of a batch of observations (Mission 6): a graph
+/// import whose element lists many evidence records re-read all of that element's evidence links
+/// once per record. Confidence depends only on the stored links and the verification, so
+/// computing it once at the end gives the same result.
+#[derive(Default)]
+pub struct Deferred {
+    entities: BTreeSet<i64>,
+    relationships: BTreeSet<i64>,
+}
+
+impl Deferred {
+    /// Recomputes every element the batch touched, once.
+    pub fn finish(self, c: &Connection) -> rusqlite::Result<()> {
+        for rid in self.relationships {
+            recompute_relationship(c, rid)?;
+        }
+        for eid in self.entities {
+            recompute_entity(c, eid)?;
+        }
+        Ok(())
+    }
+}
+
 /// Run the mapping pipeline for one observation. Call inside a transaction.
 pub fn ingest(c: &Connection, inv: i64, obs: &Observation) -> rusqlite::Result<ChangeSummary> {
+    ingest_with(c, inv, obs, None)
+}
+
+/// [`ingest`], leaving the confidence recomputation to `deferred` (call [`Deferred::finish`]).
+pub fn ingest_deferred(c: &Connection, inv: i64, obs: &Observation, deferred: &mut Deferred) -> rusqlite::Result<ChangeSummary> {
+    ingest_with(c, inv, obs, Some(deferred))
+}
+
+fn ingest_with(c: &Connection, inv: i64, obs: &Observation, deferred: Option<&mut Deferred>) -> rusqlite::Result<ChangeSummary> {
     let evidence_id = store_evidence(c, inv, &obs.evidence)?;
     let mut ctx = Ctx { c, inv, at: now(), summary: ChangeSummary { evidence_id: Some(evidence_id), ..Default::default() }, touched_entities: BTreeSet::new(), touched_relationships: BTreeSet::new(), new_entity_set: HashSet::new(), structured: HashSet::new() };
 
@@ -623,7 +655,13 @@ pub fn ingest(c: &Connection, inv: i64, obs: &Observation) -> rusqlite::Result<C
         }
     }
     ctx.correlate()?;
-    ctx.recompute_confidence()?;
+    match deferred {
+        Some(d) => {
+            d.entities.extend(ctx.touched_entities.iter().copied());
+            d.relationships.extend(ctx.touched_relationships.iter().copied());
+        }
+        None => ctx.recompute_confidence()?,
+    }
 
     // timeline
     let summary = ctx.summary.clone();

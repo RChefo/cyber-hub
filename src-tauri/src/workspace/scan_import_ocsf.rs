@@ -74,9 +74,11 @@ fn compliance(v: &Value) -> String {
 /// requirements.
 fn attacks(x: &Value) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = Vec::new();
+    // duplicates are found through a set: a linear scan per entry was quadratic in the list
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for a in x["finding_info"].get("attacks").and_then(Value::as_array).into_iter().flatten() {
         let id = s(&a["technique"], "uid");
-        if id.is_empty() || out.iter().any(|(i, _)| *i == id) {
+        if id.is_empty() || !seen.insert(id.clone()) {
             continue;
         }
         let name = s(&a["technique"], "name");
@@ -93,7 +95,7 @@ fn attacks(x: &Value) -> Vec<(String, String)> {
             continue;
         }
         for id in strings(Some(reqs)) {
-            if technique(&id) && !out.iter().any(|(i, _)| *i == id) && out.len() < 20 {
+            if out.len() < 20 && technique(&id) && seen.insert(id.clone()) {
                 out.push((id.clone(), id));
             }
         }
@@ -117,7 +119,9 @@ pub(super) fn parse(text: &str) -> Result<Parsed, String> {
     if items.iter().any(|x| finding_class(x) == Some(SECURITY_FINDING)) && !items.iter().any(|x| finding_class(x) == Some(DETECTION_FINDING)) {
         return Err("This file holds OCSF 1.0 security findings (class 2001), written by older Prowler versions. Export the results again with Prowler 4 or later (-M json-ocsf), which writes detection findings.".into());
     }
-    let product = items.iter().map(|x| s(&x["metadata"]["product"], "name")).find(|n| !n.is_empty()).unwrap_or_else(|| "OCSF".into());
+    // the product is part of every item's fingerprint, details and tags: read once, bounded
+    // (Mission 6: a long name was hashed and copied for each of thousands of items)
+    let product = items.iter().map(|x| trunc(&s(&x["metadata"]["product"], "name"), 200)).find(|n| !n.is_empty()).unwrap_or_else(|| "OCSF".into());
     let mut p = Parsed::new(Format::Ocsf, &trunc(&product, 60));
     if repaired {
         p.incomplete = true;

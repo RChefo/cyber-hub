@@ -12,7 +12,7 @@
 //! * **Completeness** follows the NTIA minimum elements: supplier, name, version, a unique
 //!   identifier, dependency relationships, the SBOM's author and timestamp.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::time::Duration;
 
 use rusqlite::{params, Connection, OptionalExtension};
@@ -468,7 +468,10 @@ fn cyclonedx(root: &Value, format: &str) -> Sbom {
             }
         }
         let (score, severity, vector) = best.unwrap_or((0.0, String::new(), String::new()));
-        let affected: Vec<usize> = list(v.get("affects")).into_iter().filter_map(|a| index.get(&text(a.get("ref"))).copied()).collect();
+        // each component once, in the file's order: a reference listed again is the same component
+        // (Mission 6: repeats were kept, counted as more affected components and merged quadratically)
+        let mut once = HashSet::new();
+        let affected: Vec<usize> = list(v.get("affects")).into_iter().filter_map(|a| index.get(&text(a.get("ref"))).copied()).filter(|c| once.insert(*c)).collect();
         let severity = match severity.as_str() {
             "critical" | "high" | "medium" | "low" => severity,
             _ if score > 0.0 => crate::cvss::rating(score).to_string(),
@@ -1209,8 +1212,10 @@ pub fn merged(sbom: &Sbom, osv: &[Vuln]) -> Vec<Vuln> {
                 if o.analysis.is_empty() {
                     o.analysis = v.analysis.clone();
                 }
+                // through a set: a linear search per component was quadratic for long lists
+                let mut have: HashSet<usize> = o.components.iter().copied().collect();
                 for c in &v.components {
-                    if !o.components.contains(c) {
+                    if have.insert(*c) {
                         o.components.push(*c);
                     }
                 }

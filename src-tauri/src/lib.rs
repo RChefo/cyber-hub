@@ -42,6 +42,8 @@ mod hostile_tests;
 mod perf_tests;
 #[cfg(test)]
 mod ci_tests;
+#[cfg(test)]
+mod amplification_tests;
 
 use tauri::{AppHandle, Manager};
 
