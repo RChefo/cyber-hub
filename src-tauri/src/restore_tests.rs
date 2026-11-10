@@ -93,6 +93,11 @@ fn only_checked_cyber_hub_databases_are_accepted() {
     // schema-embedded SQL from a file is never accepted: an added trigger, a changed index or an
     // added column is refused
     refused(&changed("trigger.db", "CREATE TRIGGER wipe AFTER INSERT ON projects BEGIN DELETE FROM findings; END;"), "unexpected: trigger wipe");
+    // a name that only resembles SQLite's own objects is compared like any other (Mission 7):
+    // `sqliteX`, `SQLITE_x` and `sqlite` + one character are not reserved names
+    refused(&changed("hidden.db", "CREATE TRIGGER sqliteX AFTER INSERT ON projects BEGIN DELETE FROM findings; END;"), "unexpected: trigger sqliteX");
+    refused(&changed("hidden2.db", "CREATE VIEW sqlite1 AS SELECT 1;"), "unexpected: view sqlite1");
+    refused(&changed("hidden3.db", "CREATE TABLE sqliteAudit (x);"), "unexpected: table sqliteAudit");
     refused(&changed("index.db", "DROP INDEX idx_activity_time; CREATE INDEX idx_activity_time ON activity_logs(kind);"), "index idx_activity_time");
     refused(&changed("column.db", "ALTER TABLE projects ADD COLUMN extra TEXT;"), "table projects");
 

@@ -135,9 +135,14 @@ fn norm(p: &Path) -> Option<String> {
 /* ───────────────────────── checking a backup ───────────────────────── */
 
 /// Every table, index, trigger and view with its SQL (whitespace collapsed), without SQLite's own
-/// objects.
+/// objects. Those are named exactly: `LIKE 'sqlite_%'` ignores case and treats `_` as a wildcard,
+/// so a crafted backup could hide a trigger named `sqliteX` from the comparison (Mission 7).
 fn schema_of(c: &Connection) -> AppResult<BTreeSet<String>> {
-    let mut st = c.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")?;
+    let mut st = c.prepare(
+        "SELECT type, name, tbl_name, sql FROM sqlite_master
+         WHERE NOT (type = 'table' AND name IN ('sqlite_sequence', 'sqlite_stat1', 'sqlite_stat2', 'sqlite_stat3', 'sqlite_stat4'))
+           AND NOT (type = 'index' AND sql IS NULL AND substr(name, 1, 17) = 'sqlite_autoindex_')",
+    )?;
     let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<String>>(3)?)))?;
     let mut out = BTreeSet::new();
     for row in rows {
