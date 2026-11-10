@@ -181,7 +181,8 @@ function RunModal({ project, onClose }: { project: Project; onClose: () => void 
       invalidate("detections", "attack", "projects");
       const failed = r.files.filter((f) => f.error);
       const notes = r.files.flatMap((f) => f.notes.map((n) => `${f.title}: ${n}`));
-      notify.success(
+      // the toast's tone follows the outcome: files that could not be read make it a warning (Mission 7)
+      (failed.length ? notify.warning : notify.success)(
         `${pluralize(r.newHits, "new hit")} from ${pluralize(r.results.length, "rule")}`,
         [`${pluralize(r.rules, "rule")} ran on ${pluralize(r.files.length - failed.length, "file")}`, failed.length ? `not read: ${failed.map((f) => `${f.title} (${f.error})`).join("; ")}` : null, notes.length ? notes.slice(0, 3).join("; ") : null].filter(Boolean).join(" · "),
       );

@@ -8,7 +8,7 @@ import { EmptyBlock, InlineSpinner } from "@/components/ui/Feedback";
 import { TextAreaInput } from "@/components/ui/Fields";
 import { Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
-import { api, errorMessage } from "@/lib/ipc";
+import { api, errorMessage, IpcError } from "@/lib/ipc";
 import { useQuery } from "@/lib/query";
 import type { AssistantContextOptions, Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -69,7 +69,9 @@ export function AssistantTab({ project }: { project: Project }) {
         },
       ]);
     } catch (e) {
-      setTurns((t) => [...t, { role: "error", text: errorMessage(e) }]);
+      // declining the native confirmation sends nothing: not an error (Mission 7)
+      if (e instanceof IpcError && e.kind === "cancelled") notify.info(e.message);
+      else setTurns((t) => [...t, { role: "error", text: errorMessage(e) }]);
     } finally {
       setSending(false);
     }

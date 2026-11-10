@@ -329,7 +329,11 @@ function RuleEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () => 
       setReport(r);
       invalidate("detections", "attack");
       if (r.failed.length === 0 && r.imported[0]) {
-        notify.success(r.imported[0].outcome === "unchanged" ? "No change" : `Saved as version ${r.imported[0].version}`, r.imported[0].errors ? `${pluralize(r.imported[0].errors, "problem")} keep it from running` : undefined);
+        // a rule that cannot run is saved, but that is not a clean success (Mission 7)
+        (r.imported[0].errors ? notify.warning : notify.success)(
+          r.imported[0].outcome === "unchanged" ? "No change" : `Saved as version ${r.imported[0].version}`,
+          r.imported[0].errors ? `${pluralize(r.imported[0].errors, "problem")} keep it from running` : undefined,
+        );
         onSaved(r.imported[0].id);
       }
     } catch (e) {

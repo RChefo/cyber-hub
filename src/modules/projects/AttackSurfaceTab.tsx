@@ -9,7 +9,7 @@ import { EmptyBlock, ErrorBlock, InlineSpinner, LoadingRows } from "@/components
 import { SearchInput, SelectInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
 import { Panel, Stat } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
-import { api, errorMessage, runtimeAvailable } from "@/lib/ipc";
+import { api, errorMessage, IpcError, runtimeAvailable } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { Asset, AssetType, DiscoverySnapshot, Project, SnapshotChange } from "@/lib/types";
 import { formatDateTime, formatRelative } from "@/lib/utils";
@@ -143,7 +143,9 @@ function ScanModal({ isOpen, onOpenChange, project }: { isOpen: boolean; onOpenC
       notify.success("Service scan started", "Results are added when the scan finishes. Follow it under Commands & runs.");
       onOpenChange(false);
     } catch (e) {
-      setError(errorMessage(e));
+      // declining the native confirmation is the analyst's decision, not an error (Mission 7)
+      if (e instanceof IpcError && e.kind === "cancelled") notify.info(e.message);
+      else setError(errorMessage(e));
     } finally {
       setStarting(false);
     }
