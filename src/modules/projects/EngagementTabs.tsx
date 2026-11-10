@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/app/store";
 import { ToneChip } from "@/components/ui/Badges";
 import { CopyButton } from "@/components/ui/Code";
-import { AppModal, useConfirm } from "@/components/ui/Dialogs";
+import { AppModal } from "@/components/ui/Dialogs";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/ui/Feedback";
 import { SearchInput, SelectInput, SwitchInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
 import { Panel } from "@/components/ui/Panel";
@@ -90,7 +90,6 @@ function ShowMoreRow({ hidden, shown, step, noun, onMore }: { hidden: number; sh
 
 export function EvidenceVault({ project, findings, onOpenFindings }: { project: Project; findings: Finding[]; onOpenFindings: () => void }) {
   const { runtime } = useApp();
-  const confirm = useConfirm();
   const list = useQuery(["findings"], () => api.evidenceList(project.id), [project.id], runtime);
   const runs = useQuery(["executions"], () => api.projectToolHistory(project.id), [project.id], runtime);
   const [note, setNote] = useState<{ title: string; content: string } | null>(null);
@@ -233,10 +232,8 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
                   size="sm"
                   variant="ghost"
                   aria-label={`Delete ${e.title}`}
-                  onPress={async () => {
-                    if (!(await confirm.ask({ title: "Delete evidence?", body: `“${e.title}” and its links to findings are removed. A stored file is deleted when no other record uses it.`, confirmLabel: "Delete" }))) return;
-                    await act(`d${e.id}`, () => api.evidenceDelete(e.id), "Evidence deleted");
-                  }}
+                  // the backend asks in a native dialog
+                  onPress={() => act(`d${e.id}`, () => api.evidenceDelete(e.id), "Evidence deleted")}
                 >
                   <Trash2 className="size-3.5" />
                 </Button>
@@ -310,7 +307,6 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
           </pre>
         )}
       </AppModal>
-      {confirm.element}
     </div>
   );
 }

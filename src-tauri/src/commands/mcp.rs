@@ -529,11 +529,44 @@ pub async fn mcp_clients(db: State<'_, Db>, bridge: State<'_, Arc<Bridge>>) -> A
 }
 
 #[tauri::command]
-pub async fn mcp_audit_clear(db: State<'_, Db>) -> AppResult<()> {
-    db.with(|c| {
-        c.execute("DELETE FROM mcp_audit", [])?;
-        Ok(())
-    })
+pub async fn mcp_audit_clear(app: AppHandle, db: State<'_, Db>) -> AppResult<i64> {
+    // the audit log is the record of what MCP clients asked for: it is cleared only after a native
+    // confirmation, and the entries tied to an approval or a run are kept (Mission 7)
+    let (ordinary, linked) = db.with(|c| Ok(audit_counts(c)?))?;
+    if ordinary == 0 {
+        return Ok(linked);
+    }
+    let kept = match linked {
+        0 => String::new(),
+        1 => " The entry tied to an approval or a run is kept.".to_string(),
+        n => format!(" The {n} entries tied to an approval or a run are kept."),
+    };
+    if !crate::confirm::native(
+        &app,
+        "Clear the MCP audit log",
+        format!("Delete {ordinary} entries of the MCP audit log permanently?{kept}\n\nThis cannot be undone."),
+        "Clear log",
+    )
+    .await
+    {
+        return Err(AppError::Cancelled("The MCP audit log was not cleared".into()));
+    }
+    db.with(clear_audit)
+}
+
+/// The audit entries not tied to an approval or a run, and those that are.
+fn audit_counts(c: &rusqlite::Connection) -> rusqlite::Result<(i64, i64)> {
+    c.query_row(
+        "SELECT COALESCE(SUM(approval_id IS NULL AND execution_id IS NULL), 0), COALESCE(SUM(approval_id IS NOT NULL OR execution_id IS NOT NULL), 0) FROM mcp_audit",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+}
+
+/// Deletes the audit entries that are not tied to an approval or a run; returns how many are kept.
+fn clear_audit(c: &rusqlite::Connection) -> AppResult<i64> {
+    c.execute("DELETE FROM mcp_audit WHERE approval_id IS NULL AND execution_id IS NULL", [])?;
+    Ok(audit_counts(c)?.1)
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -582,6 +615,28 @@ pub async fn mcp_client_configs() -> AppResult<ClientConfigs> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Mission 7: clearing the audit log keeps the entries tied to an approval or a run, the record
+    /// of what MCP clients were allowed to do.
+    #[test]
+    fn clearing_the_audit_log_keeps_approved_actions() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            for (approval, execution) in [(None, None), (Some("a1"), None), (None, Some(7)), (None, None)] {
+                c.execute(
+                    "INSERT INTO mcp_audit (at, client, connection, tool, arguments, approval, approval_id, execution_id, result, duration_ms) VALUES ('t', 'c', 1, 'x', '{}', 'none', ?1, ?2, 'ok', 1)",
+                    params![approval, execution],
+                )?;
+            }
+            assert_eq!(audit_counts(c)?, (2, 2));
+            assert_eq!(clear_audit(c)?, 2, "two entries kept");
+            assert_eq!(audit_counts(c)?, (0, 2));
+            let kept: Vec<(Option<String>, Option<i64>)> = c.prepare("SELECT approval_id, execution_id FROM mcp_audit ORDER BY id")?.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?;
+            assert_eq!(kept, vec![(Some("a1".to_string()), None), (None, Some(7))]);
+            Ok(())
+        })
+        .unwrap();
+    }
 
     #[test]
     fn client_configs_use_the_real_path_and_escape_it() {

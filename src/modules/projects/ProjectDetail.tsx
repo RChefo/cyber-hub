@@ -5,7 +5,7 @@ import { useApp } from "@/app/store";
 import { SeverityBarChart } from "@/components/charts/SeverityBarChart";
 import { EXEC_STATUS_META, PROJECT_STATUS_META, ToneChip } from "@/components/ui/Badges";
 import { CodeBlock, CopyButton } from "@/components/ui/Code";
-import { AppModal, useConfirm } from "@/components/ui/Dialogs";
+import { AppModal } from "@/components/ui/Dialogs";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/ui/Feedback";
 import { TextAreaInput } from "@/components/ui/Fields";
 import { Panel, Stat } from "@/components/ui/Panel";
@@ -272,7 +272,6 @@ function OverviewTab({ project, findings, onTab }: { project: Project; findings:
 
 export function ProjectDetail({ id }: { id: number }) {
   const { runtime, navigate, route } = useApp();
-  const confirm = useConfirm();
   // a deep link (global search, another page) may name the tab
   const [tab, setTab] = useState<TabId>(() => (TAB_IDS as string[]).includes(route.params?.tab ?? "") ? (route.params!.tab as TabId) : "overview");
   // the record whose related records are shown in the investigation view, the finding to open,
@@ -330,13 +329,8 @@ export function ProjectDetail({ id }: { id: number }) {
     }
   };
 
+  // the backend asks in a native dialog that says what is deleted
   const remove = async () => {
-    const ok = await confirm.ask({
-      title: `Delete “${p.name}”?`,
-      body: `This permanently deletes the project, its ${pluralize(p.targets.length, "scope entry", "scope entries")}, ${pluralize(f.length, "finding")}, evidence and other records. Tool runs and the activity log are kept but unlinked. A project with a run, workflow or discovery still in progress cannot be deleted.`,
-      confirmLabel: "Delete project",
-    });
-    if (!ok) return;
     try {
       await api.projectDelete(p.id);
       invalidate("projects", "findings", "activity", "tasks");
@@ -561,7 +555,6 @@ export function ProjectDetail({ id }: { id: number }) {
       >
         <CodeBlock code={report ?? ""} maxHeight={460} />
       </AppModal>
-      {confirm.element}
     </div>
   );
 }

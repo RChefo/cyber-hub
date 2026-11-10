@@ -257,6 +257,38 @@ pub async fn project_upsert(db: State<'_, Db>, input: ProjectInput) -> AppResult
 #[tauri::command]
 pub async fn project_delete(app: tauri::AppHandle, db: State<'_, Db>, id: i64) -> AppResult<()> {
     use tauri::Manager;
+    // deleting a project cannot be undone: the analyst confirms it outside the page, with what is
+    // lost (Mission 7)
+    let summary = db.with(|c| {
+        let Some(name) = c.query_row("SELECT name FROM projects WHERE id = ?1", params![id], |r| r.get::<_, String>(0)).optional()? else {
+            return Ok(None);
+        };
+        refuse_running(c, id, &name)?;
+        let count = |sql: &str| -> rusqlite::Result<i64> { c.query_row(sql, params![id], |r| r.get(0)) };
+        let findings = count("SELECT COUNT(*) FROM findings WHERE project_id = ?1")?;
+        let evidence = count("SELECT COUNT(*) FROM evidence WHERE project_id = ?1")?;
+        let targets = count("SELECT COUNT(*) FROM project_targets WHERE project_id = ?1")?;
+        Ok(Some((name, findings, evidence, targets)))
+    })?;
+    let Some((name, findings, evidence, targets)) = summary else {
+        return Ok(());
+    };
+    let n = |count: i64, one: &str, many: &str| format!("{count} {}", if count == 1 { one } else { many });
+    if !crate::confirm::native(
+        &app,
+        "Delete a project",
+        format!(
+            "Delete the project “{name}” permanently?\n\nIts {}, {} and {} are deleted with its other records, and evidence files that no other record uses are removed. Tool runs and the activity log are kept, without the project. This cannot be undone.",
+            n(findings, "finding", "findings"),
+            n(evidence, "evidence record", "evidence records"),
+            n(targets, "scope entry", "scope entries")
+        ),
+        "Delete project",
+    )
+    .await
+    {
+        return Err(AppError::Cancelled("The project was not deleted".into()));
+    }
     let dir = crate::util::data_dir(&app)?;
     let store = app.state::<std::sync::Arc<crate::workspace::evidence::EvidenceStore>>();
     db.with(|c| {
@@ -289,6 +321,19 @@ pub(crate) fn running_work(c: &Connection, project_id: i64) -> AppResult<Vec<Str
     Ok(out)
 }
 
+/// Refuses while work still runs for a project (its results would have nowhere to go).
+fn refuse_running(c: &Connection, id: i64, name: &str) -> AppResult<()> {
+    let running = running_work(c, id)?;
+    if running.is_empty() {
+        return Ok(());
+    }
+    let more = if running.len() > 5 { format!(" and {} more", running.len() - 5) } else { String::new() };
+    Err(validation(format!(
+        "Project “{name}” still has work running: {}{more}. Stop it or wait for it to finish, then delete the project.",
+        running.iter().take(5).cloned().collect::<Vec<_>>().join(", ")
+    )))
+}
+
 /// Deletes a project and everything it owns, in one transaction, unless work still runs for it
 /// (its results would have nowhere to go). Tool runs, command history, activity entries and OSINT
 /// investigations are not project records: they stay, with no project. Returns the SHA-256 of
@@ -298,14 +343,7 @@ pub(crate) fn delete_project(c: &Connection, id: i64) -> AppResult<Vec<String>> 
     let Some(name) = tx.query_row("SELECT name FROM projects WHERE id = ?1", params![id], |r| r.get::<_, String>(0)).optional()? else {
         return Ok(Vec::new());
     };
-    let running = running_work(&tx, id)?;
-    if !running.is_empty() {
-        let more = if running.len() > 5 { format!(" and {} more", running.len() - 5) } else { String::new() };
-        return Err(validation(format!(
-            "Project “{name}” still has work running: {}{more}. Stop it or wait for it to finish, then delete the project.",
-            running.iter().take(5).cloned().collect::<Vec<_>>().join(", ")
-        )));
-    }
+    refuse_running(&tx, id, &name)?;
     let files: Vec<String> = tx
         .prepare("SELECT DISTINCT sha256 FROM evidence WHERE project_id = ?1 AND kind = 'file' AND sha256 IS NOT NULL")?
         .query_map(params![id], |r| r.get(0))?

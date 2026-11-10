@@ -1,14 +1,18 @@
 import { toast } from "@heroui/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { api, errorMessage, runtimeAvailable } from "./ipc";
+import { api, errorMessage, IpcError, runtimeAvailable } from "./ipc";
 import { invalidate } from "./query";
 
 export const notify = {
   success: (title: string, description?: string) => toast.success(title, description ? { description } : undefined),
   info: (title: string, description?: string) => toast.info(title, description ? { description } : undefined),
   warning: (title: string, description?: string) => toast.warning(title, description ? { description } : undefined),
+  /** A declined native confirmation (`cancelled`) is the analyst's decision, not a failure: it is
+   * shown as information, with the backend's message saying what did not happen. */
   error: (title: string, error?: unknown) =>
-    toast.danger(title, error !== undefined ? { description: errorMessage(error) } : undefined),
+    error instanceof IpcError && error.kind === "cancelled"
+      ? toast.info(error.message)
+      : toast.danger(title, error !== undefined ? { description: errorMessage(error) } : undefined),
 };
 
 /** Copy text to the clipboard. Never executes anything. */

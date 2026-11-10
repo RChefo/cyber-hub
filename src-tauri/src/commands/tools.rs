@@ -670,7 +670,19 @@ pub fn clear_history(c: &Connection, running: &[i64]) -> AppResult<HistoryCleare
 }
 
 #[tauri::command]
-pub async fn exec_history_clear(db: State<'_, Db>, pm: State<'_, ProcessManager>) -> AppResult<HistoryCleared> {
+pub async fn exec_history_clear(app: AppHandle, db: State<'_, Db>, pm: State<'_, ProcessManager>) -> AppResult<HistoryCleared> {
+    // the run history is the record of what ran: it is cleared only after a native confirmation
+    // (Mission 7)
+    if !confirm::native(
+        &app,
+        "Clear the run history",
+        "Delete the finished runs and their stored output permanently?\n\nRuns that evidence, findings, OSINT evidence or discovery snapshots refer to are kept, and so are running ones. This cannot be undone.".into(),
+        "Clear history",
+    )
+    .await
+    {
+        return Err(AppError::Cancelled("The run history was not cleared".into()));
+    }
     let running = pm.running_ids();
     db.with(|c| clear_history(c, &running))
 }

@@ -98,9 +98,28 @@ pub async fn activity_log(db: State<'_, Db>, input: ActivityInput) -> AppResult<
 }
 
 #[tauri::command]
-pub async fn activity_clear(db: State<'_, Db>) -> AppResult<()> {
+pub async fn activity_clear(app: tauri::AppHandle, db: State<'_, Db>) -> AppResult<()> {
+    // the activity log is the record of what was done: it is cleared only after a native
+    // confirmation, and the clearing is recorded (Mission 7)
+    let n: i64 = db.with(|c| Ok(c.query_row("SELECT COUNT(*) FROM activity_logs", [], |r| r.get(0))?))?;
+    if n == 0 {
+        return Ok(());
+    }
+    if !crate::confirm::native(
+        &app,
+        "Clear the activity log",
+        format!("Delete all {n} entries of the activity log permanently?\n\nIt is the record of what was done in Cyber Hub: runs, imports and changes. This cannot be undone."),
+        "Clear log",
+    )
+    .await
+    {
+        return Err(crate::error::AppError::Cancelled("The activity log was not cleared".into()));
+    }
     db.with(|c| {
-        c.execute("DELETE FROM activity_logs", [])?;
+        let tx = c.unchecked_transaction()?;
+        tx.execute("DELETE FROM activity_logs", [])?;
+        log(&tx, "system", &format!("Activity log cleared ({n} entries)"), "", None, None, None)?;
+        tx.commit()?;
         Ok(())
     })
 }

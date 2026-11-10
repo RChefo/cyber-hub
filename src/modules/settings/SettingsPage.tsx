@@ -16,14 +16,16 @@ import { UpdatesPanel } from "./UpdatesPanel";
 function DataPanel() {
   const { system, runtime } = useApp();
   const confirm = useConfirm();
-  const clear = async (label: string, body: string, fn: () => Promise<string | void>, tags: Parameters<typeof invalidate>) => {
-    if (!(await confirm.ask({ title: `Clear ${label}?`, body, confirmLabel: `Clear ${label}` }))) return;
+  // records of what was done (the activity log, the run history) are confirmed by the backend in a
+  // native dialog; the other histories here
+  const clear = async (label: string, body: string, fn: () => Promise<string | void>, tags: Parameters<typeof invalidate>, native?: boolean) => {
+    if (!native && !(await confirm.ask({ title: `Clear ${label}?`, body, confirmLabel: `Clear ${label}` }))) return;
     try {
       const detail = await fn();
       invalidate(...tags);
       notify.success(`${label[0].toUpperCase()}${label.slice(1)} cleared`, detail || undefined);
     } catch (e) {
-      notify.error(`Could not clear ${label}`, errorMessage(e));
+      notify.error(`Could not clear ${label}`, e);
     }
   };
   const backup = async () => {
@@ -66,8 +68,8 @@ function DataPanel() {
       notify.error("Could not restore the backup", e);
     }
   };
-  const rows: { label: string; body: string; fn: () => Promise<string | void>; tags: Parameters<typeof invalidate> }[] = [
-    { label: "activity log", body: "Removes all recorded activity shown on the dashboard.", fn: api.activityClear, tags: ["activity"] },
+  const rows: { label: string; body: string; fn: () => Promise<string | void>; tags: Parameters<typeof invalidate>; native?: boolean }[] = [
+    { label: "activity log", body: "Removes all recorded activity shown on the dashboard.", fn: api.activityClear, tags: ["activity"], native: true },
     { label: "command history", body: "Removes copied and executed command history. Saved commands are kept.", fn: api.commandHistoryClear, tags: ["history"] },
     { label: "dork history", body: "Removes Google search history. Saved dorks are kept.", fn: api.dorkHistoryClear, tags: ["dorks"] },
     { label: "CVE search history", body: "Removes the list of past CVE searches. Cached CVE records are kept.", fn: api.cveHistoryClear, tags: ["cve"] },
@@ -76,6 +78,7 @@ function DataPanel() {
       body: "Removes finished runs and their stored output. Runs that evidence, findings, OSINT evidence or discovery snapshots refer to are kept.",
       fn: async () => describeRunsCleared(await api.execHistoryClear()),
       tags: ["executions"],
+      native: true,
     },
   ];
   return (
@@ -122,7 +125,7 @@ function DataPanel() {
               <div className="text-[13.5px]">{r.label[0].toUpperCase() + r.label.slice(1)}</div>
               <div className="text-[12px] text-muted">{r.body}</div>
             </div>
-            <Button size="sm" variant="tertiary" isDisabled={!runtime} onPress={() => clear(r.label, r.body, r.fn, r.tags)}>
+            <Button size="sm" variant="tertiary" isDisabled={!runtime} onPress={() => clear(r.label, r.body, r.fn, r.tags, r.native)}>
               <Trash2 className="size-3.5" />
               Clear
             </Button>

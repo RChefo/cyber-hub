@@ -248,6 +248,24 @@ mod tests {
         }
     }
 
+    /// Mission 7: deleting a project or evidence, and clearing the activity log, the MCP audit log
+    /// or the run history cannot be undone, so each is confirmed in a native dialog: a page cannot
+    /// do it alone.
+    #[test]
+    fn destructive_commands_confirm_natively() {
+        for (src, command) in [
+            (include_str!("projects.rs"), "pub async fn project_delete("),
+            (include_str!("workspace.rs"), "pub async fn evidence_delete("),
+            (include_str!("activity.rs"), "pub async fn activity_clear("),
+            (include_str!("mcp.rs"), "pub async fn mcp_audit_clear("),
+            (include_str!("tools.rs"), "pub async fn exec_history_clear("),
+        ] {
+            let start = src.find(command).unwrap_or_else(|| panic!("{command}"));
+            let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
+            assert!(body.contains("confirm::native("), "{command} confirms natively");
+        }
+    }
+
     /// Mission 7: the terminal command takes nothing from the page (a directory there could be a
     /// network path).
     #[test]

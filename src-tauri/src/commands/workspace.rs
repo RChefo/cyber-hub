@@ -259,6 +259,24 @@ pub async fn evidence_verify(app: AppHandle, project_id: i64) -> AppResult<evide
 
 #[tauri::command]
 pub async fn evidence_delete(app: AppHandle, id: i64) -> AppResult<()> {
+    // evidence cannot be restored once deleted (its file goes when no other record uses it): the
+    // analyst confirms it outside the page (Mission 7)
+    let (title, project): (String, String) = app.state::<Db>().with(|c| {
+        use rusqlite::OptionalExtension;
+        c.query_row("SELECT e.title, COALESCE(p.name, '') FROM evidence e LEFT JOIN projects p ON p.id = e.project_id WHERE e.id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .optional()?
+            .ok_or_else(|| AppError::NotFound(format!("evidence {id}")))
+    })?;
+    if !crate::confirm::native(
+        &app,
+        "Delete evidence",
+        format!("Delete the evidence “{title}” of the project “{project}” permanently?\n\nIts links to findings are removed, and its file is deleted when no other record uses it. This cannot be undone."),
+        "Delete evidence",
+    )
+    .await
+    {
+        return Err(AppError::Cancelled("The evidence was not deleted".into()));
+    }
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || handle.state::<Arc<EvidenceStore>>().delete(&handle.state::<Db>(), id))
         .await

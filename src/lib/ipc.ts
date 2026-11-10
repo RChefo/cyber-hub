@@ -428,7 +428,8 @@ export const api = {
   mcpAudit: (limit = 50, filter?: T.McpAuditFilter) => call<T.McpAuditRow[]>("mcp_audit", { limit, filter: filter ?? null }),
   mcpCatalog: () => call<T.McpCatalog>("mcp_catalog"),
   mcpClients: () => call<T.McpClientRow[]>("mcp_clients"),
-  mcpAuditClear: () => call<void>("mcp_audit_clear"),
+  /** clears the entries not tied to an approval or a run, after a native confirmation; returns how many are kept */
+  mcpAuditClear: () => call<number>("mcp_audit_clear"),
   mcpClientConfigs: () => call<T.McpClientConfigs>("mcp_client_configs"),
 
   // OSINT workspace

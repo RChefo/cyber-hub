@@ -4,7 +4,6 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { useApp } from "@/app/store";
 import { StatusDot, ToneChip } from "@/components/ui/Badges";
 import { CodeBlock, CopyButton } from "@/components/ui/Code";
-import { useConfirm } from "@/components/ui/Dialogs";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/ui/Feedback";
 import { SelectInput } from "@/components/ui/Fields";
 import { PageHeader, Panel, Stat } from "@/components/ui/Panel";
@@ -12,7 +11,7 @@ import { notify } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { McpAuditFilter, McpAuditResult, McpAuditRow, McpCatalog, McpClientConfigs, McpClientRow, McpPolicy, McpPolicyRow, McpStatus } from "@/lib/types";
-import { cn, formatRelative } from "@/lib/utils";
+import { cn, formatRelative, pluralize } from "@/lib/utils";
 import { ApprovalCenter } from "./ApprovalCenter";
 import { ResourcesAndPrompts, ToolsCatalog } from "./CatalogViews";
 import { approvalLabel, CATEGORY_SHORT, CATEGORY_TONE, type McpTab, POLICY_LABEL, RESULT_META, resultMeta, shortTool, tabFromParams } from "./mcpMeta";
@@ -376,7 +375,6 @@ function ActivityView({ clients, policy, projects }: { clients: McpClientRow[]; 
   const [client, setClient] = useState(ALL);
   const [category, setCategory] = useState(ALL);
   const [result, setResult] = useState(ALL);
-  const confirm = useConfirm();
   const filter: McpAuditFilter = {
     client: client === ALL ? undefined : client,
     category: category === ALL ? undefined : category,
@@ -385,11 +383,15 @@ function ActivityView({ clients, policy, projects }: { clients: McpClientRow[]; 
   const audit = useQuery(["mcp"], () => api.mcpAudit(200, filter), [client, category, result]);
   const filtered = client !== ALL || category !== ALL || result !== ALL;
 
+  // the backend asks in a native dialog and keeps the entries tied to an approval or a run
   const clear = async () => {
-    if (await confirm.ask({ title: "Clear the MCP audit log?", body: "Every recorded MCP call is deleted. Runs, findings and other data are kept.", confirmLabel: "Clear log" })) {
-      await api.mcpAuditClear().catch((e) => notify.error("Could not clear the log", e));
-      invalidate("mcp");
+    try {
+      const kept = await api.mcpAuditClear();
+      notify.success("MCP audit log cleared", kept > 0 ? `${pluralize(kept, "entry", "entries")} tied to an approval or a run ${kept === 1 ? "is" : "are"} kept.` : undefined);
+    } catch (e) {
+      notify.error("Could not clear the log", e);
     }
+    invalidate("mcp");
   };
 
   return (
@@ -447,7 +449,6 @@ function ActivityView({ clients, policy, projects }: { clients: McpClientRow[]; 
         <EmptyBlock compact icon={Activity} title={filtered ? "No entries match these filters" : "No MCP requests yet"} description={filtered ? "Try another client, category or status." : "Calls from AI clients are recorded here."} />
       )}
       {audit.data && audit.data.length > 0 && <AuditTable rows={audit.data} projects={projects} />}
-      {confirm.element}
     </Panel>
   );
 }
