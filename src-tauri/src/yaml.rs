@@ -111,7 +111,13 @@ impl Builder {
                 *bytes += s.bytes;
                 *depth = (*depth).max(s.depth + 1);
                 match key.take() {
-                    None => *key = Some(key_text(s.value)),
+                    None => match key_text(s.value) {
+                        Ok(k) => *key = Some(k),
+                        Err(e) => {
+                            let msg = format!("{e} (line {})", mark.line());
+                            self.fail(msg);
+                        }
+                    },
                     Some(k) => {
                         map.insert(k, s.value);
                     }
@@ -220,15 +226,42 @@ fn merge_keys(map: &mut Map<String, Value>) {
     }
 }
 
+/// The longest mapping key, the YAML specification's limit for implicit keys. A key that is
+/// itself a mapping or a sequence is written as JSON, and nested ones (`? ? ? …`) would re-escape
+/// the inner key at every level: 434 bytes of YAML grew past 2^34 characters (found by fuzzing).
+pub const MAX_KEY: usize = 1024;
+
 /// Mapping keys are strings in JSON: scalars keep their text, other keys are written as JSON.
-fn key_text(v: Value) -> String {
-    match v {
+fn key_text(v: Value) -> Result<String, String> {
+    let k = match v {
         Value::String(s) => s,
         Value::Null => String::new(),
         Value::Bool(b) => b.to_string(),
         Value::Number(n) => n.to_string(),
-        other => other.to_string(),
+        other => {
+            let mut out = String::new();
+            // written into a bounded buffer: serde_json stops at the first write past the limit
+            struct Bounded<'a>(&'a mut String);
+            impl std::io::Write for Bounded<'_> {
+                fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                    if self.0.len() + buf.len() > MAX_KEY {
+                        return Err(std::io::Error::other("key too long"));
+                    }
+                    self.0.push_str(&String::from_utf8_lossy(buf));
+                    Ok(buf.len())
+                }
+                fn flush(&mut self) -> std::io::Result<()> {
+                    Ok(())
+                }
+            }
+            serde_json::to_writer(Bounded(&mut out), &other).map_err(|_| format!("a mapping key is longer than {MAX_KEY} characters"))?;
+            out
+        }
+    };
+    if k.len() > MAX_KEY {
+        return Err(format!("a mapping key is longer than {MAX_KEY} characters"));
     }
+    Ok(k)
 }
 
 /// A scalar's value: quoted and block scalars are strings, plain ones follow the YAML 1.2 core
@@ -354,5 +387,22 @@ mod tests {
         let doc: String = (0..2_000).map(|i| format!("{}k{i}:\n", " ".repeat(i))).collect();
         let err = std::thread::Builder::new().stack_size(256 * 1024).spawn(move || parse_documents(&doc)).unwrap().join().unwrap().unwrap_err();
         assert!(err.contains("deeper than 128"), "{err}");
+    }
+
+    #[test]
+    fn nested_complex_keys_are_bounded() {
+        // found by fuzzing (434 bytes): nested complex keys (`?`), each written as the JSON of the
+        // one inside it, doubling its escapes at every level
+        let input = String::from_utf8_lossy(b"         ?               ?         ?               ?         ?      ?         ?                      ?         ?      ?         ?        ?               ?         ?      ?         ?        ?         ?      ?      ?         ?                      ?         ?      ?         ?        ?               ?         ?      ?         ?        ?         ?      ?   s:\x0d ::\x0d\n\x00~\x92        ?      ?         ?            ?  \x92\x92\x92\x92\x92\x0d - l  openapi: 3.0.3\n").into_owned();
+        let started = std::time::Instant::now();
+        let _ = parse_documents(&input);
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
+        // nested keys are refused once the key text passes the limit
+        let mut doc = String::from("x");
+        for _ in 0..40 {
+            doc = format!("? {}\n: v\n", doc.replace('\n', "\n  "));
+        }
+        let err = parse_documents(&doc).unwrap_err();
+        assert!(err.contains("longer than 1024"), "{err}");
     }
 }

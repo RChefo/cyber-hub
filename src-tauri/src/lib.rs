@@ -32,6 +32,8 @@ mod vtfile;
 mod workspace;
 mod yaml;
 
+#[cfg(feature = "fuzzing")]
+pub mod fuzzing;
 #[cfg(test)]
 mod hostile;
 #[cfg(test)]

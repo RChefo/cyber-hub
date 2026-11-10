@@ -1,0 +1,107 @@
+[package]
+name = "cyber-hub-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+cyber-hub = { path = "..", features = ["fuzzing"] }
+
+# not part of the application's build
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "yaml"
+path = "fuzz_targets/yaml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sigma"
+path = "fuzz_targets/sigma.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "events"
+path = "fuzz_targets/events.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "evtx"
+path = "fuzz_targets/evtx.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pcap"
+path = "fuzz_targets/pcap.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "scan_import"
+path = "fuzz_targets/scan_import.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sbom"
+path = "fuzz_targets/sbom.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "lockfiles"
+path = "fuzz_targets/lockfiles.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "apisec"
+path = "fuzz_targets/apisec.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "osint_import"
+path = "fuzz_targets/osint_import.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "iac"
+path = "fuzz_targets/iac.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "binary"
+path = "fuzz_targets/binary.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mcp_proof"
+path = "fuzz_targets/mcp_proof.rs"
+test = false
+doc = false
+bench = false

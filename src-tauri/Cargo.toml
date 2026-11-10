@@ -22,6 +22,9 @@ strip = true
 # Builds the developer-only credential provisioning tool `cyberhub-keys`. Never enable this for
 # application builds or installers (see docs/PROVISIONING.md).
 provisioning = ["dep:rpassword"]
+# Exposes parser entry points to the cargo-fuzz targets in fuzz/. Never enable this for application
+# builds or installers.
+fuzzing = []
 
 [[bin]]
 name = "cyber-hub"

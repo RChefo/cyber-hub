@@ -261,6 +261,13 @@ It runs each case on a named 2 MiB thread under a time budget, so a panic or a h
 
 A defect found is fixed, and its input is kept as a regression test next to the parser.
 
+**Coverage-guided fuzzing.** `src-tauri/fuzz` holds cargo-fuzz targets (libFuzzer with AddressSanitizer) for 13 parsers: YAML, Sigma, JSON and text events, EVTX, PCAP, scan imports, SBOMs, lockfiles, API specifications, OSINT imports, IaC and containers, PE/ELF triage, and the MCP proof. They call entry points that exist only with the `fuzzing` Cargo feature, which application builds never enable.
+* In Mission 5 each target ran for 150 s in an offline Linux container (Ubuntu 24.04, nightly Rust), with seeds generated from the sweep's own fixtures: between 0.2 and 38 million inputs per target.
+* It found one defect, in the YAML reader (below), and nothing in the other twelve.
+* The EVTX target started without a seed and barely got past the file signature, so its result says little; a seeded run is listed under open items.
+
+[fuzz/README.md](../src-tauri/fuzz/README.md) says how to run them.
+
 **Defects found and fixed in Mission 5** (each has a regression test; the crashes were reproduced before the fix):
 
 | Defect | Effect | Fix |
@@ -269,6 +276,7 @@ A defect found is fixed, and its input is kept as a regression test next to the 
 | PCAP: an IPv4 packet shorter than its 20-byte header was indexed; PCAPNG: a simple packet block of 12 bytes was sliced | a crafted capture ended the app | bounds checked |
 | Sigma conditions: one recursion per parenthesis or `not`, without a limit (also while the rule editor held the database lock) | a rule of a few kilobytes ended the app | conditions nesting deeper than 64 levels are refused |
 | YAML: yaml-rust2's loader recursed once per indentation level (found by the harness) | a few kilobytes of indented YAML (a Sigma rule, an OpenAPI file, a pnpm lockfile, a manifest) ended the app | events are pulled one by one from its iterative parser; nesting deeper than 128 is refused |
+| YAML: a key that is itself a mapping was written as JSON, so nested complex keys (`? ? ? …`) re-escaped the inner key at every level (**found by fuzzing**) | 434 bytes of YAML ran for more than ten minutes. An import never finished, and in the rule editor, which holds the database lock, the app would freeze | keys are bounded at 1,024 characters, the YAML limit for implicit keys |
 | YAML: aliases were bounded in values but not in bytes | 500 KB of YAML could expand to 15 GB | expansions are bounded to 64 MB of text |
 | A tool argument starting with a multi-byte character was sliced at byte 1 | checking a run (also an MCP run preview) ended the app | read without slicing |
 | Postman variables that refer to themselves grew exponentially | 5 KB grew towards terabytes | a substitution larger than 64 KB is left as written |
