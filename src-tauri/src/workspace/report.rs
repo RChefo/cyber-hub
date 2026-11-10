@@ -271,8 +271,15 @@ fn collect(c: &Connection, project_id: i64, o: &ReportOptions, today: &str) -> A
         vec![]
     };
     let asset_rows = if o.include_assets {
-        let mut st = c.prepare("SELECT type, value, status, last_seen FROM assets WHERE project_id = ?1 AND status <> 'retired' ORDER BY type, value LIMIT 1000")?;
-        let rows = st.query_map(params![project_id], |r| Ok(vec![label(&r.get::<_, String>(0)?), r.get(1)?, label(&r.get::<_, String>(2)?), r.get::<_, String>(3)?.chars().take(10).collect()]))?.collect::<Result<_, _>>()?;
+        let mut st = c.prepare("SELECT type, value, status, last_seen, data FROM assets WHERE project_id = ?1 AND status <> 'retired' ORDER BY type, value LIMIT 1000")?;
+        let rows = st
+            .query_map(params![project_id], |r| {
+                let (kind, value): (String, String) = (r.get(0)?, r.get(1)?);
+                // a cloud resource's identifier rarely says where it is: its provider, account and region do
+                let shown = if kind == "cloud_resource" { cloud_place(&value, &r.get::<_, String>(4)?) } else { value };
+                Ok(vec![label(&kind), shown, label(&r.get::<_, String>(2)?), r.get::<_, String>(3)?.chars().take(10).collect()])
+            })?
+            .collect::<Result<_, _>>()?;
         rows
     } else {
         vec![]
@@ -412,6 +419,30 @@ fn checklist_line(d: &Data) -> Option<String> {
             cov.in_progress
         )
     })
+}
+
+/// A cloud resource as the report shows it: its identifier, then its provider, account and region
+/// (or namespace), as the configuration audit recorded them.
+fn cloud_place(value: &str, data: &str) -> String {
+    let d: serde_json::Value = serde_json::from_str(data).unwrap_or(serde_json::Value::Null);
+    let s = |k: &str| d.get(k).and_then(serde_json::Value::as_str).filter(|v| !v.is_empty()).map(str::to_string);
+    let provider = s("provider").map(|p| match p.as_str() {
+        "aws" => "AWS".to_string(),
+        "azure" => "Azure".into(),
+        "gcp" => "Google Cloud".into(),
+        "kubernetes" => "Kubernetes".into(),
+        _ => p,
+    });
+    let account = s("account").map(|a| match s("accountName") {
+        Some(n) => format!("account {a} ({n})"),
+        None => format!("account {a}"),
+    });
+    let place: Vec<String> = [provider, account, s("region").or_else(|| s("namespace"))].into_iter().flatten().collect();
+    if place.is_empty() {
+        value.to_string()
+    } else {
+        format!("{value} ({})", place.join(" · "))
+    }
 }
 
 const RISKS_HEAD: &[&str] = &["Acceptance", "Standing", "Owner", "Approved", "Until", "Justification", "Covers"];

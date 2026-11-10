@@ -1,6 +1,6 @@
 import { Button, Dropdown } from "@heroui/react";
 import { listen } from "@tauri-apps/api/event";
-import { Ban, Globe, History, MoreHorizontal, Plus, Radar, RotateCcw, ScanSearch, Server, Trash2 } from "lucide-react";
+import { Ban, Globe, History, MoreHorizontal, Network, Plus, Radar, RotateCcw, ScanSearch, Server, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/app/store";
 import { ToneChip } from "@/components/ui/Badges";
@@ -201,7 +201,7 @@ function ObservationsModal({ asset, onClose }: { asset: Asset | null; onClose: (
             const certainty = typeof d.certainty === "string" && d.certainty in CERTAINTY_META ? (d.certainty as keyof typeof CERTAINTY_META) : null;
             const details = Object.entries(d)
               .filter(([k, v]) => k !== "certainty" && v !== null && v !== "" && !(Array.isArray(v) && v.length === 0))
-              .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`);
+              .map(([k, v]) => `${k}: ${shown(v)}`);
             return (
               <li key={o.id} className="panel-inset px-3 py-2 text-[12.5px]">
                 <div className="flex items-center gap-2">
@@ -278,7 +278,14 @@ function ChangesModal({ snapshot, onClose }: { snapshot: DiscoverySnapshot | nul
   );
 }
 
-export function AttackSurfaceTab({ project }: { project: Project }) {
+/** An observed value as text: lists joined, nested objects (tags, exposure) as key=value pairs. */
+function shown(v: unknown): string {
+  if (Array.isArray(v)) return v.map(shown).join(", ");
+  if (v && typeof v === "object") return Object.entries(v as Record<string, unknown>).map(([k, x]) => `${k}=${shown(x)}`).join(", ");
+  return String(v);
+}
+
+export function AttackSurfaceTab({ project, onRelated }: { project: Project; onRelated?: (assetId: number) => void }) {
   const { runtime } = useApp();
   const confirm = useConfirm();
   const assets = useQuery(["assets"], () => api.assetsList(project.id), [project.id], runtime);
@@ -420,6 +427,7 @@ export function AttackSurfaceTab({ project }: { project: Project }) {
                                 aria-label="Asset actions"
                                 onAction={(k) => {
                                   if (k === "history") setHistory(a);
+                                  else if (k === "related") onRelated?.(a.id);
                                   else if (k === "retire") void setStatus(a, "retired");
                                   else if (k === "activate") void setStatus(a, "active");
                                   else if (k === "delete") void remove(a);
@@ -428,6 +436,11 @@ export function AttackSurfaceTab({ project }: { project: Project }) {
                                 <Dropdown.Item id="history" textValue="Observation history">
                                   <History className="size-3.5" /> Observation history
                                 </Dropdown.Item>
+                                {onRelated ? (
+                                  <Dropdown.Item id="related" textValue="Related records">
+                                    <Network className="size-3.5" /> Related records
+                                  </Dropdown.Item>
+                                ) : null}
                                 {a.status === "retired" ? (
                                   <Dropdown.Item id="activate" textValue="Mark active">
                                     <RotateCcw className="size-3.5" /> Mark active

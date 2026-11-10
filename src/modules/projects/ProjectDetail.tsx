@@ -461,7 +461,13 @@ export function ProjectDetail({ id }: { id: number }) {
           <ScopeExtras project={p} />
         </Tabs.Panel>
         <Tabs.Panel id="surface">
-          <AttackSurfaceTab project={p} />
+          <AttackSurfaceTab
+            project={p}
+            onRelated={(assetId) => {
+              setTab("investigation");
+              setPanelRecord({ kind: "asset", id: assetId, sub: "" });
+            }}
+          />
         </Tabs.Panel>
         <Tabs.Panel id="apis">
           <ApiTab project={p} onOpenFindings={() => setTab("findings")} />

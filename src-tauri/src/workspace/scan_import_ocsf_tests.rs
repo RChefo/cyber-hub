@@ -242,7 +242,7 @@ fn checked_resources_become_cloud_assets_linked_to_their_findings() {
         assert_eq!(linked, assets[1].id);
         // the report lists the resource with the project's other assets
         let md = crate::workspace::report::markdown(c, 1, &crate::workspace::report::ReportOptions::default(), "2026-11-10")?;
-        assert!(md.contains("arn:aws:s3:::public-bucket"), "{md}");
+        assert!(md.contains("arn:aws:s3:::public-bucket (AWS · account 123456789012 (production) · eu-west-1)"), "the report says where the resource is: {md}");
         Ok(())
     })
     .unwrap();

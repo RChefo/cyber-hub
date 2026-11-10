@@ -86,7 +86,7 @@ One row per real asset: `UNIQUE(project_id, type, key)`, where `key` is the norm
 
   Nothing else of the resource is kept: not its raw data, nor a secret a misconfiguration exposed.
 * **Scope:** cloud resources are not network targets, so the scope's hosts and addresses do not apply to them.
-* **Links:** imported findings link to their resource. Resources take part in the investigation layer and the report's asset list like other assets.
+* **Links:** imported findings link to their resource. Resources take part in the investigation layer (Attack surface → a resource's menu → Related records) and the report's asset list like other assets; the report names each one's provider, account and region (or namespace) after its identifier.
 * **Migration 32** rebuilt the table to allow the type. It ran with foreign keys off as `run_rebuild` does: every id was kept and the references checked.
 
 The status is `active`, `not_observed` or `retired`. *Not observed* never means deleted. Seeing a `not_observed` asset again makes it active; a `retired` asset stays retired. Confidence only rises. Each refresh records an observation (`asset_observations`, with a fingerprint of the data). Within a discovery snapshot every observation is kept, so snapshots can be compared. Outside a snapshot, an identical consecutive observation is not repeated. Assets reference OSINT entities by id instead of copying them. Upserts run in a savepoint, and the unique key guarantees one record even under concurrent writers.
