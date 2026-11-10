@@ -188,7 +188,7 @@ pub static TOOLS: &[ToolSpec] = &[
             "project_id": project_id(),
             "title": { "type": "string", "minLength": 1, "maxLength": 200 },
             "severity": { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] },
-            "status": { "type": "string", "enum": ["new", "under_review", "confirmed", "accepted_risk", "in_remediation", "resolved", "reopened", "false_positive"], "description": "Defaults to new. The names open and reported of earlier versions are still accepted (as new and confirmed)." },
+            "status": { "type": "string", "enum": ["new", "under_review", "confirmed", "in_remediation", "resolved", "reopened", "false_positive"], "description": "Defaults to new. The names open and reported of earlier versions are still accepted (as new and confirmed)." },
             "description": { "type": "string", "maxLength": 20000 },
             "remediation": { "type": "string", "maxLength": 20000 },
             "affected_target": { "type": "string", "maxLength": 500 },
@@ -431,6 +431,9 @@ pub static TOOLS: &[ToolSpec] = &[
             "action": { "type": "string", "enum": ["false_positive", "dismiss", "promote"] },
             "note": { "type": "string", "maxLength": 500 }
         }), &["project_id", "hit_id", "action"]) },
+    ToolSpec { name: "cyberhub_list_risk_acceptances", title: "Risk acceptances", group: "detection", category: Category::Read,
+        description: "A project's risk register: each accepted risk with its justification, compensating controls, owner, approver, approval and expiry dates, standing (active, review_due, expired, revoked) and the findings, vulnerabilities and ASVS requirements it covers, plus findings marked accepted without a record. Read-only: only the analyst records, renews or revokes an acceptance, in Cyber Hub.",
+        schema: || obj(json!({ "project_id": project_id() }), &["project_id"]) },
     ToolSpec { name: "cyberhub_get_asvs_assessment", title: "ASVS assessment", group: "detection", category: Category::Read,
         description: "A project's OWASP ASVS 5.0.0 assessments, or one assessment with its requirements (by status or chapter), notes, linked findings and evidence, the analyst's mappings and recent changes. A requirement is compliant only when the analyst said so.",
         schema: || obj(json!({
@@ -528,7 +531,7 @@ mod tests {
                 assert!(s["properties"].get(r.as_str().unwrap()).is_some(), "{} requires an undefined property", t.name);
             }
         }
-        assert_eq!(TOOLS.len(), 61);
+        assert_eq!(TOOLS.len(), 62);
         assert!(TOOLS.iter().all(|t| GROUPS.iter().any(|(g, _)| *g == t.group)), "every tool is in a listed group");
     }
 

@@ -23,7 +23,7 @@ describe("vulnerability helpers", () => {
   });
 
   it("asks for a reason when accepting or dismissing", () => {
-    expect(needsReason("accepted_risk")).toBe(true);
+    expect(needsReason("accepted_risk")).toBe(false);
     expect(needsReason("false_positive")).toBe(true);
     expect(needsReason("in_remediation")).toBe(false);
   });

@@ -40,6 +40,8 @@ export type Tag =
   | "assets"
   /** project vulnerabilities */
   | "vulns"
+  /** risk acceptances (the risk register) */
+  | "risk"
   /** project workflows and their runs */
   | "workflows"
   /** the finding library (templates) */

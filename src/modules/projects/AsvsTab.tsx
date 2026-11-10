@@ -13,6 +13,10 @@ import { invalidate, useQuery } from "@/lib/query";
 import type { AsvsItem, AsvsStatus, AsvsSummary, Project, Severity } from "@/lib/types";
 import { ASVS_FRAMEWORKS, ASVS_STATUS, filterItems, progress } from "./asvs";
 import { cn, formatRelative, pluralize } from "@/lib/utils";
+import type { RiskAcceptance } from "@/lib/types";
+import { AcceptRiskModal } from "./RiskTab";
+import { AsvsGaps } from "./AsvsGaps";
+import { coverIndex, coverKey, RISK_STANDING } from "./risk";
 
 /** Projects → ASVS: OWASP ASVS 5.0.0 assessments. */
 export function AsvsTab({ project, onOpenFinding }: { project: Project; onOpenFinding: (id: number) => void }) {
@@ -114,6 +118,7 @@ export function AsvsTab({ project, onOpenFinding }: { project: Project; onOpenFi
           )
         )}
       </Panel>
+      {current && <AsvsGaps key={`gaps-${current.id}`} assessment={current} others={list.data ?? []} />}
       {current && <Requirements key={current.id} assessment={current} project={project} archived={archived} onOpenFinding={onOpenFinding} />}
       {confirm.element}
     </div>
@@ -161,6 +166,9 @@ function Requirements({ assessment, project, archived, onOpenFinding }: { assess
   const [beyond, setBeyond] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const items = useMemo(() => filterItems(view.data?.items ?? [], { text, status, beyond }), [view.data, text, status, beyond]);
+  // exceptions: risk acceptances covering a requirement of this assessment
+  const risks = useQuery(["risk"], () => api.riskList(project.id), [project.id], runtime);
+  const covers = useMemo(() => coverIndex(risks.data ?? []), [risks.data]);
   if (view.error) return <ErrorBlock message={view.error} onRetry={view.reload} />;
   if (!view.data || !catalog.data) return <LoadingRows rows={6} />;
   return (
@@ -184,7 +192,7 @@ function Requirements({ assessment, project, archived, onOpenFinding }: { assess
                 {ch.id} {ch.name} <span className="font-normal text-muted">· {pluralize(rows.length, "requirement")}</span>
               </h3>
               {rows.map((i) => (
-                <Row key={i.requirement.id} id={assessment.id} item={i} project={project} archived={archived} open={open === i.requirement.id} onToggle={() => setOpen(open === i.requirement.id ? null : i.requirement.id)} onOpenFinding={onOpenFinding} />
+                <Row key={i.requirement.id} id={assessment.id} item={i} project={project} archived={archived} open={open === i.requirement.id} onToggle={() => setOpen(open === i.requirement.id ? null : i.requirement.id)} onOpenFinding={onOpenFinding} exception={covers.get(coverKey("asvs", assessment.id, i.requirement.id))} />
               ))}
             </section>
           );
@@ -208,7 +216,7 @@ function Requirements({ assessment, project, archived, onOpenFinding }: { assess
   );
 }
 
-function Row({ id, item, project, archived, open, onToggle, onOpenFinding }: { id: number; item: AsvsItem; project: Project; archived: boolean; open: boolean; onToggle: () => void; onOpenFinding: (id: number) => void }) {
+function Row({ id, item, project, archived, open, onToggle, onOpenFinding, exception }: { id: number; item: AsvsItem; project: Project; archived: boolean; open: boolean; onToggle: () => void; onOpenFinding: (id: number) => void; exception?: RiskAcceptance }) {
   const r = item.requirement;
   const st = ASVS_STATUS[item.status];
   const setStatus = async (s: AsvsStatus, note?: string) => {
@@ -230,15 +238,21 @@ function Row({ id, item, project, archived, open, onToggle, onOpenFinding }: { i
           <span className={cn("min-w-0 flex-1", !open && "line-clamp-2")}>{r.text}</span>
         </button>
         {(item.findings.length > 0 || item.evidence.length > 0) && <span className="shrink-0 text-[11px] text-muted">{item.findings.length + item.evidence.length} linked</span>}
+        {exception && (
+          <ToneChip tone={exception.standing === "active" ? "accent" : RISK_STANDING[exception.standing].tone} dot={false} className="shrink-0 text-[10.5px]">
+            {exception.standing === "expired" ? `exception expired ${exception.expiresAt}` : `exception until ${exception.expiresAt}`}
+          </ToneChip>
+        )}
         <SelectInput aria-label={`Status of ${r.id}`} value={item.status} isDisabled={archived} onChange={(v) => void setStatus(v as AsvsStatus)} options={Object.entries(ASVS_STATUS).map(([k, s]) => ({ id: k, label: s.label }))} className={cn("w-40 shrink-0", st.tone === "danger" && "text-danger")} />
       </div>
-      {open && <Details id={id} item={item} project={project} archived={archived} onSaveNote={(note) => void setStatus(item.status, note)} onOpenFinding={onOpenFinding} />}
+      {open && <Details id={id} item={item} project={project} archived={archived} onSaveNote={(note) => void setStatus(item.status, note)} onOpenFinding={onOpenFinding} exception={exception} />}
     </div>
   );
 }
 
-function Details({ id, item, project, archived, onSaveNote, onOpenFinding }: { id: number; item: AsvsItem; project: Project; archived: boolean; onSaveNote: (note: string) => void; onOpenFinding: (id: number) => void }) {
+function Details({ id, item, project, archived, onSaveNote, onOpenFinding, exception }: { id: number; item: AsvsItem; project: Project; archived: boolean; onSaveNote: (note: string) => void; onOpenFinding: (id: number) => void; exception?: RiskAcceptance }) {
   const { runtime } = useApp();
+  const [excepting, setExcepting] = useState(false);
   const r = item.requirement;
   const [note, setNote] = useState(item.note);
   const [framework, setFramework] = useState("wstg");
@@ -356,6 +370,30 @@ function Details({ id, item, project, archived, onSaveNote, onOpenFinding }: { i
             Record a finding
           </Button>
         </div>
+      )}
+      {exception ? (
+        <p className="text-[12px] text-muted">
+          Exception: risk acceptance #{exception.id} “{exception.title}”, owner {exception.owner}, approved by {exception.approver} on {exception.approvedAt}, {exception.standing === "expired" ? "expired on" : "until"} {exception.expiresAt}. It stays non-compliant; the exception is managed on the Risks tab.
+        </p>
+      ) : (
+        !archived &&
+        item.status === "non_compliant" && (
+          <div>
+            <Button size="sm" variant="tertiary" onPress={() => setExcepting(true)}>
+              Record an exception…
+            </Button>
+          </div>
+        )
+      )}
+      {excepting && (
+        <AcceptRiskModal
+          projectId={project.id}
+          items={[{ kind: "asvs", refId: id, requirement: item.requirement.id }]}
+          labels={[`ASVS ${item.requirement.id} · ${item.requirement.text}`]}
+          defaultTitle={`Exception to ASVS ${item.requirement.id}`}
+          isOpen
+          onOpenChange={(o) => !o && setExcepting(false)}
+        />
       )}
     </div>
   );

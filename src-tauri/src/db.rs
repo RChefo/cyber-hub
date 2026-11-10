@@ -1213,6 +1213,60 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_ti_saved_events ON ti_saved_events(saved_id, id DESC);
     "#,
+    // 27 — risk acceptance (docs/DATA_MODEL.md#risk-acceptance-schema-27): who accepted which risk,
+    // why, with which compensating controls, approved by whom and until when; the findings,
+    // vulnerabilities and ASVS requirements it covers (an ASVS requirement's exception); every
+    // change. Findings already marked as accepted risks keep their status without a record (the
+    // risk register lists them so one can be written).
+    r#"
+    CREATE TABLE risk_acceptances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        justification TEXT NOT NULL,
+        compensating TEXT NOT NULL DEFAULT '',
+        owner TEXT NOT NULL,
+        approver TEXT NOT NULL,
+        approved_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        review_at TEXT,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked')),
+        revoked_at TEXT,
+        revoked_reason TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_risk_acceptances_project ON risk_acceptances(project_id, status);
+    CREATE TABLE risk_acceptance_items (
+        acceptance_id INTEGER NOT NULL REFERENCES risk_acceptances(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('finding','vulnerability','asvs')),
+        ref_id INTEGER NOT NULL,
+        requirement TEXT NOT NULL DEFAULT '',
+        added_at TEXT NOT NULL,
+        removed_at TEXT,
+        removed_reason TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (acceptance_id, kind, ref_id, requirement)
+    );
+    CREATE INDEX idx_risk_acceptance_items_ref ON risk_acceptance_items(kind, ref_id);
+    CREATE TABLE risk_acceptance_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        acceptance_id INTEGER NOT NULL REFERENCES risk_acceptances(id) ON DELETE CASCADE,
+        action TEXT NOT NULL,
+        detail TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'user',
+        at TEXT NOT NULL
+    );
+    CREATE INDEX idx_risk_acceptance_events ON risk_acceptance_events(acceptance_id, id);
+    CREATE TRIGGER risk_items_findings_deleted AFTER DELETE ON findings BEGIN
+        DELETE FROM risk_acceptance_items WHERE kind = 'finding' AND ref_id = OLD.id;
+    END;
+    CREATE TRIGGER risk_items_vulnerabilities_deleted AFTER DELETE ON vulnerabilities BEGIN
+        DELETE FROM risk_acceptance_items WHERE kind = 'vulnerability' AND ref_id = OLD.id;
+    END;
+    CREATE TRIGGER risk_items_asvs_deleted AFTER DELETE ON asvs_assessments BEGIN
+        DELETE FROM risk_acceptance_items WHERE kind = 'asvs' AND ref_id = OLD.id;
+    END;
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a

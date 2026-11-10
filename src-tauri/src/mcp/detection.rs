@@ -106,6 +106,19 @@ pub struct HitsQuery {
     pub offset: Option<i64>,
 }
 
+/// A project's risk register, redacted (justifications are free text the analyst wrote).
+pub fn risk_view(c: &Connection, project_id: i64) -> AppResult<Value> {
+    c.query_row("SELECT 1 FROM projects WHERE id = ?1", params![project_id], |_| Ok(())).optional()?.ok_or_else(|| AppError::NotFound(format!("project {project_id}")))?;
+    let mut v = json!({
+        "acceptances": crate::workspace::risk::list(c, project_id)?,
+        "summary": crate::workspace::risk::summary(c, project_id)?,
+        "acceptedWithoutRecord": crate::workspace::risk::uncovered_findings(c, project_id)?.into_iter().map(|(id, title)| json!({ "findingId": id, "title": title })).collect::<Vec<_>>(),
+        "note": "An accepted risk is not remediated: it stays a risk, accepted by its owner until the expiry. Only the analyst records, renews or revokes an acceptance, in Cyber Hub.",
+    });
+    redact_value(&mut v);
+    Ok(v)
+}
+
 /// Redacts every string of a JSON value (event fields, matched text) in place.
 fn redact_value(v: &mut Value) {
     match v {

@@ -42,7 +42,8 @@ export function countByPriority(list: Vulnerability[]): Record<PriorityLevel, nu
   return out;
 }
 
-/** Status changes that need a written reason (mirrors the backend rule). */
+/** Status changes that need a written reason (mirrors the backend rule). Accepting a risk needs
+ * a whole risk acceptance record instead (owner, approver, expiry). */
 export function needsReason(status: VulnStatus): boolean {
-  return status === "accepted_risk" || status === "false_positive";
+  return status === "false_positive";
 }

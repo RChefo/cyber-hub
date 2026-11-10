@@ -30,7 +30,7 @@ MCP has its own page in the sidebar (Integrations → MCP). The switch at the to
 | Overview | Server state, transport (STDIO), local bridge address, connected clients, catalog size, waiting approvals, recent activity |
 | Approvals | The Approval Center: every waiting request with the client, action, project, target, the checks Cyber Hub ran, and time left; Approve and Decline; recent decisions from the audit log |
 | Clients | Connected clients (from the running bridge) and clients seen before (from the audit log), with self-reported name and version, last activity, request counts and the latest result |
-| Tools | All 61 tools from the server catalog, grouped as below, with permission category, whether they ask you under the current policy, availability and parameters |
+| Tools | All 62 tools from the server catalog, grouped as below, with permission category, whether they ask you under the current policy, availability and parameters |
 | Resources & prompts | The resources, the scope template and the prompts, with their parameters |
 | Permissions | The policy for each category (below) |
 | Activity | The audit log, filterable by client, permission category and status, with redacted arguments per entry |
@@ -38,7 +38,7 @@ MCP has its own page in the sidebar (Integrations → MCP). The switch at the to
 
 The page reads everything from the app: the catalog comes from the same definitions `cyberhub-mcp` advertises, and clients and activity come from the bridge and the `mcp_audit` table. MCP settings are no longer in Settings.
 
-## Tools (61)
+## Tools (62)
 
 | Group | Tools | Permission category |
 |---|---|---|
@@ -62,7 +62,7 @@ The page reads everything from the app: the catalog comes from the same definiti
 The OSINT tools were exercised with Claude Code 2.1.318 on Windows: all eight read tools, a refused discovery of a private address, a refused web fingerprint outside the project scope (both refused before any approval prompt), an approved DNS collection whose results stayed pending review, and an approved relationship proposal stored as inferred with low confidence and the client's rationale as evidence. The audit log recorded each call with its category and approval.
 | Investigation | `cyberhub_search_records` (archived projects only with `include_archived`), `cyberhub_get_related_records`, `cyberhub_list_record_relationships`, `cyberhub_get_attack_matrix` | read |
 | | `cyberhub_correlate_project` (stores suggestions only), `cyberhub_propose_record_relationship` (stored as an unconfirmed suggestion with low confidence) | local write |
-| Detection and compliance | `cyberhub_list_detection_rules`, `cyberhub_get_detection_rule`, `cyberhub_list_detection_hits`, `cyberhub_get_asvs_assessment` | read |
+| Detection and compliance | `cyberhub_list_detection_rules`, `cyberhub_get_detection_rule`, `cyberhub_list_detection_hits`, `cyberhub_get_asvs_assessment`, `cyberhub_list_risk_acceptances` | read |
 | | `cyberhub_review_detection_hit` (false positive, dismiss, or promote to a finding under review), `cyberhub_set_asvs_status` (never *compliant*) | local write |
 | Reports and history | `cyberhub_generate_report`, `cyberhub_get_activity`, `cyberhub_get_run_details` | read |
 | | `cyberhub_export_report` | export |
@@ -88,6 +88,7 @@ The detection and compliance tools (Mission 4) let a client explain rules and ma
 * `cyberhub_list_detection_hits` returns a project's hits with why each matched: Sigma fields and values, or YARA strings with their offsets. Values from logs and files pass through the credential redaction first, and the result says that a hit is a lead, not a finding.
 * `cyberhub_review_detection_hit` marks a hit a false positive (feedback on the rule), dismisses it, or promotes it to a finding under review with low confidence. A hit of another project, or one already promoted, is refused before an approval is shown.
 * `cyberhub_get_asvs_assessment` lists a project's assessments, or one with its requirements by status or chapter, and gives the standard's attribution.
+* `cyberhub_list_risk_acceptances` returns a project's risk register: each acceptance with its justification, controls, owner, approver, dates, standing and what it covers, and the findings marked accepted without a record. It is read-only: no tool records, renews or revokes an acceptance, and `cyberhub_create_finding` cannot create an accepted risk.
 * `cyberhub_set_asvs_status` sets *not assessed*, *non-compliant*, *needs review* or *not applicable*, and is recorded as made by an MCP client. **A client cannot mark a requirement compliant**: the schema leaves the value out, and Cyber Hub refuses it before any approval. Compliance is the analyst's call, in the ASVS tab.
 * Both write tools refuse archived projects and wait for your approval.
 

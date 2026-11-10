@@ -1232,6 +1232,10 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
             let a: detection::AsvsQuery = parse(args)?;
             db.with(|c| detection::asvs_view(c, &a)).map_err(app_err)
         }
+        "cyberhub_list_risk_acceptances" => {
+            let a: ProjectArg = parse(args)?;
+            db.with(|c| detection::risk_view(c, a.project_id)).map_err(app_err)
+        }
         "cyberhub_set_asvs_status" => {
             let a: detection::AsvsSet = parse(args)?;
             db.with(|c| detection::set_asvs(c, &a)).map_err(app_err)

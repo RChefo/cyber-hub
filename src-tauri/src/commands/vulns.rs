@@ -229,10 +229,12 @@ pub(crate) fn bulk_status(c: &rusqlite::Connection, ids: &[i64], status: &str, n
     for &id in ids {
         match finding_get(&tx, id).map_err(|e| e.to_string()).and_then(|f| lifecycle::transition_ok(&f.status, target)) {
             Err(reason) => out.skipped.push((id, reason)),
-            Ok(()) => {
-                lifecycle::set_status(&tx, id, target, note, "user")?;
-                out.changed.push(id);
-            }
+            // a finding no risk acceptance covers is reported, not changed (and the others are)
+            Ok(()) => match lifecycle::set_status(&tx, id, target, note, "user") {
+                Ok(_) => out.changed.push(id),
+                Err(crate::error::AppError::Validation(why)) => out.skipped.push((id, why)),
+                Err(e) => return Err(e),
+            },
         }
     }
     tx.commit()?;

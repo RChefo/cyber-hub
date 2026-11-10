@@ -60,10 +60,18 @@ pub fn set_status(c: &Connection, finding_id: i64, status: &str, note: &str, sou
     let to = status_or_err(status)?;
     let (project_id, from) = owner(c, finding_id)?;
     transition_ok(&from, to).map_err(validation)?;
+    // an accepted risk needs a risk acceptance that covers it (editor, bulk changes, imports and
+    // MCP all come through here)
+    if to == "accepted_risk" {
+        crate::workspace::risk::require_cover(c, "finding", finding_id)?;
+    }
     let ts = now();
     c.execute("UPDATE findings SET status = ?2, updated_at = ?3 WHERE id = ?1", params![finding_id, to, ts])?;
     c.execute("UPDATE projects SET updated_at = ?2 WHERE id = ?1", params![project_id, ts])?;
     record_event(c, finding_id, project_id, "status", (Some(&from), Some(to)), note, source)?;
+    if from == "accepted_risk" {
+        crate::workspace::risk::release(c, "finding", finding_id, "", &format!("its status became {}", to.replace('_', " ")), source)?;
+    }
     Ok(to)
 }
 

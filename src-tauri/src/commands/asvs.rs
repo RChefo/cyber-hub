@@ -28,6 +28,19 @@ pub async fn asvs_assessment_get(db: State<'_, Db>, id: i64) -> AppResult<asvs::
     db.with(|c| asvs::get(c, id))
 }
 
+/// The gaps of an assessment by chapter, with exceptions and remediation, and the compliant
+/// requirements no evidence supports.
+#[tauri::command]
+pub async fn asvs_gaps(db: State<'_, Db>, id: i64) -> AppResult<crate::workspace::asvs_gaps::Gaps> {
+    db.with(|c| crate::workspace::asvs_gaps::gaps(c, id))
+}
+
+/// How requirements moved between two assessments of the same project.
+#[tauri::command]
+pub async fn asvs_compare(db: State<'_, Db>, from: i64, to: i64) -> AppResult<crate::workspace::asvs_gaps::Comparison> {
+    db.with(|c| crate::workspace::asvs_gaps::compare(c, from, to))
+}
+
 #[tauri::command]
 pub async fn asvs_assessment_update(db: State<'_, Db>, id: i64, name: Option<String>, level: Option<u8>, scope: Option<String>) -> AppResult<()> {
     db.with(|c| asvs::update(c, id, name.as_deref(), level, scope.as_deref()))

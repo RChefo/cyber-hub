@@ -27,6 +27,7 @@ This document states exactly what an upgrade does, what was tested, and how far 
 | development: detection engineering | 24 |
 | development: OWASP ASVS assessments | 25 |
 | development: saved indicator lifecycle | 26 |
+| development: risk acceptance | 27 |
 
 The schema version is SQLite's `user_version`. Migrations 9–25 are listed in [DATA_MODEL.md](DATA_MODEL.md); migration 26 in [PROVIDERS.md](PROVIDERS.md#saved-indicators).
 * Migrations 9–12 add tables and columns, rebuild `findings` once to give it the new lifecycle, and map the old finding statuses: `open` becomes `new`, `reported` becomes `confirmed`, and every finding that was `reported` gets a history entry recording the mapping. Ids and all other columns are kept.
@@ -38,6 +39,12 @@ The schema version is SQLite's `user_version`. Migrations 9–25 are listed in [
 * Migration 24 only adds tables (the detection library: rules, versions, collections, samples, expectations, tests, feedback, and per project the detection hits) and changes nothing that exists.
 * Migration 25 only adds tables (ASVS assessments with their statuses, links, mappings and history) and two triggers that remove a deleted finding's or evidence record's links, and changes nothing that exists.
 * Migration 26 adds columns with defaults to `ti_saved` (source, reliability, confidence, status `active`, validity, and `updated_at`, set to the time each indicator was saved) and a table for their history. Saved indicators are kept as they were.
+* Migration 27 only adds tables (risk acceptances, what they cover and their history) and triggers that remove a deleted finding's, vulnerability's or ASVS assessment's items, and changes nothing that exists. Findings already marked as accepted risks keep their status; the risk register lists them as accepted without a record.
+* Every migration is tested from every earlier schema (`db_upgrade_tests.rs`, Mission 5):
+  * a row is seeded in every table of each schema from 1 to the latest − 1, and after the upgrade every one of them must still exist, with `integrity_check` and `foreign_key_check` clean;
+  * the backup taken before the upgrade must keep the old version and the same rows, and must upgrade the same way when restored;
+  * a failure injected before any migration's commit leaves the last complete version and its rows, and the next start finishes;
+  * a process killed with SIGKILL or TerminateProcess inside a migration leaves the previous version, and the next start finishes.
 
 **Scope semantics from schema 18.** URL scope entries authorize only their paths, not their host (see [SECURITY.md](SECURITY.md#path-level-scope)). A project that relied on a URL entry for host-level operations, such as an Nmap scan of the URL's host, now needs the host, its domain or its address range added to the scope. The refusal says so.
 

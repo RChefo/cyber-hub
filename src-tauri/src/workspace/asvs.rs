@@ -66,7 +66,7 @@ fn s(v: &Value, k: &str) -> String {
     v.get(k).and_then(Value::as_str).unwrap_or("").trim().to_string()
 }
 
-static CATALOG: Lazy<Catalog> = Lazy::new(|| {
+pub(crate) static CATALOG: Lazy<Catalog> = Lazy::new(|| {
     let doc: Value = serde_json::from_str(include_str!("../../catalog/asvs-5.0.0.json")).expect("catalog/asvs-5.0.0.json is valid JSON");
     let mut chapters = Vec::new();
     let mut requirements = Vec::new();
@@ -235,6 +235,9 @@ pub fn set_status(c: &Connection, id: i64, req: &str, status: &str, note: Option
     )?;
     if old_status != status {
         tx.execute("INSERT INTO asvs_history (assessment_id, requirement, from_status, to_status, note, actor, at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![id, r.id, old_status, status, note, actor, ts])?;
+        if status != "non_compliant" {
+            crate::workspace::risk::release(&tx, "asvs", id, &r.id, &format!("the requirement is now {}", status.replace('_', " ")), actor)?;
+        }
     }
     tx.execute("UPDATE asvs_assessments SET updated_at = ?2 WHERE id = ?1", params![id, ts])?;
     tx.commit()?;
@@ -465,6 +468,28 @@ pub fn report_markdown(c: &Connection, id: i64, project: &str, generated: &str) 
         assessed,
         n.total
     );
+    // the gaps, with their exceptions and remediation, and what no evidence supports
+    let g = super::asvs_gaps::gaps(c, id)?;
+    if !g.gaps.is_empty() {
+        out.push_str("\n## Gaps\n\nNon-compliant requirements of the level, those without an exception first. An exception (a recorded risk acceptance) covers a gap; it does not close it.\n\n| Requirement | Exception | Remediation of the linked findings |\n|---|---|---|\n");
+        for gp in &g.gaps {
+            let ex = gp
+                .exception
+                .as_ref()
+                .map(|e| format!("#{} {}: owner {}, approved by {}, {} {}", e.id, md(&e.title), md(&e.owner), md(&e.approver), if e.standing == "expired" { "**expired** on" } else { "until" }, e.expires_at))
+                .unwrap_or_else(|| "—".into());
+            out.push_str(&format!("| {} {} | {} | {} |\n", gp.requirement, md(&gp.text), ex, md(&gp.remediation)));
+        }
+    }
+    if !g.without_evidence.is_empty() {
+        out.push_str(&format!(
+            "\n{} compliant requirement{} {} no evidence linked ({}): compliant on the analyst's word.\n",
+            g.without_evidence.len(),
+            if g.without_evidence.len() == 1 { "" } else { "s" },
+            if g.without_evidence.len() == 1 { "has" } else { "have" },
+            g.without_evidence.join(", ")
+        ));
+    }
     for ch in &CATALOG.chapters {
         let items: Vec<&Item> = v.items.iter().filter(|i| i.in_level && i.requirement.chapter == ch.id).collect();
         if items.is_empty() {

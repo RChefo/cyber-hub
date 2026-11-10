@@ -18,6 +18,8 @@ import { filterFindings, parseTags, sortFindings, tagsOf } from "./report";
 import { BulkEditModal } from "./BulkEditModal";
 import { CvssField } from "./CvssField";
 import { RemediationGroups } from "./RemediationGroups";
+import { AcceptRiskModal } from "./RiskTab";
+import { coverIndex, coverKey, RISK_STANDING } from "./risk";
 import { ScanImportModal } from "./ScanImportModal";
 import { Segmented } from "@/modules/utilities/tools/shared";
 import { applyTemplate, templateFromFinding } from "@/modules/library/library";
@@ -169,7 +171,12 @@ export function FindingFormModal({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <TextInput label="Title" value={d.title} onChange={(v) => set("title", v)} placeholder="Reflected XSS in search parameter" isRequired autoFocus className="md:col-span-2" />
         <SelectInput label="Severity" value={d.severity} onChange={(v) => set("severity", v as Severity)} options={SEVERITY_OPTIONS} />
-        <SelectInput label="Status" value={d.status} onChange={(v) => set("status", v as FindingStatus)} options={FINDING_STATUS_OPTIONS} />
+        <SelectInput
+          label="Status"
+          value={d.status}
+          onChange={(v) => set("status", v as FindingStatus)}
+          options={FINDING_STATUS_OPTIONS.filter((o) => o.id !== "accepted_risk" || initial?.status === "accepted_risk")}
+        />
         <TextInput label="Category" value={d.category} onChange={(v) => set("category", v)} placeholder="Injection, access control, misconfiguration" />
         <SelectInput label="Confidence" value={d.confidence} onChange={(v) => set("confidence", v as Confidence)} options={CONFIDENCE_OPTIONS} />
         <TextInput label="Affected target" value={d.affectedTarget} onChange={(v) => set("affectedTarget", v)} placeholder="https://app.example.com/search?q=" mono />
@@ -329,6 +336,11 @@ export function FindingsTab({ projectId, findings, focusId, onFocused }: { proje
   const [detail, setDetail] = useState<number | null>(null);
   const [importing, setImporting] = useState(false);
   const [bulkEditing, setBulkEditing] = useState(false);
+  // findings to accept as risks (from a status menu): the acceptance form, never a plain status change
+  const [accepting, setAccepting] = useState<Finding[] | null>(null);
+  const { runtime: riskRuntime } = useApp();
+  const risks = useQuery(["risk"], () => api.riskList(projectId), [projectId], riskRuntime);
+  const covers = useMemo(() => coverIndex(risks.data ?? []), [risks.data]);
 
   const list = useMemo(() => filterFindings(sortFindings(findings), { severity: sev, status, query, tag }), [findings, sev, status, query, tag]);
   const tags = useMemo(() => tagsOf(findings), [findings]);
@@ -338,6 +350,10 @@ export function FindingsTab({ projectId, findings, focusId, onFocused }: { proje
   const allSelected = shown.visible.length > 0 && shown.visible.every((f) => selected.has(f.id));
 
   const bulk = async (next: FindingStatus) => {
+    if (next === "accepted_risk") {
+      setAccepting(visibleSelected.filter((f) => f.status !== "resolved" && f.status !== "false_positive"));
+      return;
+    }
     try {
       const r = await api.findingsBulkStatus(
         visibleSelected.map((f) => f.id),
@@ -383,6 +399,10 @@ export function FindingsTab({ projectId, findings, focusId, onFocused }: { proje
   }, [focusId, findings]);
 
   const changeStatus = async (f: Finding, next: FindingStatus) => {
+    if (next === "accepted_risk") {
+      setAccepting([f]);
+      return;
+    }
     try {
       await api.findingSetStatus(f.id, next);
       invalidate("findings", "projects");
@@ -590,6 +610,7 @@ export function FindingsTab({ projectId, findings, focusId, onFocused }: { proje
                         <ToneChip tone={FINDING_STATUS_META[f.status].tone}>{FINDING_STATUS_META[f.status].label}</ToneChip>
                         <ChevronDown className="size-3 text-muted" />
                       </Button>
+                      {f.status === "accepted_risk" && risks.data && <AcceptanceFlag a={covers.get(coverKey("finding", f.id))} />}
                       <Dropdown.Popover placement="bottom start">
                         <Dropdown.Menu
                           aria-label="Finding status"
@@ -643,8 +664,36 @@ export function FindingsTab({ projectId, findings, focusId, onFocused }: { proje
         </div>
       )}
       <FindingFormModal isOpen={open} onOpenChange={setOpen} projectId={projectId} initial={editing} />
+      {accepting && accepting.length > 0 && (
+        <AcceptRiskModal
+          projectId={projectId}
+          items={accepting.map((f) => ({ kind: "finding", refId: f.id }))}
+          labels={accepting.map((f) => `Finding #${f.id} · ${f.title}`)}
+          defaultTitle={accepting.length === 1 ? accepting[0].title : ""}
+          isOpen
+          onOpenChange={(o) => !o && setAccepting(null)}
+          onDone={() => setSelected(new Set())}
+        />
+      )}
       <FindingDetailModal finding={findings.find((f) => f.id === detail) ?? null} onClose={() => setDetail(null)} />
       {confirm.element}
     </Panel>
+  );
+}
+
+/** An accepted finding whose acceptance needs attention: expired, due for review, or no record. */
+function AcceptanceFlag({ a }: { a: { standing: keyof typeof RISK_STANDING; expiresAt: string } | undefined }) {
+  if (!a) {
+    return (
+      <ToneChip tone="warning" dot={false} className="ml-1 text-[10.5px]">
+        no record
+      </ToneChip>
+    );
+  }
+  if (a.standing === "active") return null;
+  return (
+    <ToneChip tone={RISK_STANDING[a.standing].tone} dot={false} className="ml-1 text-[10.5px]">
+      {a.standing === "expired" ? `expired ${a.expiresAt}` : "review due"}
+    </ToneChip>
   );
 }

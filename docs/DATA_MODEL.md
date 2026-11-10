@@ -1,4 +1,4 @@
-# Project data model (schema 26)
+# Project data model (schema 27)
 
 Migration 9 adds the shared data layer that the attack-surface, vulnerability, workflow, analysis and engagement features build on. It changes no existing data except finding statuses (see the mapping below). The logic lives in `src-tauri/src/workspace/`. The Tauri commands are in `commands/workspace.rs` (plus the finding commands in `commands/projects.rs`).
 
@@ -499,6 +499,43 @@ Projects → *ASVS* assesses an application against the **OWASP Application Secu
   * the tags are `asvs`, the requirement ID and `asvs-l<level>`, and the source is `asvs`.
 * **Report:** *Export report* writes Markdown through a native save dialog. It has the totals per status, then every requirement of the level by chapter, with its status, note, findings and evidence. It also lists the analyst's mappings and ends with the attribution. It states that a requirement without a status is not assessed, whatever the findings.
 * **Timeline:** starting an assessment is recorded as `checklist`, and an export as `report`.
+* **Exceptions** (Mission 5): a non-compliant requirement can get an exception, which is a risk acceptance covering it (see [Risk acceptance](#risk-acceptance-schema-27)). It stays non-compliant. The exception is released when the requirement's status becomes anything else, and an expired exception is flagged.
+* **Gaps** (`workspace/asvs_gaps.rs`): the level's requirements chapter by chapter (compliant, non-compliant, excepted, needs review, not assessed, not applicable), and the non-compliant ones, those without an exception first. Each shows its exception and the remediation state of its linked findings: no finding recorded, open, in remediation, accepted, or all resolved ("reassess the requirement"). Compliant requirements without linked evidence are listed as compliant on the analyst's word.
+* **Comparison:** two assessments of a project, for example before and after remediation, compared over the requirements of either level. Compliant and not applicable rank above needs review, which ranks above non-compliant. Each change is *improved*, *regressed*, or *changed* to or from not assessed, regressions first.
+* **Report:** after the totals, the report lists the gaps with their exceptions (owner, approver, expiry, **expired**) and remediation, and the compliant requirements without evidence.
+
+## Risk acceptance (schema 27)
+
+A risk acceptance records who accepted which risk, why, with which compensating controls, who approved it and until when. The logic is in `workspace/risk.rs`, the commands in `commands/risk.rs`, and the tab is Projects → *Risks*.
+
+* **Records** (`risk_acceptances`):
+  * the title, the justification and the compensating controls;
+  * the risk owner, the approver and the approval date (today or earlier);
+  * the expiry (after today, and at most three years after the approval), plus an optional review date before the expiry;
+  * the status, `active` or `revoked`, with the revocation's date and reason.
+
+  The standing is computed when read: *active*, *review due* (the review date has come), *expired* (past the expiry) or *revoked*.
+* **What it covers** (`risk_acceptance_items`):
+  * findings and vulnerabilities of the project that are not resolved or false positives (vulnerabilities also not mitigated);
+  * non-compliant ASVS requirements of its assessments (their exceptions).
+
+  An item already covered by another acceptance moves to the new one. When an item leaves, its row is kept with the date and the reason: the finding was reopened or fixed, the vulnerability verified, the requirement now compliant, the record deleted (removed by triggers), or the acceptance revoked.
+* **History** (`risk_acceptance_events`): created, items added and removed, renewed, revoked, with the source.
+* **The rule.** A finding or a vulnerability becomes `accepted_risk` only while an active, unexpired acceptance covers it. The checks sit in `findings::set_status`, in the finding editor's `finding_write` and in `vulns::set_status`, which every path goes through:
+  * the status menu and the editor, which offers *Accepted risk* only to a finding that already is one;
+  * bulk changes, which report uncovered findings as skipped;
+  * imports, which never reopen or resolve an accepted risk (it is not an open status) and add a note when it is reported again;
+  * MCP: `cyberhub_create_finding` cannot create an accepted risk, and no MCP tool records, renews or revokes an acceptance;
+  * internal services.
+
+  The vulnerability rule replaces the earlier "a reason is required".
+* **Accepting is not remediating.** An accepted finding keeps the status *accepted risk*, apart from open, in remediation, resolved and false positive. The findings table flags an accepted finding whose acceptance expired, is due for review, or does not exist.
+* **Expiry changes nothing by itself.** An expired acceptance keeps its items accepted and is flagged on the Risks tab, the project overview, the findings table and the ASVS views, until it is renewed or revoked.
+  * Renewing records a new approval (approver, date) and expiry.
+  * Revoking (with a reason) reopens what it covered and nothing else covers: findings become `reopened`, vulnerabilities `open`, and requirements lose the exception.
+* **Earlier data.** Findings marked accepted before schema 27 keep their status. The register lists them as accepted without a record, so an acceptance can document them without changing their status.
+* **Timeline:** an acceptance and a revocation are recorded as `risk`.
+* **MCP:** `cyberhub_list_risk_acceptances` (read) returns the register, redacted.
 
 ## Analysis
 

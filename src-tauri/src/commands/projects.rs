@@ -683,6 +683,10 @@ pub(crate) fn finding_write(tx: &Connection, input: &FindingInput, source: &str,
             }
             if old.status != f.status {
                 lifecycle::transition_ok(&old.status, f.status).map_err(validation)?;
+                // the editor meets the same rule as a status change
+                if f.status == "accepted_risk" {
+                    crate::workspace::risk::require_cover(tx, "finding", id)?;
+                }
             }
             tx.execute(
                 "UPDATE findings SET title=?2, severity=?3, status=?4, category=?5, confidence=?6, description=?7, affected_target=?8, cve=?9, evidence=?10,
@@ -696,10 +700,17 @@ pub(crate) fn finding_write(tx: &Connection, input: &FindingInput, source: &str,
             }
             if old.status != new.status {
                 lifecycle::record_event(tx, id, new.project_id, "status", (Some(&old.status), Some(&new.status)), "", source)?;
+                if old.status == "accepted_risk" {
+                    crate::workspace::risk::release(tx, "finding", id, "", &format!("its status became {}", new.status.replace('_', " ")), source)?;
+                }
             }
             id
         }
         None => {
+            // a new finding cannot already be an accepted risk: record it, then accept the risk
+            if f.status == "accepted_risk" {
+                return Err(validation(crate::workspace::risk::NOT_COVERED));
+            }
             tx.execute(
                 "INSERT INTO findings (project_id, title, severity, status, category, confidence, description, affected_target, cve, evidence,
                      reproduction, technical_details, remediation, source, tags, assignee, due_date, created_at, updated_at, cvss_vector, cvss_score)

@@ -15,6 +15,7 @@ import { formatDateTime, formatRelative } from "@/lib/utils";
 import { nvdUrl } from "@/modules/intel/cvss";
 import { ASSET_TYPE_LABEL } from "./asm";
 import { countByPriority, EXPOSURE_LABEL, formatEpss, isOpenVuln, isOverdue, needsReason, PRIORITY_META, VULN_STATUS_META } from "./vulns";
+import { AcceptRiskModal } from "./RiskTab";
 
 const STATUS_OPTIONS = (Object.keys(VULN_STATUS_META) as VulnStatus[]).map((id) => ({ id, label: VULN_STATUS_META[id].label }));
 const EXPOSURE_OPTIONS = (Object.keys(EXPOSURE_LABEL) as Exposure[]).map((id) => ({ id, label: EXPOSURE_LABEL[id] }));
@@ -128,6 +129,7 @@ function VulnDetailModal({ vuln, onClose }: { vuln: Vulnerability | null; onClos
   const [statusNote, setStatusNote] = useState("");
   const [plan, setPlan] = useState({ text: "", owner: "", due: "" });
   const [verifyNote, setVerifyNote] = useState("");
+  const [accepting, setAccepting] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -201,17 +203,31 @@ function VulnDetailModal({ vuln, onClose }: { vuln: Vulnerability | null; onClos
 
       <section className="grid grid-cols-1 gap-3 md:grid-cols-[200px_1fr_auto] md:items-end">
         <SelectInput label="Status" value={status} onChange={(v) => setStatus(v as VulnStatus)} options={STATUS_OPTIONS} />
-        <TextInput label={needsReason(status) ? "Reason (required)" : "Note"} value={statusNote} onChange={setStatusNote} />
+        <TextInput label={needsReason(status) ? "Reason (required)" : "Note"} value={statusNote} onChange={setStatusNote} isDisabled={status === "accepted_risk" && vuln.status !== "accepted_risk"} />
         <Button
           size="sm"
           variant="secondary"
           isDisabled={status === vuln.status || (needsReason(status) && !statusNote.trim())}
           isPending={busy === "status"}
-          onPress={() => run("status", () => api.vulnSetStatus(vuln.id, status, statusNote), `Marked as ${VULN_STATUS_META[status].label.toLowerCase()}`)}
+          onPress={() =>
+            status === "accepted_risk"
+              ? setAccepting(true)
+              : run("status", () => api.vulnSetStatus(vuln.id, status, statusNote), `Marked as ${VULN_STATUS_META[status].label.toLowerCase()}`)
+          }
         >
-          Change status
+          {status === "accepted_risk" ? "Accept risk…" : "Change status"}
         </Button>
       </section>
+      {accepting && (
+        <AcceptRiskModal
+          projectId={vuln.projectId}
+          items={[{ kind: "vulnerability", refId: vuln.id }]}
+          labels={[`${vuln.cveId}${vuln.title ? ` · ${vuln.title}` : ""}`]}
+          defaultTitle={`${vuln.cveId} accepted`}
+          isOpen
+          onOpenChange={(o) => !o && setAccepting(false)}
+        />
+      )}
 
       <section className="flex flex-col gap-3">
         <TextAreaInput label="Remediation plan" value={plan.text} onChange={(v) => setPlan((p) => ({ ...p, text: v }))} rows={3} placeholder="Upgrade, configuration change or compensating control" />

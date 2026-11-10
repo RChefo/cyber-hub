@@ -334,6 +334,7 @@ const TYPE_LABEL: Record<TimelineEventType, string> = {
   checklist: "Checklist",
   correlation: "Correlation",
   detection: "Detection",
+  risk: "Risk",
 };
 
 /** A record the timeline is limited to (from the investigation view or a deep link). */

@@ -16,6 +16,7 @@ import { invalidate, useQuery } from "@/lib/query";
 import type { Finding, Project, ProjectStatus, RecordRef } from "@/lib/types";
 import { formatDate, formatDateTime, formatRelative, pluralize, shellQuote } from "@/lib/utils";
 import { AnalysisTab } from "./AnalysisTab";
+import { RiskTab } from "./RiskTab";
 import { ApiTab } from "./ApiTab";
 import { ComponentsTab } from "./ComponentsTab";
 import { AssistantTab } from "./AssistantTab";
@@ -33,9 +34,9 @@ import { countBySeverity } from "./report";
 import { ScopeTab } from "./ScopeTab";
 import { VulnerabilitiesTab } from "./VulnerabilitiesTab";
 
-type TabId = "overview" | "scope" | "surface" | "apis" | "components" | "vulns" | "findings" | "checklist" | "asvs" | "analysis" | "investigation" | "assistant" | "automation" | "timeline" | "evidence" | "report" | "notes" | "commands";
+type TabId = "overview" | "scope" | "surface" | "apis" | "components" | "vulns" | "findings" | "checklist" | "asvs" | "risk" | "analysis" | "investigation" | "assistant" | "automation" | "timeline" | "evidence" | "report" | "notes" | "commands";
 
-const TAB_IDS: TabId[] = ["overview", "scope", "surface", "apis", "components", "vulns", "findings", "checklist", "asvs", "analysis", "investigation", "assistant", "automation", "timeline", "evidence", "report", "notes", "commands"];
+const TAB_IDS: TabId[] = ["overview", "scope", "surface", "apis", "components", "vulns", "findings", "checklist", "asvs", "risk", "analysis", "investigation", "assistant", "automation", "timeline", "evidence", "report", "notes", "commands"];
 
 function NotesTab({ project }: { project: Project }) {
   const [notes, setNotes] = useState(project.notes);
@@ -169,10 +170,21 @@ function OverviewTab({ project, findings, onTab }: { project: Project; findings:
   const counts = useMemo(() => countBySeverity(findings, true), [findings]);
   const open = findings.filter((f) => isOpenFinding(f.status)).length;
   const inScope = project.targets.filter((t) => t.inScope).length;
+  const risk = useQuery(["risk", "findings"], () => api.riskOverview(project.id), [project.id], runtime);
+  const rs = risk.data?.summary;
+  const attention = rs ? [rs.expired ? `${rs.expired} expired` : "", rs.reviewDue ? `${rs.reviewDue} due for review` : "", rs.undocumented ? `${rs.undocumented} accepted finding${rs.undocumented === 1 ? "" : "s"} without a record` : ""].filter(Boolean) : [];
 
   return (
     <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
       <div className="flex flex-col gap-3 xl:col-span-8">
+        {attention.length > 0 && (
+          <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg bg-warning-soft px-3 py-2 text-[12.5px] text-warning-soft-foreground">
+            Risk acceptances need attention: {attention.join(", ")}.
+            <Button size="sm" variant="secondary" className="ml-auto h-7" onPress={() => onTab("risk")}>
+              Open the risk register
+            </Button>
+          </div>
+        )}
         <div className="panel grid grid-cols-2 gap-4 p-4 md:grid-cols-4">
           <Stat label="In-scope entries" value={inScope} hint={`${project.targets.length - inScope} excluded`} />
           <Stat label="Findings" value={findings.length} hint={`${open} open`} tone={open ? "warning" : "default"} />
@@ -365,6 +377,7 @@ export function ProjectDetail({ id }: { id: number }) {
     { id: "findings", label: `Findings (${f.length})` },
     { id: "checklist", label: "Checklist" },
     { id: "asvs", label: "ASVS" },
+    { id: "risk", label: "Risks" },
     { id: "analysis", label: "Analysis" },
     { id: "investigation", label: "Investigation" },
     { id: "assistant", label: "Assistant" },
@@ -497,6 +510,9 @@ export function ProjectDetail({ id }: { id: number }) {
         </Tabs.Panel>
         <Tabs.Panel id="asvs">
           <AsvsTab project={p} onOpenFinding={(id) => openRecordTab({ kind: "finding", id, sub: "" })} />
+        </Tabs.Panel>
+        <Tabs.Panel id="risk">
+          <RiskTab project={p} />
         </Tabs.Panel>
         <Tabs.Panel id="timeline">
           <TimelineTab

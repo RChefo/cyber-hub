@@ -520,7 +520,8 @@ export type TimelineEventType =
   | "utility"
   | "checklist"
   | "correlation"
-  | "detection";
+  | "detection"
+  | "risk";
 
 export interface TimelineEvent {
   type: TimelineEventType;
@@ -735,6 +736,73 @@ export interface PriorityReason {
   factor: "cvss" | "kev" | "exploit" | "epss" | "exposure" | "criticality";
   effect: number;
   text: string;
+}
+
+/** Risk acceptance (Mission 5): who accepted which risk, why, approved by whom, until when. */
+export type RiskStanding = "active" | "review_due" | "expired" | "revoked";
+export type RiskItemKind = "finding" | "vulnerability" | "asvs";
+
+export interface RiskItemRef {
+  kind: RiskItemKind;
+  refId: number;
+  /** the ASVS requirement id (kind asvs; refId is the assessment) */
+  requirement?: string;
+}
+
+export interface RiskItem {
+  kind: RiskItemKind;
+  refId: number;
+  requirement: string;
+  label: string;
+  /** its status now; "deleted" when the record is gone */
+  status: string;
+  addedAt: string;
+  removedAt: string | null;
+  removedReason: string;
+}
+
+export interface RiskAcceptance {
+  id: number;
+  projectId: number;
+  title: string;
+  justification: string;
+  compensating: string;
+  owner: string;
+  approver: string;
+  approvedAt: string;
+  expiresAt: string;
+  reviewAt: string | null;
+  status: "active" | "revoked";
+  standing: RiskStanding;
+  revokedAt: string | null;
+  revokedReason: string;
+  createdAt: string;
+  updatedAt: string;
+  items: RiskItem[];
+}
+
+export interface RiskDraft {
+  title: string;
+  justification: string;
+  compensating: string;
+  owner: string;
+  approver: string;
+  approvedAt: string;
+  expiresAt: string;
+  reviewAt: string | null;
+}
+
+export interface RiskEvent {
+  action: string;
+  detail: string;
+  source: string;
+  at: string;
+}
+
+export interface RiskOverview {
+  summary: { active: number; reviewDue: number; expired: number; revoked: number; undocumented: number };
+  /** findings marked accepted that no acceptance covers: [id, title] */
+  undocumented: [number, string][];
 }
 
 export interface Vulnerability {
@@ -2495,6 +2563,48 @@ export interface AsvsCounts {
   nonCompliant: number;
   notApplicable: number;
   needsReview: number;
+}
+
+export interface AsvsChapterGap {
+  id: string;
+  name: string;
+  total: number;
+  compliant: number;
+  nonCompliant: number;
+  /** non-compliant requirements an active exception covers */
+  excepted: number;
+  needsReview: number;
+  notAssessed: number;
+  notApplicable: number;
+}
+
+export interface AsvsGap {
+  requirement: string;
+  text: string;
+  level: number;
+  chapter: string;
+  exception: { id: number; title: string; owner: string; approver: string; expiresAt: string; standing: RiskStanding } | null;
+  findings: { id: number; title: string; severity: string; status: string }[];
+  remediation: string;
+}
+
+export interface AsvsGaps {
+  summary: AsvsSummary;
+  chapters: AsvsChapterGap[];
+  gaps: AsvsGap[];
+  /** compliant requirements no evidence supports */
+  withoutEvidence: string[];
+  exceptionsExpired: number;
+}
+
+export interface AsvsComparison {
+  from: AsvsSummary;
+  to: AsvsSummary;
+  improved: number;
+  regressed: number;
+  changed: number;
+  unchanged: number;
+  changes: { requirement: string; text: string; from: AsvsStatus; to: AsvsStatus; direction: "improved" | "regressed" | "changed" }[];
 }
 
 export interface AsvsSummary {

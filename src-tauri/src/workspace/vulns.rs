@@ -472,23 +472,29 @@ pub fn set_status(c: &Connection, id: i64, status: &str, note: &str, source: &st
     if !STATUSES.contains(&status) {
         return Err(validation(format!("Status must be one of: {}", STATUSES.join(", "))));
     }
-    let tx = c.unchecked_transaction()?;
-    let v = get(&tx, id)?;
-    if v.status == status {
-        return Err(validation("The vulnerability already has this status"));
-    }
-    if matches!(status, "accepted_risk" | "false_positive") && note.trim().is_empty() {
-        return Err(validation("Say why: accepting a risk or dismissing a vulnerability needs a reason"));
-    }
-    tx.execute("UPDATE vulnerabilities SET status = ?2, updated_at = ?3 WHERE id = ?1", params![id, status, now()])?;
-    // a vulnerability that comes back is no longer verified as fixed
-    if !matches!(status, "resolved" | "mitigated") && v.verified_at.is_some() {
-        tx.execute("UPDATE vulnerabilities SET verified_at = NULL WHERE id = ?1", params![id])?;
-    }
-    record_event(&tx, &v, "status", (Some(&v.status), Some(status)), note, source)?;
-    let out = get(&tx, id)?;
-    tx.commit()?;
-    Ok(out)
+    // a savepoint: a risk acceptance changes statuses inside its own transaction
+    crate::workspace::assets::with_savepoint(c, || {
+        let v = get(c, id)?;
+        if v.status == status {
+            return Err(validation("The vulnerability already has this status"));
+        }
+        if status == "false_positive" && note.trim().is_empty() {
+            return Err(validation("Say why: dismissing a vulnerability needs a reason"));
+        }
+        if status == "accepted_risk" {
+            crate::workspace::risk::require_cover(c, "vulnerability", id)?;
+        }
+        c.execute("UPDATE vulnerabilities SET status = ?2, updated_at = ?3 WHERE id = ?1", params![id, status, now()])?;
+        // a vulnerability that comes back is no longer verified as fixed
+        if !matches!(status, "resolved" | "mitigated") && v.verified_at.is_some() {
+            c.execute("UPDATE vulnerabilities SET verified_at = NULL WHERE id = ?1", params![id])?;
+        }
+        record_event(c, &v, "status", (Some(&v.status), Some(status)), note, source)?;
+        if v.status == "accepted_risk" {
+            crate::workspace::risk::release(c, "vulnerability", id, "", &format!("its status became {}", status.replace('_', " ")), source)?;
+        }
+        get(c, id)
+    })
 }
 
 pub fn set_remediation(c: &Connection, id: i64, plan: &str, owner: &str, due: Option<&str>, source: &str) -> AppResult<Vulnerability> {
@@ -527,6 +533,9 @@ pub fn verify(c: &Connection, id: i64, note: &str, source: &str) -> AppResult<Vu
     let ts = now();
     tx.execute("UPDATE vulnerabilities SET status = 'resolved', verified_at = ?2, verification_note = ?3, updated_at = ?2 WHERE id = ?1", params![id, ts, note])?;
     record_event(&tx, &v, "verification", (Some(&v.status), Some("resolved")), &note, source)?;
+    if v.status == "accepted_risk" {
+        crate::workspace::risk::release(&tx, "vulnerability", id, "", "the fix was verified", source)?;
+    }
     let out = get(&tx, id)?;
     tx.commit()?;
     Ok(out)
