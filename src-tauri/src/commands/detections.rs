@@ -103,10 +103,7 @@ fn import_sigma(c: &rusqlite::Connection, name: &str, text: &str, note: &str, re
     }
     match lib::disable_correlated(c, &stored) {
         Ok(titles) if !titles.is_empty() => report.notes.push(format!(
-            "{}: only part of a correlation in {name} (it does not say generate: true), so {} not run on {}own: {}",
-            if titles.len() == 1 { "1 rule is" } else { "Several rules are" },
-            if titles.len() == 1 { "it is" } else { "they are" },
-            if titles.len() == 1 { "its " } else { "their " },
+            "Used only by a correlation of the same file (it does not say generate: true), so imported disabled: {}. They still run as part of the correlation.",
             titles.join(", ")
         )),
         Ok(_) => {}

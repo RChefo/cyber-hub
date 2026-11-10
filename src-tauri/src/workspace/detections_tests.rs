@@ -348,9 +348,9 @@ fn correlation_rules_resolve_in_the_library_and_their_hits_are_reviewable_leads(
         // the base rules only run as part of the correlation (no generate: true)
         let mut disabled = disable_correlated(c, &docs)?;
         disabled.sort();
-        assert_eq!(disabled, vec!["Single failed login".to_string(), "Successful login".to_string()]);
+        assert_eq!(disabled, vec!["Multiple failed logons".to_string(), "Single failed login".to_string(), "Successful login".to_string()]);
         let runnable_ids: Vec<i64> = runnable(c, None)?.iter().map(|s| s.id).collect();
-        assert_eq!(runnable_ids, vec![docs[0].1.id, docs[1].1.id], "the two correlations run; the disabled rules only through them");
+        assert_eq!(runnable_ids, vec![docs[0].1.id], "only the outer correlation runs; the inner one and the rules only through it");
         assert!(compile(&stored(c, docs[0].1.id)?).is_err(), "a correlation is not a detection rule");
 
         // ten failures on one domain controller, the success on another: one chain across files
@@ -414,7 +414,7 @@ fn correlation_references_prefer_their_own_file_and_refuse_ambiguity() {
         let db2 = Db::open_in_memory().unwrap();
         db2.with(|c2| {
             let docs = import_file(c2, &gen, "gen.yml");
-            // the inner correlation (no generate) still disables its own rule, not the success rule
+            // the inner correlation (no generate) still disables its own rule; the outer keeps the inner one and the success rule running
             assert_eq!(disable_correlated(c2, &docs)?, vec!["Single failed login".to_string()]);
             Ok(())
         })?;

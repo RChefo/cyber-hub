@@ -162,7 +162,7 @@ fn perf_large_project_queries() {
         let all = crate::commands::projects::findings_of(c, 1)?;
         report("findings_list", t, &format!("{} findings", all.len()));
         let t = Instant::now();
-        let hits = crate::workspace::search::search(c, &crate::workspace::search::Query { text: "injection q4999".into(), ..Default::default() })?;
+        let hits = crate::workspace::search::search(c, &crate::workspace::search::Query { text: "parameter q4999".into(), ..Default::default() })?;
         report("global_search", t, &format!("{} hits", hits.len()));
         let t = Instant::now();
         let m = crate::workspace::attack_matrix::matrix(c, 1)?;

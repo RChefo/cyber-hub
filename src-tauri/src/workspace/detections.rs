@@ -743,14 +743,16 @@ pub fn correlation_result(mut tree: Tree, sample: &Sample, sample_id: i64, file_
 
 /// When a file's correlations refer to rules of the same file and do not say `generate: true`,
 /// those rules only run as part of the correlation (the specification's default): the ones this
-/// import added are disabled. Returns their titles.
+/// import added are disabled, inner correlations of a chain included (otherwise each would also
+/// report its own matches). Returns their titles.
 pub fn disable_correlated(c: &Connection, docs: &[(Checked, Imported)]) -> AppResult<Vec<String>> {
     let mut out = Vec::new();
     for (corr, _) in docs.iter().filter(|(ch, _)| ch.correlation.as_ref().is_some_and(|c| !c.generate)) {
         let refs = &corr.correlation.as_ref().expect("filtered").rules;
         for (ch, imp) in docs {
             let named = ch.meta.name.as_ref().is_some_and(|n| refs.contains(n)) || ch.meta.id.as_ref().is_some_and(|id| refs.iter().any(|r| r.eq_ignore_ascii_case(id)));
-            if named && ch.correlation.is_none() && imp.outcome == "added" && !out.contains(&imp.title) {
+            let itself = std::ptr::eq(ch, corr);
+            if named && !itself && imp.outcome == "added" && !out.contains(&imp.title) {
                 set_enabled(c, imp.id, false)?;
                 out.push(imp.title.clone());
             }
