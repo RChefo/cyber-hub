@@ -31,6 +31,8 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 pub struct ConnCtx {
     pub id: u64,
     pub client: ClientIdentity,
+    /// the bridge request being served (0 outside a request)
+    pub request: u64,
 }
 
 pub type DispatchFuture = Pin<Box<dyn Future<Output = Result<Value, ErrorBody>> + Send>>;
@@ -214,7 +216,7 @@ async fn serve_connection(
         }
     });
     let limit = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
-    let ctx = ConnCtx { id, client };
+    let ctx = ConnCtx { id, client, request: 0 };
     // request tasks belong to this connection: dropping the set (disconnect, MCP turned off)
     // aborts every request still being processed
     let mut inflight = tokio::task::JoinSet::new();
@@ -230,6 +232,15 @@ async fn serve_connection(
             Ok(r) => r,
             Err(_) => break,
         };
+        // the client cancelled one of its requests: answered at once, ahead of the requests it may
+        // be cancelling (they may hold every in-flight slot while they wait for the user)
+        if req.method == "cancel" {
+            let n = req.arguments.get("request").and_then(Value::as_u64).map_or(0, |r| approvals.cancel_request(id, r));
+            if tx.send(Response { id: req.id, result: Some(serde_json::json!({ "cancelled": n })), error: None }).await.is_err() {
+                break;
+            }
+            continue;
+        }
         if let Ok(mut c) = conns.lock() {
             if let Some(v) = c.get_mut(&id) {
                 v.requests += 1;
@@ -239,7 +250,7 @@ async fn serve_connection(
         // backpressure: at most MAX_IN_FLIGHT requests per connection are admitted
         let Ok(permit) = limit.clone().acquire_owned().await else { break };
         while inflight.try_join_next().is_some() {}
-        let (tx, dispatcher, ctx) = (tx.clone(), dispatcher.clone(), ctx.clone());
+        let (tx, dispatcher, ctx) = (tx.clone(), dispatcher.clone(), ConnCtx { request: req.id, ..ctx.clone() });
         inflight.spawn(async move {
             let _permit = permit;
             let mut resp = match req.method.as_str() {
@@ -317,6 +328,64 @@ mod tests {
         assert_eq!(bridge.connections().len(), 1);
         bridge.stop();
         assert!(!dir.join(proto::KEY_FILE).exists(), "key removed on stop");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Asks for the user's approval the way the app's operations do, and answers with the decision.
+    struct Asks(Arc<crate::mcp::approvals::Approvals>);
+    impl Dispatcher for Asks {
+        fn call(&self, conn: ConnCtx, tool: String, _arguments: Value) -> DispatchFuture {
+            let approvals = self.0.clone();
+            Box::pin(async move {
+                if tool != "ask" {
+                    return Ok(json!({ "tool": tool }));
+                }
+                let new = crate::mcp::approvals::NewRequest { connection: conn.id, request: conn.request, client: "x".into(), tool, category: crate::mcp::catalog::Category::LocalWrite, summary: String::new(), details: vec![], checks: vec![], project_id: None };
+                let (_, rx) = approvals.request(new).map_err(|m| ErrorBody { kind: "busy".into(), message: m })?;
+                Ok(json!({ "decision": format!("{:?}", rx.await.unwrap_or(crate::mcp::approvals::Decision::Cancelled)) }))
+            })
+        }
+    }
+
+    /// Mission 6: an MCP client that cancels a call (notifications/cancelled) cancels its approval
+    /// in the app, and only that one; the connection and the client's other requests go on.
+    #[tokio::test]
+    async fn a_cancelled_call_cancels_its_approval_in_the_app() {
+        let dir = tmp();
+        let bridge = Bridge::default();
+        bridge.start(dir.clone(), Arc::new(Asks(bridge.approvals.clone()))).unwrap();
+        let client = Arc::new(BridgeClient::with_dir(dir.clone(), ClientIdentity::default()));
+        // two calls wait for the user; the client gives up on the first one only
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        let c1 = client.clone();
+        let first = tokio::spawn(async move { c1.call_until("ask", json!({}), Duration::from_secs(10), async { let _ = cancel_rx.await; }).await });
+        let c2 = client.clone();
+        let second = tokio::spawn(async move { c2.call("ask", json!({}), Duration::from_secs(10)).await });
+        let waiting = || bridge.approvals.list().len();
+        for _ in 0..50 {
+            if waiting() == 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert_eq!(waiting(), 2, "both requests reached the user");
+        cancel_tx.send(()).unwrap();
+        assert_eq!(first.await.unwrap().unwrap_err().kind, "cancelled");
+        for _ in 0..50 {
+            if waiting() == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        let left = bridge.approvals.list();
+        assert_eq!(left.len(), 1, "only the cancelled request left the Approval Center");
+        // the other request is still answered when the user decides
+        assert!(bridge.approvals.decide(&left[0].id, true));
+        assert_eq!(second.await.unwrap().unwrap()["decision"], "Approved");
+        // and the connection still serves calls
+        assert_eq!(client.call("other", json!({}), Duration::from_secs(5)).await.unwrap()["tool"], "other");
+        assert_eq!(bridge.connections().len(), 1);
+        bridge.stop();
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -421,7 +490,7 @@ mod tests {
         // a pending approval of a client is cancelled when it disconnects
         let (_id, rx) = bridge
             .approvals
-            .request(crate::mcp::approvals::NewRequest { connection: 99, client: "x".into(), tool: "t".into(), category: crate::mcp::catalog::Category::RunTools, summary: String::new(), details: vec![], checks: vec![], project_id: None })
+            .request(crate::mcp::approvals::NewRequest { connection: 99, request: 1, client: "x".into(), tool: "t".into(), category: crate::mcp::catalog::Category::RunTools, summary: String::new(), details: vec![], checks: vec![], project_id: None })
             .unwrap();
         bridge.approvals.cancel_connection(99);
         assert_eq!(rx.await.unwrap(), crate::mcp::approvals::Decision::Cancelled);

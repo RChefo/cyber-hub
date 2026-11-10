@@ -63,8 +63,9 @@ impl CyberHubServer {
             .collect()
     }
 
-    async fn forward(&self, tool: &str, args: Value) -> CallToolResult {
-        match self.bridge.call(tool, args, CALL_TIMEOUT).await {
+    /// Forwards a call to the app; `cancelled` completes when the MCP client cancels the request.
+    async fn forward(&self, tool: &str, args: Value, cancelled: impl std::future::Future<Output = ()>) -> CallToolResult {
+        match self.bridge.call_until(tool, args, CALL_TIMEOUT, cancelled).await {
             Ok(v) => {
                 let text = serde_json::to_string_pretty(&v).unwrap_or_default();
                 let mut r = CallToolResult::success(vec![ContentBlock::text(text)]);
@@ -98,7 +99,7 @@ impl ServerHandler for CyberHubServer {
         if serde_json::to_string(&args).map(|s| s.len()).unwrap_or(usize::MAX) > MAX_ARGS {
             return Err(McpError::invalid_params("arguments are too large", None));
         }
-        Ok(self.forward(&request.name, args).await.into())
+        Ok(self.forward(&request.name, args, context.ct.cancelled()).await.into())
     }
 
     async fn list_resources(&self, _request: Option<PaginatedRequestParams>, _context: RequestContext<RoleServer>) -> Result<ListResourcesResult, McpError> {
@@ -116,7 +117,7 @@ impl ServerHandler for CyberHubServer {
     async fn read_resource(&self, request: ReadResourceRequestParams, context: RequestContext<RoleServer>) -> Result<ReadResourceResponse, McpError> {
         self.identify(&context);
         let (tool, args) = catalog::resource_call(&request.uri).ok_or_else(|| McpError::resource_not_found("resource_not_found", Some(serde_json::json!({ "uri": request.uri }))))?;
-        let v = self.bridge.call(tool, args, CALL_TIMEOUT).await.map_err(|e| McpError::internal_error(format!("{} ({})", e.message, e.kind), None))?;
+        let v = self.bridge.call_until(tool, args, CALL_TIMEOUT, context.ct.cancelled()).await.map_err(|e| McpError::internal_error(format!("{} ({})", e.message, e.kind), None))?;
         let text = serde_json::to_string_pretty(&v).unwrap_or_default();
         Ok(ReadResourceResult::new(vec![ResourceContents::text(text, request.uri.clone())]).into())
     }

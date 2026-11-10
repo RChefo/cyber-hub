@@ -633,16 +633,20 @@ async fn handle(app: AppHandle, conn: ConnCtx, tool: String, args: Value) -> Res
             Err(e) => Err(e), // invalid or out-of-scope requests never reach the user
             Ok((summary, details, project_id, checks)) => {
                 let bridge = app.state::<Arc<Bridge>>();
-                // a client that already disconnected cannot leave a request behind
+                // a client that already disconnected, or cancelled this call, cannot leave a request behind
                 if !bridge.is_connected(conn.id) || bridge.info().is_none() {
                     Err(err("cancelled", "The client disconnected."))
+                } else if bridge.approvals.was_cancelled(conn.id, conn.request) {
+                    Err(err("cancelled", "The client cancelled the request."))
                 } else {
-                    match bridge.approvals.request(NewRequest { connection: conn.id, client: conn.client.label(), tool: spec.name.into(), category, summary, details, checks, project_id }) {
+                    match bridge.approvals.request(NewRequest { connection: conn.id, request: conn.request, client: conn.client.label(), tool: spec.name.into(), category, summary, details, checks, project_id }) {
                         Err(m) => Err(err("busy", m)),
                         Ok((id, rx)) => {
-                            // it may have disconnected while the request was being created
+                            // it may have disconnected, or cancelled, while the request was being created
                             if !bridge.is_connected(conn.id) {
                                 bridge.approvals.cancel_connection(conn.id);
+                            } else if bridge.approvals.was_cancelled(conn.id, conn.request) {
+                                bridge.approvals.cancel_request(conn.id, conn.request);
                             }
                             audit.approval_id = Some(id.clone());
                             let _ = app.emit(EVENT_APPROVALS, bridge.approvals.pending_count());

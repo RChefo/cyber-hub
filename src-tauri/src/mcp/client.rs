@@ -110,6 +110,13 @@ impl BridgeClient {
     /// Call a bridge tool. Errors are returned as `ErrorBody` (never panics, never hangs past
     /// `timeout`).
     pub async fn call(&self, tool: &str, arguments: Value, timeout: Duration) -> Result<Value, ErrorBody> {
+        self.call_until(tool, arguments, timeout, std::future::pending()).await
+    }
+
+    /// `call`, given up when `cancelled` completes (the MCP client cancelled its request): the app
+    /// is told to cancel that request's approval if it is still waiting, and the answer is
+    /// "cancelled". Work the user already approved goes on in the app.
+    pub async fn call_until(&self, tool: &str, arguments: Value, timeout: Duration, cancelled: impl std::future::Future<Output = ()>) -> Result<Value, ErrorBody> {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
         {
@@ -125,7 +132,23 @@ impl BridgeClient {
                 return Err(not_running());
             }
         }
-        match tokio::time::timeout(timeout, rx).await {
+        let answer = tokio::select! {
+            a = tokio::time::timeout(timeout, rx) => a,
+            () = cancelled => {
+                let mut guard = self.conn.lock().await;
+                if let Some(conn) = guard.as_mut() {
+                    if let Ok(mut m) = conn.pending.lock() {
+                        m.remove(&id);
+                    }
+                    let cancel = Request { id: self.next.fetch_add(1, Ordering::Relaxed), method: "cancel".into(), tool: None, arguments: serde_json::json!({ "request": id }) };
+                    if proto::write_frame(&mut conn.writer, &cancel).await.is_err() {
+                        *guard = None;
+                    }
+                }
+                return Err(ErrorBody { kind: "cancelled".into(), message: "The client cancelled the request.".into() });
+            }
+        };
+        match answer {
             Ok(Ok(resp)) => match (resp.result, resp.error) {
                 (_, Some(e)) => Err(e),
                 (Some(v), None) => Ok(v),

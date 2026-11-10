@@ -71,18 +71,28 @@ pub struct ApprovalStatus {
 
 struct Pending {
     view: PendingView,
+    /// the bridge request that asked for it, so that the client can cancel exactly that one
+    request: u64,
     deadline: Instant,
     tx: Option<oneshot::Sender<Decision>>,
 }
+
+/// Requests a client cancelled, remembered per connection (also when the cancellation arrives
+/// before the request's approval exists). Bounded: a client flooding cancellations only loses
+/// the protection for its own later requests.
+const MAX_CANCELLED: usize = 1024;
 
 #[derive(Default)]
 pub struct Approvals {
     pending: Mutex<HashMap<String, Pending>>,
     finished: Mutex<VecDeque<ApprovalStatus>>,
+    cancelled: Mutex<std::collections::HashSet<(u64, u64)>>,
 }
 
 pub struct NewRequest {
     pub connection: u64,
+    /// the bridge request id (per connection)
+    pub request: u64,
     pub client: String,
     pub tool: String,
     pub category: Category,
@@ -115,7 +125,7 @@ impl Approvals {
             created_at: crate::util::now(),
             expires_in_secs: TTL.as_secs(),
         };
-        map.insert(id.clone(), Pending { view, deadline: Instant::now() + TTL, tx: Some(tx) });
+        map.insert(id.clone(), Pending { view, request: r.request, deadline: Instant::now() + TTL, tx: Some(tx) });
         Ok((id, rx))
     }
 
@@ -174,11 +184,35 @@ impl Approvals {
 
     /// Cancel everything a disconnected client was waiting for.
     pub fn cancel_connection(&self, connection: u64) -> usize {
+        if let Ok(mut c) = self.cancelled.lock() {
+            c.retain(|(conn, _)| *conn != connection);
+        }
         let ids: Vec<String> = match self.pending.lock() {
             Ok(m) => m.iter().filter(|(_, p)| p.view.connection == connection).map(|(k, _)| k.clone()).collect(),
             Err(_) => return 0,
         };
         ids.iter().filter(|id| self.resolve(id, Decision::Cancelled)).count()
+    }
+
+    /// The client cancelled one of its requests (MCP `notifications/cancelled`): its approval is
+    /// cancelled if it is still waiting, and remembered so that it cannot be asked for later.
+    /// Work the user already approved goes on, as when a client disconnects.
+    pub fn cancel_request(&self, connection: u64, request: u64) -> usize {
+        if let Ok(mut c) = self.cancelled.lock() {
+            if c.len() < MAX_CANCELLED {
+                c.insert((connection, request));
+            }
+        }
+        let ids: Vec<String> = match self.pending.lock() {
+            Ok(m) => m.iter().filter(|(_, p)| p.view.connection == connection && p.request == request).map(|(k, _)| k.clone()).collect(),
+            Err(_) => return 0,
+        };
+        ids.iter().filter(|id| self.resolve(id, Decision::Cancelled)).count()
+    }
+
+    /// Whether the client already cancelled this request.
+    pub fn was_cancelled(&self, connection: u64, request: u64) -> bool {
+        self.cancelled.lock().map(|c| c.contains(&(connection, request))).unwrap_or(false)
     }
 
     pub fn cancel_all(&self) -> usize {
@@ -233,7 +267,7 @@ mod tests {
     use super::*;
 
     fn req(conn: u64) -> NewRequest {
-        NewRequest { connection: conn, client: "test".into(), tool: "cyberhub_run_tool".into(), category: Category::RunTools, summary: "Run nmap".into(), details: vec![], checks: vec![], project_id: Some(1) }
+        NewRequest { connection: conn, request: 1, client: "test".into(), tool: "cyberhub_run_tool".into(), category: Category::RunTools, summary: "Run nmap".into(), details: vec![], checks: vec![], project_id: Some(1) }
     }
 
     #[tokio::test]
@@ -249,6 +283,24 @@ mod tests {
         let (id2, rx2) = a.request(req(1)).unwrap();
         assert!(a.decide(&id2, false));
         assert_eq!(rx2.await.unwrap(), Decision::Denied);
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_request_loses_only_its_own_approval() {
+        let a = Approvals::default();
+        let (_, rx1) = a.request(NewRequest { request: 7, ..req(1) }).unwrap();
+        let (keep, _rx2) = a.request(NewRequest { request: 8, ..req(1) }).unwrap();
+        let (other, _rx3) = a.request(NewRequest { request: 7, ..req(2) }).unwrap();
+        assert_eq!(a.cancel_request(1, 7), 1);
+        assert_eq!(rx1.await.unwrap(), Decision::Cancelled);
+        let left: Vec<String> = a.list().into_iter().map(|p| p.id).collect();
+        assert!(left.contains(&keep) && left.contains(&other) && left.len() == 2, "the same id on another connection is another request");
+        // a cancellation that arrives before the approval exists is remembered
+        assert_eq!(a.cancel_request(1, 9), 0);
+        assert!(a.was_cancelled(1, 9) && !a.was_cancelled(2, 9));
+        // and forgotten with the connection
+        a.cancel_connection(1);
+        assert!(!a.was_cancelled(1, 9) && !a.was_cancelled(1, 7));
     }
 
     #[tokio::test]
