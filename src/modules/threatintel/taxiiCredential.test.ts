@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { editDropsCredential, originOf } from "./taxiiCredential";
+import { editDropsCredential, editKeepsPasswordOfOtherUser, originOf } from "./taxiiCredential";
 
 const stored = { discoveryUrl: "https://taxii.example.org/taxii2/", auth: "basic" as const, credentialStored: true };
 
@@ -21,5 +21,14 @@ describe("TAXII credential warnings", () => {
     expect(editDropsCredential({ ...stored, credentialStored: false }, { discoveryUrl: "https://elsewhere.example.net/", auth: "basic" })).toBe(false);
     expect(editDropsCredential(null, { discoveryUrl: "https://elsewhere.example.net/", auth: "basic" })).toBe(false);
     expect(editDropsCredential(stored, { discoveryUrl: "https://", auth: "basic" })).toBe(false);
+  });
+
+  it("says when a kept password was typed for another user name", () => {
+    const basic = { ...stored, username: "analyst" };
+    expect(editKeepsPasswordOfOtherUser(basic, { discoveryUrl: basic.discoveryUrl, auth: "basic", username: "analyst" })).toBe(false);
+    expect(editKeepsPasswordOfOtherUser(basic, { discoveryUrl: basic.discoveryUrl, auth: "basic", username: "other-analyst" })).toBe(true);
+    // moving the server deletes the password anyway: that warning is enough
+    expect(editKeepsPasswordOfOtherUser(basic, { discoveryUrl: "https://elsewhere.example.net/", auth: "basic", username: "other-analyst" })).toBe(false);
+    expect(editKeepsPasswordOfOtherUser({ ...basic, credentialStored: false }, { discoveryUrl: basic.discoveryUrl, auth: "basic", username: "other-analyst" })).toBe(false);
   });
 });

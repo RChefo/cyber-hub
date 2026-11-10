@@ -12,7 +12,7 @@ import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { TaxiiCollection, TaxiiServer, TaxiiServerInput } from "@/lib/types";
 import { formatRelative, pluralize } from "@/lib/utils";
-import { editDropsCredential } from "./taxiiCredential";
+import { editDropsCredential, editKeepsPasswordOfOtherUser } from "./taxiiCredential";
 
 const STATUS_TONE: Record<string, "success" | "warning" | "danger" | "default"> = { succeeded: "success", partial: "warning", failed: "danger", running: "default" };
 
@@ -81,6 +81,11 @@ function ServerForm({ initial, onClose }: { initial: TaxiiServer | null; onClose
           placeholder="0–100, or empty"
         />
       </div>
+      {editKeepsPasswordOfOtherUser(initial, f) && (
+        <p className="rounded-lg bg-white/[0.04] px-3 py-2 text-[12.5px] text-muted">
+          The stored password was typed for “{initial?.username}”. If “{f.username.trim()}” has another one, replace the credential after saving.
+        </p>
+      )}
       {editDropsCredential(initial, f) && (
         <p className="rounded-lg bg-warning-soft px-3 py-2 text-[12.5px] text-warning-soft-foreground">
           Saving deletes the stored credential: it is never sent to another address or used for another kind of authentication. Store it again after saving.
