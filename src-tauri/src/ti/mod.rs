@@ -14,6 +14,7 @@ pub mod model;
 pub mod otx;
 pub mod shodan;
 pub mod stix;
+pub mod taxii;
 
 use std::time::Duration;
 

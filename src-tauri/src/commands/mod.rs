@@ -8,6 +8,7 @@ pub mod asvs;
 pub mod attack;
 pub mod detections;
 pub mod risk;
+pub mod taxii;
 pub mod investigation;
 pub mod utility_record;
 pub mod library;

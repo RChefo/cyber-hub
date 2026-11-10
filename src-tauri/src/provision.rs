@@ -154,6 +154,9 @@ USAGE
   cyberhub-keys import FILE [--no-verify] [--allow-unignored]
                                         Store every credential listed in a local secrets file
   cyberhub-keys remove ID|all           Delete stored credentials
+  cyberhub-keys taxii-set SERVER_ID     Store a TAXII server's password or API key (the server's
+                                        number, shown in Threat Intel → TAXII feeds)
+  cyberhub-keys taxii-remove SERVER_ID  Delete it
 
 IDS
   virustotal, abuseipdb, otx, abusech (URLhaus, MalwareBazaar, ThreatFox), shodan, nvd,
@@ -238,6 +241,40 @@ async fn run(args: &[String]) -> Result<(), String> {
                 store(cred, &value, verify).await?;
             }
             println!("Done. Delete or protect the secrets file if you no longer need it.");
+            Ok(())
+        }
+        Some("taxii-set") => {
+            let id = pos.get(1).ok_or("taxii-set needs the server's number")?;
+            if pos.len() > 2 {
+                return Err("do not pass credentials as arguments; they end up in shell history".into());
+            }
+            let name = format!("taxii_{id}");
+            if !crate::commands::system::is_taxii_secret(&name) {
+                return Err(format!("`{id}` is not a server number"));
+            }
+            let value = if std::io::stdin().is_terminal() {
+                rpassword::prompt_password("TAXII password or API key (input hidden): ").map_err(|e| e.to_string())?
+            } else {
+                let mut line = String::new();
+                std::io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())?;
+                line
+            };
+            let value = value.trim();
+            if value.is_empty() || value.len() > 4096 || value.chars().any(char::is_control) {
+                return Err("the value is empty, too long or has control characters".into());
+            }
+            store_secret(&name, value).map_err(|e| e.to_string())?;
+            println!("{name} stored (it is tested when the server is next used)");
+            Ok(())
+        }
+        Some("taxii-remove") => {
+            let id = pos.get(1).ok_or("taxii-remove needs the server's number")?;
+            let name = format!("taxii_{id}");
+            if !crate::commands::system::is_taxii_secret(&name) {
+                return Err(format!("`{id}` is not a server number"));
+            }
+            delete_secret(&name).map_err(|e| e.to_string())?;
+            println!("{name} removed");
             Ok(())
         }
         Some("remove") => {

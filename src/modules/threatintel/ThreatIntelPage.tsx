@@ -31,6 +31,7 @@ import { invalidate, useQuery } from "@/lib/query";
 import type { TiInvestigation, TiProviderResult, TiProviderStatus, TiSavedIndicator, TiSavedStatus, TiSummary, VtDetected } from "@/lib/types";
 import { cn, debounce, formatRelative } from "@/lib/utils";
 import { availability, compareRows, correlate, LEVEL_META, parseConfidence, RELIABILITY, savedStanding, sortResults, STATUS_META, summaryParts } from "./model";
+import { TaxiiFeeds } from "./TaxiiFeeds";
 
 const KIND_LABEL: Record<string, string> = { ip: "IP address", domain: "Domain", url: "URL", file: "File hash" };
 
@@ -737,6 +738,8 @@ export default function ThreatIntelPage() {
               )}
             </QueryView>
           </Panel>
+
+          <TaxiiFeeds />
 
           <Panel title="Providers" description="Status of your integrations">
             <ul className="flex flex-col gap-1.5">

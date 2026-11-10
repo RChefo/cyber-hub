@@ -188,6 +188,15 @@ fn command_line_and_protocol_inputs_survive_hostile_input() {
             let _ = crate::redirects::follows(tool, &args);
         }
     });
+    // STIX indicators from a TAXII feed: the pattern reader and the object reader
+    sweep("stix patterns", cases_for(&[b"[ipv4-addr:value = '8.8.4.4'] OR [url:value = 'https://a.example.net/x\'y']", b"[file:hashes.'SHA-256' = 'aa']"], 21), BUDGET, |d| {
+        let t = text(d);
+        let _ = crate::ti::taxii::pattern_values(&t);
+        if let Ok(v) = serde_json::from_slice::<serde_json::Value>(d) {
+            let _ = crate::ti::taxii::indicator(&v);
+        }
+        let _ = crate::ti::taxii::indicator(&serde_json::json!({ "type": "indicator", "id": "indicator--1", "pattern": t, "modified": "x" }));
+    });
     // MCP: the proof a client sends before it is authenticated
     sweep("mcp proof", cases_for(&[b"00ff10ab"], 20), BUDGET, |d| {
         let _ = crate::mcp::proto::verify(b"0123456789abcdef0123456789abcdef", "client", "a", "b", &text(d));

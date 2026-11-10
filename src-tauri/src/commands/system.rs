@@ -140,8 +140,13 @@ pub const NVD_KEY: &str = "nvd_api_key";
 /// Every credential Cyber Hub may use.
 pub const KNOWN_SECRETS: &[&str] = &[NVD_KEY, "virustotal_api_key", "abuseipdb_api_key", "otx_api_key", "abusech_auth_key", "shodan_api_key", crate::commands::assistant::ANTHROPIC_KEY];
 
+/// A TAXII server's credential: `taxii_<server id>`.
+pub fn is_taxii_secret(name: &str) -> bool {
+    name.strip_prefix("taxii_").is_some_and(|id| !id.is_empty() && id.len() <= 18 && id.bytes().all(|b| b.is_ascii_digit()))
+}
+
 fn entry(name: &str) -> AppResult<keyring::Entry> {
-    if !KNOWN_SECRETS.contains(&name) {
+    if !KNOWN_SECRETS.contains(&name) && !is_taxii_secret(name) {
         return Err(validation("Unknown secret name"));
     }
     keyring::Entry::new(SERVICE, name).map_err(|e| AppError::Secret(e.to_string()))
@@ -196,5 +201,6 @@ mod tests {
     #[test]
     fn unknown_secret_names_are_refused() {
         assert!(super::read_secret("not_a_known_secret").is_none());
+        assert!(super::is_taxii_secret("taxii_12") && !super::is_taxii_secret("taxii_") && !super::is_taxii_secret("taxii_1x") && !super::is_taxii_secret("taxii_../a"));
     }
 }

@@ -66,6 +66,17 @@ cyberhub-keys set shodan < key.txt  # or from standard input
 
 Credentials are never accepted as command-line arguments, because those end up in shell history and process listings.
 
+### TAXII servers
+
+A TAXII server that needs a password (HTTP Basic) or an API key (a header) shows its number in *Threat Intel → TAXII feeds*. Store the value for that server:
+
+```sh
+cyberhub-keys taxii-set 3           # hidden prompt
+cyberhub-keys taxii-remove 3
+```
+
+The entry is `taxii_<number>` in the same credential store. The user name and the header's name are settings of the server in the app; only the secret is stored here.
+
 ## Diagnostics
 
 ```sh

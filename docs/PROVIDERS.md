@@ -49,6 +49,36 @@ Expired, revoked and false-positive indicators stay saved for the record, but ar
 
 Saved intelligence never flags an indicator by itself.
 
+## TAXII 2.1 feeds
+
+*Threat Intel → TAXII feeds* imports STIX 2.1 indicators from TAXII 2.1 servers (OASIS TAXII Version 2.1, 2021-06-10) that the analyst adds. The client is in `ti/taxii.rs`, the commands in `commands/taxii.rs`, and the data in schema 28 (`taxii_servers`, `taxii_collections`, `taxii_syncs`, and the feed columns of `ti_saved`).
+
+* **Nothing connects until asked.** A server is added with a name, its discovery URL, how it authenticates, a source reliability (A–F) and a confidence to use when an indicator gives none. *Discover* lists its API roots and collections. *Sync* downloads one collection's new indicators. Each connection is confirmed in a native dialog that names the server, and nothing synchronizes in the background.
+* **Transport:**
+  * HTTPS only. Plain HTTP is accepted for 127.0.0.1 or localhost in debug builds, for tests.
+  * No user name or password in the URL, and redirects are not followed, so credentials never reach another host.
+  * An API root on another host than the discovery URL is not used.
+  * Requests ask for `application/taxii+json;version=2.1` and time out after 30 s.
+  * Responses are capped at 16 MB, and a synchronization at 200 pages and 100,000 objects; the next synchronization continues.
+  * Errors are mapped (credentials refused, no access, not found, not TAXII 2.1, redirect refused) and never contain the credential, even when the server echoes it.
+* **Credentials** (HTTP Basic, which TAXII 2.1 clients must support, or an API key in a named header) follow the provisioning model of the other credentials: `cyberhub-keys taxii-set <server number>` stores the value in the OS credential store ([PROVISIONING.md](PROVISIONING.md)). The app reads it only to connect; the web view only learns whether one is stored.
+* **Incremental synchronization.** Objects are requested 500 at a time (`match[type]=indicator`), following `next`, or `added_after` from `X-TAXII-Date-Added-Last` when the server gives no `next` (§3.5). The collection keeps the last stored page's `X-TAXII-Date-Added-Last` as its cursor. A failure keeps the pages already stored and the cursor at the last one, so the next synchronization continues from there. Every synchronization is recorded: pages, objects, added, updated, revoked, already saved, skipped and the message. The collection shows its last status (health).
+* **What is imported:** `indicator` objects whose STIX pattern is an equality, or an OR of equalities, on `ipv4-addr:value`, `ipv6-addr:value`, `domain-name:value`, `url:value` or a file hash (MD5, SHA-1, SHA-256), with a value Cyber Hub accepts as a public indicator.
+  * Other objects (malware, reports, relationships, observables), other pattern types (Snort, YARA, Sigma), AND, FOLLOWEDBY, other operators and qualifiers, and private addresses are skipped and counted with the reason. Nothing is approximated.
+  * Each indicator becomes a saved indicator ([Saved indicators](#saved-indicators)): the feed as its source, the server's reliability, its STIX confidence (or the server's default), `valid_until` as its validity, `revoked` as its status, the STIX id and `modified` as its provenance. The history says it came from the feed.
+* **Conflicts:** the analyst's record wins.
+  * A value already saved by the analyst, or by another feed, keeps its fields, and the feed's view (confidence, validity, revocation) is added to its history as a sighting.
+  * A false positive is never changed by a feed.
+  * A feed updates only its own indicators, and only with a newer `modified`: confidence, validity, and revocation, which revokes the saved indicator.
+* **A feed never creates a finding.** Its indicators are leads: Analysis can show them as sightings, while expired, revoked and false-positive indicators are not presented as current.
+* **Tests** (`ti/taxii_tests.rs`, a local mock server):
+  * discovery, collections, two pages through `next`, and the cursor on the next synchronization;
+  * the media type and Basic credentials;
+  * the analyst's and false-positive records left unchanged, revocation, and newer versions;
+  * partial synchronizations, refused redirects, oversized and non-JSON responses, and credential scrubbing.
+
+  The pattern and object readers are also in the hostile-input sweep.
+
 ## STIX 2.1 export
 
 *Saved indicators* → *STIX 2.1* writes every saved indicator as a STIX 2.1 `indicator` in one `bundle`, through a native save dialog (`src-tauri/src/ti/stix.rs`).

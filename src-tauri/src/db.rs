@@ -1267,6 +1267,60 @@ pub(crate) const MIGRATIONS: &[&str] = &[
         DELETE FROM risk_acceptance_items WHERE kind = 'asvs' AND ref_id = OLD.id;
     END;
     "#,
+    // 28 — TAXII 2.1 feeds (docs/PROVIDERS.md#taxii-21-feeds): servers (credentials stay in the OS
+    // credential store), their collections with the incremental cursor and health, every
+    // synchronization, and on saved indicators the feed object they came from.
+    r#"
+    CREATE TABLE taxii_servers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        discovery_url TEXT NOT NULL UNIQUE,
+        auth TEXT NOT NULL DEFAULT 'none' CHECK (auth IN ('none','basic','header')),
+        username TEXT NOT NULL DEFAULT '',
+        header_name TEXT NOT NULL DEFAULT '',
+        reliability TEXT NOT NULL DEFAULT '' CHECK (reliability IN ('','A','B','C','D','E','F')),
+        default_confidence INTEGER CHECK (default_confidence IS NULL OR default_confidence BETWEEN 0 AND 100),
+        title TEXT NOT NULL DEFAULT '',
+        discovered_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE TABLE taxii_collections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id INTEGER NOT NULL REFERENCES taxii_servers(id) ON DELETE CASCADE,
+        api_root TEXT NOT NULL,
+        collection TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        can_read INTEGER NOT NULL DEFAULT 0,
+        media_types TEXT NOT NULL DEFAULT '[]',
+        added_after TEXT,
+        last_sync_at TEXT,
+        last_status TEXT NOT NULL DEFAULT '',
+        last_error TEXT NOT NULL DEFAULT '',
+        discovered_at TEXT NOT NULL,
+        UNIQUE (server_id, api_root, collection)
+    );
+    CREATE TABLE taxii_syncs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        collection_id INTEGER NOT NULL REFERENCES taxii_collections(id) ON DELETE CASCADE,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        status TEXT NOT NULL CHECK (status IN ('running','succeeded','partial','failed')),
+        pages INTEGER NOT NULL DEFAULT 0,
+        objects INTEGER NOT NULL DEFAULT 0,
+        added INTEGER NOT NULL DEFAULT 0,
+        updated INTEGER NOT NULL DEFAULT 0,
+        revoked INTEGER NOT NULL DEFAULT 0,
+        sighted INTEGER NOT NULL DEFAULT 0,
+        skipped INTEGER NOT NULL DEFAULT 0,
+        message TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX idx_taxii_syncs ON taxii_syncs(collection_id, id DESC);
+    ALTER TABLE ti_saved ADD COLUMN feed_ref TEXT NOT NULL DEFAULT '';
+    ALTER TABLE ti_saved ADD COLUMN feed_object TEXT NOT NULL DEFAULT '';
+    ALTER TABLE ti_saved ADD COLUMN feed_modified TEXT NOT NULL DEFAULT '';
+    "#,
 ];
 
 /// Migrations that rebuild a table other tables refer to (by version). SQLite cannot change a
@@ -1512,6 +1566,8 @@ impl Db {
             let ts = crate::util::now();
             c.execute("UPDATE workflow_run_steps SET status = CASE status WHEN 'running' THEN 'failed' ELSE 'cancelled' END, summary = CASE status WHEN 'running' THEN 'Interrupted: Cyber Hub was closed' ELSE summary END, finished_at = COALESCE(finished_at, ?1) WHERE status IN ('running','pending') AND run_id IN (SELECT id FROM workflow_runs WHERE status = 'running')", [&ts])?;
             c.execute("UPDATE workflow_runs SET status = 'failed', summary = 'Interrupted: Cyber Hub was closed while it ran', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'", [&ts])?;
+            // and feed synchronizations: the cursor only moved for pages already stored
+            c.execute("UPDATE taxii_syncs SET status = 'failed', message = 'Interrupted: Cyber Hub was closed while it ran', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'", [&ts])?;
             // likewise discovery runs: nothing found by an interrupted run is treated as removed
             c.execute(
                 "UPDATE discovery_snapshots SET status = 'failed', note = 'Interrupted: Cyber Hub was closed while it ran', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'",

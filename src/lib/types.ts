@@ -738,6 +738,69 @@ export interface PriorityReason {
   text: string;
 }
 
+/** A TAXII 2.1 collection of a server (Mission 5). */
+export interface TaxiiCollection {
+  id: number;
+  serverId: number;
+  apiRoot: string;
+  collection: string;
+  title: string;
+  description: string;
+  canRead: boolean;
+  /** the incremental cursor */
+  addedAfter: string | null;
+  lastSyncAt: string | null;
+  lastStatus: "" | "succeeded" | "partial" | "failed";
+  lastError: string;
+  indicators: number;
+}
+
+export interface TaxiiServer {
+  id: number;
+  name: string;
+  discoveryUrl: string;
+  auth: "none" | "basic" | "header";
+  username: string;
+  headerName: string;
+  reliability: string;
+  defaultConfidence: number | null;
+  title: string;
+  discoveredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** a credential is stored (never its value) */
+  credentialStored: boolean;
+  credentialCommand: string;
+  collections: TaxiiCollection[];
+}
+
+export interface TaxiiServerInput {
+  id?: number;
+  name: string;
+  discoveryUrl: string;
+  auth: "none" | "basic" | "header";
+  username: string;
+  headerName: string;
+  reliability: string;
+  defaultConfidence: number | null;
+}
+
+export interface TaxiiSync {
+  id: number;
+  collectionId: number;
+  startedAt: string;
+  finishedAt: string | null;
+  status: "running" | "succeeded" | "partial" | "failed";
+  pages: number;
+  objects: number;
+  added: number;
+  updated: number;
+  revoked: number;
+  sighted: number;
+  skipped: number;
+  message: string;
+}
+
 /** Risk acceptance (Mission 5): who accepted which risk, why, approved by whom, until when. */
 export type RiskStanding = "active" | "review_due" | "expired" | "revoked";
 export type RiskItemKind = "finding" | "vulnerability" | "asvs";
