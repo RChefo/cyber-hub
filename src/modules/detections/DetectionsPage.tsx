@@ -10,11 +10,11 @@ import { PageHeader, Panel } from "@/components/ui/Panel";
 import { notify } from "@/lib/actions";
 import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import type { DetectionImportReport, DetectionRuleDetail, DetectionRuleSummary, DetectionTestOutcome, YaraMeta } from "@/lib/types";
+import type { CorrelationMeta, DetectionImportReport, DetectionRuleDetail, DetectionRuleSummary, DetectionTestOutcome, YaraMeta } from "@/lib/types";
 import { cn, formatRelative, pluralize } from "@/lib/utils";
 import { formatBytes } from "@/modules/utilities/lib/triage";
 import { Segmented } from "@/modules/utilities/tools/shared";
-import { diffLines, explain, LEVEL_TONE, RULE_TEMPLATE, runState, testsLabel, YARA_TEMPLATE } from "./detections";
+import { correlationSummary, diffLines, explain, LEVEL_TONE, RULE_TEMPLATE, runState, testsLabel, YARA_TEMPLATE } from "./detections";
 
 type Kind = "sigma" | "yara";
 /** A rule being written: new (no id) or a new version of a library entry. */
@@ -25,7 +25,7 @@ const KEYS = ["detections"] as const;
 
 function importSummary(r: DetectionImportReport): string {
   const n = (o: string) => r.imported.filter((x) => x.outcome === o).length;
-  return [`${n("added")} added`, `${n("updated")} new versions`, `${n("unchanged")} unchanged`, r.failed.length ? `${r.failed.length} not read: ${r.failed.slice(0, 2).map(([f, e]) => `${f}: ${e}`).join("; ")}` : null].filter(Boolean).join(", ");
+  return [`${n("added")} added`, `${n("updated")} new versions`, `${n("unchanged")} unchanged`, r.failed.length ? `${r.failed.length} not read: ${r.failed.slice(0, 2).map(([f, e]) => `${f}: ${e}`).join("; ")}` : null, ...(r.notes ?? [])].filter(Boolean).join(", ");
 }
 
 /** Detections: a library of Sigma and YARA rules with versions, collections, tests on log and
@@ -160,6 +160,11 @@ export default function DetectionsPage() {
               <summary className="cursor-pointer">What the Sigma engine supports</summary>
               <p className="mt-1.5">Modifiers: {engine.data.modifiers.join(", ")}.</p>
               <p className="mt-1">Refused with the reason: {engine.data.unsupported.join("; ")}.</p>
+              {engine.data.correlation && (
+                <p className="mt-1">
+                  Correlation rules: {engine.data.correlation.types.join(", ")}, with group-by, aliases, ranges and chains of up to {engine.data.correlation.maxChain} correlations; windows slide (they are not cut at clock boundaries) and last at most {engine.data.correlation.maxTimespan}. The rules a correlation refers to run as part of it, also when disabled.
+                </p>
+              )}
               <p className="mt-1">Windows log sources mapped to channels and event IDs: {[...engine.data.services, ...engine.data.categories].join(", ")}. Other log sources run against every event, and the result says so.</p>
             </details>
           )}
@@ -463,12 +468,24 @@ function RuleView({ id, onDeleted, onEdit }: { id: number; onDeleted: () => void
 function Overview({ d }: { d: DetectionRuleDetail }) {
   const { runtime } = useApp();
   const collections = useQuery(["detections"], () => api.detectionCollections(), [], runtime);
-  const m = d.meta as { description?: string; author?: string; references?: string[]; falsepositives?: string[]; tags?: string[]; tactics?: string[]; techniques?: string[] };
+  const m = d.meta as { description?: string; author?: string; references?: string[]; falsepositives?: string[]; tags?: string[]; tactics?: string[]; techniques?: string[]; correlation?: CorrelationMeta };
   const levelTone: Record<string, "danger" | "warning" | "default"> = { error: "danger", unsupported: "warning", warning: "default" };
   const yara = d.summary.kind === "yara" ? (d.meta as unknown as YaraMeta) : null;
   return (
     <div className="flex flex-col gap-3 text-[12.5px]">
       {m.description && <p>{m.description}</p>}
+      {m.correlation && (
+        <section className="flex flex-col gap-1">
+          <h3 className="text-[13px] font-medium">Correlation rule</h3>
+          <p>{correlationSummary(m.correlation)}.</p>
+          <p className="text-muted">
+            {m.correlation.generate
+              ? "generate: true — the rules it refers to also run on their own."
+              : "The rules it refers to run as part of it; on their own they run only when enabled."}{" "}
+            A match is a lead built from other rules' matches, kept as a detection hit for review.
+          </p>
+        </section>
+      )}
       {yara && yara.rules.length > 0 && (
         <section className="flex flex-col gap-1">
           <h3 className="text-[13px] font-medium">

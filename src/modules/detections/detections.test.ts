@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffLines, explain, isYara, runState, testsLabel, yaraString } from "./detections";
+import { correlationSummary, diffLines, explain, isYara, runState, testsLabel, yaraString } from "./detections";
 
 describe("detections", () => {
   it("diffs rule versions line by line", () => {
@@ -45,5 +45,41 @@ describe("detections", () => {
     expect(yaraString({ id: "$a", count: 3, matches: [] })).toBe("$a matched 3 times");
     expect(explain(null)).toEqual([]);
     expect(isYara({ condition: "c", selections: [] })).toBe(false);
+  });
+});
+
+describe("correlation rules", () => {
+  it("summarizes a correlation section in one sentence", () => {
+    expect(correlationSummary({ type: "event_count", rules: ["failed_login"], groupBy: ["User"], timespan: 600, timespanText: "10m", condition: [["gte", 10]], fields: [], aliases: {}, generate: false })).toBe(
+      "event count of failed_login by User within 10m: count ≥ 10",
+    );
+    expect(correlationSummary({ type: "temporal_ordered", rules: ["many", "success"], groupBy: [], timespan: 600, timespanText: "10m", condition: [], fields: [], aliases: {}, generate: false })).toBe(
+      "ordered temporal proximity of many, success over all events within 10m: all 2 rules in order",
+    );
+    expect(correlationSummary({ type: "value_count", rules: ["r"], groupBy: ["Host"], timespan: 60, timespanText: "1m", condition: [["gt", 2], ["lte", 9]], fields: ["User"], aliases: {}, generate: true })).toContain("distinct User > 2 and distinct User ≤ 9");
+  });
+
+  it("explains a correlation match with its group, window and events", () => {
+    const lines = explain({
+      kind: "correlation",
+      type: "temporal_ordered",
+      rules: [{ ref: "multiple_failed_login", title: "Multiple failed logons" }, { ref: "successful_login", title: "Successful login" }],
+      groupBy: [["User", "admin"]],
+      timespan: "10m",
+      condition: "all 2 rules in order",
+      value: 2,
+      first: "2026-11-09T10:03:00Z",
+      last: "2026-11-09T10:04:00Z",
+      events: [
+        { rule: "multiple_failed_login", position: "window 2026-11-09T10:00:00Z – 2026-11-09T10:03:00Z · User=admin", time: "2026-11-09T10:03:00Z", source: "dc1.evtx", sourceId: 7 },
+        { rule: "successful_login", position: "record 9", time: "2026-11-09T10:04:00Z", source: "dc2.evtx", sourceId: 8 },
+      ],
+      total: 30,
+      kept: 2,
+    });
+    expect(lines[0]).toBe("For User=admin: all 2 rules in order within 10m (measured 2)");
+    expect(lines[2]).toBe("multiple_failed_login: window 2026-11-09T10:00:00Z – 2026-11-09T10:03:00Z · User=admin in dc1.evtx");
+    expect(lines[3]).toBe("successful_login: record 9 at 2026-11-09T10:04:00Z in dc2.evtx");
+    expect(lines.at(-1)).toBe("28 more events not listed");
   });
 });

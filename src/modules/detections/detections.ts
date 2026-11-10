@@ -1,4 +1,4 @@
-import type { DetectionExplanation, DetectionRuleSummary, YaraExplanation, YaraStringHit } from "@/lib/types";
+import type { CorrelationExplanation, CorrelationMeta, CorrelationType, DetectionExplanation, DetectionRuleSummary, YaraExplanation, YaraStringHit } from "@/lib/types";
 
 export type Tone = "default" | "accent" | "success" | "warning" | "danger";
 
@@ -87,6 +87,33 @@ export function isYara(x: DetectionExplanation | null | undefined): x is YaraExp
   return x?.kind === "yara";
 }
 
+export function isCorrelation(x: DetectionExplanation | null | undefined): x is CorrelationExplanation {
+  return x?.kind === "correlation";
+}
+
+const CORRELATION_TYPE: Record<CorrelationType, string> = {
+  event_count: "event count",
+  value_count: "distinct values",
+  temporal: "temporal proximity",
+  temporal_ordered: "ordered temporal proximity",
+  value_sum: "sum",
+  value_avg: "average",
+};
+
+/** A correlation section in one sentence: "event count of failed_login by User within 10m: count ≥ 10". */
+export function correlationSummary(c: CorrelationMeta): string {
+  const ops: Record<string, string> = { gt: ">", gte: "≥", lt: "<", lte: "≤", eq: "=", neq: "≠" };
+  const what = c.type === "event_count" ? "count" : c.type === "value_count" ? `distinct ${c.fields.join("+")}` : c.type === "value_sum" ? `sum of ${c.fields[0]}` : c.type === "value_avg" ? `average of ${c.fields[0]}` : "rules matched";
+  const cond =
+    c.type === "temporal_ordered"
+      ? `all ${c.rules.length} rules in order`
+      : c.condition.length === 0
+        ? `all ${c.rules.length} rules`
+        : c.condition.map(([op, v]) => `${what} ${ops[op] ?? op} ${v}`).join(" and ");
+  const by = c.groupBy.length ? ` by ${c.groupBy.join(", ")}` : " over all events";
+  return `${CORRELATION_TYPE[c.type]} of ${c.rules.join(", ")}${by} within ${c.timespanText}: ${cond}`;
+}
+
 /** One string of a YARA match as a sentence: how often, where first, and what. */
 export function yaraString(s: YaraStringHit, limit = 1000): string {
   const first = s.matches[0];
@@ -99,6 +126,16 @@ export function yaraString(s: YaraStringHit, limit = 1000): string {
  * the strings that matched, with their first offset. */
 export function explain(x: DetectionExplanation | null | undefined): string[] {
   if (!x) return [];
+  if (isCorrelation(x)) {
+    const group = x.groupBy.map(([k, v]) => `${k}=${v}`).join(", ");
+    const out = [
+      `${group ? `For ${group}` : "Over all events"}: ${x.condition} within ${x.timespan} (measured ${x.value})`,
+      `Window from ${x.first} to ${x.last}, ${x.total} event${x.total === 1 ? "" : "s"} combined`,
+      ...x.events.map((e) => `${e.rule}: ${e.position}${e.time && !e.position.startsWith("window") ? ` at ${e.time}` : ""}${e.source ? ` in ${e.source}` : ""}`),
+    ];
+    if (x.total > x.kept) out.push(`${x.total - x.kept} more event${x.total - x.kept === 1 ? "" : "s"} not listed`);
+    return out;
+  }
   if (isYara(x)) return x.strings.length ? x.strings.map((s) => yaraString(s, x.limit)) : ["The condition holds on the file's properties (size, header values or modules); no string was needed."];
   const out: string[] = [];
   for (const s of x.selections ?? []) {

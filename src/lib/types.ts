@@ -2308,7 +2308,51 @@ export interface YaraExplanation {
   kept: number;
 }
 
-export type DetectionExplanation = SigmaExplanation | YaraExplanation;
+/** An event a correlation combined: the referenced rule (as the correlation names it), where the
+ * event is and the evidence or sample it came from. A chained correlation's own match appears as
+ * one event whose position is its window. */
+export interface CorrelationEventRef {
+  rule: string;
+  position: string;
+  time: string;
+  source: string;
+  sourceId: number;
+}
+
+export type CorrelationType = "event_count" | "value_count" | "temporal" | "temporal_ordered" | "value_sum" | "value_avg";
+
+/** Why a Sigma correlation rule matched: the group, the window and what was measured in it. */
+export interface CorrelationExplanation {
+  kind: "correlation";
+  type: CorrelationType;
+  rules: { ref: string; title: string }[];
+  groupBy: [string, string][];
+  timespan: string;
+  /** "count ≥ 10", "distinct User ≥ 100", "all 2 rules in order" */
+  condition: string;
+  value: number;
+  first: string;
+  last: string;
+  events: CorrelationEventRef[];
+  /** events in the window; only the first `kept` are listed */
+  total: number;
+  kept: number;
+}
+
+/** The correlation section of a valid Sigma correlation rule (in a library entry's meta). */
+export interface CorrelationMeta {
+  type: CorrelationType;
+  rules: string[];
+  groupBy: string[];
+  timespan: number;
+  timespanText: string;
+  condition: [string, number][];
+  fields: string[];
+  aliases: Record<string, Record<string, string>>;
+  generate: boolean;
+}
+
+export type DetectionExplanation = SigmaExplanation | YaraExplanation | CorrelationExplanation;
 
 export interface DetectionMatch {
   position: string;
@@ -2336,6 +2380,8 @@ export interface DetectionTestOutcome {
 export interface DetectionImportReport {
   imported: { id: number; title: string; outcome: "added" | "updated" | "unchanged"; version: number; errors: number }[];
   failed: [string, string][];
+  /** what the import did besides adding rules (rules disabled because only a correlation uses them) */
+  notes?: string[];
 }
 
 export interface DetectionProjectRun {
@@ -2376,6 +2422,7 @@ export interface DetectionEngine {
   categories: string[];
   services: string[];
   yara: { engine: string; modules: string[]; unsupported: string[]; limits: { ruleFileKb: number; stringsPerRule: number; scanSeconds: number; fileMb: number; matchesPerString: number } };
+  correlation?: { types: CorrelationType[]; unsupported: string[]; maxTimespan: string; maxChain: number };
 }
 
 /** What a YARA rule file says about itself (`meta` of a YARA library entry). */

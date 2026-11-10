@@ -6,8 +6,9 @@
 //! input, with a size limit on every compiled expression.
 //!
 //! What a rule uses but Cyber Hub cannot evaluate is reported, never ignored: a rule with an
-//! unsupported feature (placeholders, time modifiers, aggregations, correlation rules) is refused
-//! for evaluation with the reason.
+//! unsupported feature (placeholders, time modifiers, the obsolete `| count()` aggregations,
+//! value_percentile correlations) is refused for evaluation with the reason. Correlation rules
+//! are validated here and evaluated by [`super::correlation`].
 
 use std::collections::BTreeMap;
 use std::net::IpAddr;
@@ -74,6 +75,9 @@ pub struct Meta {
     pub techniques: Vec<String>,
     /// ATT&CK tactic short names from `attack.<tactic>` tags
     pub tactics: Vec<String>,
+    /// the correlation section of a valid correlation rule
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub correlation: Option<super::correlation::Correlation>,
 }
 
 /* ───────────────────────── values ───────────────────────── */
@@ -721,7 +725,8 @@ pub fn capabilities() -> Value {
     serde_json::json!({
         "spec": SPEC_VERSION,
         "modifiers": ["contains", "startswith", "endswith", "all", "exists", "cased", "re", "re|i", "re|m", "re|s", "base64", "base64offset", "utf16le", "wide", "utf16be", "utf16", "windash", "cidr", "lt", "lte", "gt", "gte", "neq", "fieldref"],
-        "unsupported": ["expand (placeholders)", "minute, hour, day, week, month, year", "aggregations (| count() …)", "correlation rules", "rule collections with action", "regular-expression look-around and back-references"],
+        "unsupported": ["expand (placeholders)", "minute, hour, day, week, month, year", "aggregations (| count() …): use a correlation rule", "value_percentile correlations", "rule collections with action", "regular-expression look-around and back-references"],
+        "correlation": super::correlation::capabilities(),
         "categories": CATEGORIES.iter().map(|(c, _)| *c).collect::<Vec<_>>(),
         "services": SERVICES.iter().map(|(s, _)| *s).collect::<Vec<_>>(),
     })
@@ -744,11 +749,17 @@ pub struct Checked {
     pub meta: Meta,
     pub issues: Vec<Issue>,
     pub rule: Option<Rule>,
+    /// a valid correlation rule (it has no detection of its own)
+    pub correlation: Option<super::correlation::Correlation>,
 }
 
 impl Checked {
     pub fn errors(&self) -> usize {
         self.issues.iter().filter(|i| i.level != "warning").count()
+    }
+    /// A detection rule that compiled, or a valid correlation rule.
+    pub fn runnable(&self) -> bool {
+        self.rule.is_some() || self.correlation.is_some()
     }
 }
 
@@ -796,7 +807,7 @@ pub fn read(text_in: &str) -> Result<Vec<Checked>, String> {
 pub fn check(doc: &Value) -> Checked {
     let mut issues = Vec::new();
     let Some(o) = doc.as_object() else {
-        return Checked { meta: Meta::default(), issues: vec![issue("error", "A Sigma rule is a YAML mapping")], rule: None };
+        return Checked { meta: Meta::default(), issues: vec![issue("error", "A Sigma rule is a YAML mapping")], rule: None, correlation: None };
     };
     let get = |k: &str| o.get(k);
     let s = |k: &str| get(k).and_then(text).map(|x| x.trim().to_string()).filter(|x| !x.is_empty());
@@ -821,9 +832,12 @@ pub fn check(doc: &Value) -> Checked {
         let f = |k: &str| ls.get(k).and_then(text).map(|x| x.trim().to_string()).filter(|x| !x.is_empty());
         meta.logsource = LogSource { category: f("category"), product: f("product"), service: f("service") };
     }
-    // what Cyber Hub cannot evaluate
+    // a correlation rule: validated by the correlation module, evaluated over its rules' matches
+    let mut correlation = None;
     if get("correlation").is_some() {
-        issues.push(issue("unsupported", "This is a correlation rule (it combines other rules over time); Cyber Hub evaluates detection rules only"));
+        let (c, found) = super::correlation::parse(o);
+        issues.extend(found.into_iter().map(|(level, m)| issue(level, m)));
+        correlation = c;
     }
     if get("action").is_some() {
         issues.push(issue("unsupported", "Rule collections with 'action' (global, reset, repeat) were removed in Sigma 2.0; split them into separate rules"));
@@ -893,7 +907,9 @@ pub fn check(doc: &Value) -> Checked {
         if get("correlation").is_none() {
             issues.push(issue("error", "The rule has no detection section"));
         }
-        return Checked { meta, issues, rule: None };
+        let correlation = correlation.filter(|_| !issues.iter().any(|i| i.level != "warning"));
+        meta.correlation = correlation.clone();
+        return Checked { meta, issues, rule: None, correlation };
     };
     let mut selections = BTreeMap::new();
     let mut names = Vec::new();
@@ -955,7 +971,7 @@ pub fn check(doc: &Value) -> Checked {
     }
     let runnable = !issues.iter().any(|i| i.level != "warning") && !conditions.is_empty();
     let rule = runnable.then(|| Rule { names, selections, conditions, source });
-    Checked { meta, issues, rule }
+    Checked { meta, issues, rule, correlation: None }
 }
 
 type Fail = (&'static str, String);

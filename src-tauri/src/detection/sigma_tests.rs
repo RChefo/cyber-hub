@@ -220,8 +220,12 @@ fn what_cannot_be_evaluated_is_reported_never_ignored() {
         assert!(c.rule.is_none(), "{det}");
         assert!(c.issues.iter().any(|i| i.level == level && i.message.contains(words)), "{det}: {:?}", c.issues);
     }
+    // correlation rules are checked by the correlation module: a count needs a condition, and
+    // value_percentile is refused
     let corr = one("title: Many failed logons\ncorrelation:\n    type: event_count\n    rules: [a]\n    timespan: 5m\n");
-    assert!(corr.rule.is_none() && corr.issues.iter().any(|i| i.level == "unsupported" && i.message.contains("correlation rule")));
+    assert!(!corr.runnable() && corr.issues.iter().any(|i| i.level == "error" && i.message.contains("needs a condition")), "{:?}", corr.issues);
+    let pct = one("title: Rare\ncorrelation:\n    type: value_percentile\n    rules: [a]\n    group-by: [Host]\n    timespan: 1d\n    condition:\n        field: Image\n        lte: 1\n");
+    assert!(!pct.runnable() && pct.issues.iter().any(|i| i.level == "unsupported" && i.message.contains("percentile")));
     let warn = one("title: t\nid: not-a-uuid\nstatus: beta\ndate: 2026/11/09\ntags: [attack.T1059, attack.t9999]\nlogsource:\n    category: test\ndetection:\n    s:\n        F: x\n    unused:\n        G: y\n    condition: s\n");
     assert!(warn.rule.is_some(), "warnings do not stop a rule");
     for w in ["not a UUID", "Unknown status", "YYYY-MM-DD", "lower-case", "no ATT&CK Enterprise technique", "'unused' is not used"] {

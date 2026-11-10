@@ -73,6 +73,8 @@ pub struct ImportReport {
     pub imported: Vec<Imported>,
     /// files or documents that could not be read: (name, why)
     pub failed: Vec<(String, String)>,
+    /// what the import did beyond adding rules (rules disabled because a correlation uses them)
+    pub notes: Vec<String>,
 }
 
 /// Stores every rule of a Sigma file (one per YAML document).
@@ -81,19 +83,34 @@ fn import_sigma(c: &rusqlite::Connection, name: &str, text: &str, note: &str, re
     if docs.is_empty() {
         report.failed.push((name.into(), "The file holds no rule".into()));
     }
+    let mut stored = Vec::new();
     for (i, doc) in docs.iter().enumerate() {
         let label = if docs.len() > 1 { format!("{name} (document {})", i + 1) } else { name.to_string() };
         match sigma::read(doc) {
             Ok(mut v) if v.len() == 1 => {
                 let checked = v.remove(0);
                 match lib::upsert_sigma(c, doc, &checked, name, note) {
-                    Ok(r) => report.imported.push(r),
+                    Ok(r) => {
+                        report.imported.push(r.clone());
+                        stored.push((checked, r));
+                    }
                     Err(e) => report.failed.push((label, e.to_string())),
                 }
             }
             Ok(_) => report.failed.push((label, "A document holds one rule".into())),
             Err(e) => report.failed.push((label, e)),
         }
+    }
+    match lib::disable_correlated(c, &stored) {
+        Ok(titles) if !titles.is_empty() => report.notes.push(format!(
+            "{}: only part of a correlation in {name} (it does not say generate: true), so {} not run on {}own: {}",
+            if titles.len() == 1 { "1 rule is" } else { "Several rules are" },
+            if titles.len() == 1 { "it is" } else { "they are" },
+            if titles.len() == 1 { "its " } else { "their " },
+            titles.join(", ")
+        )),
+        Ok(_) => {}
+        Err(e) => report.failed.push((name.into(), e.to_string())),
     }
 }
 
@@ -421,8 +438,13 @@ fn test_one(app: &AppHandle, rule_id: i64, sample_id: i64) -> AppResult<TestOutc
         if sample_row.kind == "file" {
             return Err(validation(format!("{} is a file sample for YARA rules; a Sigma rule runs on log samples (EVTX, JSON, text)", sample_row.file_name)));
         }
-        let rule = lib::compile(&stored)?;
-        lib::run(&rule, &read_sample(&path)?)
+        match db.with(|c| lib::correlation_tree(c, &stored))? {
+            Some(tree) => lib::correlation_result(tree, &read_sample(&path)?, sample_id, &sample_row.file_name),
+            None => {
+                let rule = lib::compile(&stored)?;
+                lib::run(&rule, &read_sample(&path)?)
+            }
+        }
     };
     let test = db.with(|c| lib::record_test(c, rule_id, stored.version, sample_id, &result))?;
     Ok(TestOutcome { sample: sample_row, previous, test, result })
@@ -517,15 +539,41 @@ pub async fn detection_project_run(app: AppHandle, project_id: i64, evidence_ids
             return Err(validation("No enabled rule can run: import Sigma or YARA rules, or enable them first"));
         }
         let (sigma_rules, yara_rules): (Vec<lib::Stored>, Vec<lib::Stored>) = rules.into_iter().partition(|s| s.kind == "sigma");
-        let compiled: Vec<(lib::Stored, sigma::Rule)> = sigma_rules.into_iter().filter_map(|s| lib::compile(&s).ok().map(|r| (s, r))).collect();
+        // correlation rules run over the matches of the rules they refer to, across every file
+        let mut trees: Vec<(lib::Stored, crate::detection::correlation::Tree)> = Vec::new();
+        let mut detections = Vec::new();
+        let mut unresolved: Vec<(lib::Stored, String)> = Vec::new();
+        db.with(|c| {
+            for s in sigma_rules {
+                match lib::correlation_tree(c, &s) {
+                    Ok(Some(t)) => trees.push((s, t)),
+                    Ok(None) => detections.push(s),
+                    Err(e) => unresolved.push((s, e.to_string())),
+                }
+            }
+            Ok(())
+        })?;
+        let compiled: Vec<(lib::Stored, sigma::Rule)> = detections.into_iter().filter_map(|s| lib::compile(&s).ok().map(|r| (s, r))).collect();
         let ylib = (!yara_rules.is_empty()).then(|| yara::library(&yara_rules.iter().map(|s| (s.id, s.content.as_str())).collect::<Vec<_>>()));
         let mut files = Vec::new();
-        let mut totals: Vec<RuleRun> = compiled.iter().map(|(s, _)| s).chain(yara_rules.iter()).map(|s| RuleRun { rule_id: s.id, title: s.title.clone(), matched: 0, new: 0, notes: vec![] }).collect();
+        let mut totals: Vec<RuleRun> = compiled
+            .iter()
+            .map(|(s, _)| s)
+            .chain(yara_rules.iter())
+            .chain(trees.iter().map(|(s, _)| s))
+            .chain(unresolved.iter().map(|(s, _)| s))
+            .map(|s| RuleRun { rule_id: s.id, title: s.title.clone(), matched: 0, new: 0, notes: vec![] })
+            .collect();
         let note = |t: &mut RuleRun, n: String| {
             if !t.notes.contains(&n) {
                 t.notes.push(n);
             }
         };
+        for (s, why) in &unresolved {
+            if let Some(t) = totals.iter_mut().find(|t| t.rule_id == s.id) {
+                note(t, format!("Not run: {why}"));
+            }
+        }
         if let Some(l) = &ylib {
             for (id, why) in &l.failed {
                 if let Some(t) = totals.iter_mut().find(|t| t.rule_id == *id) {
@@ -540,11 +588,14 @@ pub async fn detection_project_run(app: AppHandle, project_id: i64, evidence_ids
             };
             let mut file = FileRun { evidence_id: rec.id, title: rec.title.clone(), kind: String::new(), events: 0, scanned: false, error: None, notes: vec![] };
             let mut problems = Vec::new();
-            if !compiled.is_empty() {
+            if !compiled.is_empty() || !trees.is_empty() {
                 match read_sample(&path) {
                     Ok(sample) => {
                         file.kind = kind_name(sample.kind).into();
                         file.events = sample.events.len();
+                        for (_, tree) in trees.iter_mut() {
+                            tree.feed(&sample, rec.id, &rec.title);
+                        }
                         for (i, (s, rule)) in compiled.iter().enumerate() {
                             let r = lib::run(rule, &sample);
                             if r.matched == 0 {
@@ -598,10 +649,29 @@ pub async fn detection_project_run(app: AppHandle, project_id: i64, evidence_ids
             }
             files.push(file);
         }
-        let results: Vec<RuleRun> = totals.into_iter().filter(|r| r.matched > 0).collect();
+        let correlation_count = trees.len();
+        for (s, tree) in trees {
+            let run = lib::finish_correlation(tree);
+            let mut new = 0;
+            for (evidence_id, m) in run.matches.iter().take(lib::MAX_MATCHES) {
+                new += db.with(|c| lib::hits_store(c, project_id, &s, *evidence_id, std::slice::from_ref(m)))?.0;
+            }
+            if let Some(t) = totals.iter_mut().find(|t| t.rule_id == s.id) {
+                t.matched += run.matched;
+                t.new += new;
+                for n in run.notes {
+                    note(t, n);
+                }
+                if run.matched > lib::MAX_MATCHES {
+                    note(t, format!("{} matches; the first {} were stored", run.matched, lib::MAX_MATCHES));
+                }
+            }
+        }
+        // rules that matched, and rules that could not run (with the reason)
+        let results: Vec<RuleRun> = totals.into_iter().filter(|r| r.matched > 0 || r.notes.iter().any(|n| n.starts_with("Not run"))).collect();
         let new_hits = results.iter().map(|r| r.new).sum();
         let read_files = files.iter().filter(|f| f.error.is_none()).count();
-        let rule_count = compiled.len() + yara_rules.len();
+        let rule_count = compiled.len() + yara_rules.len() + correlation_count;
         let _ = db.with(|c| {
             timeline::record(
                 c,

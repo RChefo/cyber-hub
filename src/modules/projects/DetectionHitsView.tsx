@@ -108,6 +108,11 @@ function HitRow({ h, archived, onSet, onPromote, onOpenFinding }: { h: Detection
             YARA
           </ToneChip>
         )}
+        {h.explanation?.kind === "correlation" && (
+          <ToneChip tone="accent" dot={false} className="text-[10.5px]">
+            Correlation
+          </ToneChip>
+        )}
         <span className="font-medium">{h.ruleTitle}</span>
         <span className="text-muted">v{h.ruleVersion}</span>
         {h.techniques.slice(0, 3).map((t) => (

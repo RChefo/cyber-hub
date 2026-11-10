@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+use crate::detection::correlation::{Kind as CorrKind, Resolved, Tree};
 use crate::detection::events::{Event, Sample};
 use crate::detection::sigma::{self, Checked, Issue};
 use crate::detection::yara;
@@ -82,7 +83,7 @@ pub fn upsert_sigma(c: &Connection, content: &str, checked: &Checked, source: &s
         tags: &serde_json::to_string(&checked.meta.tags).unwrap_or_default(),
         meta: &meta,
         issues: &issues,
-        runnable: checked.rule.is_some(),
+        runnable: checked.runnable(),
     };
     upsert(c, "sigma", &key, content, &row, source, note, checked.errors())
 }
@@ -640,6 +641,124 @@ pub fn compile(s: &Stored) -> AppResult<sigma::Rule> {
     c.rule.ok_or_else(|| validation(format!("“{}” cannot run: {}", s.title, c.issues.iter().filter(|i| i.level != "warning").map(|i| i.message.as_str()).collect::<Vec<_>>().join("; "))))
 }
 
+/* ───────────────────────── correlations ───────────────────────── */
+
+fn read_one(content: &str) -> AppResult<Checked> {
+    sigma::read(content).map_err(validation)?.pop().ok_or_else(|| validation("The rule is empty"))
+}
+
+/// The Sigma library entry a correlation refers to: by the `name` its file gives it, or by its
+/// `id` (without regard to case). When several entries share a name, the one imported from the
+/// correlation's own file wins; otherwise the reference is ambiguous and refused.
+fn find_ref(c: &Connection, reference: &str, source: &str) -> AppResult<Stored> {
+    let found: Vec<(i64, String)> = c
+        .prepare("SELECT id, source FROM detection_rules WHERE kind = 'sigma' AND (json_extract(meta, '$.name') = ?1 OR lower(COALESCE(json_extract(meta, '$.id'), '')) = lower(?1)) ORDER BY id")?
+        .query_map(params![reference.trim()], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    let id = match found.as_slice() {
+        [] => return Err(validation(format!("No Sigma rule named or identified '{reference}' is in the library: import the rules it correlates"))),
+        [(id, _)] => *id,
+        many => {
+            let same: Vec<i64> = many.iter().filter(|(_, s)| s == source).map(|(id, _)| *id).collect();
+            match same.as_slice() {
+                [id] => *id,
+                _ => return Err(validation(format!("Several rules in the library are named '{reference}': refer to the rule by its id"))),
+            }
+        }
+    };
+    stored(c, id)
+}
+
+/// A correlation rule with everything it refers to, resolved in the library, or None for a
+/// detection rule. The rules it refers to run as part of it even when they are disabled (a
+/// correlation's rules are not run on their own unless it says `generate: true`).
+pub fn correlation_tree(c: &Connection, s: &Stored) -> AppResult<Option<Tree>> {
+    if s.kind != "sigma" {
+        return Ok(None);
+    }
+    let Some(corr) = read_one(&s.content)?.correlation else {
+        return Ok(None);
+    };
+    let source: String = c.query_row("SELECT source FROM detection_rules WHERE id = ?1", params![s.id], |r| r.get(0))?;
+    let mut resolve = |r: &str| -> Result<Resolved, String> {
+        let st = find_ref(c, r, &source).map_err(|e| e.to_string())?;
+        let ch = read_one(&st.content).map_err(|e| e.to_string())?;
+        if let Some(correlation) = ch.correlation {
+            return Ok(Resolved::Correlation { key: format!("rule:{}", st.id), title: st.title, correlation });
+        }
+        match ch.rule {
+            Some(rule) => Ok(Resolved::Rule { title: st.title, rule: Box::new(rule) }),
+            None => Err(format!("“{}”, which it refers to, cannot run: {}", st.title, ch.issues.iter().filter(|i| i.level != "warning").map(|i| i.message.as_str()).collect::<Vec<_>>().join("; "))),
+        }
+    };
+    Tree::build(&format!("rule:{}", s.id), corr, &mut resolve).map(Some).map_err(validation)
+}
+
+/// A finished correlation: every match with the evidence (or sample) of its last event.
+pub struct CorrelationRun {
+    pub matched: usize,
+    pub matches: Vec<(i64, Match)>,
+    pub notes: Vec<String>,
+}
+
+pub fn finish_correlation(tree: Tree) -> CorrelationRun {
+    let corr = tree.correlation().clone();
+    let titles = tree.titles().to_vec();
+    let out = tree.finish();
+    let measure = match corr.kind {
+        CorrKind::EventCount => "events",
+        CorrKind::ValueCount => "distinct values",
+        CorrKind::ValueSum => "sum",
+        CorrKind::ValueAvg => "average",
+        CorrKind::Temporal | CorrKind::TemporalOrdered => "rules matched",
+    };
+    let matches = out
+        .found
+        .iter()
+        .map(|f| {
+            let group = f.group.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(", ");
+            let mut fields: Vec<(String, String)> = f.group.clone();
+            fields.push((measure.to_string(), format!("{}", f.value)));
+            let label = format!("{} · {} event{} · {}", if group.is_empty() { "all events".to_string() } else { group }, f.total, if f.total == 1 { "" } else { "s" }, corr.condition_text());
+            (f.source_id(), Match { position: f.position(), time: f.last.clone(), label, fields, explanation: f.explanation(&corr, &titles) })
+        })
+        .collect();
+    CorrelationRun { matched: out.matched, matches, notes: out.notes }
+}
+
+/// A correlation run on one sample, as a test result.
+pub fn correlation_result(mut tree: Tree, sample: &Sample, sample_id: i64, file_name: &str) -> RunResult {
+    tree.feed(sample, sample_id, file_name);
+    let r = finish_correlation(tree);
+    let mut notes = sample.warnings.clone();
+    notes.extend(r.notes);
+    if sample.truncated {
+        notes.push(format!("Only the first {} events of the sample were read", crate::detection::events::MAX_EVENTS));
+    }
+    if r.matched > MAX_MATCHES {
+        notes.push(format!("{} matches; the first {MAX_MATCHES} are listed", r.matched));
+    }
+    RunResult { events: sample.events.len(), in_source: sample.events.len(), matched: r.matched, matches: r.matches.into_iter().take(MAX_MATCHES).map(|(_, m)| m).collect(), notes }
+}
+
+/// When a file's correlations refer to rules of the same file and do not say `generate: true`,
+/// those rules only run as part of the correlation (the specification's default): the ones this
+/// import added are disabled. Returns their titles.
+pub fn disable_correlated(c: &Connection, docs: &[(Checked, Imported)]) -> AppResult<Vec<String>> {
+    let mut out = Vec::new();
+    for (corr, _) in docs.iter().filter(|(ch, _)| ch.correlation.as_ref().is_some_and(|c| !c.generate)) {
+        let refs = &corr.correlation.as_ref().expect("filtered").rules;
+        for (ch, imp) in docs {
+            let named = ch.meta.name.as_ref().is_some_and(|n| refs.contains(n)) || ch.meta.id.as_ref().is_some_and(|id| refs.iter().any(|r| r.eq_ignore_ascii_case(id)));
+            if named && ch.correlation.is_none() && imp.outcome == "added" && !out.contains(&imp.title) {
+                set_enabled(c, imp.id, false)?;
+                out.push(imp.title.clone());
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Compiles a stored YARA rule file on its own.
 pub fn compile_yara(s: &Stored) -> AppResult<boreal::Scanner> {
     if s.kind != "yara" {
@@ -823,8 +942,10 @@ pub fn hit_promote(c: &Connection, id: i64) -> AppResult<i64> {
     if let Some(f) = h.finding_id {
         return Ok(f);
     }
-    if h.explanation.get("kind").and_then(Value::as_str) == Some("yara") {
-        return promote_yara(c, id, project_id, &h);
+    match h.explanation.get("kind").and_then(Value::as_str) {
+        Some("yara") => return promote_yara(c, id, project_id, &h),
+        Some("correlation") => return promote_correlation(c, id, project_id, &h),
+        _ => {}
     }
     let fields = h.event.get("fields").and_then(Value::as_array).cloned().unwrap_or_default();
     let get = |name: &str| fields.iter().find(|p| p.get(0).and_then(Value::as_str).is_some_and(|k| k.eq_ignore_ascii_case(name))).and_then(|p| p.get(1).and_then(Value::as_str)).map(str::to_string);
@@ -869,6 +990,82 @@ pub fn hit_promote(c: &Connection, id: i64) -> AppResult<i64> {
     let fid = crate::commands::projects::finding_write(&tx, &input, "detection", true)?;
     if let Some(eid) = h.evidence_id {
         crate::workspace::findings::link(&tx, fid, "evidence", eid, "detection")?;
+    }
+    tx.execute("UPDATE detection_hits SET status = 'promoted', finding_id = ?2 WHERE id = ?1", params![id, fid])?;
+    tx.commit()?;
+    Ok(fid)
+}
+
+/// A correlation hit as a finding under review, linked to every evidence file whose events it
+/// combined. The finding says what was counted and lists the events, so each can be checked.
+fn promote_correlation(c: &Connection, id: i64, project_id: i64, h: &HitRow) -> AppResult<i64> {
+    let x = &h.explanation;
+    let s = |k: &str| x.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+    let group: Vec<String> = x
+        .get("groupBy")
+        .and_then(Value::as_array)
+        .map(|g| g.iter().filter_map(|p| Some(format!("{}={}", p.get(0)?.as_str()?, p.get(1)?.as_str()?))).collect())
+        .unwrap_or_default();
+    let events = x.get("events").and_then(Value::as_array).cloned().unwrap_or_default();
+    let lines: Vec<String> = events
+        .iter()
+        .map(|e| {
+            let f = |k: &str| e.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+            format!("- {}: {} at {} in {}", f("rule"), f("position"), f("time"), f("source"))
+        })
+        .collect();
+    let mut sources: Vec<i64> = events.iter().filter_map(|e| e.get("sourceId").and_then(Value::as_i64)).collect();
+    sources.extend(h.evidence_id);
+    sources.sort_unstable();
+    sources.dedup();
+    let target = if group.is_empty() { h.evidence.clone() } else { group.join(", ") };
+    let value = x.get("value").and_then(Value::as_f64).unwrap_or_default();
+    let total = x.get("total").and_then(Value::as_u64).unwrap_or(events.len() as u64);
+    let description = format!(
+        "The correlation rule “{}” (version {}, {}) matched for {}: {} within {} (measured: {}).\n\nWindow: {} to {}.\n\nEvents combined ({} of {} listed):\n{}\n\nA correlation is a lead built from other rules' matches: confirm each event from the evidence before treating it as adversary activity.",
+        h.rule_title,
+        h.rule_version,
+        s("type"),
+        if target.is_empty() { "all events".to_string() } else { target.clone() },
+        s("condition"),
+        s("timespan"),
+        value,
+        s("first"),
+        s("last"),
+        events.len(),
+        total,
+        lines.join("\n")
+    );
+    let mut tags = vec!["detection".to_string(), "sigma".to_string(), "correlation".to_string()];
+    tags.extend(h.techniques.iter().cloned());
+    let input = crate::commands::projects::FindingInput {
+        project_id,
+        title: format!("{} ({})", h.rule_title, if target.is_empty() { "all events" } else { &target }).chars().take(200).collect(),
+        severity: finding_severity(&h.rule_level).into(),
+        status: "under_review".into(),
+        category: "Detection".into(),
+        confidence: Some("low".into()),
+        description,
+        affected_target: target.chars().take(500).collect(),
+        technical_details: format!(
+            "Sigma correlation rule #{} “{}”, version {}, type {}.{}",
+            h.rule_id.unwrap_or(0),
+            h.rule_title,
+            h.rule_version,
+            s("type"),
+            if h.techniques.is_empty() { String::new() } else { format!(" MITRE ATT&CK: {}.", h.techniques.join(", ")) }
+        ),
+        tags,
+        ..Default::default()
+    };
+    let tx = c.unchecked_transaction()?;
+    let fid = crate::commands::projects::finding_write(&tx, &input, "detection", true)?;
+    for eid in sources {
+        // evidence removed since the run is skipped; the events stay listed in the description
+        let here: bool = tx.query_row("SELECT EXISTS (SELECT 1 FROM evidence WHERE id = ?1 AND project_id = ?2)", params![eid, project_id], |r| r.get(0))?;
+        if here {
+            crate::workspace::findings::link(&tx, fid, "evidence", eid, "detection")?;
+        }
     }
     tx.execute("UPDATE detection_hits SET status = 'promoted', finding_id = ?2 WHERE id = ?1", params![id, fid])?;
     tx.commit()?;

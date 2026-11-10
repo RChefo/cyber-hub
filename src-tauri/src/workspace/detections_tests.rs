@@ -259,3 +259,166 @@ fn any_hit_can_be_reviewed_however_many_the_project_has() {
     })
     .unwrap();
 }
+
+/// The specification's complete example: a temporal_ordered correlation over an event_count
+/// correlation and a detection rule, in one file of four documents.
+const CHAIN: &str = "title: Correlation - Multiple Failed Logins Followed by Successful Login
+id: b180ead8-d58f-40b2-ae54-c8940995b9b6
+status: experimental
+correlation:
+    type: temporal_ordered
+    rules:
+        - multiple_failed_login
+        - successful_login
+    group-by:
+        - User
+    timespan: 10m
+level: high
+tags:
+    - attack.t1110
+---
+title: Multiple failed logons
+id: a8418a5a-5fc4-46b5-b23b-6c73beb19d41
+name: multiple_failed_login
+correlation:
+    type: event_count
+    rules:
+        - failed_login
+    group-by:
+        - User
+    timespan: 10m
+    condition:
+        gte: 10
+---
+title: Single failed login
+id: 53ba33fd-3a50-4468-a5ef-c583635cfa92
+name: failed_login
+logsource:
+    product: windows
+    service: security
+detection:
+    selection:
+        EventID:
+            - 529
+            - 4625
+    condition: selection
+---
+title: Successful login
+id: 4d0a2c83-c62c-4ed4-b475-c7e23a9269b8
+name: successful_login
+logsource:
+    product: windows
+    service: security
+detection:
+    selection:
+        EventID:
+            - 528
+            - 4624
+    condition: selection
+";
+
+fn login(id: &str, user: &str, second: u32) -> Event {
+    Event {
+        position: format!("record {id}-{user}-{second}"),
+        time: format!("2026-11-09T10:{:02}:{:02}Z", second / 60, second % 60),
+        fields: vec![("Channel".into(), "Security".into()), ("EventID".into(), id.into()), ("User".into(), user.into())],
+        text: String::new(),
+    }
+}
+
+fn import_file(c: &Connection, text: &str, source: &str) -> Vec<(Checked, Imported)> {
+    documents(text)
+        .iter()
+        .map(|d| {
+            let ch = crate::detection::sigma::read(d).unwrap().remove(0);
+            let imp = upsert_sigma(c, d, &ch, source, "").unwrap();
+            (ch, imp)
+        })
+        .collect()
+}
+
+#[test]
+fn correlation_rules_resolve_in_the_library_and_their_hits_are_reviewable_leads() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        c.execute("INSERT INTO projects (id, name, status, created_at, updated_at) VALUES (1, 'IR', 'active', 't', 't')", [])?;
+        c.execute("INSERT INTO evidence (id, project_id, kind, title, source, sha256, size, file_name, created_at) VALUES (7, 1, 'file', 'dc1-Security.evtx', 'user', 'ab', 10, 'a.evtx', 't'), (8, 1, 'file', 'dc2-Security.evtx', 'user', 'cd', 10, 'b.evtx', 't')", [])?;
+        let docs = import_file(c, CHAIN, "mr_failed_then_success.yml");
+        assert!(docs.iter().all(|(ch, imp)| ch.runnable() && imp.outcome == "added"), "{:?}", docs.iter().map(|(c, _)| &c.issues).collect::<Vec<_>>());
+        // the base rules only run as part of the correlation (no generate: true)
+        let mut disabled = disable_correlated(c, &docs)?;
+        disabled.sort();
+        assert_eq!(disabled, vec!["Single failed login".to_string(), "Successful login".to_string()]);
+        let runnable_ids: Vec<i64> = runnable(c, None)?.iter().map(|s| s.id).collect();
+        assert_eq!(runnable_ids, vec![docs[0].1.id, docs[1].1.id], "the two correlations run; the disabled rules only through them");
+        assert!(compile(&stored(c, docs[0].1.id)?).is_err(), "a correlation is not a detection rule");
+
+        // ten failures on one domain controller, the success on another: one chain across files
+        let outer = stored(c, docs[0].1.id)?;
+        let mut tree = correlation_tree(c, &outer)?.expect("a correlation");
+        tree.feed(&sample((0..10).map(|i| login("4625", "admin", i * 20)).collect()), 7, "dc1-Security.evtx");
+        tree.feed(&sample(vec![login("4624", "admin", 240), login("4624", "guest", 250)]), 8, "dc2-Security.evtx");
+        let run = finish_correlation(tree);
+        assert_eq!(run.matched, 1, "{:?}", run.notes);
+        let (evidence, m) = &run.matches[0];
+        assert_eq!(*evidence, 8, "stored with the evidence of the window's last event");
+        assert_eq!(m.position, "window 2026-11-09T10:03:00Z – 2026-11-09T10:04:00Z · User=admin");
+        assert_eq!(m.explanation["events"][0]["sourceId"], 7);
+        assert_eq!(hits_store(c, 1, &outer, *evidence, std::slice::from_ref(m))?, (1, 0));
+        assert_eq!(hits_store(c, 1, &outer, *evidence, std::slice::from_ref(m))?, (0, 1), "a second run adds no duplicate");
+
+        // promoted: a finding under review linked to both domain controllers' logs
+        let hit_id = hits_list(c, 1, &HitFilter::default())?.items[0].id;
+        let fid = hit_promote(c, hit_id)?;
+        let (status, confidence, tags, description): (String, String, String, String) = c.query_row("SELECT status, confidence, tags, description FROM findings WHERE id = ?1", params![fid], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
+        assert_eq!((status.as_str(), confidence.as_str()), ("under_review", "low"));
+        assert!(tags.contains("correlation") && tags.contains("T1110"), "{tags}");
+        assert!(description.contains("all 2 rules in order") && description.contains("multiple_failed_login: window") && description.contains("confirm each event"), "{description}");
+        let linked: Vec<i64> = c.prepare("SELECT ref_id FROM finding_links WHERE finding_id = ?1 AND kind = 'evidence' ORDER BY ref_id")?.query_map(params![fid], |r| r.get(0))?.collect::<Result<_, _>>()?;
+        assert_eq!(linked, vec![7, 8]);
+
+        // as a test on one sample
+        let tree = correlation_tree(c, &outer)?.unwrap();
+        let mut events: Vec<Event> = (0..10).map(|i| login("4625", "root", i * 5)).collect();
+        events.push(login("4624", "root", 100));
+        let r = correlation_result(tree, &sample(events), 3, "burst.evtx");
+        assert_eq!((r.matched, r.events), (1, 11));
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn correlation_references_prefer_their_own_file_and_refuse_ambiguity() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let docs = import_file(c, CHAIN, "mr_failed_then_success.yml");
+        // another file with its own rule named failed_login
+        let other = "title: Failed login (other source)\nid: 11111111-2222-4333-8444-555555555555\nname: failed_login\nlogsource:\n    product: windows\n    service: security\ndetection:\n    selection:\n        EventID: 4771\n    condition: selection\n";
+        import_file(c, other, "kerberos.yml");
+        assert!(correlation_tree(c, &stored(c, docs[1].1.id)?)?.is_some(), "the correlation's own file wins");
+        // a third file refers to the shared name: ambiguous
+        let third = "title: Third\ncorrelation:\n    type: event_count\n    rules: [failed_login]\n    group-by: [User]\n    timespan: 5m\n    condition:\n        gte: 3\n";
+        let t = import_file(c, third, "third.yml");
+        let err = correlation_tree(c, &stored(c, t[0].1.id)?).err().unwrap().to_string();
+        assert!(err.contains("Several rules in the library are named 'failed_login'"), "{err}");
+        // by id it is unambiguous, without regard to case
+        let by_id = "title: By id\ncorrelation:\n    type: event_count\n    rules: [53BA33FD-3A50-4468-A5EF-C583635CFA92]\n    group-by: [User]\n    timespan: 5m\n    condition:\n        gte: 3\n";
+        let t = import_file(c, by_id, "by-id.yml");
+        assert!(correlation_tree(c, &stored(c, t[0].1.id)?)?.is_some());
+        let missing = "title: Missing\ncorrelation:\n    type: event_count\n    rules: [nowhere]\n    group-by: [User]\n    timespan: 5m\n    condition:\n        gte: 3\n";
+        let t = import_file(c, missing, "missing.yml");
+        assert!(correlation_tree(c, &stored(c, t[0].1.id)?).err().unwrap().to_string().contains("No Sigma rule named or identified 'nowhere'"));
+        // generate: true keeps the referenced rules running on their own
+        let gen = CHAIN.replace("level: high\n", "level: high\ngenerate: true\n").replace("b180ead8", "c180ead8").replace("Correlation - Multiple", "Generated - Multiple");
+        let db2 = Db::open_in_memory().unwrap();
+        db2.with(|c2| {
+            let docs = import_file(c2, &gen, "gen.yml");
+            // the inner correlation (no generate) still disables its own rule, not the success rule
+            assert_eq!(disable_correlated(c2, &docs)?, vec!["Single failed login".to_string()]);
+            Ok(())
+        })?;
+        Ok(())
+    })
+    .unwrap();
+}
