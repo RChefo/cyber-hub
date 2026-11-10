@@ -1543,6 +1543,13 @@ export interface TiHistoryEntry {
 export type TiSavedStatus = "active" | "revoked" | "false_positive";
 
 /** A saved indicator with its lifecycle (docs/PROVIDERS.md#saved-indicators). */
+/** One page of the saved indicators and the counts (Mission 7). */
+export interface TiSavedPage {
+  items: TiSavedIndicator[];
+  total: number;
+  matching: number;
+}
+
 export interface TiSavedIndicator {
   id: number;
   kind: VtKind;

@@ -28,7 +28,6 @@ import { PageHeader, Panel } from "@/components/ui/Panel";
 import { notify, openExternal } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
-import { useShowMore } from "@/lib/showMore";
 import type { TiInvestigation, TiProviderResult, TiProviderStatus, TiSavedIndicator, TiSavedStatus, TiSummary, VtDetected } from "@/lib/types";
 import { cn, debounce, formatRelative } from "@/lib/utils";
 import { availability, compareRows, correlate, LEVEL_META, parseConfidence, RELIABILITY, savedStanding, sortResults, STATUS_META, summaryParts } from "./model";
@@ -36,59 +35,85 @@ import { TaxiiFeeds } from "./TaxiiFeeds";
 
 const KIND_LABEL: Record<string, string> = { ip: "IP address", domain: "Domain", url: "URL", file: "File hash" };
 
-/** The saved indicators, searchable and drawn in steps: a TAXII feed can save many thousands, and
- * drawing them all at once would block the window (Mission 7). */
-function SavedIndicatorList({ items, onPivot, onEdit }: { items: TiSavedIndicator[]; onPivot: (value: string) => void; onEdit: (item: TiSavedIndicator) => void }) {
+/** The saved indicators, searched and paged by the backend, 100 more at a time: a TAXII feed can
+ * save 100,000, and sending all of them after every lookup took about 1.7 s and 28.7 MB of JSON
+ * (measured in Mission 7). */
+function SavedIndicatorsPanel({ onPivot, onEdit, onExportStix }: { onPivot: (value: string) => void; onEdit: (item: TiSavedIndicator) => void; onExportStix: () => void }) {
+  const { runtime } = useApp();
   const [query, setQuery] = useState("");
-  const q = query.trim().toLowerCase();
-  const list = useMemo(
-    () => (q ? items.filter((it) => [it.indicator, it.source ?? "", KIND_LABEL[it.kind] ?? it.kind, savedStanding(it).label].some((v) => v.toLowerCase().includes(q))) : items),
-    [items, q],
-  );
-  const shown = useShowMore(list, q, 100);
+  const [q, setQ] = useState("");
+  const [limit, setLimit] = useState(100);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setQ(query.trim());
+      setLimit(100);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
+  const saved = useQuery(["ti"], () => api.tiSavedList(q, limit), [q, limit], runtime);
+  const total = saved.data?.total ?? 0;
   return (
-    <div className="flex flex-col gap-1.5">
-      {items.length > 10 && <SearchInput value={query} onChange={setQuery} placeholder={`Search ${items.length.toLocaleString()} indicators`} />}
-      {list.length === 0 ? (
-        <p className="px-2.5 py-2 text-[12.5px] text-muted">No saved indicator matches “{query.trim()}”.</p>
-      ) : (
-        <ul className="flex flex-col gap-0.5">
-          {shown.visible.map((it) => {
-            const standing = savedStanding(it);
-            return (
-              <li key={it.id} className="flex items-start gap-1">
-                <button type="button" onClick={() => onPivot(it.indicator)} className="flex min-w-0 flex-1 flex-col rounded-lg px-2.5 py-2 text-left outline-none hover:bg-white/[0.03] focus-visible:ring-2 focus-visible:ring-focus">
-                  <span className={cn("truncate font-mono text-[12.5px]", it.effective !== "active" && "text-muted line-through decoration-white/30")}>{it.indicator}</span>
-                  <span className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted">
-                    <ToneChip tone={standing.tone} dot={false} className="text-[10.5px]">
-                      {standing.label}
-                    </ToneChip>
-                    {it.confidence != null && <span>confidence {it.confidence} ({it.confidenceLabel})</span>}
-                    {it.source && <span className="truncate">from {it.source}{it.reliability ? ` (${it.reliability})` : ""}</span>}
-                    <span>
-                      {KIND_LABEL[it.kind]} · saved {formatRelative(it.createdAt)}
-                    </span>
-                  </span>
-                </button>
-                <Button size="sm" variant="ghost" className="mt-1 h-7" aria-label={`Edit ${it.indicator}`} onPress={() => onEdit(it)}>
-                  Edit
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {shown.hidden > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 text-[12px] text-muted">
-          <span>
-            Showing {shown.visible.length.toLocaleString()} of {list.length.toLocaleString()}
-          </span>
-          <Button size="sm" variant="ghost" onPress={shown.more}>
-            Show {Math.min(shown.step, shown.hidden).toLocaleString()} more
+    <Panel
+      title="Saved indicators"
+      contentClassName="px-2 pb-2"
+      actions={
+        total > 0 ? (
+          <Button size="sm" variant="ghost" className="h-7" onPress={onExportStix} aria-label="Export saved indicators as STIX 2.1">
+            <FileDown className="size-3.5" />
+            STIX 2.1
           </Button>
-        </div>
-      )}
-    </div>
+        ) : undefined
+      }
+    >
+      <div className="flex flex-col gap-1.5">
+        {(total > 10 || query) && <SearchInput value={query} onChange={setQuery} placeholder={`Search ${total.toLocaleString()} indicators`} />}
+        <QueryView query={saved} rows={3} isEmpty={(d) => d.total === 0} empty={<EmptyBlock compact icon={Bookmark} title="Nothing saved yet" />}>
+          {(page) =>
+            page.items.length === 0 ? (
+              <p className="px-2.5 py-2 text-[12.5px] text-muted">No saved indicator matches “{q}”.</p>
+            ) : (
+              <>
+                <ul className="flex flex-col gap-0.5">
+                  {page.items.map((it) => {
+                    const standing = savedStanding(it);
+                    return (
+                      <li key={it.id} className="flex items-start gap-1">
+                        <button type="button" onClick={() => onPivot(it.indicator)} className="flex min-w-0 flex-1 flex-col rounded-lg px-2.5 py-2 text-left outline-none hover:bg-white/[0.03] focus-visible:ring-2 focus-visible:ring-focus">
+                          <span className={cn("truncate font-mono text-[12.5px]", it.effective !== "active" && "text-muted line-through decoration-white/30")}>{it.indicator}</span>
+                          <span className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted">
+                            <ToneChip tone={standing.tone} dot={false} className="text-[10.5px]">
+                              {standing.label}
+                            </ToneChip>
+                            {it.confidence != null && <span>confidence {it.confidence} ({it.confidenceLabel})</span>}
+                            {it.source && <span className="truncate">from {it.source}{it.reliability ? ` (${it.reliability})` : ""}</span>}
+                            <span>
+                              {KIND_LABEL[it.kind]} · saved {formatRelative(it.createdAt)}
+                            </span>
+                          </span>
+                        </button>
+                        <Button size="sm" variant="ghost" className="mt-1 h-7" aria-label={`Edit ${it.indicator}`} onPress={() => onEdit(it)}>
+                          Edit
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {page.matching > page.items.length && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 text-[12px] text-muted">
+                    <span>
+                      Showing {page.items.length.toLocaleString()} of {page.matching.toLocaleString()}
+                    </span>
+                    <Button size="sm" variant="ghost" onPress={() => setLimit((l) => l + 100)}>
+                      Show {Math.min(100, page.matching - page.items.length).toLocaleString()} more
+                    </Button>
+                  </div>
+                )}
+              </>
+            )
+          }
+        </QueryView>
+      </div>
+    </Panel>
   );
 }
 
@@ -437,7 +462,6 @@ export default function ThreatIntelPage() {
   const { runtime, navigate, route } = useApp();
   const overview = useQuery(["ti"], api.tiProviders, [], runtime);
   const history = useQuery(["ti"], () => api.tiHistory(20), [], runtime);
-  const saved = useQuery(["ti"], api.tiSavedList, [], runtime);
   const exportStix = async () => {
     try {
       const r = await api.tiSavedExportStix();
@@ -707,22 +731,7 @@ export default function ThreatIntelPage() {
         </div>
 
         <div className="flex flex-col gap-3">
-          <Panel
-            title="Saved indicators"
-            contentClassName="px-2 pb-2"
-            actions={
-              (saved.data?.length ?? 0) > 0 ? (
-                <Button size="sm" variant="ghost" className="h-7" onPress={() => void exportStix()} aria-label="Export saved indicators as STIX 2.1">
-                  <FileDown className="size-3.5" />
-                  STIX 2.1
-                </Button>
-              ) : undefined
-            }
-          >
-            <QueryView query={saved} rows={3} isEmpty={(d) => d.length === 0} empty={<EmptyBlock compact icon={Bookmark} title="Nothing saved yet" />}>
-              {(items) => <SavedIndicatorList items={items} onPivot={pivot} onEdit={setEditing} />}
-            </QueryView>
-          </Panel>
+          <SavedIndicatorsPanel onPivot={pivot} onEdit={setEditing} onExportStix={() => void exportStix()} />
 
           {editing && <SavedEditor key={editing.id} item={editing} onClose={() => setEditing(null)} />}
 

@@ -179,3 +179,39 @@ fn perf_large_project_queries() {
     })
     .unwrap();
 }
+
+/// Mission 7: the saved-indicator list at the TAXII ceiling (100,000 indicators from feeds): the
+/// query and the JSON the page receives, measured before deciding whether it needs paging.
+#[test]
+#[ignore = "timing"]
+fn perf_saved_indicators_at_the_taxii_ceiling() {
+    let db = Db::open_in_memory().unwrap();
+    db.with(|c| {
+        let t = Instant::now();
+        let tx = c.unchecked_transaction()?;
+        for i in 0..100_000 {
+            tx.execute(
+                "INSERT INTO ti_saved (kind, indicator, note, source, created_at, updated_at) VALUES ('domain', ?1, '', 'TAXII: Partner / C2', ?2, ?2)",
+                params![format!("host{i}.c2.example.net"), format!("2026-11-{:02}T10:00:00Z", 1 + i % 28)],
+            )?;
+        }
+        tx.commit()?;
+        report("insert_saved_indicators", t, "100,000 saved indicators");
+        let t = Instant::now();
+        let list = crate::ti::lifecycle::list(c)?;
+        report("saved_list_query", t, &format!("{} rows", list.len()));
+        let t = Instant::now();
+        let json = serde_json::to_vec(&list).unwrap();
+        report("saved_list_json", t, &format!("{} KB for the whole list", json.len() / 1024));
+        // what the page asks for since Mission 7: one page and the counts, with and without a search
+        let t = Instant::now();
+        let p = crate::ti::lifecycle::page(c, "", 100)?;
+        let json = serde_json::to_vec(&p).unwrap();
+        report("saved_page", t, &format!("{} rows of {}, {} KB sent to the page", p.items.len(), p.total, json.len() / 1024));
+        let t = Instant::now();
+        let p = crate::ti::lifecycle::page(c, "host9999", 100)?;
+        report("saved_page_search", t, &format!("{} matching", p.matching));
+        Ok(())
+    })
+    .unwrap();
+}

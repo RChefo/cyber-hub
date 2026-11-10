@@ -51,7 +51,7 @@ The page reads everything from the app: the catalog comes from the same definiti
 | | `cyberhub_vt_get_report` (cache only) | read |
 | | `cyberhub_vt_upload_file` | file upload |
 | Threat intelligence | `cyberhub_threat_intel_lookup`, `cyberhub_threat_intel_compare` | external lookup |
-| | `cyberhub_get_saved_indicators` | read |
+| | `cyberhub_get_saved_indicators` (a page: up to `limit`, default 100, matching an optional `query`, with the counts; since Mission 7) | read |
 | | `cyberhub_save_indicator` | local write |
 | Vulnerability intelligence | `cyberhub_lookup_cve`, `cyberhub_search_vulnerabilities` (external lookup with `live: true`), `cyberhub_get_vulnerability_details`, `cyberhub_score_cvss` | read |
 | Finding library | `cyberhub_list_finding_templates`, `cyberhub_get_finding_template` | read |

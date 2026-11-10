@@ -414,7 +414,7 @@ export const api = {
   tiHistory: (limit = 30) => call<T.TiHistoryEntry[]>("ti_history", { limit }),
   tiHistoryClear: () => call<void>("ti_history_clear"),
   tiCacheClear: () => call<void>("ti_cache_clear"),
-  tiSavedList: () => call<T.TiSavedIndicator[]>("ti_saved_list"),
+  tiSavedList: (query?: string, limit?: number) => call<T.TiSavedPage>("ti_saved_list", { query: query ?? null, limit: limit ?? null }),
   tiSavedAdd: (query: string, note = "") => call<void>("ti_saved_add", { query, note }),
   tiSavedRemove: (query: string) => call<void>("ti_saved_remove", { query }),
   tiSavedUpdate: (id: number, changes: T.TiSavedChanges) => call<T.TiSavedIndicator>("ti_saved_update", { id, changes }),

@@ -94,6 +94,33 @@ fn today() -> String {
     now().get(..10).unwrap_or("").to_string()
 }
 
+/// One page of the saved indicators and how many there are (Mission 7).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedPage {
+    pub items: Vec<Saved>,
+    /// all saved indicators
+    pub total: i64,
+    /// those that match the search
+    pub matching: i64,
+}
+
+/// The newest `limit` saved indicators whose value, source or note contains `query` (any case),
+/// with the counts. A TAXII feed can save 100,000 indicators, and sending them all to the page
+/// after every lookup and synchronization took about 1.7 s and 28.7 MB of JSON each time
+/// (measured in Mission 7); a page of them is what the list shows anyway.
+pub fn page(c: &Connection, query: &str, limit: usize) -> AppResult<SavedPage> {
+    let t = today();
+    let q = query.trim().to_lowercase();
+    let like = format!("%{}%", q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
+    let filter = r"(?1 = '' OR lower(indicator) LIKE ?2 ESCAPE '\' OR lower(source) LIKE ?2 ESCAPE '\' OR lower(note) LIKE ?2 ESCAPE '\')";
+    let total: i64 = c.query_row("SELECT COUNT(*) FROM ti_saved", [], |r| r.get(0))?;
+    let matching: i64 = c.query_row(&format!("SELECT COUNT(*) FROM ti_saved WHERE {filter}"), params![q, like], |r| r.get(0))?;
+    let mut st = c.prepare(&format!("SELECT {COLS} FROM ti_saved WHERE {filter} ORDER BY created_at DESC, id DESC LIMIT ?3"))?;
+    let items = st.query_map(params![q, like, limit.clamp(1, 5000) as i64], |r| row(r, &t))?.collect::<Result<Vec<_>, _>>()?;
+    Ok(SavedPage { items, total, matching })
+}
+
 pub fn list(c: &Connection) -> AppResult<Vec<Saved>> {
     let t = today();
     let mut st = c.prepare(&format!("SELECT {COLS} FROM ti_saved ORDER BY created_at DESC"))?;
@@ -258,6 +285,32 @@ pub fn sighting_detail(s: &Saved) -> String {
 mod tests {
     use super::*;
     use crate::db::Db;
+
+    /// Mission 7: the list sends a page with the counts, searched on the value, the source and the
+    /// note; `%` and `_` in a search are plain characters.
+    #[test]
+    fn saved_indicators_come_in_pages() {
+        let db = Db::open_in_memory().unwrap();
+        db.with(|c| {
+            for i in 0..250 {
+                c.execute(
+                    "INSERT INTO ti_saved (kind, indicator, note, source, created_at, updated_at) VALUES ('domain', ?1, ?2, ?3, ?4, ?4)",
+                    params![format!("host{i}.example.net"), if i == 7 { "seen 100% in logs" } else { "" }, if i % 2 == 0 { "TAXII: Partner" } else { "IR_42" }, format!("2026-11-01T00:{:02}:{:02}Z", i / 60, i % 60)],
+                )?;
+            }
+            let p = page(c, "", 100)?;
+            assert_eq!((p.items.len(), p.total, p.matching), (100, 250, 250));
+            assert_eq!(p.items[0].indicator, "host249.example.net", "newest first");
+            let p = page(c, "HOST12", 100)?;
+            assert_eq!(p.matching, 11, "host12 and host120–129, in any case");
+            assert_eq!(page(c, "partner", 10)?.matching, 125, "the source");
+            assert_eq!(page(c, "100%", 10)?.matching, 1, "the note, with % as a plain character");
+            assert_eq!(page(c, "ir_4", 10)?.matching, 125, "_ as a plain character");
+            assert_eq!(page(c, "irx4", 10)?.matching, 0);
+            Ok(())
+        })
+        .unwrap();
+    }
 
     fn save(c: &Connection, kind: &str, v: &str) -> i64 {
         c.execute("INSERT INTO ti_saved (kind, indicator, note, created_at, updated_at) VALUES (?1, ?2, '', '2026-11-01T00:00:00Z', '2026-11-01T00:00:00Z')", params![kind, v]).unwrap();

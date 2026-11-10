@@ -511,10 +511,11 @@ pub async fn ti_cache_clear(db: State<'_, Db>) -> AppResult<()> {
     })
 }
 
-/// Saved indicators with their source, reliability, confidence, status and validity.
+/// One page of the saved indicators (with their source, reliability, confidence, status and
+/// validity) matching a search, and the counts (Mission 7: a feed can save 100,000).
 #[tauri::command]
-pub async fn ti_saved_list(db: State<'_, Db>) -> AppResult<Vec<lifecycle::Saved>> {
-    db.with(lifecycle::list)
+pub async fn ti_saved_list(db: State<'_, Db>, query: Option<String>, limit: Option<usize>) -> AppResult<lifecycle::SavedPage> {
+    db.with(|c| lifecycle::page(c, query.as_deref().unwrap_or(""), limit.unwrap_or(100)))
 }
 
 #[tauri::command]

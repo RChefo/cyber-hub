@@ -1445,8 +1445,18 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
             Ok(compare(&to_json(&inv)?))
         }
         "cyberhub_get_saved_indicators" => {
-            let _: NoArgs = opt_obj(args)?;
-            to_json(threat_intel::ti_saved_list(app.state::<Db>()).await.map_err(app_err)?)
+            #[derive(Deserialize, Default)]
+            #[serde(deny_unknown_fields)]
+            struct A {
+                query: Option<String>,
+                limit: Option<usize>,
+            }
+            let a: A = opt_obj(args)?;
+            if a.query.as_deref().is_some_and(|q| q.chars().count() > 200) {
+                return Err(err("invalid_params", "query is at most 200 characters"));
+            }
+            // a page, not every saved indicator: feeds can save 100,000 (Mission 7)
+            to_json(threat_intel::ti_saved_list(app.state::<Db>(), a.query, Some(a.limit.unwrap_or(100).clamp(1, 1000))).await.map_err(app_err)?)
         }
         "cyberhub_save_indicator" => {
             let a: SaveIndicator = parse(args)?;
