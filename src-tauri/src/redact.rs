@@ -39,18 +39,51 @@ static KEY_COLON: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(?i)\b([a-z0-9_.-]*(?:pass(?:word|wd)?|pwd|secret|token|api[-_]?key|apikey|credential|private[-_]?key)[a-z0-9_.-]*)("?\s*:\s*"?|\s+=\s*"?|"\s*=\s*"?)([^\s"',;&]+)"#).unwrap()
 });
 
-/// Redact secrets in every string of a JSON value; keys, numbers and structure are kept.
-/// Used for everything an MCP client receives (Mission 6).
+/// Names whose value is a credential (Mission 7): as an object's key, the first element of a
+/// `[name, value]` pair (detection events are stored that way), or the `field`, `name` or `key` of
+/// an object with a `value`. Anchored where a short word would match ordinary names (`UacBypass`,
+/// `authorizationRef`, `AuthenticationPackageName` are not credentials).
+static SECRET_NAME: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)(password|passwd|passphrase|secret|credential|private[-_]?key|privatekey|api[-_]?key|apikey|bearer|jwt|cookie|auth[-_]?(token|key|header|code))|(^|[-_.])(pass|pwd|pw|auth)$|(token|tokens|session|session[-_]?id|sessid|signature)$|(^|[-_.])authorization$").unwrap()
+});
+
+/// Whether a field, header or key name says that its value is a credential.
+pub fn secret_name(name: &str) -> bool {
+    SECRET_NAME.is_match(name.trim())
+}
+
+/// Redact secrets in a JSON value; keys, numbers and structure are kept. Every string is redacted
+/// for the credential shapes it contains, and a string whose name says it is a credential is
+/// masked whole: the name and the value are often separate strings (Mission 7). Used for
+/// everything an MCP client receives (Mission 6).
 pub fn redact_json(v: &mut serde_json::Value) {
+    use serde_json::Value;
     match v {
-        serde_json::Value::String(s) => {
+        Value::String(s) => {
             let r = redact_text(s);
             if r != *s {
                 *s = r;
             }
         }
-        serde_json::Value::Array(a) => a.iter_mut().for_each(redact_json),
-        serde_json::Value::Object(o) => o.values_mut().for_each(redact_json),
+        Value::Array(a) => {
+            // a `[name, value]` pair whose name says the value is a credential
+            if a.len() == 2 && a[0].as_str().is_some_and(secret_name) && a[1].is_string() {
+                a[1] = Value::String(MASK.into());
+                return;
+            }
+            a.iter_mut().for_each(redact_json)
+        }
+        Value::Object(o) => {
+            // `{"field": "sessionToken", "value": "…"}` and the like
+            let named = ["field", "name", "key"].iter().any(|k| o.get(*k).and_then(Value::as_str).is_some_and(secret_name));
+            for (k, val) in o.iter_mut() {
+                if val.is_string() && (secret_name(k) || (named && k == "value")) {
+                    *val = Value::String(MASK.into());
+                } else {
+                    redact_json(val);
+                }
+            }
+        }
         _ => {}
     }
 }
@@ -117,6 +150,31 @@ pub fn redact_args(args: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Mission 7: a value is masked when its name says it is a credential, also when the name and
+    /// the value are separate strings (a detection event's `[name, value]` pairs, a
+    /// `{"field", "value"}` object), while ordinary names keep their values.
+    #[test]
+    fn values_named_like_credentials_are_masked() {
+        let mut v = serde_json::json!({
+            "fields": [["password", "Hunter2!"], ["authorization", "Bearer opaque-token-value"], ["user", "alice"], ["UacBypass", "1"]],
+            "event": { "field": "sessionToken", "value": "IQoJb3JpZ2luX2VjEXAMPLE" },
+            "headers": { "X-Api-Key": "k-123", "Accept": "text/html", "Proxy-Authorization": "Basic Zm9vOmJhcg" },
+            "usage": { "input_tokens": 512 },
+            "authorizationRef": "AUTH-2026-17",
+            "AuthenticationPackageName": "NTLM",
+            "TargetUserSid": "S-1-5-21-1",
+            "nested": { "credentials": { "user": "bob", "pass": "pw1" }, "PHPSESSID": "abc123sess" },
+        });
+        redact_json(&mut v);
+        let s = v.to_string();
+        for secret in ["Hunter2!", "opaque-token-value", "IQoJb3JpZ2luX2VjEXAMPLE", "k-123", "Zm9vOmJhcg", "pw1", "abc123sess"] {
+            assert!(!s.contains(secret), "{secret} in {s}");
+        }
+        for kept in ["alice", "text/html", "512", "AUTH-2026-17", "NTLM", "S-1-5-21-1", "bob", r#"["UacBypass","1"]"#] {
+            assert!(s.contains(kept), "{kept} lost: {s}");
+        }
+    }
 
     fn v(a: &[&str]) -> Vec<String> {
         a.iter().map(|s| s.to_string()).collect()

@@ -12,7 +12,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::error::{validation, AppError, AppResult};
-use crate::redact::redact_text;
 use crate::workspace::{asvs, detections};
 
 /// Rule content returned to a client, at most.
@@ -119,14 +118,11 @@ pub fn risk_view(c: &Connection, project_id: i64) -> AppResult<Value> {
     Ok(v)
 }
 
-/// Redacts every string of a JSON value (event fields, matched text) in place.
+/// Redacts a JSON value (event fields, matched text) in place: credential shapes in every string,
+/// and whole values whose name says they are credentials, such as an event's `["password", "…"]`
+/// field (Mission 7).
 fn redact_value(v: &mut Value) {
-    match v {
-        Value::String(s) => *s = redact_text(s),
-        Value::Array(a) => a.iter_mut().for_each(redact_value),
-        Value::Object(o) => o.values_mut().for_each(redact_value),
-        _ => {}
-    }
+    crate::redact::redact_json(v);
 }
 
 /// A project's detection hits with why each matched; values from the logs and files are redacted.
