@@ -12,7 +12,7 @@ import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { TaxiiCollection, TaxiiServer, TaxiiServerInput } from "@/lib/types";
 import { formatRelative, pluralize } from "@/lib/utils";
-import { editDropsCredential, editKeepsPasswordOfOtherUser } from "./taxiiCredential";
+import { editDropsCollections, editDropsCredential, editKeepsPasswordOfOtherUser } from "./taxiiCredential";
 
 const STATUS_TONE: Record<string, "success" | "warning" | "danger" | "default"> = { succeeded: "success", partial: "warning", failed: "danger", running: "default" };
 
@@ -88,7 +88,12 @@ function ServerForm({ initial, onClose }: { initial: TaxiiServer | null; onClose
       )}
       {editDropsCredential(initial, f) && (
         <p className="rounded-lg bg-warning-soft px-3 py-2 text-[12.5px] text-warning-soft-foreground">
-          Saving deletes the stored credential: it is never sent to another address or used for another kind of authentication. Store it again after saving.
+          Saving deletes the stored credential: it is never sent to another address, used for another kind of authentication or sent in another header. Store it again after saving.
+        </p>
+      )}
+      {editDropsCollections(initial, f) && (
+        <p className="rounded-lg bg-warning-soft px-3 py-2 text-[12.5px] text-warning-soft-foreground">
+          Saving removes the {pluralize(initial?.collections.length ?? 0, "collection")} listed for the old address, with their synchronization history; indicators already saved from them stay, with their source. Discover the new address to list its collections.
         </p>
       )}
       {error && (

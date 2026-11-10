@@ -154,9 +154,13 @@ USAGE
   cyberhub-keys import FILE [--no-verify] [--allow-unignored]
                                         Store every credential listed in a local secrets file
   cyberhub-keys remove ID|all           Delete stored credentials
-  cyberhub-keys taxii-set SERVER_ID     Store a TAXII server's password or API key (the server's
-                                        number, shown in Threat Intel → TAXII feeds)
-  cyberhub-keys taxii-remove SERVER_ID  Delete it
+  cyberhub-keys taxii-set SERVER_ID URL basic|header [HEADER]
+                                        Store a TAXII server's password or API key for the
+                                        server's number (shown in Threat Intel → TAXII feeds),
+                                        discovery URL and authentication, as set in the app; it
+                                        is used only while they stay the same
+  cyberhub-keys taxii-remove SERVER_ID URL basic|header [HEADER]
+                                        Delete it
 
 IDS
   virustotal, abuseipdb, otx, abusech (URLhaus, MalwareBazaar, ThreatFox), shodan, nvd,
@@ -183,6 +187,28 @@ pub fn main() -> i32 {
             1
         }
     }
+}
+
+/// The credential store entry of `taxii-set` and `taxii-remove`: SERVER_ID URL basic|header
+/// [HEADER], bound like the app binds it (`ti::taxii::secret_name`).
+fn taxii_entry(pos: &[&String]) -> Result<String, String> {
+    let what = pos.first().map_or("taxii-set", |s| s.as_str());
+    let (Some(id), Some(url), Some(auth)) = (pos.get(1), pos.get(2), pos.get(3)) else {
+        return Err(format!("{what} needs the server's number, its discovery URL and its authentication (basic, or header and the header's name), as set in the app"));
+    };
+    let header = pos.get(4).map_or("", |s| s.as_str());
+    if pos.len() > if auth.as_str() == "header" { 5 } else { 4 } {
+        return Err("too many arguments; never pass a credential as an argument, it ends up in shell history".into());
+    }
+    let id: i64 = id.parse().ok().filter(|n| *n > 0).ok_or_else(|| format!("`{id}` is not a server number"))?;
+    if auth.as_str() == "header" && header.is_empty() {
+        return Err("an API key needs the name of its header".into());
+    }
+    let name = crate::ti::taxii::secret_name(id, url, auth, header).ok_or("the URL must be the server's https:// discovery URL, and the authentication basic or header")?;
+    if !crate::commands::system::is_taxii_secret(&name) {
+        return Err("unexpected credential name".into());
+    }
+    Ok(name)
 }
 
 fn select(arg: Option<&String>) -> Result<Vec<Cred>, String> {
@@ -244,14 +270,7 @@ async fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         Some("taxii-set") => {
-            let id = pos.get(1).ok_or("taxii-set needs the server's number")?;
-            if pos.len() > 2 {
-                return Err("do not pass credentials as arguments; they end up in shell history".into());
-            }
-            let name = format!("taxii_{id}");
-            if !crate::commands::system::is_taxii_secret(&name) {
-                return Err(format!("`{id}` is not a server number"));
-            }
+            let name = taxii_entry(&pos)?;
             let value = if std::io::stdin().is_terminal() {
                 rpassword::prompt_password("TAXII password or API key (input hidden): ").map_err(|e| e.to_string())?
             } else {
@@ -268,11 +287,7 @@ async fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         Some("taxii-remove") => {
-            let id = pos.get(1).ok_or("taxii-remove needs the server's number")?;
-            let name = format!("taxii_{id}");
-            if !crate::commands::system::is_taxii_secret(&name) {
-                return Err(format!("`{id}` is not a server number"));
-            }
+            let name = taxii_entry(&pos)?;
             delete_secret(&name).map_err(|e| e.to_string())?;
             println!("{name} removed");
             Ok(())
@@ -352,6 +367,25 @@ mod tests {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         let err = rt.block_on(run(&["set".into(), "shodan".into(), "SECRETVALUE123".into()])).unwrap_err();
         assert!(err.contains("do not pass credentials as arguments") && !err.contains("SECRETVALUE123"));
+    }
+
+    /// Mission 7: a TAXII credential stored from a terminal is bound like the app binds it, and the
+    /// tool still never takes the credential itself as an argument.
+    #[test]
+    fn taxii_entries_are_bound_like_the_app_binds_them() {
+        let entry = |v: &[&str]| {
+            let owned: Vec<String> = v.iter().map(|s| s.to_string()).collect();
+            taxii_entry(&owned.iter().collect::<Vec<_>>())
+        };
+        let url = "https://taxii.example.org/taxii2/";
+        assert_eq!(entry(&["taxii-set", "3", url, "basic"]).unwrap(), crate::ti::taxii::secret_name(3, url, "basic", "").unwrap());
+        assert_eq!(entry(&["taxii-remove", "3", url, "header", "X-Api-Key"]).unwrap(), crate::ti::taxii::secret_name(3, url, "header", "x-api-key").unwrap());
+        let err = entry(&["taxii-set", "3", url, "basic", "SECRETVALUE123"]).unwrap_err();
+        assert!(err.contains("never pass a credential") && !err.contains("SECRETVALUE123"), "{err}");
+        assert!(entry(&["taxii-set", "3", url, "header", "X-Api-Key", "SECRETVALUE123"]).is_err());
+        for bad in [&["taxii-set", "3"][..], &["taxii-set", "x", url, "basic"], &["taxii-set", "0", url, "basic"], &["taxii-set", "3", url, "header"], &["taxii-set", "3", "http://taxii.example.org/", "basic"], &["taxii-set", "3", url, "none"]] {
+            assert!(entry(bad).is_err(), "{bad:?}");
+        }
     }
 
     #[test]

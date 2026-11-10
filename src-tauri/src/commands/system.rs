@@ -144,9 +144,13 @@ pub const NVD_KEY: &str = "nvd_api_key";
 /// Every credential Cyber Hub may use.
 pub const KNOWN_SECRETS: &[&str] = &[NVD_KEY, "virustotal_api_key", "abuseipdb_api_key", "otx_api_key", "abusech_auth_key", "shodan_api_key", crate::commands::assistant::ANTHROPIC_KEY];
 
-/// A TAXII server's credential: `taxii_<server id>`.
+/// A TAXII server's credential: `taxii_<server number>_<16 hex digits>`, bound to the server's
+/// origin, kind of authentication and header (`ti::taxii::secret_name`, Mission 7).
 pub fn is_taxii_secret(name: &str) -> bool {
-    name.strip_prefix("taxii_").is_some_and(|id| !id.is_empty() && id.len() <= 18 && id.bytes().all(|b| b.is_ascii_digit()))
+    let Some((id, fingerprint)) = name.strip_prefix("taxii_").and_then(|rest| rest.split_once('_')) else {
+        return false;
+    };
+    !id.is_empty() && id.len() <= 18 && id.bytes().all(|b| b.is_ascii_digit()) && fingerprint.len() == 16 && fingerprint.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 fn entry(name: &str) -> AppResult<keyring::Entry> {
@@ -166,25 +170,33 @@ pub fn secret_configured(name: &str) -> bool {
     read_secret(name).is_some()
 }
 
-/// Stores a TAXII server's credential (typed into a native dialog). Only `taxii_<id>` names.
-pub fn store_taxii_secret(server_id: i64, value: &str) -> AppResult<()> {
-    let name = crate::ti::taxii::secret_name(server_id);
+/// Stores a TAXII server's credential (typed into a native dialog) under the entry bound to the
+/// server as it is now (`ti::taxii::secret_name`).
+pub fn store_taxii_secret(server: &crate::ti::taxii::Server, value: &str) -> AppResult<()> {
+    let name = crate::ti::taxii::server_secret_name(server).ok_or_else(|| validation("This server uses no authentication"))?;
     if !is_taxii_secret(&name) {
         return Err(validation("Unknown secret name"));
     }
     entry(&name)?.set_password(value).map_err(|e| AppError::Secret(e.to_string()))
 }
 
-/// Deletes a TAXII server's credential; nothing stored is not an error.
-pub fn delete_taxii_secret(server_id: i64) -> AppResult<()> {
-    let name = crate::ti::taxii::secret_name(server_id);
-    if !is_taxii_secret(&name) {
-        return Err(validation("Unknown secret name"));
+/// Deletes a TAXII server's credential, and one stored under the server's number alone (before
+/// Mission 7). Only what is stored is deleted, so nothing stored is not an error, also on a
+/// computer without a credential store.
+pub fn delete_taxii_secret(server: &crate::ti::taxii::Server) -> AppResult<()> {
+    let mut names = vec![format!("taxii_{}", server.id)];
+    names.extend(crate::ti::taxii::server_secret_name(server));
+    for name in names {
+        let Ok(e) = keyring::Entry::new(SERVICE, &name) else { continue };
+        if e.get_password().is_err() {
+            continue;
+        }
+        match e.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Err(err) => return Err(AppError::Secret(err.to_string())),
+        }
     }
-    match entry(&name)?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(AppError::Secret(e.to_string())),
-    }
+    Ok(())
 }
 
 /// Write a credential. Only compiled into the developer provisioning tool.
@@ -247,6 +259,9 @@ mod tests {
     #[test]
     fn unknown_secret_names_are_refused() {
         assert!(super::read_secret("not_a_known_secret").is_none());
-        assert!(super::is_taxii_secret("taxii_12") && !super::is_taxii_secret("taxii_") && !super::is_taxii_secret("taxii_1x") && !super::is_taxii_secret("taxii_../a"));
+        assert!(super::is_taxii_secret("taxii_12_0123456789abcdef"));
+        for name in ["taxii_12", "taxii_", "taxii_1x", "taxii_../a", "taxii_12_0123456789ABCDEF", "taxii_12_0123456789abcde", "taxii__0123456789abcdef", "taxii_12_0123456789abcdef_"] {
+            assert!(!super::is_taxii_secret(name), "{name}");
+        }
     }
 }

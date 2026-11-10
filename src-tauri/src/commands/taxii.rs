@@ -22,34 +22,20 @@ pub struct ServerView {
 }
 
 fn view(c: &rusqlite::Connection, s: Server) -> AppResult<ServerView> {
-    let stored = s.auth != "none" && stored(s.id);
+    let stored = stored(&s);
     Ok(ServerView { credential_stored: stored, collections: taxii::collections_of(c, s.id)?, server: s })
 }
 
-/// Whether a credential is stored for the server (never its value).
-fn stored(id: i64) -> bool {
-    crate::commands::system::read_secret(&taxii::secret_name(id)).is_some()
+/// Whether a credential is stored for the server as it is now: its number, origin, kind of
+/// authentication and header (never its value).
+fn stored(s: &Server) -> bool {
+    taxii::server_secret_name(s).is_some_and(|name| crate::commands::system::read_secret(&name).is_some())
 }
 
 /// Deletes the server's stored credential, if there is one (a computer without a credential store
 /// has none, so this never fails there).
-fn drop_credential(id: i64) -> AppResult<()> {
-    if stored(id) {
-        crate::commands::system::delete_taxii_secret(id)?;
-    }
-    Ok(())
-}
-
-/// The scheme, host and port a credential is sent to.
-fn origin(url: &str) -> Option<String> {
-    url::Url::parse(url).ok().map(|u| u.origin().ascii_serialization())
-}
-
-/// Whether an edit sends the server's credential somewhere else: another origin, or another kind
-/// of authentication (a password sent as an API key). An address the save refuses moves nothing.
-fn moves(old_url: &str, old_auth: &str, new_url: &str, new_auth: &str) -> bool {
-    let new_origin = taxii::check_url(new_url).ok().map(|u| u.origin().ascii_serialization());
-    new_origin.is_some() && (new_origin != origin(old_url) || new_auth != old_auth)
+fn drop_credential(s: &Server) -> AppResult<()> {
+    crate::commands::system::delete_taxii_secret(s)
 }
 
 #[tauri::command]
@@ -59,23 +45,29 @@ pub async fn taxii_servers(db: State<'_, Db>) -> AppResult<Vec<ServerView>> {
 
 #[tauri::command]
 pub async fn taxii_server_save(db: State<'_, Db>, input: ServerInput) -> AppResult<i64> {
-    // a stored credential never follows its server to another origin, or to another kind of
-    // authentication (a password sent as an API key): it is deleted, and stored again by the analyst
-    if let Some(id) = input.id {
-        let before = db.with(|c| taxii::server(c, id))?;
-        if moves(&before.discovery_url, &before.auth, &input.discovery_url, &input.auth) {
-            drop_credential(id)?;
+    let before = match input.id {
+        Some(id) => Some(db.with(|c| taxii::server(c, id))?),
+        None => None,
+    };
+    let id = db.with(|c| taxii::server_save(c, &input))?;
+    // a stored credential never follows its server to another origin, another kind of
+    // authentication (a password sent as an API key) or another header: it is bound to them
+    // (`secret_name`), so it can no longer be read, and it is deleted; the analyst stores it again
+    if let Some(before) = before {
+        let after = db.with(|c| taxii::server(c, id))?;
+        if taxii::server_secret_name(&before) != taxii::server_secret_name(&after) {
+            drop_credential(&before).map_err(|e| AppError::Secret(format!("The server was saved, but its earlier credential could not be deleted from the credential store: {e}")))?;
         }
     }
-    db.with(|c| taxii::server_save(c, &input))
+    Ok(id)
 }
 
 /// Removes a server, its collections and its stored credential. Indicators saved from it stay, with
 /// their source.
 #[tauri::command]
 pub async fn taxii_server_delete(db: State<'_, Db>, id: i64) -> AppResult<()> {
-    db.with(|c| taxii::server(c, id).map(|_| ()))?;
-    drop_credential(id)?;
+    let s = db.with(|c| taxii::server(c, id))?;
+    drop_credential(&s)?;
     db.with(|c| {
         c.execute("DELETE FROM taxii_servers WHERE id = ?1", rusqlite::params![id])?;
         Ok(())
@@ -103,7 +95,7 @@ pub async fn taxii_auth_prompt(app: AppHandle, id: i64) -> AppResult<bool> {
         .map_err(|e| AppError::Internal(format!("the credential dialog failed: {e}")))?
         .map_err(validation)?;
     let Some(t) = typed else {
-        return Ok(stored(id));
+        return Ok(stored(&s));
     };
     let secret = t.secret.trim();
     if secret.is_empty() || secret.len() > 4096 || secret.chars().any(char::is_control) {
@@ -114,12 +106,12 @@ pub async fn taxii_auth_prompt(app: AppHandle, id: i64) -> AppResult<bool> {
         return Err(validation("Nothing was stored: HTTP Basic needs a user name without ':' (at most 200 characters)"));
     }
     // the server may have been edited while the dialog was open: the secret is stored only for the
-    // origin and the kind of authentication the dialog named
+    // origin, the kind of authentication and the header the dialog named
     let now = app.state::<Db>().with(|c| taxii::server(c, id))?;
-    if origin(&now.discovery_url) != origin(&s.discovery_url) || now.auth != s.auth {
+    if taxii::server_secret_name(&now) != taxii::server_secret_name(&s) {
         return Err(validation("Nothing was stored: the server's address or authentication changed while the dialog was open"));
     }
-    crate::commands::system::store_taxii_secret(id, secret)?;
+    crate::commands::system::store_taxii_secret(&s, secret)?;
     if s.auth == "basic" && user != now.username {
         app.state::<Db>().with(|c| {
             c.execute("UPDATE taxii_servers SET username = ?2, updated_at = ?3 WHERE id = ?1", rusqlite::params![id, user, crate::util::now()])?;
@@ -135,9 +127,9 @@ pub async fn taxii_auth_prompt(app: AppHandle, id: i64) -> AppResult<bool> {
 pub async fn taxii_auth_forget(app: AppHandle, id: i64) -> AppResult<bool> {
     let s = app.state::<Db>().with(|c| taxii::server(c, id))?;
     if !crate::confirm::native(&app, "Forget a TAXII credential", format!("Delete the stored credential of the TAXII server “{}” from this computer's credential store?", s.name), "Delete").await {
-        return Ok(stored(id));
+        return Ok(stored(&s));
     }
-    drop_credential(id)?;
+    drop_credential(&s)?;
     Ok(false)
 }
 
@@ -147,7 +139,7 @@ pub async fn taxii_syncs(db: State<'_, Db>, collection_id: i64) -> AppResult<Vec
 }
 
 fn client_for(s: &Server) -> AppResult<taxii::Client> {
-    let secret = if s.auth == "none" { None } else { crate::commands::system::read_secret(&taxii::secret_name(s.id)) };
+    let secret = taxii::server_secret_name(s).and_then(|name| crate::commands::system::read_secret(&name));
     let auth = taxii::auth_of(s, secret).map_err(validation)?;
     taxii::Client::new(auth).map_err(AppError::Internal)
 }
@@ -195,6 +187,8 @@ pub async fn taxii_sync(app: AppHandle, collection_id: i64) -> AppResult<SyncRun
     if !coll.can_read {
         return Err(validation("The server does not let these credentials read this collection"));
     }
+    // refused before asking: the collection must still be on the server's own origin
+    taxii::collection_root(&s, &coll).map_err(validation)?;
     let client = client_for(&s)?;
     confirm(&app, &s, &format!("download new indicators of the collection “{}”", if coll.title.is_empty() { &coll.collection } else { &coll.title })).await?;
     let db = app.state::<Db>();
@@ -203,30 +197,4 @@ pub async fn taxii_sync(app: AppHandle, collection_id: i64) -> AppResult<SyncRun
         crate::commands::activity::log(c, "ti", &format!("TAXII synchronization: {}", coll.title), &format!("{} added, {} updated, {} revoked, {} already known, {} skipped ({})", out.added, out.updated, out.revoked, out.sighted, out.skipped, out.status), None, None, None)
     });
     Ok(out)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::moves;
-
-    /// A stored credential stays only while the server keeps its origin and its kind of
-    /// authentication.
-    #[test]
-    fn a_credential_never_follows_its_server_elsewhere() {
-        let url = "https://taxii.example.org/taxii2/";
-        // the same origin: kept (another path, a trailing difference, the default port written out)
-        assert!(!moves(url, "basic", url, "basic"));
-        assert!(!moves(url, "basic", "https://taxii.example.org/other/taxii2/", "basic"));
-        assert!(!moves(url, "basic", "https://TAXII.example.org:443/taxii2/", "basic"));
-        // another host, port or kind of authentication: deleted
-        assert!(moves(url, "basic", "https://attacker.example.net/taxii2/", "basic"));
-        assert!(moves(url, "basic", "https://taxii.example.org:8443/taxii2/", "basic"));
-        assert!(moves(url, "basic", "https://sub.taxii.example.org/taxii2/", "basic"));
-        assert!(moves(url, "basic", url, "header"));
-        assert!(moves(url, "header", url, "none"));
-        // an address the save refuses changes nothing
-        assert!(!moves(url, "basic", "http://taxii.example.org/taxii2/", "header"));
-        assert!(!moves(url, "basic", "https://user:pw@taxii.example.org/taxii2/", "basic"));
-        assert!(!moves(url, "basic", "not a url", "basic"));
-    }
 }

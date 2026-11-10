@@ -68,14 +68,15 @@ Credentials are never accepted as command-line arguments, because those end up i
 
 ### TAXII servers
 
-A TAXII server's password (HTTP Basic) or API key (a header) belongs to the analyst, not to the application owner, so it is normally entered in the app: *Threat Intel → TAXII feeds → Store credential…* opens a dialog of the operating system (Windows' credential dialog, a GTK dialog on Linux) that the web view cannot read, and stores the value in the credential store ([PROVIDERS.md](PROVIDERS.md#taxii-21-feeds)). The tool does the same from a terminal, with the number the server shows in that list:
+A TAXII server's password (HTTP Basic) or API key (a header) belongs to the analyst, not to the application owner, so it is normally entered in the app: *Threat Intel → TAXII feeds → Store credential…* opens a dialog of the operating system (Windows' credential dialog, a GTK dialog on Linux) that the web view cannot read, and stores the value in the credential store ([PROVIDERS.md](PROVIDERS.md#taxii-21-feeds)). The tool does the same from a terminal, with the number the server shows in that list, its discovery URL and its authentication exactly as set in the app:
 
 ```sh
-cyberhub-keys taxii-set 3           # hidden prompt
-cyberhub-keys taxii-remove 3
+cyberhub-keys taxii-set 3 https://taxii.example.org/taxii2/ basic                 # hidden prompt
+cyberhub-keys taxii-set 4 https://feeds.example.net/taxii2/ header X-Api-Key
+cyberhub-keys taxii-remove 3 https://taxii.example.org/taxii2/ basic
 ```
 
-The entry is `taxii_<number>` in the same credential store. The user name and the header's name are settings of the server in the app; only the secret is stored here.
+The entry is `taxii_<number>_<fingerprint>` in the same credential store. The fingerprint covers the URL's origin, the kind of authentication and the header's name, so the app uses the credential only while the server keeps them; after an edit it shows no stored credential and asks for one again. The user name is a setting of the server in the app; only the secret is stored here. Entries stored by earlier versions as `taxii_<number>` are no longer read; they are deleted when the server is removed, its credential is forgotten, or its address or authentication changes.
 
 ## Diagnostics
 

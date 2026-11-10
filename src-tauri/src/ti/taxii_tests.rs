@@ -254,9 +254,86 @@ fn servers_are_validated() {
         assert!(server_save(c, &ServerInput { auth: "header".into(), header_name: "Host".into(), discovery_url: "https://c.example.org/".into(), ..base.clone() }).is_err());
         assert!(server_save(c, &ServerInput { reliability: "G".into(), discovery_url: "https://d.example.org/".into(), ..base.clone() }).is_err());
         assert!(server_save(c, &ServerInput { default_confidence: Some(101), discovery_url: "https://e.example.org/".into(), ..base.clone() }).is_err());
-        assert_eq!(secret_name(id), format!("taxii_{id}"));
-        assert!(crate::commands::system::is_taxii_secret(&secret_name(id)));
+        let name = server_secret_name(&server(c, id)?);
+        assert_eq!(name, None, "a server without authentication has no credential");
         Ok(())
     })
     .unwrap();
+}
+
+/// Mission 7: a stored credential is bound to its server's number, origin, kind of authentication
+/// and header, so it is never read for anything else (an edited server, a restored database, or
+/// another data folder that names another server under the same number).
+#[test]
+fn a_credential_is_bound_to_where_and_how_it_is_sent() {
+    let url = "https://taxii.example.org/taxii2/";
+    let base = secret_name(3, url, "basic", "").unwrap();
+    assert!(base.starts_with("taxii_3_") && crate::commands::system::is_taxii_secret(&base), "{base}");
+    // the same server: another path, the host in capitals, the default port written out, a header
+    // name that Basic does not use
+    for same in [
+        secret_name(3, "https://taxii.example.org/other/", "basic", ""),
+        secret_name(3, "https://TAXII.example.org:443/taxii2/", "basic", ""),
+        secret_name(3, url, "basic", "X-Unused"),
+    ] {
+        assert_eq!(same.as_deref(), Some(base.as_str()));
+    }
+    // another number, host, port or kind of authentication: another entry
+    for other in [
+        secret_name(4, url, "basic", ""),
+        secret_name(3, "https://attacker.example.net/taxii2/", "basic", ""),
+        secret_name(3, "https://taxii.example.org:8443/taxii2/", "basic", ""),
+        secret_name(3, "https://sub.taxii.example.org/taxii2/", "basic", ""),
+        secret_name(3, url, "header", "Authorization"),
+    ] {
+        assert!(other.is_some() && other.as_deref() != Some(base.as_str()), "{other:?}");
+    }
+    // an API key is bound to its header, whatever the case of its name
+    assert_eq!(secret_name(3, url, "header", "X-Api-Key"), secret_name(3, url, "header", "x-api-key"));
+    assert_ne!(secret_name(3, url, "header", "X-Api-Key"), secret_name(3, url, "header", "User-Agent"));
+    // no authentication, or an address the app refuses: no entry
+    assert_eq!(secret_name(3, url, "none", ""), None);
+    assert_eq!(secret_name(3, "http://taxii.example.org/taxii2/", "basic", ""), None);
+    assert_eq!(secret_name(3, "https://user:pw@taxii.example.org/taxii2/", "basic", ""), None);
+}
+
+/// Mission 7: a collection is synchronized only while its API root is on the server's own origin,
+/// so a credential never goes to the host a server moved away from, or to a host a restored
+/// database names for a collection.
+#[tokio::test]
+async fn a_credential_only_goes_to_the_servers_own_origin() {
+    let (old, old_log) = feed_server(false);
+    let (new, new_log) = feed_server(false);
+    let db = Db::open_in_memory().unwrap();
+    let input = ServerInput { id: None, name: "P".into(), discovery_url: format!("{old}/taxii2/"), auth: "basic".into(), username: "a".into(), ..Default::default() };
+    let sid = db.with(|c| server_save(c, &input)).unwrap();
+    let srv = db.with(|c| server(c, sid)).unwrap();
+    let client = Client::new(auth_of(&srv, Some("s3cr3t-pass".into())).unwrap()).unwrap();
+    let d = discover(&client, &check_url(&srv.discovery_url).unwrap()).await.unwrap();
+    let cols = collections(&client, &check_url(&d.api_roots[0]).unwrap()).await.unwrap();
+    db.with(|c| record_discovery(c, sid, &d, &cols)).unwrap();
+    let coll = db.with(|c| collections_of(c, sid)).unwrap().remove(0);
+    // a database (restored, or changed outside the app) names another server for the collection's
+    // credential: nothing is sent to the collection's host
+    db.with(|c| {
+        c.execute("UPDATE taxii_servers SET discovery_url = ?2 WHERE id = ?1", params![sid, format!("{new}/taxii2/")])?;
+        Ok(())
+    })
+    .unwrap();
+    let sent = old_log.lock().unwrap().len();
+    let e = sync(&db, &client, coll.id).await.unwrap_err().to_string();
+    assert!(e.contains("not on the server's address"), "{e}");
+    assert_eq!(old_log.lock().unwrap().len(), sent, "nothing reached the collection's host");
+    assert!(new_log.lock().unwrap().is_empty());
+    // moving the server keeps none of its old origin's collections; another path on the same
+    // origin keeps them
+    db.with(|c| {
+        c.execute("UPDATE taxii_servers SET discovery_url = ?2 WHERE id = ?1", params![sid, format!("{old}/taxii2/")])?;
+        Ok(())
+    })
+    .unwrap();
+    db.with(|c| server_save(c, &ServerInput { id: Some(sid), discovery_url: format!("{old}/other/taxii2/"), ..input.clone() })).unwrap();
+    assert_eq!(db.with(|c| collections_of(c, sid)).unwrap().len(), 1, "the same origin keeps its collections");
+    db.with(|c| server_save(c, &ServerInput { id: Some(sid), discovery_url: format!("{new}/taxii2/"), ..input.clone() })).unwrap();
+    assert!(db.with(|c| collections_of(c, sid)).unwrap().is_empty(), "the old origin's collections are removed");
 }

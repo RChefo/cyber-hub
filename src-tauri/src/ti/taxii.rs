@@ -11,10 +11,12 @@
 //!   credential.
 //! * **Credentials** (HTTP Basic, which TAXII 2.1 clients must support, or an API-key header) are
 //!   typed by the analyst into a native OS dialog (`native_prompt`: Windows' credential dialog, a
-//!   GTK dialog on Linux) and kept in the OS credential store; `cyberhub-keys taxii-set <server id>`
-//!   still stores them from a terminal. The web view never reads or writes them. A stored
-//!   credential is deleted when its server moves to another origin, changes its kind of
-//!   authentication or is removed.
+//!   GTK dialog on Linux) and kept in the OS credential store; `cyberhub-keys taxii-set` still
+//!   stores them from a terminal. The web view never reads or writes them. A stored credential is
+//!   bound to its server's number, origin, kind of authentication and header (`secret_name`), so
+//!   it is never read for anything else, and it is deleted when one of them changes or the server
+//!   is removed. Collections are synchronized only while their API root is on the server's own
+//!   origin (`collection_root`, Mission 7).
 //! * **What is imported.** STIX `indicator` objects whose pattern is a simple equality (or an OR
 //!   of equalities) on an IPv4/IPv6 address, a domain name, a URL or a file hash. Other objects and
 //!   patterns are counted and skipped with the reason; nothing is guessed. Indicators become saved
@@ -34,6 +36,7 @@ use reqwest::header::{HeaderMap, HeaderValue, ACCEPT};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::error::AppResult;
@@ -51,9 +54,27 @@ pub const MAX_PAGES: usize = 200;
 pub const MAX_OBJECTS: usize = 100_000;
 pub const TIMEOUT: Duration = Duration::from_secs(30);
 
-/// The credential store entry of a server.
-pub fn secret_name(server_id: i64) -> String {
-    format!("taxii_{server_id}")
+/// The credential store entry of a server: `taxii_<number>_<fingerprint>`. The fingerprint (16
+/// hex digits of SHA-256) covers where and how the credential is sent: the discovery URL's origin,
+/// the kind of authentication and, for an API key, the header's name (in any case). A credential
+/// is therefore only read for the server, origin and header it was stored for: not after an edit,
+/// and not when a restored database, or another data folder of the same user, names another
+/// server under the same number (Mission 7). `None` without authentication or for an address the
+/// app refuses.
+pub fn secret_name(server_id: i64, discovery_url: &str, auth: &str, header_name: &str) -> Option<String> {
+    if !matches!(auth, "basic" | "header") {
+        return None;
+    }
+    let origin = check_url(discovery_url).ok()?.origin().ascii_serialization();
+    let header = if auth == "header" { header_name.trim().to_ascii_lowercase() } else { String::new() };
+    let digest = Sha256::digest(format!("{origin}\n{auth}\n{header}").as_bytes());
+    let fingerprint: String = digest.iter().take(8).map(|b| format!("{b:02x}")).collect();
+    Some(format!("taxii_{server_id}_{fingerprint}"))
+}
+
+/// The credential store entry of a stored server (see `secret_name`).
+pub fn server_secret_name(s: &Server) -> Option<String> {
+    secret_name(s.id, &s.discovery_url, &s.auth, &s.header_name)
 }
 
 /// A TAXII URL: https, or http to 127.0.0.1/localhost in debug builds; no credentials, query or
@@ -182,7 +203,24 @@ fn api_root(base: &Url, raw: &str) -> Option<Url> {
     let u = check_url(joined.as_str()).ok()?;
     // an absolute API root on another host is allowed by the specification, but the server's
     // credentials are never sent there
-    (u.host_str() == base.host_str() && u.port_or_known_default() == base.port_or_known_default()).then_some(u)
+    (u.origin() == base.origin()).then_some(u)
+}
+
+/// A collection's API root, checked again before anything is sent to it: it must still be on the
+/// server's own origin (scheme, host and port). A server edited to another origin keeps none of
+/// its collections (`server_save`), and a restored database cannot point a collection, and with
+/// it the server's credential, at another host (Mission 7).
+pub fn collection_root(srv: &Server, coll: &Collection) -> Result<Url, String> {
+    let base = check_url(&srv.discovery_url)?;
+    let root = check_url(&coll.api_root)?;
+    if root.origin() != base.origin() {
+        return Err(format!(
+            "The collection's API root ({}) is not on the server's address ({}): list the server's collections again",
+            root.origin().ascii_serialization(),
+            base.origin().ascii_serialization()
+        ));
+    }
+    Ok(root)
 }
 
 pub async fn discover(client: &Client, discovery: &Url) -> Result<Discovery, String> {
@@ -614,10 +652,20 @@ pub fn server_save(c: &Connection, input: &ServerInput) -> AppResult<i64> {
     match input.id {
         Some(id) => {
             server(c, id)?;
-            c.execute(
+            let tx = c.unchecked_transaction()?;
+            tx.execute(
                 "UPDATE taxii_servers SET name = ?2, discovery_url = ?3, auth = ?4, username = ?5, header_name = ?6, reliability = ?7, default_confidence = ?8, updated_at = ?9 WHERE id = ?1",
                 params![id, name, url.as_str(), input.auth, username, header_name, input.reliability, input.default_confidence, ts],
             )?;
+            // collections live on the server's origin: those of an origin it left are removed (with
+            // their synchronization history; indicators saved from them stay, with their source)
+            let roots: Vec<(i64, String)> = tx.prepare("SELECT id, api_root FROM taxii_collections WHERE server_id = ?1")?.query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?;
+            for (cid, root) in roots {
+                if check_url(&root).map_or(true, |r| r.origin() != url.origin()) {
+                    tx.execute("DELETE FROM taxii_collections WHERE id = ?1", params![cid])?;
+                }
+            }
+            tx.commit()?;
             Ok(id)
         }
         None => {
@@ -717,7 +765,7 @@ pub async fn sync(db: &crate::db::Db, client: &Client, collection_id: i64) -> Ap
         let srv = server(c, coll.server_id)?;
         Ok((coll, srv))
     })?;
-    let root = check_url(&coll.api_root).map_err(crate::error::validation)?;
+    let root = collection_root(&srv, &coll).map_err(crate::error::validation)?;
     let feed = Feed {
         reference: format!("taxii:{}", coll.id),
         label: format!("TAXII: {} / {}", srv.name, if coll.title.is_empty() { coll.collection.as_str() } else { coll.title.as_str() }),
