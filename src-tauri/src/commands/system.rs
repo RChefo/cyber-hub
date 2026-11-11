@@ -66,9 +66,13 @@ pub async fn system_info(app: AppHandle, db: State<'_, Db>, pm: State<'_, Proces
 /// Opens a new system terminal window in the home folder. No command is passed to the terminal:
 /// the UI copies commands to the clipboard instead, so nothing runs without the user pressing
 /// Enter. It takes no directory from the page (Mission 7): a network path there would make
-/// Windows connect to that host with the user's credentials.
+/// Windows connect to that host with the user's credentials. It starts a program, so it asks in a
+/// native dialog first (Mission 8): a page cannot open terminals by itself.
 #[tauri::command]
-pub async fn open_terminal() -> AppResult<String> {
+pub async fn open_terminal(app: AppHandle) -> AppResult<String> {
+    if !crate::confirm::native(&app, "Open a terminal", "Open a terminal window in your home folder?\n\nCyber Hub types nothing into it: a command you copied runs only if you paste it there and press Enter.".to_string(), "Open terminal").await {
+        return Err(AppError::Cancelled("No terminal was opened".into()));
+    }
     let dir = dirs_home().filter(|d| !crate::util::is_network_or_device_path(&d.to_string_lossy())).unwrap_or_else(|| PathBuf::from("."));
 
     let spawn = |mut cmd: Command| -> std::io::Result<()> {
@@ -267,10 +271,36 @@ mod tests {
     }
 
     /// Mission 7: the terminal command takes nothing from the page (a directory there could be a
-    /// network path).
+    /// network path); its only parameter is the app handle Tauri provides.
     #[test]
     fn the_terminal_takes_no_directory_from_the_page() {
-        assert!(include_str!("system.rs").contains(&["pub async fn open_terminal(", ") -> AppResult<String>"].concat()));
+        assert!(include_str!("system.rs").contains(&["pub async fn open_terminal(", "app: AppHandle) -> AppResult<String>"].concat()));
+    }
+
+    /// Mission 8: every process start asks in a native dialog first, except tool detection's
+    /// version probes (fixed catalog flags; ProjectDiscovery tools with `-duc`, so nothing is
+    /// contacted). Before, a page could open terminals and start GUI tools by itself.
+    #[test]
+    fn programs_start_only_after_a_native_confirmation() {
+        for (src, command) in [
+            (include_str!("system.rs"), "pub async fn open_terminal("),
+            (include_str!("tools.rs"), "pub async fn tool_launch("),
+        ] {
+            let start = src.find(command).unwrap_or_else(|| panic!("{command}"));
+            let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
+            let ask = body.find("confirm::native(").unwrap_or_else(|| panic!("{command} confirms natively"));
+            let spawn = body.find(".spawn()").unwrap_or_else(|| panic!("{command} starts a program"));
+            assert!(ask < spawn, "{command} asks before it starts anything");
+        }
+        // the probes stay without a dialog, so they must stay offline: every ProjectDiscovery tool
+        // probes with its update check turned off
+        let catalog: serde_json::Value = serde_json::from_str(include_str!("../../catalog/tools.json")).unwrap();
+        for t in catalog["tools"].as_array().unwrap() {
+            let args: Vec<&str> = t["detect"]["versionArgs"].as_array().into_iter().flatten().filter_map(|a| a.as_str()).collect();
+            if ["nuclei", "httpx", "katana", "naabu", "subfinder", "dnsx"].contains(&t["id"].as_str().unwrap_or_default()) {
+                assert!(args.contains(&"-duc"), "{}: version probe without -duc", t["id"]);
+            }
+        }
     }
 
     #[test]

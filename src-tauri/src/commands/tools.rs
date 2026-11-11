@@ -231,15 +231,21 @@ pub async fn tool_install(
     )
 }
 
-/// Launch a GUI tool (no arguments).
+/// Launch a GUI tool (no arguments). It starts a program, so it asks in a native dialog first
+/// (Mission 8): GUI tools act on their own once started (a proxy listener, a vendor's update or
+/// licence check), and a page must not start them by itself.
 #[tauri::command]
-pub async fn tool_launch(db: State<'_, Db>, tool_id: String) -> AppResult<()> {
+pub async fn tool_launch(app: AppHandle, db: State<'_, Db>, tool_id: String) -> AppResult<()> {
     let tool = catalog::tool(&tool_id).ok_or_else(|| AppError::NotFound(format!("tool {tool_id}")))?;
     if tool.kind != "gui" {
         return Err(validation("Only GUI tools can be launched directly; use Run for CLI tools"));
     }
     let detect = tool.detect.as_ref().ok_or_else(|| validation("Tool has no detection rules"))?;
     let path = detect::locate(detect).ok_or_else(|| validation(format!("{} is not installed", tool.name)))?;
+    let message = format!("Start {}?\n\nProgram: {}\n\nCyber Hub passes it no arguments. Once started, it works as it does when you start it yourself.", tool.name, path.display());
+    if !confirm::native(&app, "Start a program", message, "Start").await {
+        return Err(AppError::Cancelled(format!("{} was not started", tool.name)));
+    }
     let mut cmd = if path.extension().map(|e| e == "app").unwrap_or(false) {
         let mut c = std::process::Command::new(crate::util::MACOS_OPEN);
         c.arg("-a").arg(&path);
