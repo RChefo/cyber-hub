@@ -1,66 +1,69 @@
-# Release readiness: Cyber Hub 0.1.0 (after Mission 7)
+# Release readiness: Cyber Hub 0.1.0 (after Mission 8)
 
-This is the checklist for the first release. It separates what was verified automatically from what still needs a person, hardware, a GitHub run or a signing key. **No installer or release binary has been built** (that happens once, at the final stage, with the owner's authorization), so nothing here describes a built package.
+This is the checklist for the first release. It separates what was verified automatically from what still needs a person, hardware, a GitHub run or a signing key. **No installer, package or release binary has been built, nothing has been signed, and nothing has been pushed.** That happens once, at the final stage, with the owner's explicit authorization, so nothing here describes a built package.
+
+**Cyber Hub is not release-ready.** The engineering checks pass; the release decision rests on M1–M10 below, and eight of them block it.
 
 Status words:
 
 * **PASS:** verified, with the evidence named.
-* **PARTIAL:** verified in a substitute environment (emulated scaling, containers, a debug build), or only part of it.
-* **NOT TESTED:** not run in this mission. Each one says why.
-* **BLOCKED:** it needs something only the owner can provide: a push, a signing key, an authorization.
+* **PARTIAL:** verified only in part, or only in a substitute environment (emulated scaling, a container, a debug build, a stand-in for a person). What is missing is named.
+* **NOT TESTED:** no evidence. Each one says why.
+* **BLOCKED:** it needs something only the owner can provide: a push, a signing key, an authorization, or an environment that was not available (a real desktop session, a physical HiDPI screen).
 
-Evidence means one of:
-
-* a test name in the repository;
-* a log or screenshot from the Mission 7 runs (MISSION_REPORT.md, "Mission 7");
-* for the manual items, the tester's own record in the table below.
+Evidence is a test name in the repository, a log or screenshot from the Mission 7 or 8 runs (MISSION_REPORT.md), or, for the manual items, the tester's own record below.
 
 ## Release requirements
 
 | Requirement | Status | Evidence or reason |
 |---|---|---|
-| Rust and frontend tests, tsc, clippy on Windows 11, Ubuntu 24.04, Debian 12 | PASS | Final regression, MISSION_REPORT.md "Mission 7" (exact counts and commands) |
-| Minimum Rust version 1.90 | PASS | `cargo +1.90.0 check --locked --all-targets` in the Linux container |
-| Dependency audits (cargo audit, npm audit) | PASS | 0 vulnerabilities; see the report for advisory warnings |
-| Secret scan of the whole history (gitleaks 8.30.1) | PASS | 183 commits at `d21c76e` and the documentation, no leaks after the two test fixtures were marked (`.gitleaksignore`) |
+| Rust and frontend tests, tsc, clippy on Windows 11, Ubuntu 24.04, Debian 12 | PASS | Final regression of Mission 8, MISSION_REPORT.md "Mission 8" (counts, commands, environments) |
+| Minimum Rust version 1.90 | PASS | `cargo +1.90.0 check --locked --all-targets` on Ubuntu and Debian |
+| Dependency audits (cargo audit, npm audit) | PASS | 0 vulnerabilities; the allowed warnings are listed in the report |
+| Secret scan of the whole history (gitleaks 8.30.1) | PASS | Every commit up to the last one of Mission 8, and the documentation, without leaks |
 | Database upgrades from every schema, backup before migrating, interrupted and failed upgrades | PASS | `every_schema_version_upgrades_to_the_latest_with_all_its_rows_and_a_usable_backup`, `a_failed_upgrade_leaves_the_previous_database_untouched_and_can_be_retried`, `an_interrupted_rebuild_is_rolled_back_at_the_next_open`, `upgrade_child_process` |
-| An older version refuses a newer database and says how to recover | PASS on Windows (live), PASS on Linux (live, container) | `startup_error.rs`; the message box was read through Win32 and the GTK dialog captured; the exit code is 1 and the file is unchanged |
-| Backup and restore keep IDs, relationships and evidence | PASS | `restore_tests.rs`; the Linux GUI restore cycle (segment 3: restart, kept database, evidence) on both distributions |
-| End-to-end flows in the real app | PASS on debug builds | Windows: the Mission 6 end-to-end script, 23/23, with native Open and Save dialogs. Linux: the Mission 7 and Mission 6 GUI phases and segment 3 on both distributions. A release build is exercised only with the installers (item M10) |
-| MCP | PASS | The MCP tests in the suites on all three systems; segment 3's MCP checks in the real app on both distributions |
-| Security review of Mission 7 (25 distinct findings: 3 High, 10 Medium, 12 Low), and 2 found in live testing | PASS for the code | Every finding is fixed with a regression test or recorded as an accepted risk in SECURITY.md (MISSION_REPORT.md lists each with severity and commit) |
-| Native confirmations: Cancel default, approve delayed, one at a time | PASS on Windows and Linux | Windows: task dialog read and pressed through Win32, including an early synthetic click being ignored. Linux: GTK dialog through xdotool (Return cancels, early click ignored, late click approves) |
-| High-DPI and minimum window | PARTIAL | Emulated on Windows (device emulation at 100–200 %), virtual X screens on Linux (`GDK_SCALE=2`, minimum enforced by the window manager). No physical HiDPI screen (item M4) |
-| Linux desktops | PARTIAL | Compositors in containers: Mutter and KWin (Wayland), KWin with XWayland (software rendering). No full GNOME Shell or Plasma session, no portal, no login keyring (items M2, M3, M6, M7) |
-| TAXII credentials in Windows' credential dialog | NOT TESTED | It cannot be scripted (UIPI). Linux GTK dialog: PASS, with a check that no copy reaches the disk. Procedure for Windows: `TAXII_CREDENTIAL_TEST.md` (item M1) |
-| CI on GitHub | BLOCKED | Needs a push, which only the owner can authorize (item M8) |
-| Release workflow | PARTIAL | Static checks and the guard test pass; never run on GitHub (item M8). It builds and signs only in a manual run with `RELEASE_PUBLISHING` enabled |
-| Code signing (Authenticode, updater key in the `release` environment) | BLOCKED | Owner's keys and setup (`docs/SIGNING.md`, `docs/UPDATER.md`) (item M9) |
-| Installers: install, upgrade a copy of a real database, uninstall, first start | BLOCKED | Installers are built only at the final stage with authorization (item M10) |
-
-**Engineering readiness is not release readiness.** The automated checks pass, but items M1–M10 below decide the release, and several of them block it.
+| An older version refuses a newer database and says how to recover | PASS | `startup_error.rs`; the message box on Windows, the GTK dialog on Ubuntu and Debian; exit code 1, the file unchanged |
+| Backup and restore keep IDs, relationships and evidence | PASS | `restore_tests.rs`; the Linux GUI restore cycle (segment 3) on both distributions; a backup made by the Mission 8 Windows TAXII run |
+| End-to-end flows in the real app | PASS on debug builds | The Windows end-to-end script; the Linux GUI phases and segment 3 on both distributions. A release build is exercised only with the installers (M10) |
+| MCP | PASS | The MCP tests in the suites; segment 3's MCP checks on Linux; three read tools through the real sidecar on Windows (Mission 8) |
+| TAXII credential lifecycle | PASS on Linux (GTK dialog), PARTIAL on Windows | Linux: 16/16 on both distributions, and the removal race 0/17. Windows: everything except typing into the credential dialog, 16/16 with the real Credential Manager (M1) |
+| Parser malformed input | PASS | `hostile_tests.rs` and the parser regressions in the suites; the amplification tests in the optimized build (Mission 7) |
+| Security review (Mission 7: 25 distinct findings and 2 found live; Mission 8: the accepted risks) | PASS for the code | Every finding fixed with a regression test or recorded as an accepted risk. Mission 8 fixed two accepted risks and narrowed one (below) |
+| Native confirmations: Cancel default, approval delayed, one at a time; also for the terminal, GUI tools and reopening an ended project | PASS on Windows and Linux | Windows: Win32 reads and presses. Linux: the GTK dialogs through xdotool, including the Mission 8 phase |
+| Release workflow | PARTIAL | A static review, the guard tests and a local test of the tag check pass. It has never run on GitHub (M8) |
+| The release build's Linux environment (Ubuntu 22.04) | PARTIAL | `cargo check --locked --release --bins` passed there with the release job's packages; nothing was built |
+| High-DPI and minimum window | PARTIAL | HiDPI emulated (Windows) and virtual (Linux) only (M4). The minimum window was checked in a real window on a physical screen at 100 % (M5, partial) |
+| Linux desktops | PARTIAL | Compositors in containers only (M2, M3, M6, M7) |
+| Code signing | BLOCKED | The owner's certificate and keys (M9) |
+| Installers: install, upgrade a copy of a real database, uninstall | BLOCKED | Built only at the final stage with authorization (M10) |
 
 ## Manual release-candidate checklist
 
-Fill in *Result* (pass / fail) and *Evidence* when you run an item. *Blocks* says whether the release waits for it.
+*Status* is what is known today. Fill in *Result* (pass or fail), *Evidence*, the tester and the date when you run an item. The procedures are in `MANUAL_VALIDATION.md` (M1–M7), `GITHUB_FIRST_RUN.md` (M8), `SIGNING_SETUP.md` (M9) and `RELEASE_CANDIDATE_PROCEDURE.md` (M10).
 
-| # | Item | Environment | Steps | Expected | Evidence | Result | Blocks |
-|---|---|---|---|---|---|---|---|
-| M1 | TAXII credentials in Windows' credential dialog | Windows 11, development build with an isolated data folder, `scripts/qa/taxii-mock.mjs` | `docs/release/TAXII_CREDENTIAL_TEST.md`, steps 1–17 and the leak check | As listed there for each step; no test value outside Credential Manager | Screenshots, the test server's log lines, the leak-check output | | **Yes** |
-| M2 | Full GNOME Shell session | Ubuntu 24.04 desktop (VM or hardware), Wayland session, then "GNOME on Xorg" | Start the release candidate; open every page; run a tool through the native confirmation (Return at once must cancel); store a TAXII credential (GTK dialog); open and save files (backup, report); maximize, restore, log out with the app open | Every page renders; dialogs belong to the window and work by keyboard; files open and save; the app ends cleanly at log-out | Screenshots, the activity log | | **Yes** for Linux |
-| M3 | Full KDE Plasma session | Kubuntu 24.04 or Debian 12 KDE, Plasma on Wayland, then X11 | As M2 | As M2 | As M2 | | **Yes** for Linux |
-| M4 | Physical HiDPI | Windows 11 on a 1920 × 1080 (or larger) screen at 150 % and 200 %; GNOME with 200 % and with fractional 125 % scaling | Start the app; check the first window size and position; resize to the minimum with the mouse; open the finding form, a project's tabs, the ATT&CK matrix and the OSINT graph; move the window between screens of different scales if available | Sharp text, nothing cut off, the minimum is held by the window manager, dialogs fit | Screenshots at each scale | | **Yes** |
-| M5 | Minimum window usability | Same as M4 at the smallest size (800 × 480 logical) | Use the sidebar (icons only), Projects, a project's tabs, the record panel and a dialog with the keyboard and mouse | Everything reachable by scrolling, no horizontal page overflow | Screenshots | | No |
-| M6 | Desktop portals | GNOME and KDE sessions; `GTK_USE_PORTAL=1` | Open and save files (import, backup, report, evidence) with the portal file chooser | The portal chooser opens; files are read and written | Screenshots | | No, unless the package is sandboxed (Flatpak or Snap) |
-| M7 | A real keyring | GNOME (GNOME Keyring unlocked by the login), KDE (KWallet through the Secret Service) | Store, use and forget a TAXII credential; quit and start again | The credential survives a restart, is used, and is removed when forgotten; no unlock prompt loops | Screenshots, `secret-tool search` output | | **Yes** for Linux |
-| M8 | First GitHub Actions run | GitHub, after the owner pushes a branch | Push a branch; check `ci.yml` on windows-2022, ubuntu-24.04, Debian 12 (container), audit (cargo audit, gitleaks, actionlint) and MSRV. Then push a test tag `v0.1.0-rc…` in a fork or start `release.yml` by hand with `RELEASE_PUBLISHING` unset | `ci.yml` green; the release run validates only and says nothing is built | The run links | | **Yes** |
-| M9 | Code signing | Owner's Authenticode certificate; the updater key in the `release` environment with required reviewers | `docs/SIGNING.md` and `docs/UPDATER.md` (owner's checklist) | Signed installers; `latest.json` signatures verify against the key in `tauri.conf.json` | Signature check output | | **Yes** |
-| M10 | Installers | Windows 11 (NSIS and MSI), Ubuntu 24.04 and Debian 12 (DEB, AppImage), Fedora or RHEL (RPM) if offered | Build once with authorization; install; upgrade a **copy** of a real database; start; uninstall | The upgrade keeps all data with a backup taken first; uninstall leaves the data folder | Notes and screenshots | | **Yes** |
+| # | Item | Status today | Environment | Procedure | Expected | Blocks | Result | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| M1 | TAXII credentials in Windows' credential dialog | **PARTIAL.** Everything but the dialog was automated: 16/16 on Windows 11 with the real Credential Manager. Steps 2, 3 and 9 need a person | Windows 11, development build, isolated data folder, the local test servers | `TAXII_CREDENTIAL_TEST.md` | As listed there; no test value outside Credential Manager | **Yes** | | |
+| M2 | Full GNOME Shell session (Wayland, Xorg, XWayland) | **BLOCKED:** no GNOME session available. Substitute: Mutter in a container 5/5 | Ubuntu 24.04 desktop, hardware or VM | `MANUAL_VALIDATION.md`, M2 | Every step in both sessions and under XWayland | **Yes**, for Linux | | |
+| M3 | Full KDE Plasma session (Wayland, X11, XWayland) | **BLOCKED:** no Plasma session available. Substitute: KWin 5/5, KWin with XWayland 7/7 in containers | Kubuntu 24.04 or Debian 12 KDE | `MANUAL_VALIDATION.md`, M3 | As M2, plus a clear error without a Secret Service | **Yes**, for Linux | | |
+| M4 | Physical HiDPI: 100, 125, 150, 200 % | **BLOCKED:** this machine's screens are at 100 %, and changing your display scale is your decision. Substitute: emulated and virtual scaling | Windows 11, GNOME (also fractional), Plasma | `MANUAL_VALIDATION.md`, M4 | Sharp, nothing cut off, the minimum held, dialogs fit | **Yes** | | |
+| M5 | The minimum window on a real screen | **PARTIAL.** Windows only: a real window resized to 800 × 480 on a physical 1920 × 1080 screen at 100 %, every page, project tab and the finding form, 37/37 (Mission 8). Not tested: a HiDPI screen, a Linux session, resizing with the mouse | Any M4 screen | `MANUAL_VALIDATION.md`, M5 | Everything reachable, no sideways scrolling | No | | |
+| M6 | Desktop portals and the native file chooser | **BLOCKED:** needs the M2 and M3 sessions. Cyber Hub uses the portal only with `GTK_USE_PORTAL=1` or in a sandbox | GNOME and Plasma sessions | `MANUAL_VALIDATION.md`, M6 | Portal calls with the variable, GTK's chooser without it | No, unless shipped sandboxed | | |
+| M7 | A real login keyring (GNOME Keyring, KWallet) | **BLOCKED:** needs a login session. Substitute: GNOME Keyring unlocked by a script in containers, 16/16 | GNOME and Plasma sessions | `MANUAL_VALIDATION.md`, M7 | Kept across restarts and log-ins; no prompt loop; removed when forgotten | **Yes**, for Linux | | |
+| M8 | First GitHub Actions run | **BLOCKED:** needs your push. The static review and guards pass (`GITHUB_FIRST_RUN.md`, section 2) | GitHub | `GITHUB_FIRST_RUN.md` | `ci.yml` green, actionlint included; the release runs only validate | **Yes** | | |
+| M9 | Code signing (Authenticode; update signatures in CI) | **BLOCKED:** your certificate and keys. The setup and verification are written; nothing was signed | GitHub `release` environment; a code-signing certificate | `SIGNING_SETUP.md` | Valid, timestamped Authenticode on four Windows files; update signatures verify | **Yes** | | |
+| M10 | Installers: build once, install, upgrade a copy, back up and restore, uninstall | **BLOCKED:** your authorization. The procedure is written; nothing was built | The release workflow; Windows 11, Ubuntu 24.04, Debian 12 (Fedora optional) | `RELEASE_CANDIDATE_PROCEDURE.md` | As listed there for every package | **Yes** | | |
 
-## Known risks at this point
+## Accepted risks after Mission 8
 
-* The accepted risks in `docs/SECURITY.md` ("Accepted risks and limitations") apply, including the two recorded in Mission 7:
-  * process starts without a native dialog (GUI tools, a terminal, version probes);
-  * a project's status changed by a compromised page.
-* Copied command lines are exact in POSIX shells. In PowerShell, a word that contains a quote character arrives split, and pasting never runs another command. Command history written before Mission 7 is not quoted.
-* TAXII credentials stored by earlier development builds (entry `taxii_<number>`) are no longer read; they have to be stored again.
+* **Fixed in Mission 8, with tests and live checks on Windows and Linux:**
+  * a GUI tool or a terminal starting without a native dialog;
+  * a compromised page reopening a completed or archived project.
+* **Narrowed in Mission 8.** Copied command lines are exact in PowerShell too, except for a word that has a quote together with `$`, a backtick, `"`, `\` or `!`. Such a word still arrives split, and pasting never runs another command.
+* **Still accepted** (SECURITY.md, "Accepted risks and limitations"):
+  * tool detection's version probes start without a dialog (fixed flags, offline);
+  * a page can still move a project between planning, active and paused;
+  * the other rows of that table.
+* **TAXII credentials stored by earlier development builds** (entry `taxii_<number>`) are no longer read; they have to be stored again.
+* **Release builds share the data folder of development builds**, because the identifier is `dev.cyberhub.workstation`. Install candidates only where no real data is, or set it aside first (`RELEASE_CANDIDATE_PROCEDURE.md`, section 4).
+* **The release workflow, signing and the installers have never run.** The first run will be the first test of the hosted runners.

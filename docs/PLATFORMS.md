@@ -114,6 +114,16 @@ npm run tauri dev      # run the app
 
 Installers and packages (`npm run tauri build`) are deferred: Cyber Hub is still in development and nothing is packaged or distributed.
 
+### The release build's Linux environment (Mission 8)
+
+The release workflow builds the Linux packages on Ubuntu 22.04, which no CI job tests: its older system libraries give the packages wider compatibility. Mission 8 checked that the code compiles there, without building anything:
+
+* `cargo check --locked --release --bins` passed in an `ubuntu:22.04` container (22.04.5);
+* the release job's packages were installed: WebKitGTK 2.50.4, GTK 3.24.33, libsoup 3.0.7, glibc 2.35;
+* Rust 1.99.1 and Node 22.12.0 were used, and the frontend was built first.
+
+The packages themselves are first built by the release workflow (RELEASE_CANDIDATE_PROCEDURE.md).
+
 ### Packaging and the MCP server
 
 `tauri build` runs `npm run build && node scripts/build-sidecar.mjs` before compiling the app. The script builds `cyberhub-mcp` for the target triple (`TAURI_ENV_TARGET_TRIPLE`; macOS targets are refused), without the `provisioning` feature, checks it (`--version` when it can run on the build machine) and stages a copy as `src-tauri/binaries/cyberhub-mcp-<triple>[.exe]` (git-ignored) for manual use. The installers ship the crate's own `cyberhub-mcp` binary: the bundler includes every `[[bin]]` of the app crate next to the app executable. It was previously also declared as `bundle.externalBin`; the first real MSI build (updater tests) failed because the MSI then contained the same file twice (WiX ICE30), so that entry was removed.

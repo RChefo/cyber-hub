@@ -25,10 +25,10 @@ Since March 1, 2026 (ballot CSC-31), a publicly trusted code-signing certificate
 Every Windows binary that ships, before it is packed:
 
 * `cyber-hub.exe` (the application)
-* `cyberhub-mcp.exe` (the MCP sidecar, `externalBin`)
+* `cyberhub-mcp.exe`, the MCP sidecar. It is not a Tauri `externalBin`: it is a second binary of the app crate, which the bundler ships next to the application (`scripts/build-sidecar.mjs` explains why). This was corrected in Mission 8.
 * the NSIS installer (`*-setup.exe`) and the MSI (`*.msi`)
 
-Tauri's bundler runs the configured signing for the application and the installers. **Whether it also signs the `externalBin` sidecar has not been verified for this project**, and the Tauri documentation does not say. Check it with the verification commands below after the first signed build. If the sidecar is unsigned, sign it in a step before `tauri build` (the bundler copies the already-signed file).
+Tauri's bundler runs the configured signing for the application and the installers. **Whether it also signs the crate's second binary has not been verified for this project**, and the Tauri documentation does not say. Check it with the verification commands below after the first signed build; `docs/release/SIGNING_SETUP.md` (section 6) gives a verification step for the workflow. If the sidecar is unsigned, sign it in a step before `tauri build` (the bundler copies the already-signed file).
 
 Update packages are produced from these signed files, so the updater keeps working unchanged. The update signature covers the signed installer.
 
