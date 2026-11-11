@@ -34,11 +34,16 @@ describe("raw requests", () => {
     expect(raw.split("\n").slice(0, 3)).toEqual(["PUT /v1/items/7?x=1 HTTP/1.1", "Host: api.example.com", "Authorization: Bearer t"]);
     const back = parseRawRequest(raw, targetOf(req.url));
     expect({ ...back, headers: back.headers.filter(([k]) => k !== "Host") }).toEqual(req);
-    expect(toCurl(req, true)).toBe(`curl -sS -i -k -X PUT -H 'Authorization: Bearer t' --data-raw 'it'"'"'s' 'https://api.example.com/v1/items/7?x=1'`);
+    // a body with a quote and nothing else special is double-quoted, which PowerShell reads whole (Mission 8)
+    expect(toCurl(req, true)).toBe(`curl -sS -i -k -X PUT -H 'Authorization: Bearer t' --data-raw "it's" 'https://api.example.com/v1/items/7?x=1'`);
     expect(toCurl({ method: "GET", url: "https://a.example.com/", headers: [], body: "" })).toBe("curl -sS -i https://a.example.com/");
-    // Mission 7: a path an imported API definition supplies cannot end the quoting in PowerShell
+    // Mission 7: a path an imported API definition supplies cannot end the quoting in PowerShell;
+    // since Mission 8 it is one double-quoted word, with nothing inside that a shell expands
     const hostile = toCurl({ method: "GET", url: "https://a.example.com/v1/users';calc;'\u2019;calc;\u2019", headers: [], body: "" });
-    expect(hostile).toBe(`curl -sS -i 'https://a.example.com/v1/users'"'"';calc;'"'"''"\u2019"';calc;'"\u2019"''`);
+    expect(hostile).toBe(`curl -sS -i "https://a.example.com/v1/users';calc;'\u2019;calc;\u2019"`);
+    // with a character that is special in double quotes, it keeps the joined form
+    const hostile2 = toCurl({ method: "GET", url: "https://a.example.com/v1/$(calc)';x", headers: [], body: "" });
+    expect(hostile2).toBe(`curl -sS -i 'https://a.example.com/v1/$(calc)'"'"';x'`);
     expect(targetOf("not a url")).toBe("");
   });
 });

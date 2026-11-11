@@ -98,6 +98,9 @@ export function placeholdersIn(template: string, style: "single" | "double" = "d
  */
 export function shellQuote(arg: string): string {
   if (/^[A-Za-z0-9_+=:./-]+$/.test(arg)) return arg;
+  // a word with a quote and nothing else special in double quotes: POSIX shells and PowerShell
+  // both read it back exactly (Mission 8; the same rule as the backend's `shell_word`)
+  if (/['\u2018-\u201B]/.test(arg) && !/[$`"\\!\u201C-\u201E]/.test(arg)) return `"${arg}"`;
   return `'${arg.replace(/['\u2018-\u201B]/g, (q) => `'"${q}"'`)}'`;
 }
 

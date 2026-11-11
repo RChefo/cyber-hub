@@ -196,20 +196,30 @@ pub fn read_regular(path: &std::path::Path, max: u64) -> std::io::Result<Vec<u8>
     Ok(buf)
 }
 
-/// One word of a command line that an analyst pastes into a shell (Mission 7): POSIX shells and
-/// PowerShell both read it back as exactly this word and run nothing else. Plain words (ASCII
-/// letters, digits and `_ + = : . / -`) stay as they are; anything else is single-quoted, and a
-/// quote inside (`'`, or one of the typographic quotes U+2018–U+201B that PowerShell also reads as
-/// `'`) is written as `'"q"'`: the quoted text ends, the quote follows in double quotes, the
-/// quoted text goes on.
+/// One word of a command line that an analyst pastes into a shell (Mission 7): pasted into a POSIX
+/// shell or PowerShell, it runs nothing else, and a POSIX shell reads it back as exactly this word.
+/// Plain words (ASCII letters, digits and `_ + = : . / -`) stay as they are. A word with a quote
+/// (`'`, or one of the typographic quotes U+2018–U+201B that PowerShell also reads as `'`) and
+/// nothing else that is special in double quotes is double-quoted, which PowerShell reads back
+/// exactly too (Mission 8). Anything else is single-quoted, and a quote inside is written as
+/// `'"q"'`: the quoted text ends, the quote follows in double quotes, the quoted text goes on.
+/// PowerShell reads such a word as several arguments; only words with a quote and `$`, a
+/// backtick, `"`, `\` or `!` still take this form.
 pub fn shell_word(a: &str) -> String {
     if !a.is_empty() && a.chars().all(|c| c.is_ascii_alphanumeric() || "_+=:./-".contains(c)) {
         return a.to_string();
     }
+    // A word with a single quote (`it's`, `' OR 1=1--`) in double quotes, when nothing in it is
+    // special there: POSIX shells (bash, zsh, sh, fish) and PowerShell then read it as one word,
+    // exactly (Mission 8). Single-quoted text joined around the quote, below, is exact in POSIX
+    // shells only, because PowerShell passes adjacent quoted texts as separate arguments.
+    if a.chars().any(is_single_quote) && !a.chars().any(|c| matches!(c, '$' | '`' | '"' | '\\' | '!' | '\u{201C}' | '\u{201D}' | '\u{201E}')) {
+        return format!("\"{a}\"");
+    }
     let mut s = String::with_capacity(a.len() + 2);
     s.push('\'');
     for c in a.chars() {
-        if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+        if is_single_quote(c) {
             s.push('\'');
             s.push('"');
             s.push(c);
@@ -221,6 +231,11 @@ pub fn shell_word(a: &str) -> String {
     }
     s.push('\'');
     s
+}
+
+/// `'` and the typographic single quotes PowerShell reads as `'` (U+2018–U+201B).
+fn is_single_quote(c: char) -> bool {
+    matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}')
 }
 
 /// Every raw HTML or image that a CommonMark parser (pulldown-cmark) finds in `md`: the tests of
