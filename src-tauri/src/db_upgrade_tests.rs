@@ -390,6 +390,33 @@ fn a_failure_at_any_migration_keeps_the_last_complete_version_and_a_retry_finish
     }
 }
 
+/// Mission 9: data folders as earlier development builds left them, for the installer upgrade
+/// test (RELEASE_CANDIDATE_PROCEDURE.md, section 7), instead of copies of anyone's real data.
+/// Each is built by the real migrations with a row in every table, and lists the seeded rows in
+/// `seeded.tsv`. It writes only into the empty folder named by CYBERHUB_UPGRADE_FIXTURES and does
+/// nothing in a normal test run.
+#[test]
+fn write_upgrade_fixtures() {
+    let Ok(out) = std::env::var("CYBERHUB_UPGRADE_FIXTURES") else { return };
+    let out = PathBuf::from(out);
+    std::fs::create_dir_all(&out).unwrap();
+    assert!(std::fs::read_dir(&out).unwrap().next().is_none(), "{} must be an empty folder", out.display());
+    // a spread of earlier schemas: 8 is the first build's (d1cf064, which has no check for newer
+    // databases), and the one before the latest runs the last migration alone
+    for version in [1, 8, 19, 26, latest() - 1] {
+        let dir = out.join(format!("schema{version}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (path, seeded) = file_at(&dir, version);
+        let c = Connection::open(&path).unwrap();
+        // one file to copy: no -wal or -shm beside it
+        c.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode = DELETE;").unwrap();
+        assert_eq!(version_of(&c), version);
+        drop(c);
+        let rows: Vec<String> = seeded.iter().map(|(t, id)| format!("{t}\t{id}")).collect();
+        std::fs::write(dir.join("seeded.tsv"), rows.join("\n") + "\n").unwrap();
+    }
+}
+
 /// Runs only when started by `a_process_killed_during_a_migration_…` (the environment variable
 /// names the database and the migration to stop in); otherwise it does nothing.
 #[test]
