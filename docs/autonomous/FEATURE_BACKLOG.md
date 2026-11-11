@@ -306,3 +306,32 @@ Each is larger than a focused fix, and none puts data at risk.
 
 * Process starts without a native dialog (GUI tools, a terminal, version probes) and a project's status changed by a compromised page: accepted risks.
 * Copied command lines are exact in POSIX shells; in PowerShell a word with a quote character arrives split. A platform-specific copy would need the history to keep the argument list.
+
+## Mission 8 (2026-11-11): release validation and final readiness
+
+The brief named release-validation work, not features: the manual tests (M1–M7), the first GitHub run (M8), signing (M9), the release-candidate procedure (M10), the accepted risks, the final regression and the release documents. No feature was added.
+
+### Status of earlier items
+
+| # | Item | Status |
+|---|---|---|
+| 65 | GNOME Shell and Plasma sessions, portals, a GPU, a physical HiDPI screen | **Procedures written** (`docs/release/MANUAL_VALIDATION.md`, M2–M7). There was no such environment here: the VMs on this machine are Kali Linux (Xfce) and an inaccessible entry, and the screens run at 100 %. So these items are owner tasks |
+| 66 | Typing into Windows' credential dialog | **Partly automated.** Everything but the dialog ran on Windows with the real Credential Manager, 16/16. Steps 2, 3 and 9 of `TAXII_CREDENTIAL_TEST.md` need a person |
+
+### Accepted risks reviewed
+
+| Risk | Outcome |
+|---|---|
+| GUI tools and a terminal start without a native dialog | **Fixed** (`fb1f323`): both ask first |
+| Version probes start without a dialog | **Still accepted.** Fixed catalog flags; the ProjectDiscovery tools probe with `-duc`, so nothing is contacted; a test keeps the flag |
+| A compromised page reopens an ended project | **Fixed** (`d3c654f`): reopening asks natively, with a compare-and-set |
+| Copied commands in PowerShell | **Narrowed** (`8fe5ab5`): a word with a quote and nothing else special is double-quoted and arrives whole |
+
+### Deferred, with reasons
+
+| # | Item | Why deferred |
+|---|---|---|
+| 76 | Exact PowerShell copies of every word: keep the argument list with the command history and offer a copy per shell | Needs a schema change (migration 33) for the stored argument list. That is not a change for a release-validation mission; the remaining case (a quote with `$`, a backtick, `"`, `\` or `!`) is rare and runs nothing else |
+| 77 | The real-window layout probe in the repository | **Done once, outside the repository**: a variant of `scripts/qa/layout-probe.mjs` measured the real window at 800 × 480 on Windows, 37/37. Adding it to `scripts/qa` (an option to skip emulation) is small; M5 does not block |
+| 78 | A portal check in a container (`xdg-desktop-portal` with `GTK_USE_PORTAL=1`) | Would only be a substitute for M6, which does not block unsandboxed packages |
+| 79 | Build provenance attestations for release artifacts (`actions/attest-build-provenance`) | Needs `id-token` and `attestations` permissions and a run on GitHub to test; recommended after the first release |

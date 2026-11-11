@@ -7,7 +7,7 @@ This file lets a new session resume the mission accurately. Times are UTC and me
 | Mission start | 2026-11-08T21:31:01Z |
 | Branch | `release/v0.1.0` |
 | HEAD at start | `092e092` (plus 27 uncommitted QA-audit paths) |
-| Current phase | **Complete** (Mission 7, 2026-11-10T18:40Z–2026-11-11: final hardening and release preparation: a full security review with every finding fixed and regression-tested or accepted, native-confirmation hardening, the minimum window and HiDPI, KWin with XWayland diagnosed, the Windows TAXII credential procedure, a manual-run-only release workflow, start errors shown natively, saved indicators paged, a TAXII credential race found in testing and fixed, and the release-readiness checklist (docs/release/), schema unchanged at 32; engineering checks pass, the release is not ready (checklist items M1–M4 and M7–M10), see MISSION_REPORT.md "Mission 7". Mission 6, 2026-11-10T14:05Z–18:31Z: exceptions for failed WSTG tests, the remaining parser amplifications, TAXII credentials typed into a native dialog, ATT&CK Mobile and ICS, process chains and logons, cloud-resource assets, validation with Claude Code as an MCP client and the two MCP fixes it led to, the compositors of GNOME and KDE and HiDPI on Linux, a release workflow that publishes only on explicit conditions, and an integration review, schema 29 → 32, see MISSION_REPORT.md "Mission 6". Mission 5, 2026-11-10T10:14:43Z–2026-11-10T14:08Z: Linux compatibility on Ubuntu 24.04 and Debian 12 including a real Wayland compositor, parser hardening with a hostile-input sweep and fuzzing, upgrade validation from every schema, Sigma correlation rules, risk acceptance, TAXII 2.1, ASVS gaps and comparison, ATT&CK history and comparison, release-profile timings and a pinned CI workflow, schema 26 → 29, see MISSION_REPORT.md "Mission 5". Mission 4, 2026-11-09T23:21:37Z–2026-11-10T01:56Z: detection engineering (Sigma, YARA), hunting leads, ASVS 5.0.0, indicator lifecycle and MCP tools, schema 23 → 26, see MISSION_REPORT.md "Mission 4". Mission 3, 2026-11-09T20:10:11Z–22:35Z: the unified investigation layer, schema 21 → 23, see MISSION_REPORT.md "Mission 3". Mission 2, 2026-11-09T16:31:14Z–19:55Z: ten research-driven capabilities, schema unchanged at 21, see MISSION_REPORT.md "Mission 2". Feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
+| Current phase | **Complete** (Mission 8, 2026-11-11T00:04Z–01:20Z: release validation and final readiness: two accepted risks fixed (a terminal and GUI tools, and reopening an ended project, now ask natively) and one narrowed (PowerShell quoting); the release workflow checks that its tag names the built commit and is validated statically; the Windows TAXII lifecycle automated except typing into the dialog; the minimum window checked in a real window; the Linux release environment type-checked; the manual-validation, signing, first-run and release-candidate procedures (docs/release/); the release notes brought up to date; engineering checks pass, the release is not ready (M1 and M5 partial, M2–M4 and M6–M10 blocked on the owner), see MISSION_REPORT.md "Mission 8". Mission 7, 2026-11-10T18:40Z–2026-11-11: final hardening and release preparation: a full security review with every finding fixed and regression-tested or accepted, native-confirmation hardening, the minimum window and HiDPI, KWin with XWayland diagnosed, the Windows TAXII credential procedure, a manual-run-only release workflow, start errors shown natively, saved indicators paged, a TAXII credential race found in testing and fixed, and the release-readiness checklist (docs/release/), schema unchanged at 32; engineering checks pass, the release is not ready (checklist items M1–M4 and M7–M10), see MISSION_REPORT.md "Mission 7". Mission 6, 2026-11-10T14:05Z–18:31Z: exceptions for failed WSTG tests, the remaining parser amplifications, TAXII credentials typed into a native dialog, ATT&CK Mobile and ICS, process chains and logons, cloud-resource assets, validation with Claude Code as an MCP client and the two MCP fixes it led to, the compositors of GNOME and KDE and HiDPI on Linux, a release workflow that publishes only on explicit conditions, and an integration review, schema 29 → 32, see MISSION_REPORT.md "Mission 6". Mission 5, 2026-11-10T10:14:43Z–2026-11-10T14:08Z: Linux compatibility on Ubuntu 24.04 and Debian 12 including a real Wayland compositor, parser hardening with a hostile-input sweep and fuzzing, upgrade validation from every schema, Sigma correlation rules, risk acceptance, TAXII 2.1, ASVS gaps and comparison, ATT&CK history and comparison, release-profile timings and a pinned CI workflow, schema 26 → 29, see MISSION_REPORT.md "Mission 5". Mission 4, 2026-11-09T23:21:37Z–2026-11-10T01:56Z: detection engineering (Sigma, YARA), hunting leads, ASVS 5.0.0, indicator lifecycle and MCP tools, schema 23 → 26, see MISSION_REPORT.md "Mission 4". Mission 3, 2026-11-09T20:10:11Z–22:35Z: the unified investigation layer, schema 21 → 23, see MISSION_REPORT.md "Mission 3". Mission 2, 2026-11-09T16:31:14Z–19:55Z: ten research-driven capabilities, schema unchanged at 21, see MISSION_REPORT.md "Mission 2". Feature expansion round 2026-11-09T13:31Z–16:30Z: seven new capabilities in the six areas the owner named, schema 21; it comes after RC0, which does not cover it. RC0 release-candidate validation 2026-11-09T12:16Z–13:30Z: **ready for a release-candidate build**, not yet for final release authorization. Fourth segment 2026-11-09T11:28:28Z–12:20Z: final pre-release hardening. Earlier segments: 2026-11-08T21:31:01Z–23:43Z, 2026-11-09T06:32:12Z–08:07Z and 08:51:44Z–11:05Z). See [MISSION_REPORT.md](MISSION_REPORT.md) |
 
 ## Baseline (2026-11-08T21:31Z–21:45Z)
 
@@ -130,7 +130,28 @@ See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md).
 
 ## Known failures
 
-None. At the end of Mission 6:
+None. At the end of Mission 8 (`af88c00`, the last code commit; the later commits change documentation only):
+* **Windows 11:**
+  * tsc; vitest 303 tests in 55 files; clippy; cargo test 637 passed, 28 ignored;
+  * cargo audit 0 vulnerabilities in 652 crates (8 allowed warnings); npm audit 0;
+  * the end-to-end script 23/23;
+  * the TAXII lifecycle with the real Credential Manager 16/16, all but typing into the dialog;
+  * the new dialogs live; the minimum window in a real window, 37/37.
+* **Debian 12:**
+  * tsc, 55 frontend test files, clippy, cargo test 637 passed (28 ignored), npm audit 0, MSRV 1.90;
+  * the newer-database start, dialogs 7/7, minimum window 3/3, the Mission 8 dialogs 6/6, HiDPI 5/5;
+  * TAXII 16/16, Mission 6 main 11/11, segment 3 63 + 6 + 3, the removal sweep 0/17.
+* **Ubuntu 24.04.5:** as Debian, every phase passing, plus the compositors: KWin with XWayland 7/7, Mutter 5/5, KWin 5/5.
+* **Ubuntu 22.04:** the release profile type-checks.
+* **gitleaks:** 190 commits up to `cc3d3ca`, and the report's documents, without leaks.
+* **Not run:** GitHub Actions, installers, signing, a release build; the manual items (M1's dialog steps, M2–M4, M6, M7).
+
+At the end of Mission 7 (`d21c76e`):
+* Windows: 633 Rust tests (28 ignored) and 299 frontend tests.
+* Ubuntu and Debian: 632 (28 ignored), and every GUI phase.
+* gitleaks: 184 commits.
+
+At the end of Mission 6:
 * **Windows 11** (at `2a60d9f`; `b002e0e` changed only comments): 593 Rust tests (27 ignored) and 291 frontend tests in 53 files; clippy, also with `fuzzing`, and tsc clean; cargo audit 0 vulnerabilities in 651 crates (the same 8 allowed warnings); npm audit 0; gitleaks over 149 commits: no leaks.
 * **Ubuntu 24.04.5 and Debian 12** (at `b002e0e`): tsc, 53 frontend test files, clippy, 593 Rust tests (27 ignored) and npm audit pass; `cargo +1.90.0 check --all-targets` passes on Ubuntu.
 * **Real app:** Windows end-to-end 23/23; Claude Code and a scripted MCP client 18/18; on each distribution the Mission 6 features 25/25 and the GUI regression 71/71; on Ubuntu, Mutter 5/5, KWin 5/5 and HiDPI 7/7.
@@ -287,8 +308,62 @@ The final results at `d6a192e`:
 | `bfa6107` | fix(intel): say when a kept TAXII password was typed for another user name |
 | `2a60d9f` | fix(risk): render the confirmation that guards an exception |
 | `b002e0e` | test(mcp): mark the made-up key ID in the redaction test for the secret scan |
+| `e9b5da1` | fix(window): fit the window to scaled screens and lower its minimum |
+| `bac82fe` | fix(restore): compare every schema object whose name only resembles SQLite's own |
+| `a1c4ba9` | fix(security): make Cancel the default in native confirmations and delay approval |
+| `ab337f9` | fix(security): confirm natively when the scope widens toward internal addresses |
+| `5185c4a` | fix(security): bind TAXII credentials to their server's origin and header |
+| `5bc31b0` | fix(security): stop argument validation from leaking files or credentials |
+| `98b4fbc` | fix(security): confirm irreversible deletions in native dialogs |
+| `d3e8391` | fix(security): keep hidden characters from disguising native confirmations |
+| `488b075` | fix(security): keep imported text from becoming markup in Markdown reports |
+| `4ccc8f6` | fix(security): quote copied commands so pasting runs nothing else |
+| `68be193` | fix(security): mask MCP values whose names mark them as credentials |
+| `bd84971` | fix(security): keep request builder credentials and routing headers in scope |
+| `304c00d` | fix(security): check OSINT graph SVG exports for active content |
+| `96f28d7` | fix(security): read only regular files and drop restored wordlist paths |
+| `f19f258` | fix(security): tighten MCP approvals, project data and path checks |
+| `88cf533` | docs(security): record process starts and project status as accepted risks |
+| `4ac9eba` | fix(taxii): guard concurrent synchronizations and report outcomes truthfully |
+| `47d7a95` | fix(ui): match toast tones to outcomes and treat declined dialogs as information |
+| `a18c157` | feat(attack): show per-matrix counts and state words in the ATT&CK view |
+| `b135d5b` | feat(triage): record a log's detections and process chains from one bar |
+| `b43d3ee` | feat(threatintel): search the saved indicators and show them in steps |
+| `2b8ce1a` | fix(a11y): move focus to the page on navigation and let a failed page retry |
+| `ab17d66` | fix(intel): explain network errors and offer the cache whenever NVD is unreachable |
+| `c090836` | feat(report): export Markdown with the Report tab's options |
+| `dd6ca10` | fix(findings): show failed link and history loads, and copy evidence hashes |
+| `8ca17b9` | fix(security): ignore approve clicks that arrive before the delay ends |
+| `74127e1` | ci(release): build and sign only in a manual run |
+| `1e5d4dd` | docs(release): add the Windows TAXII credential test and its local server |
+| `12108f6` | fix(startup): say why Cyber Hub cannot start instead of closing silently |
+| `67d14b4` | test(security): mark two made-up fixture values for the secret scan |
+| `6f190d1` | perf(threatintel): send saved indicators one page at a time |
+| `0dd3dc0` | build(deps): update the test-only pulldown-cmark to 0.13.6 |
+| `d21c76e` | fix(security): store and delete TAXII credentials one change at a time |
+| `5810c2e` | docs(mission): report mission 7 and add the release-readiness checklist |
+| `fb1f323` | fix(security): ask before opening a terminal or starting a GUI tool |
+| `d3c654f` | fix(security): ask before reopening a completed or archived project |
+| `8fe5ab5` | fix(security): paste words with a quote whole into PowerShell |
+| `af88c00` | ci(release): check the tag names the built commit, and validate the workflows statically |
+| `0db2dc4` | docs(release): bring the 0.1.0 release notes up to date |
+| `cc3d3ca` | docs(release): add the M1-M10 procedures and update the readiness checklist |
 
 ## Next action
+
+**After Mission 8 (2026-11-11), the owner decides:**
+1. Review the work (MISSION_REPORT.md, "Mission 8"):
+   * two accepted risks fixed, one narrowed;
+   * the release workflow checks that its tag names the built commit;
+   * the release procedures are in `docs/release/`.
+
+   No migration (schema 32), and no dependency was added.
+2. M1: the three manual steps of `docs/release/TAXII_CREDENTIAL_TEST.md`; everything else was automated.
+3. M2–M7: `docs/release/MANUAL_VALIDATION.md`, on real GNOME and KDE sessions and physical HiDPI screens.
+4. M8: create the repository with its settings and push (`docs/release/GITHUB_FIRST_RUN.md`).
+5. M9: set up Authenticode and the `release` environment's secrets (`docs/release/SIGNING_SETUP.md`).
+6. M10: authorize the one release-candidate build and validate its installers (`docs/release/RELEASE_CANDIDATE_PROCEDURE.md`).
+7. Next candidates (FEATURE_BACKLOG.md, "Mission 8"): items 76–79.
 
 **After Mission 7 (2026-11-11), the owner decides:**
 1. Review the work (MISSION_REPORT.md, "Mission 7"). No migration (schema 32). One test-only crate was added (`pulldown-cmark` 0.13.6, a dev-dependency). The TAXII credential entry name changed: credentials stored by earlier development builds have to be stored again.

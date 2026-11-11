@@ -1715,3 +1715,230 @@ See `docs/release/RELEASE_READINESS.md`. Its status column is empty because none
 | Installers | BLOCKED (final stage, authorization) |
 
 The code is ready for a release-candidate build once the owner authorizes one. **The product is not ready for release:** M1–M4 and M7–M10 must pass first.
+
+## Mission 8: release validation and final readiness (2026-11-11)
+
+**Started** at `5810c2e` (2026-11-11T00:04Z), schema 32, clean tree, no remote, no tag. **Ended** at the commit that adds this report. Everything is on `release/v0.1.0`; nothing was pushed or tagged, and no remote was created.
+
+**Not done in this mission, by the brief:**
+
+* no installer, package or release binary was built;
+* nothing was signed, uploaded or published;
+* no signing key, certificate or secret was created, read or used;
+* the real database was never opened. Its modification time is unchanged, 2026-11-05T15:58:24.8534883Z.
+
+**Verdict.** The engineering checks pass on Windows 11, Ubuntu 24.04 and Debian 12. Mission 8 fixed two accepted risks, narrowed a third, and closed a release-workflow gap. **Cyber Hub is not release-ready:**
+
+* M1 is partial (typing into Windows' credential dialog needs a person);
+* M2–M4 and M6–M10 are blocked on the owner: a real desktop, a HiDPI screen, a push, signing keys, an authorization;
+* M5 is partial (a real window on Windows at 100 % only).
+
+### 1. Starting and ending commits
+
+* Start: `5810c2e` (Mission 7's report).
+* Last code commit: `af88c00`. The commits after it change documentation only.
+* End: the commit that adds this report.
+
+### 2. Commits
+
+| Commit | Kind | Change |
+|---|---|---|
+| `fb1f323` | fix(security) | A terminal and a GUI tool from the catalog start only after a native dialog (accepted risk 1, fixed) |
+| `d3c654f` | fix(security) | Reopening a completed or archived project asks natively; compare-and-set save (accepted risk 2, fixed) |
+| `8fe5ab5` | fix(security) | A copied word with a quote and nothing else special is double-quoted, exact in PowerShell too (the PowerShell limitation, narrowed) |
+| `af88c00` | ci(release) | The release names the commit it built (two tag checks); static validation of both workflows in `ci_tests.rs` |
+| `0db2dc4` | docs(release) | The 0.1.0 release notes brought up to date: schema 32, the Mission 6 capabilities, the Mission 7 and 8 changes, the audit warnings, the Linux limitation |
+| `cc3d3ca` | docs(release) | `MANUAL_VALIDATION.md`, `GITHUB_FIRST_RUN.md`, `SIGNING_SETUP.md`, `RELEASE_CANDIDATE_PROCEDURE.md`; the readiness checklist with a status for every M item; the TAXII procedure corrected; `SIGNING.md` and `PLATFORMS.md` |
+| (this commit) | docs(mission) | This report and the tracking files |
+
+### 3. M1–M10
+
+| # | Item | Status | Evidence or reason |
+|---|---|---|---|
+| M1 | TAXII credentials in Windows' credential dialog | **PARTIAL** | Everything but the dialog, on Windows 11 with the real Credential Manager: 16/16. Steps 2, 3 and 9 need a person (`TAXII_CREDENTIAL_TEST.md`) |
+| M2 | Full GNOME Shell session | **BLOCKED** | No GNOME session available. Mutter in a container passes 5/5 (Mission 6), which is a substitute, not this test |
+| M3 | Full KDE Plasma session | **BLOCKED** | No Plasma session available. KWin 5/5 and KWin with XWayland 7/7 in containers |
+| M4 | Physical HiDPI | **BLOCKED** | This machine's screens are at 100 %, and changing your display scale is your decision; emulated and virtual scaling pass |
+| M5 | Minimum window on a real screen | **PARTIAL** | Windows: a real window at 800 × 480 on a physical 1920 × 1080 screen at 100 %, 37/37 (every page, project tab and the finding form). Not on HiDPI or Linux; does not block |
+| M6 | Desktop portals | **BLOCKED** | Needs the M2 and M3 sessions. The file dialog is `GtkFileChooserNative`, which uses the portal only with `GTK_USE_PORTAL=1` or in a sandbox; does not block unsandboxed packages |
+| M7 | A real login keyring | **BLOCKED** | Needs a login session. GNOME Keyring unlocked by a script passes 16/16 in containers |
+| M8 | First GitHub Actions run | **BLOCKED** | Needs your push. The static review and guards pass (section 5) |
+| M9 | Code signing | **BLOCKED** | Your certificate and keys. The setup is documented (section 6) |
+| M10 | Installers | **BLOCKED** | Your authorization. The procedure is documented (`RELEASE_CANDIDATE_PROCEDURE.md`) |
+
+The procedures are in `docs/release/`:
+
+* `MANUAL_VALIDATION.md` (M1–M7): each item's environment, steps, expected results, evidence and pass criteria;
+* `GITHUB_FIRST_RUN.md` (M8);
+* `SIGNING_SETUP.md` (M9);
+* `RELEASE_CANDIDATE_PROCEDURE.md` (M10).
+
+### 4. Security findings and accepted risks
+
+| Risk (SECURITY.md) | Verified | Reproduced | Impact, exploitability | Outcome |
+|---|---|---|---|---|
+| GUI tools and a terminal start without a native dialog | Yes: the inventory of every `Command::new` found only these, plus version probes | Guard test against the earlier code | A compromised page could start GUI tools (a proxy listener, a vendor's update or licence check) or open terminals, without passing them anything. Low | **Fixed** (`fb1f323`). Checked live on Windows: the terminal declined (no terminal opened); a stand-in GUI tool declined, then approved. On Linux, the GTK dialogs: 6/6 on Debian and 6/6 on Ubuntu |
+| Version probes start without a dialog | Yes | n/a | They run detected catalog tools with fixed flags; a page can trigger them but not choose the program or the arguments. The ProjectDiscovery tools pass `-duc`, so nothing is contacted | **Still accepted**, with that rationale recorded and the flag kept by a test |
+| A compromised page reopens an ended project | Yes | **Live on the earlier build:** archived → active through IPC in 2 ms, no dialog | Reopened, its scope is usable by the HTTP request builder and TLS analyzer without a dialog per request, and by MCP clients. Low to medium; needs a compromised page | **Fixed** (`d3c654f`): a native dialog naming the project and what becomes usable, and a compare-and-set save. Live: declined (stays archived) and approved. On Linux, the same GTK dialog checks |
+| Copied commands in PowerShell | Yes | In real shells: Windows PowerShell 5.1 passing to a native program, and bash with history expansion | A word with a quote arrived split; pasting never ran another command. Low (correctness) | **Narrowed** (`8fe5ab5`). A word with a quote and none of `$`, a backtick, `"`, `\`, `!` is double-quoted and arrives whole in both shells. The rest is still accepted: exact copies for every word need the argument list stored (a schema change, deferred as backlog item 76) |
+
+**The release workflow:** a tag moved during a run could put the release on another commit than its binaries. Severity Low: it needs write access to the repository and a mistimed or malicious move. **Fixed** in `af88c00`, with two tag checks, tested against a stubbed `gh`.
+
+No new product vulnerability was found. The other accepted risks in SECURITY.md are unchanged.
+
+### 5. The GitHub workflows
+
+* **Pins.** Every action is pinned to the commit of the upstream tag its comment names (`git ls-remote`); `dtolnay/rust-toolchain` is the head of its `stable` branch.
+* **Downloads.** The gitleaks and actionlint sums equal the published checksum files. The Debian image digest is an official Rust 1.99.1 bookworm image from 2026-10-28; its tag has been rebuilt since, which the pin deliberately ignores.
+* **Toolchains.** Exact versions throughout. The runner images and the Ubuntu packages float, which hosted runners cannot avoid.
+* **Permissions.** Read-only for CI; nothing at the top of the release workflow, and `contents: write` only for `publish`.
+* **Pull requests.** No `pull_request_target`; CI reads no secret; the release has no pull-request trigger.
+* **Publishing.** It needs a manual run, the `RELEASE_PUBLISHING` variable, the environment's reviewers, and for a public release *draft* unchecked with the tag typed again. A tag push validates only; pre-release tags are refused.
+* **Separation.** The verification and release workflows are separate. CI never builds packages and never touches user data: tests use in-memory databases and temporary folders, and the only resolution of the real data folder needs a running app.
+* **actionlint did not run.** It is not installed, and its container was not permitted in Mission 7. In its place: static guards in `ci_tests.rs` (5 tests, one of them Linux-only), all 43 scripts through `bash -n`, and a local test of the tag check. CI runs actionlint on the first push.
+* **The release build's Linux image**, Ubuntu 22.04: `cargo check --locked --release --bins` passed. It was a type-check; nothing was built.
+* **Corrections.** The checklist's advice to push an `-rc` tag was wrong, since the workflow refuses pre-release tags. `GITHUB_FIRST_RUN.md` gives the correct sequence.
+
+### 6. Signing
+
+* **Update signatures** (minisign, Ed25519, version-bound) are configured in the build job. The public key `957F3F7D955C72FA` is compiled in, and the private key exists on the owner's computer; it was not opened in this mission.
+* **Authenticode is not configured:** `bundle.windows` is unset, and no certificate exists. It covers `cyber-hub.exe`, `cyberhub-mcp.exe`, the NSIS installer and the MSI.
+* **SIGNING.md** wrongly called the sidecar an `externalBin`. Corrected: it is a second binary of the crate, and whether Tauri signs it must be verified on the first signed build.
+* **Linux packages** carry no package signature; `SHA256SUMS.txt`, GitHub's digests and the update signatures cover them.
+* **The verification commands** were checked here. On a signed third-party binary: `Valid`, with an RFC 3161 timestamp. On the development build: `NotSigned`.
+* **`SIGNING_SETUP.md`** covers:
+  * formats and tools, secret names and formats;
+  * certificate routes (hardware-backed keys; at most 460 days);
+  * how development and release builds differ, how failures stop a release;
+  * the CI step to add, independent verification, rotation and expiry.
+
+### 7. Cross-platform regression (at `af88c00`)
+
+| Environment | tsc | Frontend tests | clippy | cargo test | ignored | MSRV 1.90 | npm audit |
+|---|---|---|---|---|---|---|---|
+| Windows 11 Pro 10.0.26200, rustc 1.94.1, Node 24.19.0 | OK | 303 in 55 files | OK | 637 passed | 28 | (Linux) | 0 |
+| Ubuntu 24.04.5, rustc 1.99.1, Node 22.12.0, WebKitGTK 2.52.6 (container) | OK | 55 files | OK | 637 passed | 28 | OK | 0 |
+| Debian 12, rustc 1.99.1, Node 22.12.0, WebKitGTK 2.50.6 (container) | OK | 55 files | OK | 637 passed | 28 | OK | 0 |
+
+**GUI and end-to-end** (the real app, debug builds, disposable data, no network on Linux):
+
+| Phase | Windows | Ubuntu | Debian |
+|---|---|---|---|
+| End-to-end script (WSTG exception, EVTX chains and logons through the native Open dialog, ATT&CK Mobile and ICS with a layer saved through the native Save dialog, a Prowler import) | 23/23 | | |
+| Mission 8 dialogs (terminal, GUI tool, reopen) | live (section 4) | 6/6 | 6/6 |
+| TAXII credential lifecycle | 16/16 (all but the dialog) | 16/16 | 16/16 |
+| Mission 7 dialogs, minimum window, HiDPI | | 7/7, 3/3, 5/5 | 7/7, 3/3, 5/5 |
+| Start with a newer database | | PASS | PASS |
+| Mission 6 main | | 11/11 | 11/11 |
+| Segment 3 (scope, imports, findings, workflows, MCP, backup, restore and restart, SIGKILL recovery) | | 63/63, 6/6, 3/3 | 63/63, 6/6, 3/3 |
+| Compositors (KWin with XWayland, Mutter, KWin) | | 7/7, 5/5, 5/5 | |
+| A server removed 10–405 ms after Store, 17 times | | none left behind | none left behind |
+
+**Commands:**
+
+* Windows: `npx tsc -b --noEmit`, `npx vitest run`, `cargo clippy --offline --all-targets -- -D warnings`, `cargo test --offline`, `cargo audit`, `npm audit`.
+* Linux: the same with `--locked`, run from a copy of the tree in the containers, and `cargo +1.90.0 check --locked --all-targets`.
+
+**The 28 ignored tests** are the same as in Mission 7: 10 timing and volume, 10 amplification, and 8 that need samples kept outside the repository.
+
+**Other checks:**
+
+* **Malformed input** is in the default suites (`hostile_tests.rs` and the parser regressions).
+* **MCP:** the suites, segment 3 on Linux, and three read tools through the real sidecar on Windows.
+
+**Unexpected failures, investigated:**
+
+* The first M1 run on Windows passed 13 of 16.
+  * Step 6 expected 3 saved indicators. The product saves only public ones and skipped the documentation address, so the procedure was wrong; it is corrected.
+  * Step 17 depended on step 6.
+  * Step 10's MCP criterion was the harness's own error.
+
+  The rerun on a new data folder passed 16/16.
+* Two harness errors were mine and were corrected before any conclusion:
+  * the tag check's `gh` stub dispatched on the wrong argument;
+  * a test compared JSON keys in written order, though serde sorts them.
+
+### 8. Dependency audits and secret scan
+
+* **cargo audit 0.22.2:** 0 vulnerabilities in 652 crates. 8 allowed warnings: 7 unmaintained (`proc-macro-error`, and two versions each of `zbus_names`, `zvariant`, `zvariant_derive`) and 1 unsound (`glib` 0.18.5), all transitive through Tauri's Linux stack. The release notes had called these "seven unmaintained crates"; corrected.
+* **npm audit:** 0, on Windows and both distributions.
+* **gitleaks 8.30.1:** no leaks in the whole history (190 commits, up to `cc3d3ca`), nor in the documents this report commit adds.
+
+### 9. Migrations and recovery
+
+* **Every earlier schema** upgrades to 32 with all rows and a backup first, failed and interrupted upgrades are rolled back, and a killed upgrade recovers. The tests in the suites pass on all three systems.
+* **A database from a newer version** is refused with a native message, and the file is unchanged: Linux GTK on both distributions in this mission; Windows live in Mission 7, with no change to that code since.
+* **Backup and restore with a restart:** segment 3 on both distributions. A backup was also made through the native dialog on Windows during M1.
+* No migration was added (schema 32).
+* **The upgrade from the earlier builds** (`d1cf064` at schema 8, and later development schemas) is part of M10, on a copy.
+
+### 10. Manual tasks left for the owner
+
+1. **M1:** steps 2, 3 and 9 of `docs/release/TAXII_CREDENTIAL_TEST.md` on Windows 11. The whole procedure takes about 45 minutes, in an account without your own TAXII credentials.
+2. **M2, M3, M6, M7:** `docs/release/MANUAL_VALIDATION.md` on Ubuntu 24.04 GNOME and on Kubuntu 24.04 or Debian 12 KDE (hardware or VMs), with the release-candidate packages.
+3. **M4, M5:** physical HiDPI at 100–200 % on Windows and Linux, and the minimum window.
+4. **M8:** create the repository and its settings, push, and check CI (`GITHUB_FIRST_RUN.md`).
+5. **M9:** choose the Authenticode route, obtain the certificate, set up the `release` environment and its secrets, and add the release-only signing configuration with its verification step (`SIGNING_SETUP.md`).
+6. **M10:** authorize and start the one build, then test installation, upgrade on a copy, backup and restore, uninstall, Defender and SmartScreen; publish only after that (`RELEASE_CANDIDATE_PROCEDURE.md`).
+
+### 11. Commands the owner will need
+
+* **First push:**
+
+  ```bash
+  git remote add origin https://github.com/<owner>/<repo>.git
+  git push -u origin release/v0.1.0
+  ```
+* **The tag, on the reviewed release-candidate commit:**
+
+  ```bash
+  git tag -a v0.1.0 -m "Cyber Hub 0.1.0" <commit>
+  git rev-parse "v0.1.0^{commit}"
+  git push origin v0.1.0
+  ```
+* **The update secrets**, without printing them: UPDATER.md, "Release secrets" (`gh secret set … --env release`).
+* **Verification:**
+
+  ```bash
+  sha256sum -c SHA256SUMS.txt
+  signtool verify /pa /all /v <file>
+  Get-AuthenticodeSignature <file>
+  node scripts/updater-manifest.mjs validate --manifest latest.json --assets <dir> --require windows-x86_64-nsis,windows-x86_64-msi,linux-x86_64-appimage,linux-x86_64-deb,linux-x86_64-rpm
+  ```
+* **Rollback before publishing:**
+
+  ```bash
+  git push --delete origin v0.1.0
+  git tag -d v0.1.0
+  ```
+
+  Then delete the draft release.
+* **After publishing, a bad release:** `gh release edit v0.1.0 --draft=true`, then fix forward with 0.1.1.
+
+### 12. Actions that need your explicit authorization
+
+1. Creating the GitHub repository, adding the remote, and pushing a branch.
+2. Creating and pushing the tag `v0.1.0`.
+3. Adding signing secrets and certificates, and the signing configuration.
+4. Setting `RELEASE_PUBLISHING` to `enabled`.
+5. Starting the release run and approving its deployments; this builds and signs the installers once.
+6. Publishing the draft release.
+7. Changing your display scaling, using your VMs or accounts for desktop tests, or installing the release candidate where your real data is.
+
+### 13. Engineering readiness
+
+| Requirement | Status |
+|---|---|
+| Automated tests, typecheck and lints on the three systems | PASS |
+| MSRV 1.90 | PASS |
+| Dependency audits and secret scan | PASS |
+| Security: accepted risks reviewed, two fixed, one narrowed | PASS (code) |
+| Release workflow: static review, tag integrity, guards | PASS (static); first run BLOCKED |
+| The release build's Linux environment | PARTIAL (type-checked only) |
+| Database upgrades, recovery, newer databases, backup and restore | PASS |
+| TAXII on Windows | PARTIAL (dialog steps manual) |
+| High-DPI, minimum window, Linux desktops, portals, keyring | PARTIAL (substitutes) / BLOCKED (real environments) |
+| Code signing | BLOCKED |
+| Installers | BLOCKED |
+
+**The code is ready for the owner to push, set up signing and authorize one release-candidate build. Cyber Hub is not ready for release:** M1–M4 and M7–M10 must pass first, and the first GitHub run has not happened.

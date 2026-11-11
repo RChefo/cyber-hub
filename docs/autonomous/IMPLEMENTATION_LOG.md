@@ -1276,3 +1276,83 @@ The owner's brief asked for research-driven new capabilities in seven tracks (we
 * **At `d21c76e`:**
   * Windows: 633 Rust tests pass; the Windows end-to-end script 23 of 23; the TAXII commands smoke-tested through IPC.
   * Ubuntu and Debian: every phase passed: 632 Rust tests, MSRV 1.90, the newer-database start, the Mission 7 and Mission 6 GUI phases, segment 3, and on Ubuntu the compositors. 17 removals from 10 to 405 ms after Store left nothing behind on each.
+
+## Mission 8 (2026-11-11T00:04Z): release validation and final readiness
+
+## From 00:04Z: state, documents and environments
+
+* **State.** `release/v0.1.0` at `5810c2e`, clean, no remote, no upstream, no tag, schema 32.
+* **Read:**
+  * the Mission 7 report, the release-readiness checklist and SECURITY.md in full;
+  * the tracking files. MISSION_STATE's known failures and commit table had stopped at Mission 6.
+* **Environments**, all checked read-only:
+  * two physical screens, both at 100 %;
+  * the VirtualBox VMs are Kali Linux and an inaccessible entry;
+  * WSL holds Kali Linux and Docker's own distribution;
+  * no GNOME or KDE session, no actionlint, zizmor or shellcheck; the Windows SDK's `signtool` is present.
+* **The workflows.**
+  * Every pinned action resolves to the upstream tag its comment names (`git ls-remote`, read-only); `dtolnay/rust-toolchain` is the head of its `stable` branch.
+  * The gitleaks and actionlint checksums equal the published ones.
+  * The Debian image digest is an official Rust 1.99.1 bookworm image.
+  * The release workflow accepts only stable tags, so the checklist's advice to push an `-rc` tag was wrong.
+* **Configuration.**
+  * `bundle.windows` is unset: no Authenticode.
+  * The sidecar is a crate binary, not an `externalBin` as SIGNING.md said.
+  * Release and development builds share the identifier `dev.cyberhub.workstation`, and so the data folder.
+  * The release notes still said schema 26.
+
+## Until 00:32Z: the accepted risks (`fb1f323`, `d3c654f`, `8fe5ab5`)
+
+* **Process starts.** The inventory confirmed that only the terminal, GUI tools and version probes started without a dialog.
+  * The terminal and GUI tools now ask natively. Checked live on Windows: the terminal declined; a stand-in GUI tool (`whoami.exe` named `Wireshark.exe`) declined, then approved.
+  * Version probes stay accepted; a test keeps the ProjectDiscovery tools' `-duc`.
+* **Reopening.**
+  * Reproduced on the earlier build: an archived project became active through IPC in 2 ms, without a dialog.
+  * Reopening a completed or archived project now asks natively, and the save is a compare-and-set. Live: declined (stays archived) and approved.
+* **PowerShell quoting.** A word with a quote and nothing else special is double-quoted. Checked in Windows PowerShell 5.1, passing to a native program, and in bash with history expansion: every such word arrives whole; the joined form remains only for a quote with `$`, a backtick, `"`, `\` or `!`.
+* Each new guard test fails on the earlier code.
+
+## 00:32–00:44Z: the release workflow (`af88c00`, 00:38Z) and its build environment (00:40–00:44Z)
+
+* **Tag integrity.** The publish job checks that the tag still names the built commit, before the draft upload and before publishing. Tested against a stubbed `gh`: lightweight and annotated tags pass, and a moved tag stops both steps.
+* **Static validation in place of actionlint**, in `ci_tests.rs`:
+  * known keys at each level;
+  * every step one action or one script;
+  * expressions that read known contexts only;
+  * bash syntax, on Linux. All 43 scripts also passed `bash -n` on Windows;
+  * CI without secrets or write access;
+  * checkouts without credentials, and checked downloads;
+  * the release's triggers, environments and job order.
+
+  The new guard fails on the previous workflow.
+* **Ubuntu 22.04** (the release build's Linux image): `cargo check --locked --release --bins` passed with the release job's packages, Rust 1.99.1 and Node 22.12.0. No binary was produced.
+
+## 00:44–00:49Z: M1 on Windows
+
+* **The automated run.** `TAXII_CREDENTIAL_TEST.md` ran against the real development build, the local test servers and the real Windows Credential Manager, with `cyberhub-keys taxii-set` in place of typing into the dialog. To make collisions impossible, the server numbers started at 900001, and only the exact entries the tool reported were queried.
+* **First run: 13 of 16.** All three failures were investigated:
+  * Step 6 expected 3 indicators. A synchronization saves only public addresses, so the documentation address `198.51.100.23` is skipped by design. The procedure was wrong; it is corrected.
+  * Step 17 depended on step 6.
+  * Step 10's MCP criterion was the harness's own error: the three calls had succeeded.
+* **Rerun on a new data folder: 16 of 16.**
+  * The leak check covered the data folder, the STIX export, the backup, both reports, diagnostics, activity, the provisioning tool's status, three MCP tools through the real sidecar and the MCP audit log.
+  * No entry was left behind.
+
+## 00:49Z–01:20Z: documents, M5 in a real window, and the final regression
+
+* **M5, partly:**
+  * The application window was resized to 800 × 480 on the physical 1920 × 1080 screen at 100 %.
+  * A variant of the layout probe that measures the real window instead of emulating one passed 37/37: every page, every project tab and the finding form, with screenshots.
+  * Windows lets a program's own `SetWindowPos` go below the minimum, as PLATFORMS.md says; resizing with the mouse is part of the manual test.
+
+* New in `docs/release/`: `MANUAL_VALIDATION.md`, `SIGNING_SETUP.md`, `GITHUB_FIRST_RUN.md` and `RELEASE_CANDIDATE_PROCEDURE.md`.
+* Updated:
+  * `RELEASE_READINESS.md`, with a status for every M item;
+  * `TAXII_CREDENTIAL_TEST.md`: a safety stop when the store holds `taxii_` entries, step 6 corrected, MCP required;
+  * the release notes: schema 32, the Mission 6 capabilities, the Mission 7 and 8 behaviour changes, the audit warnings, the Linux limitation;
+  * `SIGNING.md`, `PLATFORMS.md`, `UPDATER.md` and `SECURITY.md`.
+* **Final regression at `af88c00`:**
+  * **Windows:** tsc; vitest 303 tests in 55 files; clippy; cargo test 637 passed and 28 ignored; cargo audit 0 (652 crates, 8 allowed warnings); npm audit 0; the end-to-end script 23/23.
+  * **Debian 12:** suites (637 passed, 28 ignored), MSRV, the start with a newer database, dialogs 7/7, minimum window 3/3, the new Mission 8 GTK dialogs 6/6, HiDPI 5/5, TAXII 16/16, Mission 6 main 11/11, segment 3 63 + 6 + 3, the removal sweep 0/17.
+  * **Ubuntu 24.04:** the same as Debian, every phase passing, plus the compositors: KWin with XWayland 7/7, Mutter 5/5, KWin 5/5.
+  * **gitleaks:** 190 commits up to `cc3d3ca`, and the documents of the report commit, without leaks.
