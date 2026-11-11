@@ -32,6 +32,7 @@ import type { RecordKind, SearchHit } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { KIND_LABEL, refKey } from "@/modules/projects/investigation";
 import { UTILITIES } from "@/modules/utilities/registry";
+import { rank } from "./paletteRank";
 import { ALL_NAV, type PageId } from "./routes";
 import { useApp } from "./store";
 
@@ -48,23 +49,9 @@ interface ResultItem {
 /** Groups whose subtitles are literal data (commands, queries, URLs, paths). */
 const MONO_GROUPS = new Set(["Commands", "Dorks", "Resources", "Wordlists"]);
 
-const GROUP_ORDER = ["Pages", "Tools", "Projects", "Records", "Commands", "Resources", "Dorks", "Payloads", "Wordlists", "Utilities"];
-
 /** Project records found by the backend (techniques have no project and are left out here). */
 const RECORD_KINDS: RecordKind[] = ["finding", "asset", "vulnerability", "evidence", "osint_entity", "execution", "api_endpoint", "sbom_component"];
 const RECORD_ICON: Partial<Record<RecordKind, LucideIcon>> = { finding: Bug, asset: Server, vulnerability: ShieldAlert, evidence: FileArchive, osint_entity: Network, execution: SquareTerminal, api_endpoint: Route, sbom_component: Package };
-
-function score(item: ResultItem, terms: string[]): number {
-  let s = 0;
-  const title = item.title.toLowerCase();
-  for (const t of terms) {
-    if (title.startsWith(t)) s += 6;
-    else if (title.includes(t)) s += 4;
-    else if (item.haystack.includes(t)) s += 1;
-    else return 0;
-  }
-  return s;
-}
 
 export function CommandPalette() {
   const { paletteOpen, setPaletteOpen, navigate, catalog, runtime } = useApp();
@@ -139,39 +126,26 @@ export function CommandPalette() {
   }, [catalog, projects.data, savedCommands.data, savedDorks.data, customPayloads.data, wordlists.data, customResources.data]);
 
   const results = useMemo(() => {
-    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-    if (!terms.length) return items.filter((i) => i.group === "Pages");
-    const scored = items
-      .map((i) => ({ i, s: score(i, terms) }))
-      .filter((x) => x.s > 0)
-      .sort((a, b) => b.s - a.s);
-    const perGroup = new Map<string, ResultItem[]>();
-    for (const { i } of scored) {
-      const g = perGroup.get(i.group) ?? [];
-      if (g.length < 6) g.push(i);
-      perGroup.set(i.group, g);
-    }
-    perGroup.set(
-      "Records",
-      records.filter((h) => h.projectId != null).slice(0, 8).map((h) => {
-        const pid = String(h.projectId);
-        const params: Record<string, string> = h.node.ref.kind === "finding" ? { project: pid, tab: "findings", finding: String(h.node.ref.id) } : { project: pid, tab: "investigation", record: refKey(h.node.ref) };
-        return {
-          key: `rec:${h.node.key}`,
-          group: "Records",
-          icon: RECORD_ICON[h.node.ref.kind] ?? Search,
-          title: h.node.label,
-          subtitle: [`${KIND_LABEL[h.node.ref.kind]} in ${h.project}`, h.node.detail].filter(Boolean).join(" · "),
-          haystack: "",
-          run: () => {
-            // the time makes a second jump to the same record apply again
-            navigate("projects", { ...params, at: String(Date.now()) });
-            close();
-          },
-        };
-      }),
-    );
-    return GROUP_ORDER.flatMap((g) => perGroup.get(g) ?? []);
+    if (!query.trim()) return items.filter((i) => i.group === "Pages");
+    // records were matched by the backend's text search: ranked like a title that contains the query
+    const found: ResultItem[] = records.filter((h) => h.projectId != null).slice(0, 8).map((h) => {
+      const pid = String(h.projectId);
+      const params: Record<string, string> = h.node.ref.kind === "finding" ? { project: pid, tab: "findings", finding: String(h.node.ref.id) } : { project: pid, tab: "investigation", record: refKey(h.node.ref) };
+      return {
+        key: `rec:${h.node.key}`,
+        group: "Records",
+        icon: RECORD_ICON[h.node.ref.kind] ?? Search,
+        title: h.node.label,
+        subtitle: [`${KIND_LABEL[h.node.ref.kind]} in ${h.project}`, h.node.detail].filter(Boolean).join(" · "),
+        haystack: "",
+        run: () => {
+          // the time makes a second jump to the same record apply again
+          navigate("projects", { ...params, at: String(Date.now()) });
+          close();
+        },
+      };
+    });
+    return rank(items, query, [{ group: "Records", items: found, score: 4 }]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, query, records]);
 
