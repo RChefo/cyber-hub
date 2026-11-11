@@ -1,6 +1,6 @@
 # Manual validation: M1–M7
 
-These are the release-candidate checks that need a person, real hardware or a real desktop session. Mission 8 prepared them. **None has been performed.** Record each result in `RELEASE_READINESS.md` (manual checklist) with its evidence.
+These are the release-candidate checks that need a person, real hardware or a real desktop session. Mission 8 prepared them. **Mission 9 ran M2, M3, M6 and M7 in real GNOME and Plasma sessions of disposable VMs, with the development build** (results below, in *Mission 9: real desktop sessions*). What remains is in that section and in `RELEASE_READINESS.md`. Record each result in `RELEASE_READINESS.md` (manual checklist) with its evidence.
 
 What was verified without a person, and where, is listed under *Already verified automatically* for each item. A container or an emulator is never counted as the real environment: a check run there is PARTIAL at most.
 
@@ -34,7 +34,7 @@ Create a project named `RC validation`, with these scope entries:
 * `example.com` and `*.example.com` (public: no dialog);
 * `192.0.2.0/24` (documentation space, which Cyber Hub treats as non-public: adding it shows a native dialog).
 
-For the import checks, save this as `rc-nmap.xml`. It names only a documentation address:
+For the import checks, save this as `rc-nmap.xml`. It names only a documentation address. The `<runstats>` element marks a finished scan; without it the preview warns that the scan did not finish (the Mission 8 version of this file lacked it, Mission 9 corrected it):
 
 ```xml
 <?xml version="1.0"?>
@@ -42,6 +42,7 @@ For the import checks, save this as `rc-nmap.xml`. It names only a documentation
   <host><status state="up"/><address addr="192.0.2.10" addrtype="ipv4"/>
     <ports><port protocol="tcp" portid="443"><state state="open"/><service name="https" product="nginx" version="1.24.0"/></port></ports>
   </host>
+  <runstats><finished time="1700000060" exit="success"/><hosts up="1" down="0" total="1"/></runstats>
 </nmaprun>
 ```
 
@@ -93,7 +94,7 @@ In the Wayland session, also run the app once through **XWayland**: `GDK_BACKEND
 | 4 | Add the scope entry `192.0.2.0/24`. When the native dialog appears, press Enter at once | The dialog belongs to the Cyber Hub window, above it. Enter at once **cancels** (Cancel is the default), and the entry is not added |
 | 5 | Add it again; wait one second, then click the approving button | The approving button works only after about a second; the entry is added |
 | 6 | Click the terminal button in the top bar, then **Cancel**; click it again and approve | First nothing opens. Then a terminal opens in your home folder, empty |
-| 7 | *Projects → RC validation → Findings → Import results*, then choose `rc-nmap.xml` in the file dialog | The file dialog opens, the preview names `192.0.2.10:443`, and the import commits |
+| 7 | *Projects → RC validation → Findings → Import results → Choose file*, then choose `rc-nmap.xml` in the file dialog | The file dialog opens. The preview shows *Nmap* (Nmap XML), 0 findings and 3 assets (the host, its service and the software), with no warning: an open port alone is not a finding. *Import* commits it |
 | 8 | *Report*: *Save as HTML…*, then *Save as Markdown…* | The save dialog proposes a file name; both files are written and open in a browser or editor |
 | 9 | *Settings → Local data → Back up*, saving to your home folder; then *Restore* from that file and accept the restart | Both dialogs work. After the restart the restore notice appears, and the project, the finding and the scope are still there |
 | 10 | Maximize, restore and minimize; drag the window to the second screen if there is one; try to drag it smaller than 800 × 480 | Every control works. The window stops shrinking at the minimum size (800 × 480 logical pixels) |
@@ -292,6 +293,84 @@ Use the M2 and M3 sessions.
 
 * GNOME Keyring in containers, unlocked by a script, not by a login, on Ubuntu 24.04 and Debian 12: store, rotate, cancel, forget, deletion on every change, no copy on disk, 16/16;
 * the Mission 7 race fix, with 0 of 17 removals right after Store leaving a credential behind.
+
+## Mission 9: real desktop sessions (2026-11-11)
+
+**Environments.** Disposable VirtualBox 7.2.6 VMs on the owner's Windows 11 machine, created for the test and NAT-only:
+* **Ubuntu 24.04.5** (kernel 6.8): GNOME Shell 46.0, GDM 46.2. Three sessions: *Ubuntu* (Wayland), *Ubuntu on Xorg*, and XWayland (`GDK_BACKEND=x11` in the Wayland session).
+* **Debian 12.**
+  * Desktop: KDE Plasma 5.27.5, KWin 5.27.5, SDDM.
+  * Sessions: *Plasma (Wayland)*, *Plasma (X11)*, and XWayland.
+  * Credential stores: GNOME Keyring 42.1 provides the Secret Service; KWallet 5 is installed beside it.
+
+Each session started with a password login at GDM or SDDM, typed on the VM's virtual keyboard, so PAM unlocked the login keyring as it does for a person. Screens are 1280 × 800 at 100 %; rendering is in software (no 3D acceleration).
+
+**Build.** The development build (debug profile, frontend embedded) of the fixed code, built in the Ubuntu 24.04 and Debian 12 images. It is the same code as the release candidate, **but not its packages**. Not covered yet:
+* the deb, AppImage and rpm themselves;
+* the desktop entry and the app-grid launcher;
+* `/usr/bin` paths;
+* the data folder of an installed copy.
+
+Those wait for the candidate (`RELEASE_CANDIDATE_PROCEDURE.md`).
+
+**How it was driven.**
+* **The page:** through WebDriver (`tauri-driver` with WebKitWebDriver).
+* **Native GTK dialogs:** read and answered through AT-SPI, which works on Wayland and X11 alike.
+* **Real key presses:** on the VM's virtual keyboard: Return at once on a confirmation, Ctrl+L and typed paths in file choosers, Alt+F4, the login password.
+* **Screenshots:** full-screen, from VirtualBox. MISSION_REPORT.md, "Mission 9", says where the screenshots and logs are kept.
+* **Limitations:** KDE's portal dialogs are Qt windows, which AT-SPI did not list, so they were typed into blind and judged by screenshots and results. GNOME's portal chooser (GTK 4) completes paths inline while keys arrive, so on Xorg its path was set through AT-SPI.
+
+| Item | Result | Evidence folder |
+|---|---|---|
+| M2: GNOME | **PASS.** Wayland: all 12 steps. Xorg: steps 1–8, the backup of step 9, 10 and 12. XWayland: steps 1–6, 10 and 12. Details below the table | `M2-gnome-wayland*`, `M2-gnome-xorg`, `M2-gnome-xwayland` |
+| M3: Plasma | **PASS** for M2's steps 1–6, 10 and 12 in Plasma Wayland, X11 and XWayland. In Wayland also the import, both reports and the backup (7, 8, 9's backup), and step 11. Details below the table. **Credentials:** see M7 | `M3-kde-*` |
+| M6: portals | **PASS.** Details below the table | `M6-*` |
+| M7: login keyring, GNOME | **PASS** for steps 1–7 in the Wayland session. Details below the table | `M7-gnome-wayland*` |
+| M7: Plasma | **Not usable in this Debian configuration.** Details below the table. KWallet as the Secret Service was not tried: it needs KWallet's interactive first-run setup. **Open** | `M3-kde-wayland` |
+| M4, M5 | Not tested again: physical HiDPI screens were not available | |
+
+**M2 in GNOME** (every step in Wayland; the subsets above in Xorg and XWayland):
+* **Window:** the first window fills GNOME's work area beside the dock (1214 × 768 of 1280 × 800); Mutter enlarges windows that nearly fill it. The data folder is `700`.
+* **Pages:** all 17 pages and 19 project tabs render without an error.
+* **Keyboard:** Ctrl+K "RC" + Return opens the project, after the palette fix of Mission 9.
+* **Confirmations:** a real Return at once cancels (Cancel is the default and has the focus), a click in the first second does nothing, and approving after the delay adds the scope entry.
+* **Terminal:** it asks first; approving opens gnome-terminal.
+* **Files:** the GTK file chooser imports, both reports save, and the backup saves.
+* **Restore:** chosen, checked and applied. Cyber Hub restarts itself into the restored database ("Database restored" in the activity) and keeps the previous one in `backups/before-restore-<time>/`.
+* **Window controls:** maximize, restore and minimize work; the minimum is 800 × 480 and the page fits.
+* **Log-out:** logging out with Cyber Hub open leaves no process, and the data is there after logging in again.
+* **Closing:** Alt+F4 ends the process in about 0.5 s.
+
+**M3 in Plasma:**
+* **Window:** the first window is exactly 94 % of the work area (1203 × 752), as specified.
+* **Confirmations:** the dialogs have KWin's title bar.
+* **Terminal:** it opens Konsole in the home folder (`x-terminal-emulator`).
+* **XWayland:** it ran under the real KWin with no crash: the Mission 6 container crash does not occur here.
+* **Log-out:** logging out with Cyber Hub open leaves no process, and the data is kept.
+
+**M6 (portals):**
+* **With `GTK_USE_PORTAL=1`:** one Open and one Save each reached `org.freedesktop.portal.FileChooser` (`OpenFile`, `SaveFile`, recorded with `dbus-monitor`). They went to the desktop's own chooser: GNOME's GTK 4 chooser in Wayland and Xorg, and KDE's "… — Portal" dialog in Plasma Wayland. The files were read and written.
+* **Without the variable:** GTK's chooser inside Cyber Hub, and no portal call.
+
+**M7 in GNOME (Wayland session):**
+* **Steps 1–3:** the GTK dialog names the server and host, shows the user name and hides the password. The typed password is stored as one entry, `taxii_1_<16 hex>`.
+* **Step 4:** the credential is still stored after a restart and after logging out and in, with no unlock prompt.
+* **Step 5, unlocking:** with the keyring locked, *Replace* makes GNOME Shell ask "Authentication required" once; after the login password, the replacement is stored.
+* **Step 5, cancelling:** cancelling that prompt gives a clear error ("Secret Service: unlock prompt was dismissed"), nothing is stored, and no prompt follows.
+* **Step 6:** Forget, after the delay, leaves nothing.
+* **Step 7:** removing the server leaves nothing.
+
+**M7 in Plasma (this Debian configuration):** GNOME Keyring lists a `login` collection that it does not serve. `secret-tool store` hangs, and Cyber Hub's Store fails at once, with nothing stored and nothing else affected, with: "Secure storage error: Platform secure storage failure: DBus error: Object does not exist at path “/org/freedesktop/secrets/collection/login”". That is the behaviour step 13 asks for.
+
+**Found and fixed in these sessions (with tests):**
+* the palette ranking (`810e024`);
+* a partial restore copy left in the data folder (`ed99331`);
+* a locked keyring that raised an unlock prompt and held the database while the TAXII list was shown, and then showed a stored credential as missing (`63d2cd6`).
+
+**Not done, and why:**
+* **M1:** the Windows 11 VM's setup hung under VirtualBox with Hyper-V active: no disk write after 20:23Z, a black screen.
+* **M4:** no physical HiDPI screen.
+* **Packaging checks:** need the release candidate, which needs the update-signing secrets.
 
 ## Results
 

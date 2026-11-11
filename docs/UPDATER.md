@@ -94,21 +94,25 @@ npx tauri signer generate -w ~/.cyberhub/updater-signing/cyberhub-updater.key
 
 ### Release secrets
 
-The release workflow reads two secrets, which should be stored in a GitHub **environment** named `release` (not as repository secrets), with required reviewers:
+The release workflow reads two secrets, which should be stored in a GitHub **environment** named `release` (not as repository secrets), with required reviewers where the plan offers them. The environment of `RChefo/cyber-hub` exists since Mission 9 (branch policy `main` and `release/*`, no administrator bypass); its two secrets are not set yet, because storing them is the owner's step:
 
 | Secret | Value |
 |---|---|
 | `TAURI_SIGNING_PRIVATE_KEY` | the content of `cyberhub-updater.key` |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | its password |
 
-Set them from the owner's machine without displaying them (PowerShell, after `gh auth login` and creating the `release` environment):
+Set them from the owner's machine without displaying them (PowerShell, after `gh auth login` and creating the `release` environment). PowerShell has no `<` redirection, so the key file goes through `cmd`, which passes its bytes unchanged (the file is one line without a newline). The password goes from Credential Manager into `gh`'s standard input without a trailing newline:
 
 ```powershell
-gh secret set TAURI_SIGNING_PRIVATE_KEY --env release --repo <owner>/<repo> < "$env:USERPROFILE\.cyberhub\updater-signing\cyberhub-updater.key"
+cmd /c "gh secret set TAURI_SIGNING_PRIVATE_KEY --env release --repo <owner>/<repo> < ""%USERPROFILE%\.cyberhub\updater-signing\cyberhub-updater.key"""
 [void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime]
 $c = (New-Object Windows.Security.Credentials.PasswordVault).Retrieve('CyberHub.UpdaterSigning','TAURI_SIGNING_PRIVATE_KEY_PASSWORD'); $c.RetrievePassword()
-$c.Password | gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --env release --repo <owner>/<repo>
+$psi = New-Object System.Diagnostics.ProcessStartInfo -Property @{ FileName = (Get-Command gh).Source; Arguments = 'secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --env release --repo <owner>/<repo>'; UseShellExecute = $false; RedirectStandardInput = $true }
+$p = [System.Diagnostics.Process]::Start($psi); $p.StandardInput.Write($c.Password); $p.StandardInput.Close(); $p.WaitForExit(); $c = $null
+gh secret list --env release --repo <owner>/<repo>   # lists both names, never a value
 ```
+
+(Mission 9 corrected this snippet: its first line used `<`, which PowerShell rejects, and piping a string to `gh` adds a newline to the password.)
 
 Never paste the key or password into chats, issues, workflow files or logs.
 
@@ -165,7 +169,7 @@ node scripts/updater-manifest.mjs validate --manifest latest.json --assets <fold
 ## Owner setup
 
 1. Push the repository to GitHub (the workflow derives the feed address from the repository it runs in).
-2. Create the environment **release** (Settings → Environments) with required reviewers, and restrict it to tags `v*`.
+2. Create the environment **release** (Settings → Environments), restrict its deployments to the branches release runs start from (`main` and `release/*`, never tags), and turn off the administrator bypass. Add required reviewers if your plan offers them: on GitHub Free a private repository has no required reviewers or wait timers (Mission 9; `docs/release/GITHUB_FIRST_RUN.md`).
 3. Add the two secrets to that environment (see [Release secrets](#release-secrets)).
 4. Back up the private key file and its password offline.
 5. Only when the environment, its reviewers and its secrets are in place, set the repository variable `RELEASE_PUBLISHING` to `enabled` (Settings → Secrets and variables → Actions → Variables). Remove it again to stop all building and publishing.

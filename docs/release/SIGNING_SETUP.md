@@ -2,17 +2,61 @@
 
 This is the owner's guide to the signing Cyber Hub needs before its first release. It is based on the review of the signing architecture in Mission 8. [SIGNING.md](../SIGNING.md) compares the Authenticode certificate routes, and [UPDATER.md](../UPDATER.md) covers the update key.
 
-**Status:**
+**Status (after Mission 9):**
 
-* Update signing is configured in the release workflow, and its key exists on the owner's computer.
-* Authenticode signing is **not configured**, and no certificate exists.
-* The workflow has never run.
+* **Update signing** is configured in the release workflow, and its key exists on the owner's computer.
+  * Mission 9 checked that the public key next to it, `cyberhub-updater.key.pub`, is the one compiled into the app (key ID `957F3F7D955C72FA`).
+  * It checked that the key file is one line with no newline, and that the password's Credential Manager entry exists. Neither value was read or printed.
+* **The `release` environment** of `RChefo/cyber-hub` exists (branches `main` and `release/*`, no administrator bypass), **without secrets**.
+  * Mission 9's attempt to store the key there was refused by the session's permission rules, which do not let the assistant write secrets.
+  * Storing it is the owner's step (section 5, "Commands").
+* **Authenticode signing is not configured, and no certificate exists.**
+  * The certificate stores (current user and machine) hold no certificate with the code-signing usage.
+  * There is no smart-card reader and no signing client.
+  * The recommended route is below.
+* **The release workflow has never run.**
 
-In Mission 8:
+Nothing was signed. No certificate, key or production secret was created.
 
-* no certificate, key or signing secret was created, requested, read or copied;
-* nothing was signed;
-* the update key's file and its Credential Manager entry were not opened.
+## Choosing the Authenticode route (research of 2026-11-11)
+
+Research by web sources, for an individual developer who may live outside the US, Canada, EU and UK. Recheck the prices and terms before buying.
+
+| Option | Who can buy | Price per year (USD, seen 2026-11-11) | Works on GitHub-hosted runners | Notes |
+|---|---|---|---|---|
+| **SSL.com IV (Individual Validation) code signing + eSigner** | Individuals and organizations in most countries; not Cuba, Iran, North Korea, Syria | About $309: certificate $129 + eSigner Tier 1 $180 (240 signings, then $1 each) | Yes: CodeSignTool with a TOTP secret, no hardware | Validation: government ID and a selfie or liveness check, 3–5 days. Timestamp `http://ts.ssl.com` |
+| Sectigo code signing (as an individual, through a reseller) | Individuals and organizations; not Belarus, Cuba, Iran, North Korea, Russia, Syria | About $302 from a reseller, plus about $2.50 a month for a Google Cloud KMS HSM key | Yes, through your own cloud HSM: jsign `GOOGLECLOUD` with GitHub OIDC, no long-lived secret | Video ID and a government ID. Timestamp `http://timestamp.sectigo.com` |
+| Microsoft Artifact Signing | Organizations in 12 regions (US, CA, EU, UK, AU, NZ, JP, KR, SG, CH, NO, IL); individuals only in the US and Canada | $9.99 a month (Basic) | Yes: `azure/artifact-signing-action` | Not available to an individual elsewhere |
+| DigiCert KeyLocker | A validated organization | $696–972 | Yes: DigiCert's action | Organizations only |
+| GlobalSign | Registered organizations only | UNVERIFIED | Through Azure Key Vault | Organizations only |
+| Certum (SimplySign cloud) | Individuals and organizations | Standard €209; the open-source certificate requires a public project | Only through unofficial automation | Not a reliable CI route |
+| SignPath Foundation | Open-source projects with public source | Free | By upload | Not for a private repository |
+
+**Recommendation:** an SSL.com IV certificate with eSigner. It is open to individuals almost everywhere, signs from a GitHub-hosted runner without a USB token, and the vendor supports unattended use. **Fallback:** Sectigo as an individual, with the key in Google Cloud KMS and signing through OIDC.
+
+**Watch the signing quota.** One NSIS + MSI build signs at least 13 files, by a reading of the Tauri bundler's source: the app twice, `cyberhub-mcp.exe`, five NSIS plug-in DLLs, the uninstaller, the setup program, two WiX DLLs and the MSI. eSigner Tier 1 therefore covers about 18 builds a year. Check the count in the first signed build's log.
+
+**Unverified points to check when buying:**
+* whether SSL.com's eSigner enrolment for IV certificates matches its documented EV steps;
+* whether Microsoft currently accepts new individual identities.
+
+The research's sources:
+* SSL.com: `ssl.com/products/software-integrity/code-signing/iv/`, `ssl.com/guide/esigner-pricing-for-code-signing/`, `ssl.com/guide/esigner-codesigntool-command-guide/`.
+* Microsoft: `learn.microsoft.com/en-us/azure/artifact-signing/quickstart`.
+* Sectigo: `sectigo.com/faqs/detail/OV-Code-Signing-Validation-for-Organizations-and-Individuals`.
+* jsign: `ebourg.github.io/jsign/`.
+* Tauri: `v2.tauri.app/distribute/`.
+
+**Purchase and setup (SSL.com IV):**
+1. Buy *IV Code Signing* for one year, with *eSigner Cloud Signing* as the key storage.
+2. Complete the identity validation.
+3. In the order, choose *eSigner Cloud Signing Enrollment* → *OTP APP*, set a PIN, and keep the secret code shown beside the QR code: it is the TOTP secret.
+4. Buy eSigner Tier 1 before the free period ends.
+5. Read the credential ID with `CodeSignTool get_credential_ids`.
+6. Store `ES_USERNAME`, `ES_PASSWORD`, `ES_CREDENTIAL_ID` and `ES_TOTP_SECRET` in the `release` environment.
+7. Add the signing configuration and the verification step of section 6. The `signCommand` must take `%1` as an argument of its own: use the object form `{"cmd": …, "args": […, "%1"]}`, because the file name has a space.
+
+`cyberhub-mcp.exe` should be signed by the bundler with the other crate binaries. The verification step checks it either way.
 
 ## 1. What is signed, and how
 
@@ -83,6 +127,22 @@ All signing material lives only in the `release` environment, never in repositor
 | The vendor's API credentials, such as eSigner's `ES_USERNAME`, `ES_PASSWORD`, `ES_TOTP_SECRET`, `CREDENTIAL_ID` | Environment secrets | As the vendor documents | A cloud HSM other than Azure |
 
 UPDATER.md ("Release secrets") gives the commands that copy the update key and its password into the environment without printing them.
+
+**Commands (for `RChefo/cyber-hub`, in PowerShell on the owner's machine).** Neither value appears on a command line or on the screen. The key file goes through `cmd`'s redirection, which PowerShell lacks; the quoting was tested in Mission 9 on the public key file. The password goes from Credential Manager into `gh`'s standard input without a trailing newline:
+
+```powershell
+cmd /c "gh secret set TAURI_SIGNING_PRIVATE_KEY --env release --repo RChefo/cyber-hub < ""%USERPROFILE%\.cyberhub\updater-signing\cyberhub-updater.key"""
+[void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime]
+$c = (New-Object Windows.Security.Credentials.PasswordVault).Retrieve('CyberHub.UpdaterSigning','TAURI_SIGNING_PRIVATE_KEY_PASSWORD'); $c.RetrievePassword()
+$psi = New-Object System.Diagnostics.ProcessStartInfo -Property @{ FileName = (Get-Command gh).Source; Arguments = 'secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --env release --repo RChefo/cyber-hub'; UseShellExecute = $false; RedirectStandardInput = $true }
+$p = [System.Diagnostics.Process]::Start($psi); $p.StandardInput.Write($c.Password); $p.StandardInput.Close(); $p.WaitForExit(); $c = $null
+gh secret list --env release --repo RChefo/cyber-hub
+```
+
+**Plan caveat.** One source says that on GitHub Free environment secrets work only in public repositories. Yet this private repository accepted the `release` environment, its branch policy and a listing of its secrets.
+* If `gh secret set --env release` is refused, either upgrade to GitHub Pro, or store the two secrets as repository secrets.
+* Repository secrets are readable by any workflow of the repository, but only the owner can push here and `ci.yml` reads no secret. That is a weaker protection: record it if chosen.
+* The first release run shows which applies. If the build job reports "no TAURI_SIGNING_PRIVATE_KEY", the environment secrets did not reach it.
 
 **Storage:**
 

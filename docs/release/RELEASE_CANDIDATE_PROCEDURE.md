@@ -5,6 +5,15 @@ This is how the one release-candidate build is made and validated. Mission 8 pre
 * no installer, package or release binary has been built;
 * nothing has been signed, uploaded or published.
 
+**Mission 9 status.** The owner authorized the candidate build, and the steps up to it are done:
+* the private repository;
+* green CI at `5ad2ad1`;
+* the `release` environment;
+* the upgrade fixtures;
+* the Linux test VMs.
+
+The build itself is not done. Storing the update key in the `release` environment was refused by the assistant session's permission rules, and without that key the build job stops at once by design. The next step is the owner's: `SIGNING_SETUP.md`, section 5, "Commands". After that come sections 1–3 below.
+
 **The build happens only after the owner has reviewed `RELEASE_READINESS.md` and explicitly authorized it.** A checklist in the repository is not that authorization.
 
 ## 0. The authorization boundary
@@ -52,7 +61,7 @@ Each of these is the owner's decision, made separately:
    * *tag* `v0.1.0`;
    * *draft* **checked**;
    * *confirm* empty.
-3. Approve the `release` deployment twice when asked: *Build and sign*, then *Publish*.
+3. Approve the `release` deployment twice when asked: *Build and sign*, then *Publish*. **On GitHub Free there is no approval step:** a private repository's environment cannot have required reviewers (Mission 9). The run goes on by itself, so set `RELEASE_PUBLISHING` only just before this run.
 4. When the run ends, **set `RELEASE_PUBLISHING` back** (delete it, or set it to anything but `enabled`), so no later run can build.
 
 **What the workflow runs:**
@@ -92,9 +101,16 @@ Development builds use the same folder unless told otherwise. **Install the cand
 | Machine | For |
 |---|---|
 | A clean Windows 11 VM or spare computer | First install, MSI, uninstall, SmartScreen and Defender |
-| A second Windows account or VM holding a **copy** of a real database | The upgrade test (section 7) |
+| A second Windows account or VM holding an earlier data folder (section 7) | The upgrade test |
 | Ubuntu 24.04 and Debian 12 desktops (VM or hardware) | deb, AppImage; M2, M3, M6, M7 |
 | Fedora or RHEL (optional) | rpm |
+
+**What Mission 9 found about these machines on the owner's computer:**
+* **Linux.** VirtualBox VMs of Ubuntu 24.04 with GNOME and Debian 12 with Plasma work, under Hyper-V too. Mission 9 kept the two it made, `chqa-noble` and `chqa-deb12` (MISSION_REPORT.md, "Mission 9").
+* **Windows.** A Windows 11 VirtualBox VM did not finish Windows Setup while Hyper-V (WSL 2, Docker) was active. For Windows, use one of these instead:
+  * **Windows Sandbox:** *Turn Windows features on or off → Windows Sandbox*. It needs an administrator and a restart, and is the simplest isolation: a fresh Windows with its own `%APPDATA%`, discarded when closed;
+  * a Hyper-V VM;
+  * a spare computer.
 
 ## 5. Download and verify
 
@@ -143,7 +159,15 @@ There is no earlier *release*. The earlier versions are the development builds o
 
 The candidate upgrades their database to schema 32 at its first start, after writing a backup to `backups/`.
 
-1. On the upgrade machine, with the old build closed, copy a real data folder into the test account's data folder: `cyberhub.db` with its `-wal` and `-shm` files, and `evidence/`. Work only on the copy.
+1. On the upgrade machine, with the old build closed, put an earlier data folder into the test account's data folder: `cyberhub.db` with its `-wal` and `-shm` files, and `evidence/`.
+   * **Preferred: no real data.** Since Mission 9 the test suite writes data folders as earlier builds left them, at schemas 1, 8, 19, 26 and 31, each with a row in every table and a `seeded.tsv` listing them:
+
+     ```bash
+     CYBERHUB_UPGRADE_FIXTURES=/path/to/an/empty/folder cargo test write_upgrade_fixtures
+     ```
+
+     Copy one `schema<N>/cyberhub.db` into the test data folder, and compare its tables with `seeded.tsv` after the upgrade.
+   * A copy of a real data folder is a stronger test. Use it only with the owner's agreement, and only on a disposable machine.
 2. Before the upgrade, record what is there:
 
    ```bash

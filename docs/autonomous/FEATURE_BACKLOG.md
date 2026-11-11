@@ -335,3 +335,35 @@ The brief named release-validation work, not features: the manual tests (M1–M7
 | 77 | The real-window layout probe in the repository | **Done once, outside the repository**: a variant of `scripts/qa/layout-probe.mjs` measured the real window at 800 × 480 on Windows, 37/37. Adding it to `scripts/qa` (an option to skip emulation) is small; M5 does not block |
 | 78 | A portal check in a container (`xdg-desktop-portal` with `GTK_USE_PORTAL=1`) | Would only be a substitute for M6, which does not block unsandboxed packages |
 | 79 | Build provenance attestations for release artifacts (`actions/attest-build-provenance`) | Needs `id-token` and `attestations` permissions and a run on GitHub to test; recommended after the first release |
+
+## Mission 9 (2026-11-11): autonomous end-to-end release execution
+
+The brief authorized the repository, CI, VMs, signing with existing credentials, and the release-candidate build and its tests. No feature was added. Three defects found in real desktop sessions were fixed.
+
+### Status of earlier items
+
+| # | Item | Status |
+|---|---|---|
+| 65 | GNOME Shell and Plasma sessions, portals, a physical HiDPI screen | **Sessions done** in disposable VMs: GNOME 46 and Plasma 5.27, Wayland, X11 and XWayland, with the development build (`docs/release/MANUAL_VALIDATION.md`, "Mission 9"). A physical HiDPI screen is still missing |
+| 66 | Typing into Windows' credential dialog | **Still manual.** The Windows 11 VM hung in Windows Setup under VirtualBox with Hyper-V. A host-keyboard M1 run is prepared for Windows Sandbox |
+| 78 | A portal check | **Done in real sessions:** GNOME (Wayland, Xorg) and Plasma Wayland, with `dbus-monitor` evidence |
+
+### Fixed in Mission 9
+
+| # | Item | Commit |
+|---|---|---|
+| 80 | Checking whether a credential exists unlocked the keyring and, for the TAXII list, held the database | `63d2cd6` |
+| 81 | An interrupted restore left a copy of the backup in the data folder | `ed99331` |
+| 82 | The command palette ranked pages above a project whose name starts with the query | `810e024` |
+| 83 | Data folders at earlier schemas for the installer upgrade test (`write_upgrade_fixtures`) | `5ad2ad1` |
+
+### Open, with reasons
+
+| # | Item | Why open |
+|---|---|---|
+| 84 | Store the update-signing secrets in the `release` environment | The owner's step: the assistant session may not write secrets |
+| 85 | An Authenticode certificate and its CI signing and verification | A purchase and an identity validation (`SIGNING_SETUP.md`) |
+| 86 | Plasma with KWallet serving the Secret Service | Needs KWallet's interactive first-run setup; the GNOME Keyring of the Debian test VM did not serve its login collection |
+| 87 | The desktop harness of Mission 9 (VM agent, AT-SPI helper, `qa-desktop.mjs`) in `scripts/qa/` | It lives in `E:\CyberHubQA\desk`. Worth adding with a short guide once the candidate exists, so the package tests can reuse it |
+| 88 | GitHub Actions runs that never start | An account setting (usage or billing) to check |
+| 89 | Third-party GitHub Apps with access to all repositories | An account setting: limit them to the repositories that need them |

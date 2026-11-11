@@ -1,6 +1,55 @@
 # First run on GitHub (M8)
 
-The workflows have never run. In Mission 8 nothing was pushed, no remote was created (`git remote -v` prints nothing), and no workflow was triggered. This guide is for the owner. It covers the static review done instead, the repository settings to make before the first push, the first push itself, and the release workflow's validation runs. Nothing here builds, signs or publishes anything until the owner sets up signing and enables publishing on purpose.
+This guide is for the owner. It covers the static review, the repository settings to make before the first push, the first push itself, and the release workflow's validation runs. Nothing here builds, signs or publishes anything until the owner sets up signing and enables publishing on purpose. Mission 8 prepared it without pushing. **Mission 9 did the first push**: the next section records what was done and what GitHub refused.
+
+## Mission 9: the private repository and the first CI runs (2026-11-11)
+
+**The repository** is `https://github.com/RChefo/cyber-hub`.
+* **Visibility:** private.
+* **Creation:** no README or licence was added on GitHub.
+* **Before pushing:** gitleaks scanned the whole history first: 191 commits, no leaks.
+* **What was pushed:** only `release/v0.1.0`, which is therefore the default branch. No tag was pushed.
+
+**Settings applied through the API before the first push:**
+
+| Setting | Value |
+|---|---|
+| Actions permissions | Selected actions only: the six the workflows use (`actions/checkout`, `actions/setup-node`, `actions/upload-artifact`, `actions/download-artifact`, `dtolnay/rust-toolchain`, `Swatinem/rust-cache`). GitHub-owned and verified creators are *not* allowed wholesale. **Full-length SHA pinning required** |
+| Workflow token | Read-only (`contents: read` by default); workflows cannot approve pull requests |
+| Fork pull requests | Do not run, get no write token and no secrets (the private-repository defaults, checked) |
+| Environment `release` | Exists. Deployments only from the branches `main` and `release/*`; administrator bypass off; no secrets yet |
+| Dependabot alerts | On. Automatic security-fix pull requests stay off |
+
+**Refused by the plan.** The account is on GitHub Free, and for a private repository GitHub answered:
+
+| Feature | GitHub's answer |
+|---|---|
+| Required reviewers on the `release` environment | HTTP 422, "ensure the billing plan supports the required reviewers protection rule" |
+| A wait timer | The same |
+| Rulesets: tag protection for `v*`, required status checks for `release/*` | HTTP 403, "Upgrade to GitHub Pro or make this repository public" |
+| Branch protection | Not available either |
+| Secret scanning and push protection | HTTP 422, "Secret scanning is not available for this repository" |
+
+Without them:
+* **No approval step:** a manual release run with `RELEASE_PUBLISHING=enabled` builds without asking anyone. Keep the variable unset except for the one candidate run.
+* **Tags are not protected,** but the publish job's tag check still stops a moved tag.
+* **Secrets are caught only by CI:** the `audit` job's gitleaks on every push is the only secret scanning.
+* **Upgrading to GitHub Pro adds:** tag rulesets and branch protection.
+* **Required reviewers for a private repository's environment need GitHub Enterprise.**
+
+**CI results:**
+
+| Run | Commit | Result |
+|---|---|---|
+| [43084985623](https://github.com/RChefo/cyber-hub/actions/runs/43084985623) | `a1edbaf` | **Green, 22 min.** `windows-2022`, `ubuntu-24.04`, Debian 12: 637 Rust tests passed, 28 ignored, on each. Dependency and secret scans: cargo audit 0 vulnerabilities (8 allowed warnings), gitleaks 191 commits without leaks, actionlint 1.7.7 with shellcheck clean (first run), npm audit 0. MSRV 1.90 green |
+| [43089305680](https://github.com/RChefo/cyber-hub/actions/runs/43089305680) | `5ad2ad1` | **Green, 12 min** (with caches), all five jobs |
+| [43095621019](https://github.com/RChefo/cyber-hub/actions/runs/43095621019) | `ed99331` | **Queued, never started:** GitHub created no job. Pushed at 20:22Z |
+| [43097581846](https://github.com/RChefo/cyber-hub/actions/runs/43097581846) | `63d2cd6` | The same, pushed at 20:41Z. GitHub's status page showed no incident |
+| (the documentation commit) | | Pushed at the end of Mission 9 |
+
+**Why the later runs did not start is not known.** The likeliest cause is the account's Actions minutes for private repositories, or a billing restriction. This token has no scope to read billing. Check *Settings → Billing and plans → Usage*: GitHub Free includes 2,000 minutes a month for private repositories, and Windows minutes count twice. The runs start once the cause is cleared; nothing in them needs a change. A CI run of this repository takes about 85 billed minutes cold and fewer with caches.
+
+**Third-party GitHub Apps can see this private repository.** Each pushed commit received a check suite from eight apps besides GitHub Actions: Vercel, Render, Cursor, Netlify, Wasmer, Mintlify, Claude and Cloudflare Workers and Pages. They are installed on the account with access to *all* repositories, so they can likely read this source. Under *Settings → Applications → Installed GitHub Apps*, give each one access only to the repositories it needs. Mission 9 changed nothing there: these are account-wide settings.
 
 ## 1. What runs, and when
 

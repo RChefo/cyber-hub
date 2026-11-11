@@ -1356,3 +1356,81 @@ The owner's brief asked for research-driven new capabilities in seven tracks (we
   * **Debian 12:** suites (637 passed, 28 ignored), MSRV, the start with a newer database, dialogs 7/7, minimum window 3/3, the new Mission 8 GTK dialogs 6/6, HiDPI 5/5, TAXII 16/16, Mission 6 main 11/11, segment 3 63 + 6 + 3, the removal sweep 0/17.
   * **Ubuntu 24.04:** the same as Debian, every phase passing, plus the compositors: KWin with XWayland 7/7, Mutter 5/5, KWin 5/5.
   * **gitleaks:** 190 commits up to `cc3d3ca`, and the documents of the report commit, without leaks.
+
+## Mission 9 (2026-11-11T19:08Z): autonomous end-to-end release execution
+
+## 19:08–19:35Z: state, the private repository, the first CI run
+
+* **State.** `release/v0.1.0` at `a1edbaf`, clean, no remote and no tag. The real database's modification time was `2026-11-05T15:58:24.8534883Z`.
+* **Before the push.** gitleaks over the whole history: 191 commits, no leaks.
+* **The repository.** `RChefo/cyber-hub` was created private.
+  * Actions limited to the six pinned actions, with SHA pinning required; read-only tokens.
+  * Environment `release` with branches `main` and `release/*` and no administrator bypass.
+  * Dependabot alerts on.
+  * The Free plan refused required reviewers, wait timers, rulesets, branch protection and secret scanning.
+* **The push.** Only `release/v0.1.0`, through the `gh` token (Git Credential Manager would have opened a window).
+* **CI run 43084985623:** green in 22 minutes. Windows, Ubuntu and Debian: 637 passed, 28 ignored each. MSRV green. Scans: actionlint (first run), gitleaks, cargo audit and npm audit, all clean.
+
+## 19:15–19:45Z: signing, infrastructure
+
+* **The update key.**
+  * The `.pub` file matches the app's key ID, `957F3F7D955C72FA`. The key file is one line, and the password entry exists; neither value was read.
+  * `gh secret set --env release` for the key was **refused by the session's permission rules** (secret-store writes). Not worked around: it is the owner's step.
+* **Authenticode.** No code-signing certificate or token. A research agent compared the providers: SSL.com IV with eSigner is recommended.
+* **VMs on E:.**
+  * Ubuntu 24.04 cloud image, SHA-256 checked. Its appliance came with a bridged NIC, switched to NAT before first boot.
+  * Debian 12 generic image, SHA-512 checked through a mirror while DNS failed intermittently.
+  * Windows 11 Enterprise Evaluation ISO.
+  * cloud-init seeds: a password user (so PAM unlocks the keyring), an SSH key, the desktop, AT-SPI and WebKitWebDriver.
+* **Ubuntu's provisioning.** The Snap Store is unreachable from this network, so the Firefox snap installer waited 30 minutes. Firefox was pinned out and the desktop install finished by hand.
+* **The first reboot.** It took 7 minutes: the RAID6 benchmark under Hyper-V. `MODULES=dep` removes it.
+* **`write_upgrade_fixtures`** (`5ad2ad1`). It writes databases at schemas 1, 8, 19, 26 and 31 for the installer upgrade test. CI run 43089305680 green.
+
+## 19:52–20:58Z: GNOME 46 on Ubuntu 24.04 (Wayland, Xorg, XWayland)
+
+* **Logins** at GDM with the password typed on the virtual keyboard: session `gdm-password`, Wayland, login keyring unlocked.
+* **The harness.**
+  * WebDriver for the page, AT-SPI for GTK dialogs.
+  * A host agent for real keys and screenshots. It listens only on loopback, which VirtualBox NAT shows to the guest as `10.0.2.2`.
+* **Harness lessons:**
+  * GTK message dialogs are named "Warning" for AT-SPI, so they are found by their message;
+  * `pgrep`/`pkill -f` match their own shell unless the pattern is bracketed;
+  * three queued confirmations showed the one-at-a-time rule in a real session;
+  * GTK 4's location field completes paths inline as keys arrive.
+* **Found and fixed:**
+  * **The palette.** "RC" opened Cyber Resources before the project "RC validation" (`810e024`).
+  * **The restore staging.** Stopping the app during it (my harness did) left `.restore-<id>.partial`, which no start removed (`ed99331`).
+  * **The locked keyring.** With the keyring locked, the TAXII list asked to unlock it and held the database (projects took 4.2 s to list). A dismissed prompt showed the credential as missing (`63d2cd6`). Each was reproduced first; each fix has a test, and two of the tests fail on the earlier code.
+* **Results.**
+  * M2 steps 1–12 pass in Wayland, Xorg and XWayland.
+  * M6 passes with and without the portal.
+  * M7 steps 1–7 pass: lock, unlock, cancelled unlock, log-out and log-in.
+  * Ubuntu's restore-and-restart cycle passes once the harness leaves the app alone.
+* **Pushed:** `ed99331` and `63d2cd6`. Their CI runs (43095621019, 43097581846) were **queued by GitHub and never started**: no job was created. GitHub's status page was green; the likeliest cause is the account's Actions usage.
+
+## 21:00–21:24Z: Plasma 5.27 on Debian 12 (Wayland, X11, XWayland)
+
+* **The VM network.** The Debian VM cannot reach host loopback: VirtualBox 7 turns NAT's loopback access off for new VMs. A reverse SSH tunnel carried the agent instead.
+* **Results.**
+  * M2's steps pass in all three sessions. The first window is exactly 94 % of the work area.
+  * Konsole opens through `x-terminal-emulator`.
+  * Logging out with the app open leaves no process.
+  * KDE's portal dialogs work.
+  * XWayland under real KWin did not crash.
+* **The credential store.** GNOME Keyring in this session listed a `login` collection it did not serve, and `secret-tool store` hung. Cyber Hub's Store failed at once with a clear error, as M3 step 13 requires.
+
+## 21:25–21:31Z: Windows
+
+* The Windows 11 VM's setup stopped writing to its disk at 20:23Z with a black screen, using about 10 % CPU. It was powered off at 21:31Z.
+* **M1 stays PARTIAL.** The run that types into the dialog from the host keyboard is prepared, for Windows Sandbox or another Windows VM.
+
+## 21:31Z–21:40Z: documents
+
+* **Release documents:**
+  * the readiness checklist rewritten for after Mission 9;
+  * MANUAL_VALIDATION corrected (the import sample and the expected preview), with Mission 9's results;
+  * GITHUB_FIRST_RUN records the repository, the plan's limits, the runs and the third-party apps;
+  * SIGNING_SETUP has the provider comparison and working secret commands;
+  * the RC procedure has the fixtures, the Windows Sandbox advice and the lack of an approval step.
+* **Other documents:** UPDATER's snippet and environment advice, SIGNING's regions, SECURITY's credential control, and the release notes.
+* **Local checks:** Windows `cargo test` 641 passed, 28 ignored; clippy; tsc; vitest 308 in 56 files; cargo audit 0 (8 allowed); npm audit 0. The Ubuntu 24.04 image: `cargo test` 641 passed, 28 ignored.

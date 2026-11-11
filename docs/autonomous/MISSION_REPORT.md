@@ -1942,3 +1942,197 @@ No new product vulnerability was found. The other accepted risks in SECURITY.md 
 | Installers | BLOCKED |
 
 **The code is ready for the owner to push, set up signing and authorize one release-candidate build. Cyber Hub is not ready for release:** M1–M4 and M7–M10 must pass first, and the first GitHub run has not happened.
+
+## Mission 9: autonomous end-to-end release execution (2026-11-11)
+
+**Brief.** Take Cyber Hub from its current state to a validated, signed release candidate, using a broad authorization to:
+* create and configure a private GitHub repository, push, and run and fix CI;
+* provision disposable VMs and run the manual tests there;
+* configure signing where valid credentials exist;
+* build, install, upgrade and uninstall the candidate in isolation;
+* prepare a draft release.
+
+Never install the candidate where the owner's real database lives, never publish, never expose keys.
+
+**Classification: BLOCKED.**
+* **The release candidate was not built.** The release workflow needs the update-signing key in the `release` environment. Mission 9's attempt to store it was refused by the session's permission rules (secret-store writes); the brief says not to work around such a refusal.
+* **There is no Authenticode certificate.** Buying one is the owner's decision; section 7 recommends a route.
+* **The Windows 11 test VM hung in Windows Setup** under VirtualBox with Hyper-V active.
+
+Everything that did not need those three was done:
+* the repository and CI;
+* the Linux desktop validation in real sessions, which found three defects, all fixed with tests;
+* the documents.
+
+**Times:** 2026-11-11T19:08Z (`date -u`) to the commit that adds this report.
+
+### 1. Repository and privacy
+
+* **Repository:** `https://github.com/RChefo/cyber-hub`, **private** (`isPrivate: true`, visibility `PRIVATE`), created by Mission 9 with `gh` as `RChefo`.
+* **Before anything left the machine:** gitleaks 8.30.1 scanned the whole history at `a1edbaf`: 191 commits, no leaks.
+* **Settings, the plan's limits and the third-party apps:** `docs/release/GITHUB_FIRST_RUN.md`, "Mission 9".
+  * Actions are limited to the six pinned actions, SHA pinning is required, and tokens are read-only.
+  * The `release` environment allows only `main` and `release/*`, with no administrator bypass.
+  * Refused on GitHub Free: required reviewers, wait timers, rulesets, branch protection and secret scanning.
+  * Eight third-party GitHub Apps installed with access to all repositories receive this repository's commits.
+
+### 2. Branches and tags
+
+* **Pushed:** `release/v0.1.0` only, which is the default branch.
+* **Not pushed:** no tag, and no other branch. `main` does not exist on GitHub.
+
+### 3. GitHub Actions
+
+| Run | Commit | Result |
+|---|---|---|
+| [43084985623](https://github.com/RChefo/cyber-hub/actions/runs/43084985623) | `a1edbaf` | **Success**, 22 min. Every job green (below) |
+| [43089305680](https://github.com/RChefo/cyber-hub/actions/runs/43089305680) | `5ad2ad1` | **Success**, 12 min, all five jobs |
+| [43095621019](https://github.com/RChefo/cyber-hub/actions/runs/43095621019) | `ed99331` | **Queued, not started** (no job created, since 20:22Z) |
+| [43097581846](https://github.com/RChefo/cyber-hub/actions/runs/43097581846) | `63d2cd6` | **Queued, not started** (since 20:41Z) |
+
+Jobs of the first green run:
+* `windows-2022`, `ubuntu-24.04`, Debian 12: 637 passed, 28 ignored, each;
+* MSRV 1.90;
+* dependency and secret scans: cargo audit 0 with 8 allowed warnings, gitleaks 191 commits, **actionlint 1.7.7 with shellcheck, first run, clean**, npm audit 0.
+
+No job failed, so nothing needed fixing. Why the later runs never started is unknown. GitHub's status page showed no incident; the likeliest cause is the account's Actions minutes or billing for private repositories, which this token cannot read.
+
+`release.yml` has not run: no tag was pushed, because the candidate could not be built.
+
+### 4. Commits
+
+| Commit | Change |
+|---|---|
+| `5ad2ad1` | test(db): write older-schema data folders for the installer upgrade test |
+| `810e024` | fix(palette): order result groups by their best match |
+| `ed99331` | fix(restore): remove an interrupted stage's copy at the next start |
+| `63d2cd6` | fix(credentials): check for a stored credential without unlocking the keyring |
+| (this commit) | docs: the Mission 9 results, readiness checklist, release documents and tracking files |
+
+### 5. Windows and Linux desktop validation
+
+**The VMs.**
+* **Where:** disposable VirtualBox 7.2.6 VMs on E:, NAT only, VM disks in `E:\CyberHubQA\vms`.
+* **Logins:** password logins at GDM and SDDM, typed on the VM's virtual keyboard.
+* **Driving:** the app through WebDriver; native GTK dialogs through AT-SPI; real key presses and full-screen screenshots through VirtualBox.
+* **Evidence:** screenshots in `E:\CyberHubQA\evidence\` (folders `M2-*`, `M3-*`, `M6-*`, `M7-*`); the harness in `E:\CyberHubQA\desk\`.
+* **Build:** the development build of the fixed code.
+* **Details:** `docs/release/MANUAL_VALIDATION.md`, "Mission 9".
+
+| Environment | Result |
+|---|---|
+| Ubuntu 24.04.5, GNOME Shell 46.0: Wayland, Xorg, XWayland | **M2:** all 12 steps in Wayland; steps 1–8, the backup of 9, 10 and 12 in Xorg; steps 1–6, 10 and 12 under XWayland. **M6 passes** with and without the portal (GNOME's GTK 4 chooser through the portal). **M7 steps 1–7 pass** with the PAM-unlocked login keyring |
+| Debian 12, KDE Plasma 5.27.5 and KWin 5.27.5: Wayland, X11, XWayland | **M2:** steps 1–6, 10 and 12 in all three; in Wayland also 7, 8, the backup of 9, and 11. KDE's "— Portal" dialog works through the portal. **No crash under XWayland.** Credential storage was not usable in this VM: GNOME Keyring lists a `login` collection it does not serve, and `secret-tool store` hangs. Cyber Hub fails at once with a clear error and nothing else breaks (M3 step 13). KWallet's Secret Service was not tried |
+| Windows 11 Enterprise Evaluation 26H2, VirtualBox with Hyper-V active | **Not reached.** Windows Setup stopped writing to its disk at 20:23Z with a black screen. Powered off at 21:31Z. The ISO's SHA-256 is `BC3F2408…C10E38`; Microsoft publishes no hash for it |
+
+**M7 steps in GNOME:**
+* **Steps 1–3:** the GTK dialog asks, and stores one entry in the login keyring.
+* **Step 4:** the credential is kept across a restart and across logging out and in, with no prompt.
+* **Step 5:** with the keyring locked, *Replace* makes GNOME Shell ask "Authentication required" once, and stores after the password. Cancelling gives "unlock prompt was dismissed", stores nothing, and no prompt follows.
+* **Steps 6 and 7:** Forget and Remove leave nothing.
+
+**Not covered: the packages** (deb, AppImage, rpm, desktop entry). They come with the candidate.
+
+### 6. TAXII credential tests
+
+* **GNOME:** M7 steps 1–7 pass with a real login keyring (section 5).
+* **Windows:** M1 stays PARTIAL. It is Mission 8's 16/16 automated run, without typing into the dialog, because the Windows VM did not finish installing.
+* **Prepared for a Windows VM or Windows Sandbox:** an M1 run that types into Windows' credential dialog from the host keyboard (`E:\CyberHubQA\win-share\m1\m1-vm.mjs`). It was not run.
+
+### 7. Signing certificate status
+
+* **Authenticode: none.** The current-user and machine stores hold no certificate with the code-signing usage, there is no smart-card reader, and no signing client is installed.
+* **Recommendation** (research of 2026-11-11, `docs/release/SIGNING_SETUP.md`):
+  * **SSL.com IV with eSigner**, about $309 a year, open to individuals in most countries, works on GitHub-hosted runners with a TOTP secret.
+  * **Fallback:** Sectigo as an individual with a Google Cloud KMS key.
+  * **Not available here:** Microsoft Artifact Signing serves individuals only in the US and Canada.
+* **Update signing.** The key pair exists. The public key next to it is the app's (`957F3F7D955C72FA`). The key file is one line with no newline. Neither value was read. Storing the two secrets in the `release` environment was refused by the permission rules, and that is the owner's step (`SIGNING_SETUP.md`, section 5, "Commands").
+* **Corrected:** `UPDATER.md`'s snippet for storing them could not have worked, since PowerShell has no `<` and a pipe adds a newline to the password.
+
+### 8. Security findings and fixes
+
+Found in the real desktop sessions:
+
+| # | Finding | Severity | Fix |
+|---|---|---|---|
+| 1 | With the keyring locked, any page showing whether a credential is stored read the credential's value, so the desktop asked to unlock it. The TAXII list did this inside the database lock: the whole app waited until the prompt was answered (projects took 4.2 s to list, reproduced live), and a dismissed prompt showed the stored credential as missing | Medium (availability; misleading state) | `63d2cd6`. On Linux, presence is now a Secret Service search that neither unlocks nor transfers a value, made after the database lock is released. Two guard tests. Live in GNOME: the list returns in 9 ms with the credential shown as stored, and nothing waits |
+| 2 | A process stopped while a restore was being staged left a full copy of the chosen backup, `.restore-<id>.partial` and its `-journal`, hidden in the data folder for good. Documented before as a known limitation | Low (data hygiene) | `ed99331`. The next start removes it. A test fails on the earlier code |
+| 3 | The command palette listed pages that merely contained the query before a project whose name starts with it: "RC" + Return opened Cyber Resources | Low (usability) | `810e024`. Groups are ordered by their best match. 5 unit tests; checked live in GNOME, Plasma and XWayland |
+
+**Mission 8's accepted risks re-checked.**
+* Unchanged: the version probes, planning/active/paused moves, and the PowerShell remainder.
+* The native-confirmation boundaries were re-verified in real sessions: Return at once cancels, an early click does nothing, and the terminal asks.
+
+**Documentation errors corrected:**
+* MANUAL_VALIDATION's import sample lacked `<runstats>`, which makes the preview warn.
+* MANUAL_VALIDATION expected the preview to list an address it never lists.
+* UPDATER's PowerShell snippet.
+* UPDATER's environment advice: tags instead of branches.
+* SIGNING's Artifact Signing regions.
+
+### 9. Regression
+
+| Where | Commit | Result |
+|---|---|---|
+| GitHub: Windows Server 2022, Ubuntu 24.04, Debian 12 (Rust 1.99.1) | `a1edbaf`, `5ad2ad1` | 637 passed, 28 ignored, on each; frontend tests, tsc, clippy, MSRV 1.90 (`msrv` job) |
+| Windows 11 (this machine) | the final code | `cargo test`: **641 passed, 28 ignored** (+4: the fixture writer, the restore test and the two credential guards); clippy with warnings denied; `tsc -b`; **vitest 308 tests in 56 files**. cargo audit 0.22.2: 0 vulnerabilities, 8 allowed warnings, 652 crates; npm audit 0 |
+| Ubuntu 24.04 image (Rust 1.99.1) | the final code | `cargo test`: **641 passed, 28 ignored**, including the Linux-only credential check; the Linux build. Clippy is not installed in that image, and the CI clippy for these commits is queued |
+| Real sessions | the final code | Section 5 |
+
+* **Migrations, backups and recovery:** the upgrade tests ran in CI. `write_upgrade_fixtures` produced databases at schemas 1, 8, 19, 26 and 31. The restore cycle ran in a real GNOME session.
+* **Parsers:** the fuzz entry points compile, and the hostile-input suites pass in CI.
+* **MCP:** the suites pass in CI.
+* **Workflows:** actionlint on GitHub, plus the static guards in every `cargo test`.
+* **gitleaks 8.30.1:** 195 commits up to `63d2cd6`, and the documents of the report commit, without leaks (before committing them).
+
+### 10–13. Release artifacts, checksums, signatures, installation
+
+**None.** No package, installer or release binary was built, so there is nothing to checksum, verify, install, upgrade or uninstall, and no draft release.
+
+The downloaded test images were checked against their published sums:
+* the Ubuntu cloud image's SHA-256 matched Canonical's `SHA256SUMS`;
+* the Debian image's SHA-512 matched Debian's `SHA512SUMS`;
+* Node 22.23.5 for the Windows VM matched `SHASUMS256.txt`.
+
+### 14. Database isolation
+
+* **The owner's real database was never opened.** Its modification time is unchanged: `2026-11-05T15:58:24.8534883Z`, at the start and the end of Mission 9.
+* **Where every app run happened:**
+  * inside the disposable VMs, with their own users and data folders;
+  * in containers;
+  * as `cargo test` with temporary folders.
+* No installer was run, and nothing was installed on this machine.
+
+### 15. Draft release
+
+None was created.
+
+### 16. Remaining blockers
+
+1. **Update-signing secrets:** the owner stores them (`SIGNING_SETUP.md`, section 5, "Commands"). That unblocks the candidate build.
+2. **Authenticode:** buy and validate a certificate (SSL.com IV recommended), then add signing and its verification step.
+3. **GitHub Actions runs not starting:** check the account's Actions usage and billing.
+4. **M1 typing into Windows' dialog:** enable Windows Sandbox or use a Windows VM without a shared hypervisor. A person can also do the three steps by hand.
+5. **M4:** a physical HiDPI screen.
+6. **Plasma's credential store:** test with KWallet serving the Secret Service, or with a working GNOME Keyring.
+7. **M10:** the candidate's packages, installed on clean machines.
+8. **Recommended:**
+   * limit the eight third-party GitHub Apps to the repositories that need them;
+   * consider GitHub Pro for tag rulesets and branch protection.
+
+### 17. Readiness
+
+**BLOCKED.**
+* The code is in good shape:
+  * the suites pass;
+  * real GNOME and Plasma sessions behave as specified;
+  * three defects found there were fixed with tests;
+  * the repository, CI and the release environment are in place.
+* No release candidate exists, so nothing about installing, upgrading, signing or Defender's reaction is proven.
+* Cyber Hub must not be released before items 1–4 and 7 of section 16 are done.
+
+**Mission 9's infrastructure:**
+* **The repository:** stays, private.
+* **The Linux VMs** `chqa-noble` and `chqa-deb12`: kept, powered down with their state saved, for the candidate's Linux tests.
+* **The Windows VM** `chqa-win11`: powered off, kept, but not usable.
+* **What to delete when done:** `E:\CyberHubQA` (images, VMs, harness, evidence) and the three VMs in VirtualBox. Nothing of Mission 9 is on C: except the scratchpad.
