@@ -108,6 +108,8 @@ libc = "0.2.191"
 # the native credential dialog on Linux (the same GTK 3 bindings Tauri uses)
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+# whether a credential exists, without unlocking the keyring (the Secret Service client keyring uses)
+dbus-secret-service = "4.1.0"
 
 [dev-dependencies]
 # test oracle only (Markdown report escaping is checked against a real CommonMark parser)

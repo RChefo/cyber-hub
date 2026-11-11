@@ -162,8 +162,35 @@ pub fn read_secret(name: &str) -> Option<String> {
 }
 
 /// Whether a credential is present (never its value).
+///
+/// On Linux the Secret Service is searched without unlocking anything, and an item in a locked
+/// keyring counts as present. Reading the value of a locked item makes the desktop ask to unlock
+/// the keyring, so pages that only show whether a credential exists opened an unlock prompt, and
+/// the TAXII list held the database until it was answered (Mission 9, GNOME). Windows' Credential
+/// Manager has nothing to unlock.
 pub fn secret_configured(name: &str) -> bool {
-    read_secret(name).is_some()
+    if !KNOWN_SECRETS.contains(&name) && !is_taxii_secret(name) {
+        return false;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        secret_service_has(name)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        read_secret(name).is_some()
+    }
+}
+
+/// A Secret Service search for the entry keyring writes (service and user name; the target is
+/// left out, so entries written by older keyring versions count too). No secret is transferred,
+/// so the session needs no encryption. False without a Secret Service.
+#[cfg(target_os = "linux")]
+fn secret_service_has(name: &str) -> bool {
+    use dbus_secret_service::{EncryptionType, SecretService};
+    let Ok(ss) = SecretService::connect(EncryptionType::Plain) else { return false };
+    let attributes = std::collections::HashMap::from([("service", SERVICE), ("username", name)]);
+    ss.search_items(attributes).is_ok_and(|found| !found.unlocked.is_empty() || !found.locked.is_empty())
 }
 
 /// Stores a TAXII server's credential (typed into a native dialog) under the entry bound to the
@@ -212,6 +239,24 @@ pub fn delete_secret(name: &str) -> AppResult<()> {
 
 #[cfg(test)]
 mod tests {
+    /// Mission 9 (GNOME): checking whether a credential exists read its value, and with the keyring
+    /// locked that made the desktop ask to unlock it. On Linux the check is a search that neither
+    /// unlocks nor reads, and it answers for known credential names only.
+    #[test]
+    fn presence_checks_never_unlock_or_read_a_value() {
+        let src = include_str!("system.rs");
+        let f = &src[src.find("fn secret_service_has(").unwrap()..];
+        let f = &f[..f.find("\n}\n").unwrap()];
+        assert!(f.contains("search_items(") && f.contains("found.locked"), "{f}");
+        for forbidden in ["get_password", "get_secret", ".unlock(", "read_secret", "EncryptionType::Dh"] {
+            assert!(!f.contains(forbidden), "{forbidden} in {f}");
+        }
+        let p = &src[src.find("pub fn secret_configured(").unwrap()..];
+        let p = &p[..p.find("\n}\n").unwrap()];
+        assert!(p.contains("secret_service_has(name)"), "{p}");
+        assert!(!super::secret_configured("not_a_known_secret"));
+    }
+
     /// Guard: the web view must not be able to read, list, set, test or delete credentials.
     /// Fails if such a command is ever registered in the IPC handler list again.
     #[test]

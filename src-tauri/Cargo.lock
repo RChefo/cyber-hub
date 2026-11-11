@@ -863,6 +863,7 @@ version = "0.1.0"
 dependencies = [
  "boreal",
  "chrono",
+ "dbus-secret-service",
  "dirs",
  "encoding_rs",
  "futures-util",

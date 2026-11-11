@@ -21,15 +21,23 @@ pub struct ServerView {
     pub collections: Vec<Collection>,
 }
 
-fn view(c: &rusqlite::Connection, s: Server) -> AppResult<ServerView> {
-    let stored = stored(&s);
-    Ok(ServerView { credential_stored: stored, collections: taxii::collections_of(c, s.id)?, server: s })
+/// A server and its collections, read under the database lock.
+fn rows(c: &rusqlite::Connection, s: Server) -> AppResult<(Server, Vec<Collection>)> {
+    let collections = taxii::collections_of(c, s.id)?;
+    Ok((s, collections))
+}
+
+/// The view of a server. Called after the database lock is released: the credential store may
+/// talk to the desktop, and nothing else may wait on the database meanwhile (Mission 9).
+fn view((server, collections): (Server, Vec<Collection>)) -> ServerView {
+    ServerView { credential_stored: stored(&server), collections, server }
 }
 
 /// Whether a credential is stored for the server as it is now: its number, origin, kind of
-/// authentication and header (never its value).
+/// authentication and header (never its value). It never unlocks the credential store: an entry
+/// in a locked keyring counts as stored (`secret_configured`).
 fn stored(s: &Server) -> bool {
-    taxii::server_secret_name(s).is_some_and(|name| crate::commands::system::read_secret(&name).is_some())
+    taxii::server_secret_name(s).is_some_and(|name| crate::commands::system::secret_configured(&name))
 }
 
 /// Deletes the server's stored credential, if there is one (a computer without a credential store
@@ -48,7 +56,8 @@ static CREDENTIALS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[tauri::command]
 pub async fn taxii_servers(db: State<'_, Db>) -> AppResult<Vec<ServerView>> {
-    db.with(|c| taxii::servers(c)?.into_iter().map(|s| view(c, s)).collect())
+    let listed = db.with(|c| taxii::servers(c)?.into_iter().map(|s| rows(c, s)).collect::<AppResult<Vec<_>>>())?;
+    Ok(listed.into_iter().map(view).collect())
 }
 
 #[tauri::command]
@@ -206,10 +215,11 @@ pub async fn taxii_discover(app: AppHandle, id: i64) -> AppResult<ServerView> {
         }
     }
     let db = app.state::<Db>();
-    db.with(|c| {
+    let discovered = db.with(|c| {
         taxii::record_discovery(c, id, &d, &found)?;
-        view(c, taxii::server(c, id)?)
-    })
+        rows(c, taxii::server(c, id)?)
+    })?;
+    Ok(view(discovered))
 }
 
 /// The collections being synchronized now: one synchronization per collection at a time.
@@ -331,5 +341,43 @@ mod tests {
         drop(first);
         let again = Syncing::start(9001).unwrap();
         drop((other, again));
+    }
+
+    /// Mission 9 (GNOME): with the keyring locked, listing the servers asked the desktop to unlock
+    /// it and held the database until the prompt was answered, so every other page waited, and a
+    /// dismissed prompt showed the stored credential as missing. Nothing that asks the credential
+    /// store runs inside a `db.with` closure, and the list asks only whether a credential exists.
+    #[test]
+    fn the_credential_store_is_never_asked_under_the_database_lock() {
+        let src = include_str!("taxii.rs");
+        let code = &src[..src.find("#[cfg(test)]").unwrap()];
+        let mut closures = 0;
+        for (start, _) in code.match_indices("db.with(") {
+            let mut depth = 0;
+            let mut end = code.len();
+            for (i, ch) in code[start..].char_indices() {
+                match ch {
+                    '(' => depth += 1,
+                    ')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = start + i;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let body = &code[start..end];
+            closures += 1;
+            // (two names are built, so that system.rs's count of their calls here stays exact)
+            for call in ["stored(", "secret_configured(", "read_secret(", "client_for(", concat!("store_taxii", "_secret("), concat!("delete_taxii", "_secret("), "drop_credential(", "view("] {
+                assert!(!body.contains(call), "{call} under the database lock: {}", &body[..body.len().min(160)]);
+            }
+        }
+        assert!(closures >= 10, "db.with closures found: {closures}");
+        let stored = &code[code.find("fn stored(").unwrap()..];
+        let stored = &stored[..stored.find("\n}\n").unwrap()];
+        assert!(stored.contains("secret_configured(") && !stored.contains("read_secret("), "presence only: {stored}");
     }
 }
