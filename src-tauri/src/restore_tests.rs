@@ -256,6 +256,32 @@ fn a_backup_that_changed_after_the_confirmation_is_refused() {
     assert!(!pending(&dir) && !sorting_evidence(&dir) && !cancel(&dir).unwrap());
 }
 
+/// Mission 9, in a GNOME session: the process ended while a restore was being staged, after the
+/// journal and during the copy of the backup (`VACUUM INTO`). The next start dropped the journal but
+/// kept the partial copy, a full copy of the chosen backup, hidden in the data folder for good.
+#[test]
+fn a_stage_ended_during_its_copy_leaves_no_copy_behind() {
+    let (dir, backup) = current_and_backup("ended-stage");
+    write_journal(&dir.join(JOURNAL), &Journal { source: "backup.db".into(), ..Default::default() }).unwrap();
+    let copy = dir.join(".restore-0123456789ab.partial");
+    fs::copy(&backup, &copy).unwrap();
+    let sqlite_journal = dir.join(".restore-0123456789ab.partial-journal");
+    fs::write(&sqlite_journal, b"rollback").unwrap();
+    let journal_tmp = dir.join(format!("{JOURNAL}.partial"));
+    fs::write(&journal_tmp, b"{").unwrap();
+
+    assert!(swap_pending(&dir).is_none(), "nothing was staged, so nothing is restored");
+    assert!(!dir.join(JOURNAL).exists() && !copy.exists() && !sqlite_journal.exists() && !journal_tmp.exists(), "nothing of the stage is left");
+    assert_eq!(project_names(&dir.join(DB_NAME)), ["Current"]);
+
+    // a stray copy without a journal goes at the next start as well
+    fs::copy(&backup, &copy).unwrap();
+    assert!(swap_pending(&dir).is_none());
+    assert!(!copy.exists());
+    // other files in the data folder stay
+    assert!(dir.join(DB_NAME).is_file() && backup.is_file());
+}
+
 #[test]
 fn leftover_partial_copies_are_removed_when_evidence_is_sorted() {
     let (dir, backup) = current_and_backup("partial");

@@ -123,9 +123,9 @@ A notice and the activity log report the result.
 **Undoing a restore.** Restore `backups/before-restore-<time>/cyberhub.db`. Its evidence files come back from the folder next to it.
 
 **Safety:**
-* Nothing is deleted.
+* No database or evidence file is deleted.
 * A journal (`restore-pending.json`) exists until the evidence files are sorted. While it exists, the evidence sweep does not run, and an interrupted restore resumes at the next start once its copy exists. The sweep is also skipped at the start that applies a restore.
-* A restore interrupted while SQLite is still making the copy is not resumed: the next start drops it, and the current database stays in use unchanged. The unfinished copy, a hidden `.restore-<id>.partial` file (with a `-journal` file next to it), stays in the data folder; it is never used and can be deleted.
+* A restore interrupted while SQLite is still making the copy is not resumed: the next start drops it, and the current database stays in use unchanged. That start also removes the unfinished copy, a hidden `.restore-<id>.partial` file with a `-journal` file next to it, so no partial copy of a backup stays in the data folder. (Until Mission 9 the copy stayed there; a test reproduces that case.)
 * If the database is still in use when Cyber Hub starts again (another process holds it), the copy waits for the next start. *Settings* shows it and can cancel it.
 * If the restored database does not open, it is set aside as `restored-cyberhub.db` in the same folder, and the previous database and its evidence files go back.
 * A restored database never turns the MCP bridge on by itself. If it was on in the backup, it is turned off and the notice says so.

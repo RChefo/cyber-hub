@@ -21,7 +21,8 @@
 //! interrupted swap resumes at the next start: a staged copy that is still there has not replaced
 //! the database yet, and a journal with a folder but no staged copy has. If the database is still in
 //! use, the staged copy waits for the next start. A restored database that does not open goes
-//! aside, and the previous database and its evidence files go back.
+//! aside, and the previous database and its evidence files go back. A copy that a stage was still
+//! making when the process ended is removed at the next start.
 
 use std::collections::{BTreeSet, HashSet};
 use std::fs;
@@ -316,6 +317,22 @@ pub fn stage(data_dir: &Path, source: &Path, confirmed: Option<&BackupInfo>) -> 
     Ok(info)
 }
 
+/// Removes what a stage leaves when the process ends during it (Mission 9): the copy being made
+/// (`.restore-<nonce>.partial`, a full copy of the chosen backup, which must not stay hidden in the
+/// data folder), SQLite's `-journal` next to it, and a journal being written. Called at start-up,
+/// before anything is staged: only one Cyber Hub runs, so no stage can be in progress.
+fn remove_interrupted_stages(data_dir: &Path) {
+    let Ok(entries) = fs::read_dir(data_dir) else { return };
+    let journal_tmp = format!("{JOURNAL}.partial");
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        let stale = (name.starts_with(".restore-") && (name.ends_with(".partial") || name.ends_with(".partial-journal"))) || name == journal_tmp;
+        if stale && e.file_type().is_ok_and(|t| t.is_file()) {
+            let _ = fs::remove_file(e.path());
+        }
+    }
+}
+
 /// Whether a staged restore waits for the next start.
 pub fn pending(data_dir: &Path) -> bool {
     data_dir.join(PENDING).is_file()
@@ -421,6 +438,7 @@ fn put_back(data_dir: &Path, kept: &Path) -> bool {
 
 /// Swaps in a staged restore before the database is opened. None when nothing is staged.
 pub fn swap_pending(data_dir: &Path) -> Option<Swap> {
+    remove_interrupted_stages(data_dir);
     let pending_path = data_dir.join(PENDING);
     let journal_path = data_dir.join(JOURNAL);
     if !journal_path.exists() && !pending_path.exists() {
