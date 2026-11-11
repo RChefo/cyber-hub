@@ -201,8 +201,23 @@ pub(crate) fn project_load(c: &Connection, id: i64) -> AppResult<Project> {
     }
 }
 
+/// Statuses of an engagement that has ended. Leaving them reopens it (Mission 8).
+const CLOSED: &[&str] = &["completed", "archived"];
+
+/// The native question before a completed or archived project is reopened (Mission 8): reopened,
+/// its scope can be used again, by the HTTP request builder and the TLS analyzer without a dialog
+/// per request, and by MCP clients. A compromised page could otherwise reopen an ended engagement
+/// by itself.
+fn reopen_question(name: &str, before: &str, after: &str, in_scope: i64, excluded: i64) -> String {
+    format!(
+        "Reopen the project “{name}”? It is {before}.\n\nAs {after}, its scope can be used again ({in_scope} in-scope {}, {excluded} {}): the HTTP request builder and the TLS analyzer send requests to an active project's targets without asking each time, and MCP clients can change the project. Every tool run still asks for its own confirmation.",
+        if in_scope == 1 { "entry" } else { "entries" },
+        if excluded == 1 { "exclusion" } else { "exclusions" },
+    )
+}
+
 #[tauri::command]
-pub async fn project_upsert(db: State<'_, Db>, input: ProjectInput) -> AppResult<i64> {
+pub async fn project_upsert(app: tauri::AppHandle, db: State<'_, Db>, input: ProjectInput) -> AppResult<i64> {
     let name = clean("Project name", &input.name, 120, true)?;
     let description = clean("Description", &input.description, 2000, false)?;
     let status = one_of("Status", &input.status, STATUSES)?;
@@ -222,16 +237,42 @@ pub async fn project_upsert(db: State<'_, Db>, input: ProjectInput) -> AppResult
         }
     }
     let ts = now();
+    // reopening an ended engagement is decided outside the page (Mission 8); the status asked
+    // about must still be the project's when it is saved
+    let before = match input.id {
+        Some(id) => {
+            let (stored_name, before, in_scope, excluded) = db.with(|c| {
+                let row: Option<(String, String)> = c.query_row("SELECT name, status FROM projects WHERE id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
+                let (stored_name, before) = row.ok_or_else(|| AppError::NotFound(format!("project {id}")))?;
+                let (in_scope, excluded): (i64, i64) = c.query_row(
+                    "SELECT COALESCE(SUM(in_scope != 0), 0), COALESCE(SUM(in_scope = 0), 0) FROM project_targets WHERE project_id = ?1",
+                    params![id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )?;
+                Ok((stored_name, before, in_scope, excluded))
+            })?;
+            if CLOSED.contains(&before.as_str()) && !CLOSED.contains(&status.as_str()) {
+                let question = reopen_question(&stored_name, &before, &status, in_scope, excluded);
+                if !crate::confirm::native(&app, "Reopen a project", question, "Reopen").await {
+                    return Err(AppError::Cancelled(format!("The project stays {before}")));
+                }
+            }
+            Some(before)
+        }
+        None => None,
+    };
     db.with(|c| match input.id {
         Some(id) => {
-            let before: Option<String> = c.query_row("SELECT status FROM projects WHERE id = ?1", params![id], |r| r.get(0)).optional()?;
-            let before = before.ok_or_else(|| AppError::NotFound(format!("project {id}")))?;
+            let before = before.unwrap_or_default();
             let tx = c.unchecked_transaction()?;
-            tx.execute(
+            let changed = tx.execute(
                 "UPDATE projects SET name=?2, description=?3, status=?4, scope_notes=?5, notes=?6, start_date=?7, end_date=?8, updated_at=?9,
-                     client=?10, engagement_type=?11, authorization_ref=?12, objectives=?13, methodology=?14, contacts=?15 WHERE id=?1",
-                params![id, name, description, status, scope_notes, notes, start, end, ts, client, engagement_type, authorization_ref, objectives, methodology, contacts],
+                     client=?10, engagement_type=?11, authorization_ref=?12, objectives=?13, methodology=?14, contacts=?15 WHERE id=?1 AND status=?16",
+                params![id, name, description, status, scope_notes, notes, start, end, ts, client, engagement_type, authorization_ref, objectives, methodology, contacts, before],
             )?;
+            if changed == 0 {
+                return Err(validation("The project's status changed while it was being saved; review the project and save again"));
+            }
             // a status change (active, completed, archived…) changes what may run against the project
             if before != status {
                 let what = format!("Project status changed: {before} → {status}");
@@ -940,6 +981,31 @@ mod lifecycle_tests {
             let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
             assert!(body.contains(needle) && body.contains("crate::confirm::native("), "{command} confirms natively");
         }
+    }
+
+    /// Mission 8: reopening a completed or archived project is confirmed in a native dialog (a page
+    /// could otherwise make an ended engagement's scope usable again by itself), the dialog says
+    /// what becomes usable, and the save only applies to the status that was asked about.
+    #[test]
+    fn reopening_an_ended_project_is_confirmed_outside_the_page() {
+        let src = include_str!("projects.rs");
+        let start = src.find("pub async fn project_upsert(").unwrap();
+        let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
+        let ask = body.find("crate::confirm::native(").expect("project_upsert confirms natively");
+        let check = body.find("CLOSED.contains(&before.as_str()) && !CLOSED.contains(&status.as_str())").expect("the question is asked when an ended project is reopened");
+        let write = body.find("UPDATE projects SET").unwrap();
+        assert!(check < ask && ask < write, "it asks before it writes");
+        assert!(body.contains("WHERE id=?1 AND status=?16"), "the save applies only to the status that was asked about");
+        assert_eq!(super::CLOSED, &["completed", "archived"]);
+        for s in super::CLOSED {
+            assert!(super::STATUSES.contains(s));
+        }
+        let q = super::reopen_question("Acme \u{202E}x", "archived", "active", 3, 1);
+        assert!(q.starts_with("Reopen the project “Acme \u{202E}x”? It is archived."), "{q}");
+        assert!(q.contains("As active, its scope can be used again (3 in-scope entries, 1 exclusion)"), "{q}");
+        assert!(super::reopen_question("P", "completed", "paused", 1, 0).contains("(1 in-scope entry, 0 exclusions)"));
+        // the hidden character in the name is shown as its code point by the dialog itself
+        assert_eq!(crate::util::dialog_text(&q).matches("<U+202E>").count(), 1);
     }
 
     fn setup(db: &Db) -> i64 {

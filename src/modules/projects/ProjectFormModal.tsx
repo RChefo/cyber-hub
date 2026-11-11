@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { AppModal } from "@/components/ui/Dialogs";
 import { SelectInput, TextAreaInput, TextInput } from "@/components/ui/Fields";
 import { notify } from "@/lib/actions";
-import { api, errorMessage } from "@/lib/ipc";
+import { api, errorMessage, IpcError } from "@/lib/ipc";
 import { invalidate } from "@/lib/query";
 import type { Engagement, Project, ProjectStatus } from "@/lib/types";
 
@@ -95,7 +95,10 @@ export function ProjectFormModal({ isOpen, onOpenChange, project, onSaved }: Pro
       onOpenChange(false);
       onSaved?.(id);
     } catch (e) {
-      setError(errorMessage(e));
+      // declining the native question about reopening an ended project is a decision, not an
+      // error: the form stays open with the analyst's edits (Mission 8)
+      if (e instanceof IpcError && e.kind === "cancelled") notify.error("", e);
+      else setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
