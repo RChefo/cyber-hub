@@ -131,7 +131,7 @@ See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md).
 ## Known failures
 
 None in the code. At the end of Mission 9 (`63d2cd6`, the last code commit):
-* **GitHub Actions:** green at `a1edbaf` and `5ad2ad1` on `windows-2022`, `ubuntu-24.04`, Debian 12 (637 passed, 28 ignored each), MSRV 1.90 and the scans (actionlint, gitleaks, cargo audit, npm audit). The runs for `ed99331` and `63d2cd6` were queued by GitHub and never started (no job created): an account matter, not a test failure.
+* **GitHub Actions:** green at `a1edbaf` and `5ad2ad1` on `windows-2022`, `ubuntu-24.04`, Debian 12 (637 passed, 28 ignored each), MSRV 1.90 and the scans (actionlint, gitleaks, cargo audit, npm audit). The runs for `ed99331` and `63d2cd6` were queued by GitHub and never started (no job created). **The final code, `d4372b5`, is green: run 43105721393, with 641 passed and 28 ignored on each platform.**
 * **Windows 11, the final code:** cargo test 641 passed, 28 ignored; clippy; tsc; vitest 308 tests in 56 files; cargo audit 0 (8 allowed warnings, 652 crates); npm audit 0.
 * **Ubuntu 24.04 image, the final code:** cargo test 641 passed, 28 ignored.
 * **Real desktop sessions (development build):** GNOME 46: M2 (every step in Wayland, subsets in Xorg and XWayland), M6 (Wayland and Xorg) and M7 (Wayland; the stored credential also in Xorg and XWayland) pass. Plasma 5.27 Wayland, X11 and XWayland: M2's steps pass and KDE's portal works; the test VM's GNOME Keyring did not serve its login collection, and Cyber Hub reported that clearly.
@@ -365,7 +365,7 @@ The final results at `d6a192e`:
 
 **After Mission 9 (2026-11-11), the owner's next steps** (MISSION_REPORT.md, "Mission 9", section 16):
 1. Store the two update-signing secrets in the `release` environment: `docs/release/SIGNING_SETUP.md`, section 5, "Commands".
-2. Check why GitHub Actions stopped starting runs (*Settings → Billing and plans → Usage*); the queued runs then start by themselves.
+2. Only if it happens again: two GitHub Actions runs were never started (the next push ran normally); check *Settings → Billing and plans → Usage*.
 3. Choose and buy the Authenticode certificate (SSL.com IV recommended), then add signing and its verification step.
 4. Then: tag `v0.1.0`, build the candidate once with the release workflow (`RELEASE_CANDIDATE_PROCEDURE.md`), and test the packages on the kept Linux VMs and in Windows Sandbox.
 5. Recommended: limit the eight third-party GitHub Apps to the repositories that need them.

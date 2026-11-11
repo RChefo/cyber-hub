@@ -1989,13 +1989,14 @@ Everything that did not need those three was done:
 | [43089305680](https://github.com/RChefo/cyber-hub/actions/runs/43089305680) | `5ad2ad1` | **Success**, 12 min, all five jobs |
 | [43095621019](https://github.com/RChefo/cyber-hub/actions/runs/43095621019) | `ed99331` | **Queued, not started** (no job created, since 20:22Z) |
 | [43097581846](https://github.com/RChefo/cyber-hub/actions/runs/43097581846) | `63d2cd6` | **Queued, not started** (since 20:41Z) |
+| [43105721393](https://github.com/RChefo/cyber-hub/actions/runs/43105721393) | `d4372b5` | **Success**, 12 min, the final code: 641 passed, 28 ignored, on each platform; 56 frontend test files; MSRV 1.90; gitleaks 196 commits; cargo audit 0 (8 allowed warnings) |
 
 Jobs of the first green run:
 * `windows-2022`, `ubuntu-24.04`, Debian 12: 637 passed, 28 ignored, each;
 * MSRV 1.90;
 * dependency and secret scans: cargo audit 0 with 8 allowed warnings, gitleaks 191 commits, **actionlint 1.7.7 with shellcheck, first run, clean**, npm audit 0.
 
-No job failed, so nothing needed fixing. Why the later runs never started is unknown. GitHub's status page showed no incident; the likeliest cause is the account's Actions minutes or billing for private repositories, which this token cannot read.
+No job failed, so nothing needed fixing. Why two runs never started is unknown. The next push ran at once and verified the final code, so they are superseded. GitHub's status page showed no incident; the likeliest cause is the account's Actions minutes or billing for private repositories, which this token cannot read.
 
 `release.yml` has not run: no tag was pushed, because the candidate could not be built.
 
@@ -2075,6 +2076,7 @@ Found in the real desktop sessions:
 | Where | Commit | Result |
 |---|---|---|
 | GitHub: Windows Server 2022, Ubuntu 24.04, Debian 12 (Rust 1.99.1) | `a1edbaf`, `5ad2ad1` | 637 passed, 28 ignored, on each; frontend tests, tsc, clippy, MSRV 1.90 (`msrv` job) |
+| GitHub, the same | `d4372b5` (the final code) | **641 passed, 28 ignored, on each**; 56 frontend test files; tsc; clippy; MSRV 1.90; gitleaks 196 commits; cargo audit 0 |
 | Windows 11 (this machine) | the final code | `cargo test`: **641 passed, 28 ignored** (+4: the fixture writer, the restore test and the two credential guards); clippy with warnings denied; `tsc -b`; **vitest 308 tests in 56 files**. cargo audit 0.22.2: 0 vulnerabilities, 8 allowed warnings, 652 crates; npm audit 0 |
 | Ubuntu 24.04 image (Rust 1.99.1) | the final code | `cargo test`: **641 passed, 28 ignored**, including the Linux-only credential check; the Linux build. Clippy is not installed in that image, and the CI clippy for these commits is queued |
 | Real sessions | the final code | Section 5 |
@@ -2111,7 +2113,7 @@ None was created.
 
 1. **Update-signing secrets:** the owner stores them (`SIGNING_SETUP.md`, section 5, "Commands"). That unblocks the candidate build.
 2. **Authenticode:** buy and validate a certificate (SSL.com IV recommended), then add signing and its verification step.
-3. **GitHub Actions runs not starting:** check the account's Actions usage and billing.
+3. **Two GitHub Actions runs never started**; the next push ran normally. If it happens again, check the account's Actions usage and billing.
 4. **M1 typing into Windows' dialog:** enable Windows Sandbox or use a Windows VM without a shared hypervisor. A person can also do the three steps by hand.
 5. **M4:** a physical HiDPI screen.
 6. **Plasma's credential store:** test with KWallet serving the Secret Service, or with a working GNOME Keyring.

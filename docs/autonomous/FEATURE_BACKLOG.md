@@ -365,5 +365,5 @@ The brief authorized the repository, CI, VMs, signing with existing credentials,
 | 85 | An Authenticode certificate and its CI signing and verification | A purchase and an identity validation (`SIGNING_SETUP.md`) |
 | 86 | Plasma with KWallet serving the Secret Service | Needs KWallet's interactive first-run setup; the GNOME Keyring of the Debian test VM did not serve its login collection |
 | 87 | The desktop harness of Mission 9 (VM agent, AT-SPI helper, `qa-desktop.mjs`) in `scripts/qa/` | It lives in `E:\CyberHubQA\desk`. Worth adding with a short guide once the candidate exists, so the package tests can reuse it |
-| 88 | GitHub Actions runs that never start | An account setting (usage or billing) to check |
+| 88 | Two GitHub Actions runs that never started | The next push ran normally. Check the account's usage only if it recurs |
 | 89 | Third-party GitHub Apps with access to all repositories | An account setting: limit them to the repositories that need them |
