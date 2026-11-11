@@ -12,9 +12,10 @@ name: Release
 # - build: the only job that receives TAURI_SIGNING_PRIVATE_KEY and its password, in the protected
 #   `release` environment (add required reviewers under Settings → Environments → release).
 # - publish: generates latest.json, verifies every signature against the public key compiled into
-#   the app and uploads everything to a draft release. A run stops at the draft unless "draft" is
-#   unchecked and the tag is typed again in "confirm". A failure in any job leaves nothing
-#   published.
+#   the app, checks that the tag still names the commit that was validated and built (Mission 8),
+#   and uploads everything to a draft release. A run stops at the draft unless "draft" is unchecked
+#   and the tag is typed again in "confirm"; the tag is checked again before the release becomes
+#   public. A failure in any job leaves nothing published.
 # Toolchains and tools are exact versions (the same as ci.yml); src-tauri/src/ci_tests.rs fails if
 # an action, toolchain or tool floats or a gate disappears. No caches are used here (a poisoned
 # cache must not reach a signed build). See docs/UPDATER.md for the setup and the owner's checklist.
@@ -264,6 +265,7 @@ jobs:
       contents: write
     env:
       VERSION: ${{ needs.validate.outputs.version }}
+      SHA: ${{ needs.validate.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -298,6 +300,21 @@ jobs:
             --require windows-x86_64-nsis,windows-x86_64-msi,linux-x86_64-appimage,linux-x86_64-deb,linux-x86_64-rpm
           mv latest.json assets/latest.json
           (cd assets && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: The tag still names the built commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A tag moved during the run (re-tagged by mistake, or by someone else) would put the
+          # release on another commit than the binaries were built from (Mission 8).
+          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.type + " " + .object.sha')
+          obj=${ref#* }
+          if [ "${ref%% *}" = "tag" ]; then obj=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$obj" --jq '.object.sha'); fi
+          if [ "$obj" != "$SHA" ]; then
+            echo "::error::$TAG now names $obj, not the validated and built $SHA; nothing is uploaded"; exit 1
+          fi
+          echo "$TAG names $SHA."
 
       - name: Upload to a draft release
         env:
@@ -334,4 +351,13 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.draft == false && inputs.confirm == inputs.tag
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+        run: |
+          set -euo pipefail
+          # the tag is checked again just before the release becomes public (Mission 8)
+          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.type + " " + .object.sha')
+          obj=${ref#* }
+          if [ "${ref%% *}" = "tag" ]; then obj=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$obj" --jq '.object.sha'); fi
+          if [ "$obj" != "$SHA" ]; then
+            echo "::error::$TAG now names $obj, not the built $SHA; the release stays a draft"; exit 1
+          fi
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

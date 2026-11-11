@@ -108,3 +108,180 @@ fn the_release_workflow_is_pinned_least_privileged_and_publishes_only_on_explici
     assert_eq!(public.len(), 1);
     assert_eq!(public[0]["if"], "github.event_name == 'workflow_dispatch' && inputs.draft == false && inputs.confirm == inputs.tag");
 }
+
+/// The keys GitHub Actions accepts at each level of a workflow (workflow syntax reference).
+const TOP_KEYS: &[&str] = &["name", "run-name", "on", "permissions", "env", "defaults", "concurrency", "jobs"];
+const JOB_KEYS: &[&str] = &["name", "needs", "runs-on", "permissions", "environment", "concurrency", "outputs", "env", "defaults", "if", "steps", "timeout-minutes", "strategy", "continue-on-error", "container", "services"];
+const STEP_KEYS: &[&str] = &["id", "name", "if", "uses", "with", "run", "shell", "env", "working-directory", "continue-on-error", "timeout-minutes"];
+/// The contexts an expression may read.
+const CONTEXTS: &[&str] = &["github", "env", "vars", "secrets", "inputs", "needs", "matrix", "steps", "runner", "job", "strategy"];
+
+/// The roots of the property paths in an expression (`github.ref_name` → `github`), skipping
+/// string literals and function names.
+fn expression_roots(expr: &str) -> Vec<String> {
+    let mut roots = Vec::new();
+    let b = expr.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'\'' => {
+                i += 1;
+                while i < b.len() && b[i] != b'\'' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            c if c.is_ascii_alphabetic() || c == b'_' => {
+                let start = i;
+                while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_' || b[i] == b'-') {
+                    i += 1;
+                }
+                let after_dot = start > 0 && b[start - 1] == b'.';
+                if !after_dot && i < b.len() && (b[i] == b'.' || b[i] == b'[') {
+                    roots.push(expr[start..i].to_string());
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    roots
+}
+
+/// Every expression of a workflow: `${{ … }}` anywhere, and the implicit ones in `if:`.
+fn expressions(text: &str, doc: &serde_json::Value) -> Vec<String> {
+    let mut out: Vec<String> = text.split("${{").skip(1).map(|s| s.split("}}").next().unwrap_or_default().to_string()).collect();
+    for def in doc["jobs"].as_object().unwrap().values() {
+        out.extend(def["if"].as_str().map(String::from));
+        for step in def["steps"].as_array().into_iter().flatten() {
+            out.extend(step["if"].as_str().map(String::from));
+        }
+    }
+    out
+}
+
+/// Mission 8: a static validation of the workflows in place of actionlint, which could not run
+/// locally (CI still runs it): only keys GitHub knows at each level, every step one action or one
+/// script, and expressions that read known contexts only.
+#[test]
+fn workflows_use_only_known_keys_steps_and_contexts() {
+    for (name, text) in [("ci.yml", include_str!("../../.github/workflows/ci.yml")), ("release.yml", include_str!("../../.github/workflows/release.yml"))] {
+        let doc = crate::yaml::parse_one(text).unwrap();
+        for key in doc.as_object().unwrap().keys() {
+            assert!(TOP_KEYS.contains(&key.as_str()), "{name}: unknown top-level key {key}");
+        }
+        for (job, def) in doc["jobs"].as_object().unwrap() {
+            for key in def.as_object().unwrap().keys() {
+                assert!(JOB_KEYS.contains(&key.as_str()), "{name}: {job}: unknown key {key}");
+            }
+            assert!(def.get("runs-on").is_some(), "{name}: {job} has no runner");
+            for (n, step) in def["steps"].as_array().unwrap().iter().enumerate() {
+                for key in step.as_object().unwrap().keys() {
+                    assert!(STEP_KEYS.contains(&key.as_str()), "{name}: {job} step {n}: unknown key {key}");
+                }
+                let (uses, run) = (step.get("uses").is_some(), step.get("run").is_some());
+                assert!(uses != run, "{name}: {job} step {n} is one action or one script");
+                if uses {
+                    assert!(step.get("shell").is_none() && step.get("working-directory").is_none(), "{name}: {job} step {n}: script keys on an action");
+                } else {
+                    assert!(step.get("with").is_none(), "{name}: {job} step {n}: `with` on a script");
+                }
+            }
+        }
+        for expr in expressions(text, &doc) {
+            for root in expression_roots(&expr) {
+                assert!(CONTEXTS.contains(&root.as_str()), "{name}: unknown context {root} in `{expr}`");
+            }
+        }
+    }
+    assert_eq!(expression_roots("github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name"), ["github", "inputs", "github"]);
+    assert_eq!(expression_roots("needs.validate.outputs.sha"), ["needs"]);
+    assert_eq!(expression_roots("contains('a.b', x.y)"), ["x"]);
+}
+
+/// Mission 8: verification and release stay apart. CI reads no secret, writes nothing and never
+/// runs for `pull_request_target`; checkouts keep no credentials; downloads are checked against
+/// pinned hashes; the release runs only for stable version tags or by hand, without caches, with
+/// its secrets only in the protected environment, and names on its release the commit it built.
+#[test]
+fn verification_and_release_stay_apart_and_the_release_names_the_commit_it_built() {
+    let ci = include_str!("../../.github/workflows/ci.yml");
+    let release = include_str!("../../.github/workflows/release.yml");
+    let ci_doc = crate::yaml::parse_one(ci).unwrap();
+    let doc = crate::yaml::parse_one(release).unwrap();
+    // CI: verification only
+    // (keys come back sorted)
+    let triggers: Vec<&str> = ci_doc["on"].as_object().unwrap().keys().map(String::as_str).collect();
+    assert_eq!(triggers, ["pull_request", "push"]);
+    assert!(!ci.contains("secrets.") && !ci.contains("write") && !ci.contains("environment:"), "ci.yml reads no secret and writes nothing");
+    assert_eq!(ci_doc["permissions"], serde_json::json!({ "contents": "read" }));
+    for text in [ci, release] {
+        for trigger in ["pull_request_target", "workflow_run", "issue_comment"] {
+            assert!(!text.contains(trigger), "{trigger}");
+        }
+    }
+    // both: no credentials left in a checkout, and every download checked
+    for (name, text) in [("ci.yml", ci), ("release.yml", release)] {
+        let parsed = crate::yaml::parse_one(text).unwrap();
+        for (job, def) in parsed["jobs"].as_object().unwrap() {
+            for step in def["steps"].as_array().unwrap() {
+                if step["uses"].as_str().is_some_and(|u| u.starts_with("actions/checkout@")) {
+                    assert_eq!(step["with"]["persist-credentials"], false, "{name}: {job}: a checkout keeps its credentials");
+                }
+                if let Some(run) = step["run"].as_str() {
+                    if run.contains("curl ") {
+                        assert!(run.contains("sha256sum -c"), "{name}: {job}: a download without a pinned hash: {run}");
+                    }
+                }
+            }
+        }
+    }
+    // release: stable version tags or a manual run, nothing from pull requests, no caches
+    let on = doc["on"].as_object().unwrap();
+    assert_eq!(on.keys().map(String::as_str).collect::<Vec<_>>(), ["push", "workflow_dispatch"]);
+    assert_eq!(on["push"], serde_json::json!({ "tags": ["v*.*.*"] }));
+    let inputs = &on["workflow_dispatch"]["inputs"];
+    assert_eq!(inputs["tag"]["required"], true);
+    assert_eq!(inputs["draft"]["default"], true, "a manual run stops at a draft unless asked otherwise");
+    assert_eq!(inputs["confirm"]["default"], "");
+    assert!(release.contains(r#"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"#), "pre-release tags are refused");
+    for cache in ["cache:", "rust-cache", "actions/cache"] {
+        assert!(!release.contains(cache), "release.yml uses a cache: {cache}");
+    }
+    let jobs = doc["jobs"].as_object().unwrap();
+    assert!(jobs["validate"].get("environment").is_none() && !jobs["validate"].to_string().contains("secrets."));
+    assert_eq!(jobs["build"]["environment"], "release");
+    assert_eq!(jobs["publish"]["environment"], "release");
+    assert_eq!(jobs["build"]["needs"], "validate");
+    assert_eq!(jobs["publish"]["needs"], serde_json::json!(["validate", "build"]));
+    // the build checks out the validated commit, and the release names it: the tag is checked
+    // before the draft is created and again before it becomes public (Mission 8)
+    assert_eq!(jobs["build"]["steps"][0]["with"]["ref"], "${{ needs.validate.outputs.sha }}");
+    assert_eq!(jobs["publish"]["env"]["SHA"], "${{ needs.validate.outputs.sha }}");
+    let steps = jobs["publish"]["steps"].as_array().unwrap();
+    let position = |name: &str| steps.iter().position(|s| s["name"] == name).unwrap_or_else(|| panic!("publish has the step {name}"));
+    let check = position("The tag still names the built commit");
+    assert!(check < position("Upload to a draft release"), "the tag is checked before the draft is created");
+    for step in [&steps[check], &steps[position("Publish the release")]] {
+        let run = step["run"].as_str().unwrap();
+        assert!(run.contains("git/ref/tags/$TAG") && run.contains("!= \"$SHA\""), "{run}");
+    }
+    let publish = steps[position("Publish the release")]["run"].as_str().unwrap();
+    assert!(publish.find("!= \"$SHA\"").unwrap() < publish.find("--draft=false").unwrap(), "checked before it becomes public");
+}
+
+/// Mission 8: every run script parses as bash (the shell of the Linux jobs and of the Windows
+/// steps that name it); a syntax error would only show on the first run on GitHub.
+#[cfg(unix)]
+#[test]
+fn run_scripts_are_valid_bash() {
+    for (name, text) in [("ci.yml", include_str!("../../.github/workflows/ci.yml")), ("release.yml", include_str!("../../.github/workflows/release.yml"))] {
+        let doc = crate::yaml::parse_one(text).unwrap();
+        for (job, def) in doc["jobs"].as_object().unwrap() {
+            for step in def["steps"].as_array().unwrap() {
+                let Some(run) = step["run"].as_str() else { continue };
+                let out = std::process::Command::new("bash").args(["-n", "-c", run]).output().expect("bash");
+                assert!(out.status.success(), "{name}: {job}: {}\n{run}", String::from_utf8_lossy(&out.stderr));
+            }
+        }
+    }
+}
