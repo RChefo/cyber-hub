@@ -285,3 +285,43 @@ fn run_scripts_are_valid_bash() {
         }
     }
 }
+
+/// Mission 11: after a real uninstall, the NSIS uninstaller forgets the install folder (Tauri's MSI
+/// looks there and installed into the removed per-user folder), and removes nothing else: no
+/// files, no other registry values, and nothing when an update runs it.
+#[test]
+fn the_nsis_uninstaller_forgets_the_install_folder_and_nothing_else() {
+    let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+    assert_eq!(conf["bundle"]["windows"]["nsis"]["installerHooks"], "windows/installer-hooks.nsh");
+    let hooks = include_str!("../windows/installer-hooks.nsh");
+    let code: Vec<&str> = hooks.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with(';')).collect();
+    assert_eq!(
+        code,
+        [
+            "!macro NSIS_HOOK_POSTUNINSTALL",
+            "${If} $UpdateMode <> 1",
+            r#"DeleteRegValue SHCTX "${MANUPRODUCTKEY}" """#,
+            r#"DeleteRegKey /ifempty SHCTX "${MANUPRODUCTKEY}""#,
+            r#"DeleteRegKey /ifempty SHCTX "${MANUKEY}""#,
+            "${EndIf}",
+            "!macroend",
+        ]
+    );
+}
+
+/// Mission 11: what identifies an installed copy on Windows stays the same, so that a new version
+/// upgrades the old one instead of installing next to it. The MSI's upgrade code is derived from
+/// the product name. The publisher, unset and so "cyberhub" (the identifier's second part), names
+/// the NSIS key that holds the install folder (HKCU\Software\cyberhub\Cyber Hub), read by the next
+/// NSIS installer to find and remove the old copy and by the MSI to choose its folder. The
+/// identifier names the data folder. Changing any of them needs a migration; see
+/// docs/release/RELEASE_READINESS.md, "Publisher identity".
+#[test]
+fn the_windows_install_identity_stays_the_same() {
+    let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+    assert_eq!(conf["productName"], "Cyber Hub");
+    assert_eq!(conf["identifier"], "dev.cyberhub.workstation");
+    assert!(conf["bundle"].get("publisher").is_none(), "the publisher stays the derived \"cyberhub\"");
+    assert!(conf["bundle"]["windows"].get("wix").is_none(), "no upgrade code or template override");
+    assert!(conf.get("mainBinaryName").is_none(), "the binary stays cyber-hub.exe");
+}
