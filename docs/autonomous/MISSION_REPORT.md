@@ -2273,7 +2273,10 @@ On Windows the run was repeated (pass 3, 20/20) with the launcher's console hidd
 * **This commit's CI run** re-runs everything on the same code; its result is on the repository's Actions page.
 * **Audits on 2026-11-12:**
   * cargo audit 0.22.2: 0 vulnerabilities, 8 allowed warnings, including the new RUSTSEC-2026-0372 (`zvariant_derive` unmaintained, a transitive dependency of the D-Bus crates);
-  * npm audit 0.
+  * npm audit of the app: 0.
+* **GitHub's Dependabot alerts,** two medium, both open since 2026-11-11 and not mentioned in Mission 9's report:
+  * `glib` below 0.20 (GHSA-wrw7-89jp-8q8g): the unsound iterator already allowed in cargo audit;
+  * `minimatch` 10.2.6 in `website/`'s ESLint tools (GHSA-g3hv-75wg-m249): development only, not in the app; npm audit of `website/` counts it 10 times through the lint packages (FEATURE_BACKLOG.md, item 94).
 * **gitleaks and actionlint** run in CI on every push.
 * **Real sessions and VMs:** sections 6–8.
 
