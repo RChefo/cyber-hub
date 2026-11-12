@@ -93,9 +93,11 @@ jobs:
           if ! git branch -r --contains "$sha" | grep -Eq '^\s*origin/(main|release/[^ ]+)$'; then
             echo "::error::$sha is not on main or a release/* branch"; exit 1
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "candidate=$candidate"
+            echo "sha=$sha"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Updater configuration
         run: |
