@@ -16,6 +16,7 @@ import { ProjectFormModal, STATUS_OPTIONS } from "./ProjectFormModal";
 
 function ProjectRow({ p, onOpen }: { p: ProjectSummary; onOpen: () => void }) {
   const meta = PROJECT_STATUS_META[p.status];
+  const dates = p.startDate || p.endDate ? `${p.startDate ?? "?"} → ${p.endDate ?? "?"}` : "Not set";
   return (
     <Button
       variant="ghost"
@@ -24,32 +25,37 @@ function ProjectRow({ p, onOpen }: { p: ProjectSummary; onOpen: () => void }) {
       aria-label={`Open project ${p.name}`}
     >
       <FeaturedIcon icon={FolderKanban} size="md" color={p.status === "active" ? "brand" : "gray"} />
-      <div className="min-w-0 flex-1">
+      {/* the name keeps room, and the details give way to it (Mission 11: the row scrolled the page sideways just above the lg width) */}
+      <div className="min-w-40 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-[14.5px] font-medium text-foreground">{p.name}</span>
           <ToneChip tone={meta.tone}>{meta.label}</ToneChip>
         </div>
         <div className="mt-0.5 truncate text-[12.5px] text-muted">{p.description || "No description"}</div>
       </div>
-      <dl className="hidden shrink-0 grid-cols-4 gap-6 text-[12.5px] lg:grid">
-        <div>
+      <dl className="hidden min-w-0 grid-cols-4 gap-6 text-[12.5px] lg:grid">
+        <div className="min-w-0">
           <dt className="text-muted">Dates</dt>
-          <dd className="tabular mt-0.5 text-foreground">{p.startDate || p.endDate ? `${p.startDate ?? "?"} → ${p.endDate ?? "?"}` : "Not set"}</dd>
+          <dd className="tabular mt-0.5 truncate text-foreground" title={dates}>
+            {dates}
+          </dd>
         </div>
-        <div>
+        <div className="min-w-0">
           <dt className="text-muted">Scope</dt>
-          <dd className="tabular mt-0.5 text-foreground">{p.targetCount} entries</dd>
+          <dd className="tabular mt-0.5 truncate text-foreground">{p.targetCount} entries</dd>
         </div>
-        <div>
+        <div className="min-w-0">
           <dt className="text-muted">Findings</dt>
           <dd className="tabular mt-0.5 flex items-center gap-1.5 text-foreground">
             {p.openFindings > 0 && <StatusDot tone="warning" />}
-            {p.openFindings} open / {p.findingCount}
+            <span className="truncate">
+              {p.openFindings} open / {p.findingCount}
+            </span>
           </dd>
         </div>
-        <div>
+        <div className="min-w-0">
           <dt className="text-muted">Updated</dt>
-          <dd className="mt-0.5 text-foreground">{formatRelative(p.updatedAt)}</dd>
+          <dd className="mt-0.5 truncate text-foreground">{formatRelative(p.updatedAt)}</dd>
         </div>
       </dl>
     </Button>
