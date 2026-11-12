@@ -9,6 +9,12 @@ export const ASVS_STATUS: Record<AsvsStatus, { label: string; tone: "default" | 
   not_applicable: { label: "Not applicable", tone: "accent" },
 };
 
+/** A status's label; a status this version does not know (the history keeps whatever was stored) is
+ * shown as stored instead of breaking the page (Mission 11). */
+export function statusLabel(status: string): string {
+  return ASVS_STATUS[status as AsvsStatus]?.label ?? status;
+}
+
 /** Frameworks an analyst can map a requirement to (`asvs_mappings.framework`). */
 export const ASVS_FRAMEWORKS = [
   { id: "wstg", label: "OWASP WSTG" },

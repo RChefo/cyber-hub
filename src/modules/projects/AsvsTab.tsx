@@ -11,7 +11,7 @@ import { notify } from "@/lib/actions";
 import { api } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import type { AsvsItem, AsvsStatus, AsvsSummary, Project, Severity } from "@/lib/types";
-import { ASVS_FRAMEWORKS, ASVS_STATUS, filterItems, progress } from "./asvs";
+import { ASVS_FRAMEWORKS, ASVS_STATUS, filterItems, progress, statusLabel } from "./asvs";
 import { cn, formatRelative, pluralize } from "@/lib/utils";
 import type { RiskAcceptance } from "@/lib/types";
 import { AcceptRiskModal } from "./RiskTab";
@@ -204,7 +204,7 @@ function Requirements({ assessment, project, archived, onOpenFinding, onOpenRisk
             <ul className="mt-1.5 flex flex-col gap-0.5">
               {view.data.history.slice(0, 50).map((h, n) => (
                 <li key={n}>
-                  <span className="font-mono">{h.requirement}</span> {ASVS_STATUS[h.fromStatus].label} → {ASVS_STATUS[h.toStatus].label}
+                  <span className="font-mono">{h.requirement}</span> {statusLabel(h.fromStatus)} → {statusLabel(h.toStatus)}
                   <span className="text-muted"> · {formatRelative(h.at)}</span>
                 </li>
               ))}

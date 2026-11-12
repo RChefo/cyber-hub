@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AsvsItem } from "@/lib/types";
-import { ASVS_STATUS, filterItems, progress } from "./asvs";
+import { ASVS_STATUS, filterItems, progress, statusLabel } from "./asvs";
 
 const item = (id: string, level: 1 | 2 | 3, inLevel: boolean, status: AsvsItem["status"], note = ""): AsvsItem => ({
   requirement: { id, chapter: id.split(".").slice(0, 1).join("."), section: id.split(".").slice(0, 2).join("."), text: `Verify that requirement ${id} holds.`, level },
@@ -31,5 +31,12 @@ describe("ASVS assessments", () => {
 
   it("labels every status the database accepts", () => {
     expect(Object.keys(ASVS_STATUS).sort()).toEqual(["compliant", "needs_review", "non_compliant", "not_applicable", "not_assessed"]);
+  });
+
+  it("shows a history status it does not know as stored instead of failing (Mission 11)", () => {
+    expect(statusLabel("non_compliant")).toBe("Non-compliant");
+    // the history table has no constraint on its statuses: an upgraded or edited database can hold others
+    expect(statusLabel("seed asvs_history.from_status")).toBe("seed asvs_history.from_status");
+    expect(statusLabel("")).toBe("");
   });
 });
