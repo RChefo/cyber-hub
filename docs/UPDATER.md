@@ -94,25 +94,31 @@ npx tauri signer generate -w ~/.cyberhub/updater-signing/cyberhub-updater.key
 
 ### Release secrets
 
-The release workflow reads two secrets, which should be stored in a GitHub **environment** named `release` (not as repository secrets), with required reviewers where the plan offers them. The environment of `RChefo/cyber-hub` exists since Mission 9 (branch policy `main` and `release/*`, no administrator bypass); its two secrets are not set yet, because storing them is the owner's step:
+The release workflow reads two secrets, which should be stored in a GitHub **environment** named `release` (not as repository secrets), with required reviewers where the plan offers them. The environment of `RChefo/cyber-hub` exists since Mission 9 (branch policy `main` and `release/*`, no administrator bypass); both secrets are stored since Mission 10:
 
 | Secret | Value |
 |---|---|
 | `TAURI_SIGNING_PRIVATE_KEY` | the content of `cyberhub-updater.key` |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | its password |
 
-Set them from the owner's machine without displaying them (PowerShell, after `gh auth login` and creating the `release` environment). PowerShell has no `<` redirection, so the key file goes through `cmd`, which passes its bytes unchanged (the file is one line without a newline). The password goes from Credential Manager into `gh`'s standard input without a trailing newline:
+Set them from the owner's machine without displaying them (Windows PowerShell, after `gh auth login` and creating the `release` environment).
+* PowerShell has no `<` redirection, so the key file goes through `cmd`, which passes its bytes unchanged (the file is one line without a newline).
+* The password goes from Credential Manager into `gh`'s standard input as its exact bytes, with no trailing newline and no byte-order mark. The first line keeps Windows PowerShell from writing a UTF-8 byte-order mark into `gh`'s input when the console uses UTF-8:
 
 ```powershell
+[Console]::InputEncoding = New-Object System.Text.UTF8Encoding $false
 cmd /c "gh secret set TAURI_SIGNING_PRIVATE_KEY --env release --repo <owner>/<repo> < ""%USERPROFILE%\.cyberhub\updater-signing\cyberhub-updater.key"""
 [void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime]
 $c = (New-Object Windows.Security.Credentials.PasswordVault).Retrieve('CyberHub.UpdaterSigning','TAURI_SIGNING_PRIVATE_KEY_PASSWORD'); $c.RetrievePassword()
 $psi = New-Object System.Diagnostics.ProcessStartInfo -Property @{ FileName = (Get-Command gh).Source; Arguments = 'secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --env release --repo <owner>/<repo>'; UseShellExecute = $false; RedirectStandardInput = $true }
-$p = [System.Diagnostics.Process]::Start($psi); $p.StandardInput.Write($c.Password); $p.StandardInput.Close(); $p.WaitForExit(); $c = $null
+$p = [System.Diagnostics.Process]::Start($psi); if ($p.StandardInput.Encoding.GetPreamble().Length) { $p.Kill(); $c = $null; throw 'the input would start with a byte-order mark' }
+$p.StandardInput.Write($c.Password); $p.StandardInput.Close(); $p.WaitForExit(); $c = $null
 gh secret list --env release --repo <owner>/<repo>   # lists both names, never a value
 ```
 
-(Mission 9 corrected this snippet: its first line used `<`, which PowerShell rejects, and piping a string to `gh` adds a newline to the password.)
+Earlier corrections to this snippet:
+* **Mission 9:** its first line used `<`, which PowerShell rejects, and piping a string to `gh` adds a newline to the password.
+* **Mission 10:** without the encoding line, a UTF-8 console stored the password with a byte-order mark in front of it, and the build failed with "Wrong password for that key".
 
 Never paste the key or password into chats, issues, workflow files or logs.
 

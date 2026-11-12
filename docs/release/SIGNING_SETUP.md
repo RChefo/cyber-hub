@@ -179,21 +179,25 @@ All signing material lives only in the `release` environment, never in repositor
 
 UPDATER.md ("Release secrets") gives the commands that copy the update key and its password into the environment without printing them.
 
-**Commands (for `RChefo/cyber-hub`, in PowerShell on the owner's machine).** Neither value appears on a command line or on the screen. The key file goes through `cmd`'s redirection, which PowerShell lacks; the quoting was tested in Mission 9 on the public key file. The password goes from Credential Manager into `gh`'s standard input without a trailing newline:
+**Commands (for `RChefo/cyber-hub`, in Windows PowerShell on the owner's machine).** Neither value appears on a command line or on the screen.
+* The key file goes through `cmd`'s redirection, which PowerShell lacks. The quoting was tested in Mission 9 on the public key file.
+* The password goes from Credential Manager into `gh`'s standard input as its exact bytes, with no trailing newline and **no byte-order mark**.
+  * When the console uses UTF-8, Windows PowerShell's `Process` class writes a UTF-8 byte-order mark into the child's input before anything else, and GitHub stores it as part of the secret.
+  * Mission 10's first release build failed that way: "incorrect updater private key password: Wrong password for that key".
+  * The first line below prevents it, and the check stops before writing if a mark would still be sent.
 
 ```powershell
+[Console]::InputEncoding = New-Object System.Text.UTF8Encoding $false
 cmd /c "gh secret set TAURI_SIGNING_PRIVATE_KEY --env release --repo RChefo/cyber-hub < ""%USERPROFILE%\.cyberhub\updater-signing\cyberhub-updater.key"""
 [void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime]
 $c = (New-Object Windows.Security.Credentials.PasswordVault).Retrieve('CyberHub.UpdaterSigning','TAURI_SIGNING_PRIVATE_KEY_PASSWORD'); $c.RetrievePassword()
 $psi = New-Object System.Diagnostics.ProcessStartInfo -Property @{ FileName = (Get-Command gh).Source; Arguments = 'secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --env release --repo RChefo/cyber-hub'; UseShellExecute = $false; RedirectStandardInput = $true }
-$p = [System.Diagnostics.Process]::Start($psi); $p.StandardInput.Write($c.Password); $p.StandardInput.Close(); $p.WaitForExit(); $c = $null
+$p = [System.Diagnostics.Process]::Start($psi); if ($p.StandardInput.Encoding.GetPreamble().Length) { $p.Kill(); $c = $null; throw 'the input would start with a byte-order mark' }
+$p.StandardInput.Write($c.Password); $p.StandardInput.Close(); $p.WaitForExit(); $c = $null
 gh secret list --env release --repo RChefo/cyber-hub
 ```
 
-**Plan caveat.** One source says that on GitHub Free environment secrets work only in public repositories. Yet this private repository accepted the `release` environment, its branch policy and a listing of its secrets.
-* If `gh secret set --env release` is refused, either upgrade to GitHub Pro, or store the two secrets as repository secrets.
-* Repository secrets are readable by any workflow of the repository, but only the owner can push here and `ci.yml` reads no secret. That is a weaker protection: record it if chosen.
-* The first release run shows which applies. If the build job reports "no TAURI_SIGNING_PRIVATE_KEY", the environment secrets did not reach it.
+**Plan.** Environment secrets work in this private repository on GitHub Free. Mission 10's release run received both in its build job: the key decoded, and the password was checked against it.
 
 **Storage:**
 
