@@ -232,6 +232,12 @@ These runs build, sign and upload nothing.
 
 Building, signing and the draft release come after signing is set up (M9), in `RELEASE_CANDIDATE_PROCEDURE.md`, and need the owner's explicit authorization.
 
+**Mission 10 (2026-11-12): both checks ran as expected.**
+* **The tag push:** run 43219450467, *Validate* green, with the notice "RELEASE_PUBLISHING is not 'enabled'…". *Build and sign* and *Publish* were skipped.
+* **A manual run without the variable:** run 43222864191, the same.
+* **The draft runs.** With the owner's authorization, three draft runs followed, with the variable set only during each. The third, 43242424304, built the candidate as a private draft (`RELEASE_CANDIDATE_PROCEDURE.md`, "Status after Mission 10").
+* **The plan:** environment secrets reach the build job in this private repository on GitHub Free.
+
 ## 6. Troubleshooting
 
 | Symptom | Likely cause | What to do |

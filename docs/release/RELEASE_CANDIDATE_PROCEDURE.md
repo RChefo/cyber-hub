@@ -1,9 +1,19 @@
 # Release-candidate procedure (M10)
 
-This is how the one release-candidate build is made and validated. Mission 8 prepared it and executed none of it:
+This is how the one release-candidate build is made and validated. Mission 8 prepared it.
 
-* no installer, package or release binary has been built;
-* nothing has been signed, uploaded or published.
+**Status after Mission 10 (2026-11-12): carried out once.**
+* **The candidate is a private draft release** of `v0.1.0` (tag on `add894e`), built by [run 43242424304](https://github.com/RChefo/cyber-hub/actions/runs/43242424304). Nothing was published.
+* **Sections 3–9 were run** in disposable VMs and clean containers; the results are in MISSION_REPORT.md, "Mission 10, continued". `RELEASE_PUBLISHING` was set only during each draft run.
+* **What it taught, for the next candidate:**
+  * **Store the password without a byte-order mark** (`SIGNING_SETUP.md`, section 5, corrected). The first build failed with "Wrong password for that key".
+  * **Release notes longer than 20,000 characters** are now shortened for `latest.json` (`598b1f9`). The second build failed there.
+  * **A failed run uploads nothing.** Fix the cause, delete and re-create the tag if the fix is a commit, set the variable again and run again.
+  * **Without Authenticode,** section 6's NSIS and MSI rows are not met: SmartScreen says "Unknown publisher" and blocks until *More info → Run anyway*, and the MSI's UAC prompt says "unknown publisher". Defender did not quarantine the unsigned installed program (11 minutes, then a restart).
+  * **The MSI** installs into the NSIS folder (`%LOCALAPPDATA%\Cyber Hub`) when an NSIS install was there before (FEATURE_BACKLOG.md, item 96). Test it on a machine without that history.
+  * **The deb declares** `libwebkit2gtk-4.1-0` and `libgtk-3-0`. It does not declare `ca-certificates`, without which Cyber Hub does not start (item 95).
+  * **The AppImage ran on Ubuntu 24.04 with only FUSE 3 installed.**
+  * **Verification (section 5)** also ran the reference `minisign` against the public key compiled into the app, independently of the repository's validator.
 
 **Mission 9 status.** The owner authorized the candidate build, and the steps up to it are done:
 * the private repository;
@@ -12,7 +22,7 @@ This is how the one release-candidate build is made and validated. Mission 8 pre
 * the upgrade fixtures;
 * the Linux test VMs.
 
-The build itself is not done. Storing the update key in the `release` environment was refused by the assistant session's permission rules, and without that key the build job stops at once by design. The next step is the owner's: `SIGNING_SETUP.md`, section 5, "Commands". After that come sections 1–3 below.
+In Mission 9 the build itself was not done: storing the update key was refused by the session's permission rules. The owner authorized it in Mission 10.
 
 **The build happens only after the owner has reviewed `RELEASE_READINESS.md` and explicitly authorized it.** A checklist in the repository is not that authorization.
 

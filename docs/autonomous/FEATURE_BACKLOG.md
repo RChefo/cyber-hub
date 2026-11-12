@@ -393,3 +393,32 @@ The brief asked for the remaining blockers to be resolved, and for the candidate
 | 92 | Windows: another program can size the window below its minimum | `SetWindowPos` from another process is not limited by the minimum tracking size, which Windows applies to sizing by the user (a corner drag stops at 800 × 480 at every scale). It could be enforced in `WM_WINDOWPOSCHANGING`, which tao does not handle. No user action produces it; low priority |
 | 93 | The Windows harness (M1 typing, the early-click checker, the HiDPI driver) | It lives in `E:\CyberHubQA\win-share` and `desk`. Add it with item 87 |
 | 94 | Dependabot alert: `minimatch` 10.2.6 in `website/` (GHSA-g3hv-75wg-m249, medium, a denial of service through glob patterns) | It comes with the website's ESLint and typescript-eslint, development only, and is not part of the app. npm's suggested fix downgrades both a major version. Update them once they depend on `minimatch` 11.0.1 or later, or override `minimatch` after checking ESLint still works. The other Dependabot alert, `glib` below 0.20, is the unsound iterator already allowed in cargo audit and named in the release notes (Tauri's GTK 3 stack) |
+
+## Mission 10, continued (2026-11-12): the release candidate
+
+The owner authorized the password secret and the draft builds. The candidate was built and is a private draft (MISSION_REPORT.md, "Mission 10, continued"). Its tests found two release-pipeline defects, both fixed, and three issues recorded below.
+
+### Status of earlier items
+
+| # | Item | Status |
+|---|---|---|
+| 84 | Store the update-signing secrets in the `release` environment | **Done.** The password was stored at 13:47:49Z, without the byte-order mark that broke the first copy, and the builds sign with both secrets |
+| 85 | An Authenticode certificate and its CI signing and verification | **Open, now the main blocker for Windows.** SmartScreen ("Unknown publisher") and the MSI's UAC prompt ("unknown publisher") were seen on the candidate |
+| 87, 93 | The QA harnesses in the repository | **Open.** Mission 10 added a CDP driver for installed Windows builds, UI Automation clicks, and Linux package and AppImage sequences. Gaps it hit: GTK's and Windows' "replace it?" prompts, Plasma's screen lock, Debian's `x-terminal-emulator`, and long lines typed into Win+R |
+| 90 | A switch that builds a draft without allowing publication | **Open.** The owner allowed `RELEASE_PUBLISHING` for the draft runs; the variable was set only during each run |
+
+### Fixed
+
+| What | Commit |
+|---|---|
+| The update manifest refused 0.1.0's release notes (25,720 characters; the app shows 20,000), so the first complete run uploaded nothing. `generate` now shortens notes at a paragraph and links the full notes on the release page; `validate` still enforces the limit | `598b1f9` |
+| The documented password command stored a UTF-8 byte-order mark in front of the password when the console used UTF-8 | `add894e` |
+
+### New
+
+| # | Item | Why open |
+|---|---|---|
+| 95 | **Cyber Hub refuses to start without CA certificates** | `VtState::new()` and `TiState::new()` build reqwest clients during setup. On a system with no CA certificates (bare Ubuntu 24.04 and Debian 12 containers, `--no-install-recommends`), `build()` fails and the start-up error says only "builder error"; with `ca-certificates` it starts. Desktops have the certificates. Fix: build those clients when first used (or start and report the network features as unavailable), name the cause in the message, and declare `ca-certificates` in the deb and rpm (`bundle.linux.deb.depends`). Low; decide before publishing |
+| 96 | **The MSI installs into the NSIS folder after an NSIS install was removed** | The NSIS uninstaller leaves `HKCU\Software\cyberhub\Cyber Hub` (`(Default)` is the install folder). Tauri's MSI template reads that key to follow an NSIS install, so the per-machine MSI went to `C:\Users\<user>\AppData\Local\Cyber Hub\`. Options: clean the key in the NSIS uninstaller (a template hook), or document it. An MSI on a machine that never had the NSIS version was not tested |
+| 97 | **Windows lists the publisher as "cyberhub"** | No `bundle.publisher` is set, so Tauri derives it from the identifier. Set it, for example to the certificate's subject, when Authenticode is added |
+| 98 | **Test an update end to end after publication** | The feed is `releases/latest` of the repository. Before publication every package correctly reports that no update manifest is published. Check 0.1.0 against the published feed, then a 0.1.1 update signed with the same key |

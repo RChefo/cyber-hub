@@ -9,14 +9,17 @@ This is the owner's guide to the signing Cyber Hub needs before its first releas
   * The key file is one line with no newline, and the password's Credential Manager entry exists. Neither value was read or printed.
 * **The `release` environment** of `RChefo/cyber-hub` exists (branches `main` and `release/*`, no administrator bypass).
   * **`TAURI_SIGNING_PRIVATE_KEY` is stored there.** `gh secret list --env release` shows it updated 2026-11-11 22:13 UTC (Mission 10, from the key file through standard input; the value was never shown).
-  * **`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is not.** Mission 10's command, which pipes it from Credential Manager into `gh secret set`, was refused by the session's permission classifier. Storing it is the owner's step (section 5, "Commands").
+  * **`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is stored too**, since 2026-11-12 13:47 UTC. The owner authorized the session to store it.
+    * The first copy (12:34 UTC) began with a UTF-8 byte-order mark that Windows PowerShell had written into `gh`'s input, and the build failed with "Wrong password for that key".
+    * Section 5's command now prevents that.
+* **Update signing works.** Release run 43242424304 (2026-11-12) signed all five packages of the `v0.1.0` candidate. Every signature verifies against the public key compiled into the app, with the repository's validator and with the reference minisign.
 * **Authenticode signing is not configured, and no certificate exists.**
   * The certificate stores (current user and machine) hold no certificate with the code-signing usage.
   * There is no smart-card reader and no signing client.
   * Nothing was bought. The recommendation, the SmartScreen facts and the costs are below.
-* **The release workflow has never run.**
+  * On the candidate, SmartScreen blocked the unsigned downloads ("Unknown publisher"), and the MSI's UAC prompt said "unknown publisher".
 
-Nothing was signed. No certificate, key or production secret was created.
+No certificate, key or production secret was created. The candidate's Windows installers are update-signed but not Authenticode-signed.
 
 ## Choosing the Authenticode route (research of 2026-11-11)
 
@@ -111,8 +114,8 @@ Then follow *Purchase and setup (SSL.com IV)* above, and section 6.
 
 | What | Format | Tool and key | Where | State |
 |---|---|---|---|---|
-| Update packages: the NSIS and MSI installers, AppImage, deb and rpm | A minisign signature (Ed25519) in a `.sig` next to each package, whose trusted comment names the version | `tauri build` with `bundle.createUpdaterArtifacts`, reading `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The public key (key ID `957F3F7D955C72FA`) is compiled into the app from `plugins.updater.pubkey` | The release workflow's build job, in the protected `release` environment | Configured, never run |
-| The update manifest `latest.json` | Lists each package's URL and signature | `scripts/updater-manifest.mjs`, which verifies every signature against the compiled public key and the version | The publish job | Configured, never run |
+| Update packages: the NSIS and MSI installers, AppImage, deb and rpm | A minisign signature (Ed25519) in a `.sig` next to each package, whose trusted comment names the version | `tauri build` with `bundle.createUpdaterArtifacts`, reading `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The public key (key ID `957F3F7D955C72FA`) is compiled into the app from `plugins.updater.pubkey` | The release workflow's build job, in the protected `release` environment | Configured; signed the `v0.1.0` candidate (Mission 10) |
+| The update manifest `latest.json` | Lists each package's URL and signature | `scripts/updater-manifest.mjs`, which verifies every signature against the compiled public key and the version | The publish job | Configured; generated and validated the candidate's `latest.json` (Mission 10) |
 | Windows executables and installers: `cyber-hub.exe`, `cyberhub-mcp.exe`, `*-setup.exe`, `*.msi` | Authenticode, SHA-256, RFC 3161 timestamp | `signtool`, or Microsoft Artifact Signing, through Tauri's `bundle.windows.certificateThumbprint` or `bundle.windows.signCommand` | To be added to the build job | **Not configured. Release blocker.** |
 | Linux packages: AppImage, deb, rpm | No package signature | Integrity comes from `SHA256SUMS.txt`, GitHub's per-asset digests (both checked by the publish job), and the update signatures | The publish job | By design for 0.1.0. Optionally, sign `SHA256SUMS.txt` with a GPG key (section 7) |
 

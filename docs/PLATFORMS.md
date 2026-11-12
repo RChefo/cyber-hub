@@ -49,7 +49,7 @@ Cyber Hub is under active development. It is not released or distributed, and no
 
 **Updater (Windows 11, staging):** a disposable NSIS installation of a test build updated from 0.1.0 to 0.2.0 through a local feed, with signature, version-binding, downgrade, TLS, cancellation, install-guard and data-preservation checks (details and the untested parts in [UPDATER.md](UPDATER.md#testing)).
 
-`.github/workflows/release.yml` builds, signs and publishes releases. It has never run. Since Mission 6:
+`.github/workflows/release.yml` builds, signs and publishes releases. Its first runs, in Mission 10, built the `v0.1.0` candidate as a private draft. Since Mission 6:
 * it builds and uploads nothing unless the repository variable `RELEASE_PUBLISHING` is `enabled`;
 * a tag push stops at a draft;
 * its toolchains are pinned like `ci.yml`'s.

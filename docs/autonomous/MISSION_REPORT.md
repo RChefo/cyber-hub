@@ -2336,3 +2336,205 @@ When the release is done: delete the four VMs in VirtualBox, then `E:\CyberHubQA
 * **The repository:** stays private.
 * **The VMs** `chqa-win11b`, `chqa-noble` and `chqa-deb12`: shut down from inside, never saved, and kept for the candidate.
 * **`chqa-win11`:** off and unusable.
+
+## Mission 10, continued: the release candidate (2026-11-12)
+
+**What changed.** When the owner asked the session to continue, two of section 16's blockers were theirs to lift, and they did:
+* they authorized the session to store the update key's password itself;
+* they allowed `RELEASE_PUBLISHING` for one draft run, then for two more, when the first two failed and were fixed.
+
+The release candidate was then built, verified, installed and tested. It is a **private draft release**. Nothing was published.
+
+**Classification: RELEASE CANDIDATE PARTIALLY VERIFIED.**
+* Every package was built and update-signed by the release workflow. Every signature verifies, independently too, and every checksum matches.
+* Every package installed, ran and passed the app checks in disposable VMs (Windows 11, Ubuntu 24.04 GNOME, Debian 12 Plasma) or clean containers (Fedora for the rpm). That includes upgrade, rollback and uninstall.
+* **Not verified:**
+  * Authenticode: there is no certificate, so the Windows installers are unsigned, and SmartScreen and UAC say "unknown publisher";
+  * an update end to end, which needs a published release and a later one;
+  * physical HiDPI;
+  * the rpm in a desktop session.
+* **Found by the candidate's tests and fixed:** two release-pipeline defects, the password secret's byte-order mark and the update notes' length.
+* **Found and recorded:** a start-up dependency on CA certificates, the MSI's install folder after an NSIS install, and the publisher name.
+
+**Times:** 2026-11-12T12:04Z to the commit that adds this section.
+
+### 1. Starting and ending commits
+
+* **Start:** `f01dbdf`, clean, the same as GitHub, no tag.
+* **Commits:**
+  * `598b1f9` fix(release): shorten update notes that are longer than the app shows;
+  * `add894e` docs(release): store the update key's password without a byte-order mark;
+  * this documentation commit.
+* **The tag `v0.1.0`** names `add894ecaa0d9d03da8a0709715dfc966fcf93f8`, locally and on GitHub. It was first created on `f01dbdf`, then moved with the owner's approval after the second build exposed the notes defect; nothing had been released from it.
+* **The application code** is unchanged since `63d2cd6`. `598b1f9` changes only the update-manifest script and its test.
+
+### 2. GitHub Actions runs
+
+| Run | What | Result |
+|---|---|---|
+| [43219450467](https://github.com/RChefo/cyber-hub/actions/runs/43219450467) | Release, the tag push (`f01dbdf`) | Success: *Validate* only, with the notice that `RELEASE_PUBLISHING` is not enabled; *Build* and *Publish* skipped |
+| [43222864191](https://github.com/RChefo/cyber-hub/actions/runs/43222864191) | Release, a manual run without the variable | Success: the same; nothing built (GITHUB_FIRST_RUN.md, section 5) |
+| [43225209120](https://github.com/RChefo/cyber-hub/actions/runs/43225209120) | Release, draft run 1 | **Failure:** Linux built and bundled, then "incorrect updater private key password" (the stored password began with a byte-order mark). Windows cancelled, *Publish* skipped, nothing uploaded |
+| [43231095560](https://github.com/RChefo/cyber-hub/actions/runs/43231095560) | Release, draft run 2 | **Failure:** both builds and signatures passed; *Publish* refused `latest.json`'s notes (25,720 characters, limit 20,000). Nothing uploaded |
+| [43239973165](https://github.com/RChefo/cyber-hub/actions/runs/43239973165) | CI on `add894e` | Success, all five jobs |
+| [43242291328](https://github.com/RChefo/cyber-hub/actions/runs/43242291328) | Release, the second tag push | Cancelled. It only validates; the draft run validated the same commit |
+| [43242424304](https://github.com/RChefo/cyber-hub/actions/runs/43242424304) | Release, draft run 3 | **Success:** validate (641 Rust tests passed, 28 ignored; 56 frontend test files; clippy; npm audit 0; cargo audit 0 vulnerabilities in 652 crates, 8 allowed warnings), both builds and signatures, and *Publish* (manifest, tag check, upload to a draft, digest check) |
+| The run of this commit | CI | Started by the push |
+
+**`RELEASE_PUBLISHING`** existed only during the three draft runs (13:13–13:44Z, 13:50–14:35Z and 14:56–15:35Z). Each time it was deleted when the run ended, the last time 23 seconds after. No variable exists now.
+
+### 3. Update-signing secret configuration status
+
+* **Both secrets are stored** in the `release` environment, and the builds prove them: the key decoded, and the password opened it.
+  * `TAURI_SIGNING_PRIVATE_KEY`: since 2026-11-11 22:13:18Z.
+  * `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: since 2026-11-12 13:47:49Z.
+* **Neither value was displayed,** put in an argument or written to a file.
+* **The first copy of the password** (12:34:26Z, through the documented command) began with a UTF-8 byte-order mark.
+  * In Windows PowerShell, a child's standard input gets one first when the console uses UTF-8. A test string arrived as `efbbbf616263`.
+  * The corrected command sets a mark-free input encoding and refuses to write if a mark would still be sent. SIGNING_SETUP.md and UPDATER.md carry it.
+
+### 4. Authenticode certificate status
+
+* **None.** Nothing was bought.
+* **The NSIS installer, the MSI and the installed programs are "NotSigned".** What a Windows 11 user sees:
+  * SmartScreen blocks the downloaded installers ("Windows protected your PC", "Publisher: Unknown publisher") until *More info → Run anyway*;
+  * the MSI's administrator prompt says "an unknown publisher".
+* **Microsoft Defender did not quarantine the installed program,** 11 minutes after its first start nor after a restart. In 2026-11-05's staging test, a development build had been quarantined.
+* **Before distribution:** the certificate (SSL.com IV with eSigner recommended, about $309 a year), then rebuild the Windows installers.
+
+### 5. Windows environment status
+
+* **`chqa-win11b`:** Windows 11 Enterprise Evaluation 26H2. Pending updates were installed by a restart before the tests: build 26300.9457 → 26300.9974.
+  * WebView2 157.0.4341.46.
+  * Windows Update paused for seven days, sleep off.
+* **One hang.** The guest stopped responding once (15:53:55Z, VirtualBox's heartbeat log). It was powered off and cold-booted; the test resumed. Disk resets were logged under host load.
+* **Never touched:** the owner's Windows. Nothing was installed or run on it; the installers were downloaded there only to be hashed and their signatures read.
+
+### 6. TAXII test results
+
+* **M1 on Windows:** 17/17 earlier in Mission 10, with a development build of the same application code. It was not repeated on the installed candidate.
+* **M7 on the installed deb:**
+  * **GNOME Keyring (Ubuntu) and KWallet (Debian):** a server without a credential; the native dialog storing the typed password; one entry named by the server; still stored after a restart without an unlock prompt; Forget after the delay leaving nothing; removing the server removing its entry.
+  * The lock and cancelled-unlock step (5) was not repeated.
+
+### 7. GNOME, KDE and KWallet results
+
+* **Installed deb, M2 (start, every page and project tab, Ctrl+K, native confirmations, the terminal, the window controls), 9/9:**
+  * Ubuntu 24.04.5 with GNOME 46 on Wayland;
+  * Debian 12 with Plasma 5.27 on X11, KWallet as the Secret Service.
+* **Credentials:** M7 in both, section 6.
+* **The AppImage** runs in both.
+* **Two VM environment problems, not Cyber Hub:**
+  * Plasma's screen locked despite `Autolock=false`, until a ScreenSaver inhibit was held;
+  * report and backup files left by Mission 9 triggered GTK's "replace it?" prompt.
+  * The affected runs were repeated on the final packages.
+
+### 8. HiDPI results
+
+* **Unchanged from earlier in Mission 10:** virtual scaling passes at 100, 125, 150 and 200 % on GNOME and Windows.
+* **The installed builds' first windows fit the work area** on Windows (2560 × 1600) and Linux (1280 × 800).
+* No physical screen (M4).
+
+### 9. Linux package installation results
+
+| Where | Package | Result |
+|---|---|---|
+| Ubuntu 24.04.5 GNOME, VM | deb | Installs (`Depends: libwebkit2gtk-4.1-0, libgtk-3-0`): `/usr/bin/cyber-hub`, `/usr/bin/cyberhub-mcp`, a desktop entry; no data before the first start. M2 9/9; RC-1 to RC-4; reports, backup and restore; M7; Alt+F4. Upgrade from schema 19 (backup first), then rollback. Uninstall keeps the data; a reinstall opens it without another upgrade |
+| The same VM | AppImage | RC-1 to RC-4, with the AppImage path warning on the MCP page. Ran with FUSE 3 only, without `libfuse2` |
+| Debian 12 Plasma X11, KWallet, VM | deb | The same, with an upgrade from schema 8 |
+| The same VM | AppImage | RC-1 to RC-4 |
+| Clean Ubuntu 24.04 and Debian 12 containers | deb | Installs with every dependency (92 → 311 and 88 → 314 packages), no library missing, removal clean. **Does not start without CA certificates**: "builder error" (section 16) |
+| Clean Fedora 43 container | rpm | Installs (`Requires` the GTK 3 and WebKitGTK 4.1 libraries), starts with its window, schema 32 and a 0700 data folder; removal clean |
+
+In both VMs, the import preview matches MANUAL_VALIDATION: with the address in scope, the complete sample gives Nmap XML, 0 findings, 3 assets and no warning.
+
+### 10. Full regression results
+
+* **The release run's own validation of the tagged commit:** 641 passed, 0 failed, 28 ignored; 56 frontend test files; tsc, clippy, the production build; npm audit 0; cargo audit 0 vulnerabilities in 652 crates, 8 allowed warnings.
+* **CI on `add894e`:** green on Windows, Ubuntu, Debian 12, MSRV and the scans (gitleaks, actionlint).
+* **The manifest script's tests:** 5/5, including the new shortening test.
+
+### 11. Release artifacts and verified paths
+
+* **The draft's 12 assets,** downloaded to `E:\CyberHubQA\rc\draft-v0.1.0\` and verified there:
+
+| File | Bytes |
+|---|---|
+| `Cyber.Hub_0.1.0_x64-setup.exe` (NSIS) | 8,650,490 |
+| `Cyber.Hub_0.1.0_x64_en-US.msi` | 11,378,688 |
+| `Cyber.Hub_0.1.0_amd64.AppImage` | 90,724,856 |
+| `Cyber.Hub_0.1.0_amd64.deb` | 13,232,520 |
+| `Cyber.Hub-0.1.0-1.x86_64.rpm` | 13,234,766 |
+| the five `.sig` files | 432–440 each |
+| `latest.json` | 24,118 |
+| `SHA256SUMS.txt` | 1,050 |
+
+* **Installed paths:**
+  * NSIS: `%LOCALAPPDATA%\Cyber Hub\{cyber-hub.exe, cyberhub-mcp.exe, uninstall.exe}`;
+  * deb: `/usr/bin/cyber-hub`, `/usr/bin/cyberhub-mcp`, `/usr/share/applications/Cyber Hub.desktop`;
+  * the MSI: section 16.
+* **Evidence:** `E:\CyberHubQA\evidence\M10\2026-11-12\` holds `verify.log`, `SHA256SUMS.txt`, `latest.json`, the runs' logs, the containers, and the VMs' logs and screenshots.
+
+### 12. SHA-256 checksums
+
+```
+6b1a708607b6f41a88dac9f4eeb7c634d5051b23c67d1cfdd139ec8152c09cfa  Cyber.Hub_0.1.0_x64-setup.exe
+5051213a74ff3d890855dc638ef688a88e126dcb660f323a91f7f266aa145ed0  Cyber.Hub_0.1.0_x64_en-US.msi
+0d96580351e5ac22f4fc33984e3a7ded44c9e70aee6edbc16f2c01eb38af5c40  Cyber.Hub_0.1.0_amd64.AppImage
+60603f7c040d5047583783b2878d0a4c5d10cbc388d3ffb9671fdf0e65a4743b  Cyber.Hub_0.1.0_amd64.deb
+092768b645464650e414eb6c1d2c890e7fb8757b06a593a704072b12f10ce581  Cyber.Hub-0.1.0-1.x86_64.rpm
+202bc0a6db44370e33c2b41b9910dba54fe461519b4fb50cf1766d7ec0f058be  latest.json
+```
+
+The `.sig` files' sums are in `SHA256SUMS.txt`. GitHub's own asset digests equal these: the publish job checks that, and the draft's listing shows them.
+
+### 13. Signature verification results
+
+* **`sha256sum -c SHA256SUMS.txt`:** all 11 files OK.
+* **The repository's validator** at the tagged commit: `latest.json` valid, 7 platform entries, every signature verified against the public key compiled into the app.
+* **The reference minisign 0.12,** independent of the repository's code, against key `957F3F7D955C72FA`: all five packages OK. Every trusted comment names `version:0.1.0`.
+* **Authenticode:** "NotSigned" for both Windows installers and the installed programs.
+
+### 14. Database isolation evidence
+
+* **The real database was never opened.** Its modification time is `2026-11-05T15:58:24.8534883Z`, unchanged.
+* **Nothing was installed on the owner's Windows:** neither `%LOCALAPPDATA%\Cyber Hub` nor `Program Files\Cyber Hub` exists there.
+* **Every installation ran in a disposable VM or a container,** with that machine's own data folder.
+  * Before the packages, the VMs' earlier QA data was moved aside, not deleted: `dev.cyberhub.workstation.dev-builds-m9-m10`, `~/rc-run1`, `~/m9-leftovers`.
+  * A leftover QA keyring entry of Mission 9 was removed in the Ubuntu VM.
+* **The upgrade tests used the synthetic fixtures,** not real data.
+
+### 15. Private draft release URL
+
+https://github.com/RChefo/cyber-hub/releases/tag/untagged-be186ef1d1191b08b196
+* Tag `v0.1.0`, a draft: `isDraft: true`, never published.
+* It is visible only to people with write access to this private repository. GitHub gives a draft a new `untagged-…` address when it is edited.
+* Its body starts with the candidate section (signature status, checksums, installation, upgrade and rollback, validation, limitations). The full release notes follow.
+
+### 16. Every remaining blocker
+
+1. **Authenticode (blocks Windows distribution).** Buy and set up the certificate, add signing and its verification to the release workflow, delete this draft and the tag, then rebuild.
+2. **Start-up without CA certificates** (FEATURE_BACKLOG.md item 95). On a system with no CA certificates, Cyber Hub refuses to start with "builder error", because two network clients are built in setup. Desktop systems have them.
+   * Fix before publishing, or accept: build those clients when first used, name the cause in the message, and declare `ca-certificates` in the deb and rpm.
+3. **The update path** can only be tested after publication. Then the owner checks:
+   * that `releases/latest/download/latest.json` serves the manifest;
+   * that 0.1.0 reports it is up to date;
+   * later, a 0.1.1 update.
+4. **The MSI after an NSIS install** (item 96). The NSIS uninstaller leaves `HKCU\Software\cyberhub\Cyber Hub`, and the MSI then installs into that per-user folder. A clean-machine MSI install, and the publisher name "cyberhub" (item 97), remain to decide.
+5. **Physical HiDPI (M4)**, the rpm in a desktop, M1 on the installed build.
+6. **The owner's publication decision.** The draft stays a draft. Publishing needs a separate authorization and `RELEASE_PUBLISHING` for that run.
+7. **Recommended, as before:** limit the eight third-party GitHub Apps; GitHub Pro for required reviewers and rulesets.
+
+**QA storage** (`E:\CyberHubQA`, about 65 GB plus 0.4 GB of new evidence): the cleanup report above still applies. Nothing was deleted, and all three working VMs are off.
+
+### 17. Final classification
+
+**RELEASE CANDIDATE PARTIALLY VERIFIED.**
+* The candidate exists as a private draft. Its packages are built and update-signed by the workflow, and verified twice, once independently.
+* Every package was installed and exercised on the platform it targets: upgrade, rollback, backup and restore, credentials, the MCP sidecar, uninstall.
+* It is **not** a release:
+  * the Windows installers are unsigned;
+  * the update path cannot be checked before publication;
+  * physical HiDPI is untested;
+  * the CA-certificate start-up issue is open.
+* **Nothing was published,** the repository stays private, and `RELEASE_PUBLISHING` is unset.

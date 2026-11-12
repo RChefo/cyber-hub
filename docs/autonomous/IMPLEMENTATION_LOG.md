@@ -1498,3 +1498,155 @@ All 17 steps ran in the VM, and the host typed into Windows' credential dialog t
   * no repository secrets, and no variables (`RELEASE_PUBLISHING` unset).
 * **The update key.** The public key in `tauri.conf.json` is identical to `cyberhub-updater.key.pub`.
 * **Documents:** SIGNING_SETUP, MANUAL_VALIDATION, RELEASE_READINESS, GITHUB_FIRST_RUN and the tracking files.
+
+## Mission 10, continued (2026-11-12T12:04Z): the release candidate
+
+## 12:04–12:36Z: the owner's decisions, the password, the tag
+
+* **State.** `release/v0.1.0` at `f01dbdf`, clean, the same as GitHub; no tag, no variable, no release. The `release` environment held only `TAURI_SIGNING_PRIVATE_KEY`.
+* **The owner's answers** (asked once, in the session):
+  * that the session runs the password script itself;
+  * "Enable it for one draft run" for `RELEASE_PUBLISHING`.
+* **The password.** The same script as before (`set-updater-password.ps1`: Credential Manager → `gh secret set` through standard input, nothing printed) ran with that authorization. `gh` exited 0. `gh secret list --env release` shows `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` at 12:34:26Z. The value was never displayed.
+* **Before tagging.**
+  * The versions in `package.json`, `tauri.conf.json` and `Cargo.toml` are 0.1.0.
+  * `f01dbdf` is on `origin/release/v0.1.0`.
+  * No file outside the documentation changed since `63d2cd6`.
+  * CI was green on `f01dbdf` (run 43129528211).
+* **The tag.** `git tag -a v0.1.0 -m "Cyber Hub 0.1.0" f01dbdf`, pushed at 12:36Z. It names `f01dbdfb251f5a0c0d13820c6c6becacfe0a6161`, locally and on GitHub.
+
+## 12:36–13:13Z: the two validation-only release runs (GITHUB_FIRST_RUN.md, section 5)
+
+* **The tag push.** [Run 43219450467](https://github.com/RChefo/cyber-hub/actions/runs/43219450467): *Validate* green, with the notice "RELEASE_PUBLISHING is not 'enabled': this run only validates; nothing is built, signed or uploaded". *Build and sign* and *Publish* were skipped.
+  * cargo audit: 0 vulnerabilities in 652 crates, 8 allowed warnings.
+* **A manual run without the variable.** [Run 43222864191](https://github.com/RChefo/cyber-hub/actions/runs/43222864191): the same notice; *Build* and *Publish* skipped.
+* **Actions minutes.** About 362 of the plan's 2,000 used this month, from the job durations. The billing API needs a token scope the session does not have.
+
+## 12:48–13:21Z: the test machines
+
+* **Booted cold.** `chqa-noble` (Ubuntu 24.04, GNOME Wayland), `chqa-deb12` (Debian 12, Plasma X11) and `chqa-win11b` (Windows 11 26H2), with logins typed at GDM and SDDM.
+  * GDM's user entry already had the focus, so the Tab that Mission 10 needed moved it to "Not listed?". The password went into a user-name prompt, and GDM logged "user unknown" without the name.
+* **Prepared for clean first starts.**
+  * No suspend or screen lock in any VM.
+  * The data that the development builds left in Missions 9 and 10 was set aside as `dev.cyberhub.workstation.dev-builds-m9-m10`.
+  * Mission 9's leftover GNOME Keyring entry (`taxii_2_…`, created 2026-11-11 20:28 by a development build) was removed.
+* **Windows.**
+  * The VM had a restart pending from earlier updates. It was restarted from inside, and the update installed.
+  * Windows Update was paused for seven days, elevated through UAC.
+  * Sleep was turned off.
+  * Before the install: no Cyber Hub folder, Start-menu entry, uninstall entry or data folder; Defender's real-time protection on, with no detections.
+* **The new harness, rehearsed with the development build.**
+  * Linux: the `rc` phase (version, data folder, update check, MCP sidecar).
+  * Windows: the CDP driver (`rc-vm.mjs`): version, data folder, update check, MCP sidecar, window, pages, a native confirmation, backup and restore through Windows' file dialogs.
+  * Only the two checks that need a release build failed: no update feed in a development build. The rehearsal's data folders were deleted, so the packages meet clean machines.
+* **Typing into Win+R.** A long command lost keystrokes, and the Bash tool halves doubled backslashes. Win+R now types one short fixed line, `conhost --headless \\VBOXSVR\qa\rc\a.cmd`, and each step's command is in `a.cmd`.
+
+## 13:13Z: the build
+
+* `RELEASE_PUBLISHING` set to `enabled` at 13:13:15Z.
+* [Run 43225209120](https://github.com/RChefo/cyber-hub/actions/runs/43225209120) started by hand: `release/v0.1.0`, tag `v0.1.0`, *draft* checked, *confirm* empty.
+
+## 13:13–13:50Z: the first build fails at update signing; the cause and the fix
+
+* **Run 43225209120.** *Validate* passed in 17 minutes. *Build and sign (linux-x64)* compiled the release build and bundled the AppImage (86.5 MiB), the deb and the rpm (12.6 MiB each), then stopped at the update signature: "failed to decode secret key: incorrect updater private key password: Wrong password for that key".
+  * The Windows job was cancelled (fail-fast) and *Publish* skipped. **Nothing was uploaded; no draft was created.**
+  * `RELEASE_PUBLISHING` was deleted at 13:44:52Z, as soon as the run ended.
+* **The cause.** The key decoded, so only the password differed. In this session's Windows PowerShell, `[Console]::InputEncoding` is UTF-8 with a 3-byte preamble. The `Process` class's stdin writer, set to AutoFlush, writes that byte-order mark into the child's input before any data.
+  * Proof with a harmless string: a reader received `efbbbf616263` for `abc`.
+  * So `gh` stored the mark and the password together.
+  * The documented owner command (SIGNING_SETUP.md, section 5; UPDATER.md) had the same flaw.
+* **The fix.** `[Console]::InputEncoding = New-Object System.Text.UTF8Encoding $false` before starting `gh`, plus a check that stops before writing if the writer still has a preamble. The test reader then received exactly `616263`.
+  * The password was stored again at 13:47:49Z, never displayed.
+  * Both documents now carry the corrected command and the reason.
+* **The owner approved one more draft run** when asked. `RELEASE_PUBLISHING` was set at 13:50:05Z, and [run 43231095560](https://github.com/RChefo/cyber-hub/actions/runs/43231095560) started at 13:50:07Z with *draft* checked.
+
+## 14:06–14:35Z: run 43231095560 builds and signs everything, then stops before the upload
+
+* **Both builds and their update signatures passed:** Linux at 14:24Z, Windows at 14:34Z. The password fix is confirmed.
+* **Publish failed at "Generate and validate latest.json":** "notes are longer than 20000 characters (the app shows the first 20000)". `docs/releases/0.1.0.md` has 25,720 characters. The validate job checks only that notes exist, and the workflow had never got this far.
+  * Nothing was uploaded; no draft was created.
+  * `RELEASE_PUBLISHING` was deleted at 14:35Z.
+* **The Linux packages were tried early** from the run's artifact, ahead of the draft:
+  * The reference minisign verified their update signatures.
+  * **Ubuntu 24.04 GNOME:** the deb installed; M2 passed 9/9, and the release checks passed: About shows 0.1.0 and schema v32; the data folder is 0700; the update check says no manifest is published; the installed `cyberhub-mcp` serves 62 tools.
+  * **Two harness problems spoiled part of that run, not the app:**
+    * In the Debian VM, Plasma's screen had locked, so every real key went to the lock screen (M2 steps 4, 5a and 10 failed). `Autolock=false` did not stop it: the screen locked again 10 minutes after unlocking. A process now holds `org.freedesktop.ScreenSaver.Inhibit` for the tests.
+    * In the Ubuntu VM, report and backup files that Mission 9 left in the home folder made GTK ask "replace it?". The harness does not answer that, so the backup was never written, and the restore used Mission 9's copy. The leftovers were moved to `~/m9-leftovers`.
+  * **The upgrade and rollback checks** found two missing rows, both by design:
+    * the fixture's made-up tool `seed tools.id` is not in the tool catalog, so the start-up catalog sync deletes it, and its `tool_installations` row goes with it (`ON DELETE CASCADE`);
+    * a restore drops wordlists indexed by reference (`managed = 0`; Mission 7, `restore.rs`).
+  * Both runs were set aside (`~/rc-run1`) and are repeated on the final packages.
+
+## 14:36–14:56Z: the fix, the new tag
+
+* **`598b1f9` fix(release).** `generate` cuts notes longer than 20,000 characters at the last blank line that fits, drops a heading left without its text, and ends them with a link to the full notes on the release page. `validate` still refuses longer notes, and the release keeps the full text.
+  * A new test covers it; the five manifest tests pass.
+  * On the 0.1.0 notes: 19,731 characters.
+  * Run locally on run 43231095560's own signed artifacts (all five packages), generate and validate pass.
+* **`add894e` docs(release):** the owner's password command without a byte-order mark.
+* **CI [43239973165](https://github.com/RChefo/cyber-hub/actions/runs/43239973165)** was green on `add894e`, all five jobs.
+* **The owner approved** moving the tag and one more draft run.
+  * `v0.1.0` was deleted from `f01dbdf` and created again on `add894e` (`add894ecaa0d9d03da8a0709715dfc966fcf93f8`). Nothing had been released from it.
+  * The tag-push run (43242291328), which only validates, was cancelled: the draft run validates the same commit, and the push run would have held the workflow's concurrency slot for about 17 minutes.
+* **The third run.** `RELEASE_PUBLISHING` was set at 14:56:25Z, and [run 43242424304](https://github.com/RChefo/cyber-hub/actions/runs/43242424304) started at 14:56:27Z with *draft* checked.
+
+## 14:56–15:36Z: run 43242424304, the private draft
+
+* **All four jobs passed:**
+  * *Validate*, 14:56–15:10Z;
+  * *Build and sign*: Linux 15:10–15:30Z, Windows 15:10–15:34Z;
+  * *Publish*, 15:34–15:35Z: `latest.json` generated and validated, the tag still naming the built commit, the upload to a draft, and GitHub's digests matching `SHA256SUMS.txt`.
+* **`RELEASE_PUBLISHING` was deleted at 15:35:37Z**, 23 seconds after the run ended. The variable existed only during the three draft runs: 13:13–13:44Z, 13:50–14:35Z and 14:56–15:35Z.
+* **The draft.** "Cyber Hub 0.1.0", tag `v0.1.0`, `isDraft: true`, with 12 assets: the five packages, their `.sig` files, `latest.json` and `SHA256SUMS.txt`. The manifest's notes have 19,731 characters; the release body has the full notes.
+* **Verification** of the draft's own files (`evidence/M10/2026-11-12/verify.log`):
+  * `sha256sum -c SHA256SUMS.txt`: all 11 files OK;
+  * the repository's validator at `add894e`: valid, 7 platform entries, every signature verified;
+  * the reference minisign 0.12 against key `957F3F7D955C72FA`: all five packages OK, each trusted comment naming version 0.1.0;
+  * Authenticode: NSIS and MSI "NotSigned".
+
+## 15:30–15:45Z: Linux packages (the final run's files, the same bytes as the draft's)
+
+* **Ubuntu 24.04.5 GNOME 46 Wayland, and Debian 12 Plasma 5.27 X11 with KWallet.** Each run: install the deb, then:
+  * M2, 9/9;
+  * RC-1 to RC-4: Settings shows 0.1.0 and v32; the data folder is 0700 with schema 32; the update check reports no published manifest; the installed `cyberhub-mcp` serves 62 tools, and its bridge files are 0600 in a 0700 folder and go when MCP is off;
+  * reports and a backup through GTK's dialogs, and a restore of that backup;
+  * M7: the GNOME Keyring, or KWallet;
+  * Alt+F4;
+  * an upgrade from a fixture (schema 19 on Ubuntu, 8 on Debian) with its backup first, and a rollback by restoring that backup, which is upgraded again after another backup;
+  * uninstall (the data stays), reinstall (no second upgrade), removal;
+  * then the AppImage: RC-1 to RC-4, with the MCP page's AppImage path warning.
+* **Step 7, the import preview.** It was checked against MANUAL_VALIDATION's expectation: with the sample's address in scope, the complete sample gives Nmap XML, 0 findings, 3 assets and no warning.
+  * The VMs' old sample (no `<runstats>`) adds the "scan did not finish" warning.
+  * The harness's old expectation ("names 192.0.2.10:443") predates Mission 9's correction.
+* **Harness corrections, none in the app:**
+  * the import check now uses MANUAL_VALIDATION's expectation;
+  * the upgrade checks name the designed pruning instead of failing on it;
+  * Debian's leftover terminal (`x-terminal-emulator`, which the harness's terminal pattern misses) took Alt+F4 once. The repeat passed in 0.52 s.
+* **Clean containers.**
+  * The deb on Ubuntu 24.04 and Debian 12 installs with all dependencies (92 → 311 and 88 → 314 packages), with no library missing, and is removed cleanly.
+  * The rpm on Fedora 43 installs, starts with its window and schema 32, and is removed cleanly.
+  * **Found:** on the bare deb images Cyber Hub refuses to start: "Cyber Hub could not start: builder error".
+    * They have no CA certificates (`--no-install-recommends`), and `VtState::new()` and `TiState::new()` build reqwest clients during setup.
+    * With `ca-certificates` installed it starts.
+    * Desktop systems have them; FEATURE_BACKLOG.md item 95.
+
+## 15:50–17:05Z: Windows packages (`chqa-win11b`, Windows 11 26H2 build 26300.9974)
+
+* **NSIS.**
+  * **SmartScreen.** The installer, saved to Downloads with an Internet-zone mark as a browser leaves it, was blocked: "Windows protected your PC", "Publisher: Unknown publisher". *More info → Run anyway* was pressed through UI Automation, because the dialog shows no keyboard focus.
+  * **Install.** The wizard installed per user without UAC (`%LOCALAPPDATA%\Cyber Hub`, a Start-menu entry, a desktop shortcut, an HKCU uninstall entry whose publisher reads "cyberhub"), and *Run Cyber Hub* started it.
+  * **Checks:** RC-1 to RC-9 pass, 10/10 and 1/1. The installed sidecar is `…\Cyber Hub\cyberhub-mcp.exe`.
+  * **Defender** has no detection 11 minutes after the first start, nor after a restart, when the app started again.
+  * **Upgrade and rollback.** Upgrade from fixture schema 31: backup `cyberhub-schema31-…db` at version 31, then 32 with integrity ok. The rollback restored that backup, and it was upgraded again.
+  * **Uninstall.** The uninstaller offers "Delete the application data", unchecked by default. The program, the Start-menu entry and the uninstall entry went; the data stayed.
+  * **Reinstall.** A silent reinstall opened the data without another upgrade, and a silent uninstall removed it again.
+* **MSI.**
+  * **Prompts.** SmartScreen ("Unknown publisher"), the wizard, then UAC: "an app from an unknown publisher", "Publisher: Unknown".
+  * **Install location.** It installed per machine (HKLM entry, all-users Start menu) but into `C:\Users\tester\AppData\Local\Cyber Hub\`, because the NSIS uninstaller leaves `HKCU\Software\cyberhub\Cyber Hub` and Tauri's MSI template reads it (item 96).
+  * **Checks:** RC-1 to RC-9 pass, 10/10 and 1/1. RC-8 waited on Windows' "replace it?" prompt for the previous run's backup file, answered Yes by hand: a harness gap, like the GTK one.
+  * **Uninstall.** `msiexec /x` with UAC removed the program; the data stayed.
+* **The VM.**
+  * The guest stopped responding once, at 15:53:55Z: its heartbeat ended in VirtualBox's log while a script started. It was powered off and cold-booted, and the test resumed from SmartScreen.
+  * Disk resets were logged at about 14:27Z and 16:35Z under host load.
+  * VirtualBox on Hyper-V; the Linux VMs were shut down to lower the load.
+* **The draft's body** now starts with a candidate section: signature status, the checksums, installation, upgrade and rollback, these validation results and the limitations. The release notes follow unchanged. The draft stayed a draft.
