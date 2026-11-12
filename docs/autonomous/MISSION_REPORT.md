@@ -2138,3 +2138,198 @@ None was created.
 * **The Linux VMs** `chqa-noble` and `chqa-deb12`: kept, powered down with their state saved, for the candidate's Linux tests.
 * **The Windows VM** `chqa-win11`: powered off, kept, but not usable.
 * **What to delete when done:** `E:\CyberHubQA` (images, VMs, harness, evidence) and the three VMs in VirtualBox. Nothing of Mission 9 is on C: except the scratchpad.
+
+## Mission 10: release-candidate completion (2026-11-11 and 12)
+
+**Brief.** Resolve the remaining blockers, then build and validate the first release candidate and prepare a private draft release, but only once the signing prerequisites are in place.
+* Never publish, never make the repository public, never expose or print signing material.
+* Buy nothing without authorization, and do not enable `RELEASE_PUBLISHING` without a separate authorization.
+* Never touch the real database, and never install a candidate on the owner's Windows.
+
+**Classification: BLOCKED.**
+* **No release candidate was built.** The signing prerequisites are not in place:
+  * the update key's password is not in the `release` environment, because the session's permission classifier refused the command;
+  * the release workflow builds only while `RELEASE_PUBLISHING` is `enabled`, and no authorization to set it was given;
+  * there is no Authenticode certificate, and buying one needs the owner.
+* **Everything that did not need the candidate was done.** Windows M1 passes 17/17 with every credential typed into Windows' own dialog. M7 passes on Plasma with KWallet and with GNOME Keyring. Virtual HiDPI passes on GNOME and Windows at four scales. The signing decision is documented.
+* **No defect was found in Cyber Hub, and no code changed.**
+
+**Times:** 2026-11-11T22:11Z (`date -u`) to the commit that adds this report.
+
+### 1. Starting and ending commits
+
+* **Start:** `c7052bd` on `release/v0.1.0`, clean, the same as GitHub, no tag.
+* **End:** the commit that adds this report. It changes documentation only. The code is unchanged since `63d2cd6`.
+
+### 2. GitHub Actions runs
+
+| Run | Commit | Result |
+|---|---|---|
+| [43105721393](https://github.com/RChefo/cyber-hub/actions/runs/43105721393) | `d4372b5` (the final code) | **Success:** 641 passed, 28 ignored, on each of `windows-2022`, `ubuntu-24.04` and Debian 12; MSRV; actionlint, gitleaks, cargo audit, npm audit |
+| [43107766877](https://github.com/RChefo/cyber-hub/actions/runs/43107766877) | `c7052bd` | **Success,** 10 min |
+| The run for this report's commit | this commit | Started by the push; its result is on the repository's Actions page (documentation only, so it re-tests unchanged code) |
+| [43095621019](https://github.com/RChefo/cyber-hub/actions/runs/43095621019), [43097581846](https://github.com/RChefo/cyber-hub/actions/runs/43097581846) | `ed99331`, `63d2cd6` | **Still queued, never started** (since 2026-11-11 20:22Z and 20:41Z). Superseded; left alone |
+
+`release.yml` has never run: no tag was pushed.
+
+**GitHub settings, read back on 2026-11-12:**
+* the repository is private;
+* Actions are limited to six action patterns, with SHA pinning required, a read-only `GITHUB_TOKEN`, and no approving pull requests;
+* fork pull requests get no runs, no write tokens and no secrets;
+* the `release` environment allows branches `main` and `release/*`, with no administrator bypass;
+* there are no repository secrets and no variables, so **`RELEASE_PUBLISHING` is not set**.
+
+### 3. Update-signing secrets
+
+* **`TAURI_SIGNING_PRIVATE_KEY`: stored** in the `release` environment from the key file through `gh`'s standard input. Its metadata says updated 2026-11-11 22:13:18Z. The value was never printed, put in an argument or written elsewhere.
+* **`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: not stored.** The command that pipes it from Credential Manager into `gh secret set` was refused by the session's permission classifier. Per the brief, the refusal was not worked around.
+  * **What it takes:** the owner runs `SIGNING_SETUP.md`, section 5, "Commands", or allows this PowerShell command in the session's permission rules.
+* **The key pair matches the app.** `plugins.updater.pubkey` in `tauri.conf.json` is identical to `cyberhub-updater.key.pub` (key ID `957F3F7D955C72FA`).
+
+### 4. Authenticode certificate status
+
+* **None exists. Nothing was bought or ordered.**
+* **Research added to `SIGNING_SETUP.md`:**
+  * **SmartScreen,** from Microsoft's page dated 2026-05-04: OV and EV certificates both start with the "unrecognized app" warning until reputation builds. EV no longer bypasses it, and changing the certificate affects the publisher signal.
+  * **Identity:** an individual certificate puts the owner's legal name on the binaries; an organization certificate needs a registered entity.
+  * **Key storage:** a cloud key works with GitHub-hosted runners; a token needs a self-hosted runner.
+  * **Timestamps and renewal:** RFC 3161 timestamps keep signatures valid after expiry. Certificates last at most 460 days, and a renewal should keep the same subject.
+  * **First-year cost:** about $309 for the recommendation (SSL.com IV with eSigner), about $332 for the fallback (Sectigo with Cloud KMS), about $120 for Artifact Signing where eligible, $696–972 for DigiCert KeyLocker.
+* **The MCP binary's signature.** By tauri-cli 2.12.4's source, the bundler signs `cyberhub-mcp.exe` with the other crate binaries whenever Windows signing is configured. The planned verification step still checks it.
+
+### 5. Windows environment
+
+* **`chqa-win11b`:** a new disposable VM.
+  * Windows 11 Enterprise Evaluation 26H2, build 26300.9457, from the ISO checked in Mission 9.
+  * VirtualBox 7.2.6 on Hyper-V, 2 vCPUs, no paravirtualization, an emulated TSC.
+  * NAT only, Guest Additions 7.2.6, local user `tester`, WebView2 157.0.4341.46.
+* **The owner's Windows was not changed.** Nothing was installed on it, and its Credential Manager was not touched.
+* **The first Windows VM (`chqa-win11`)** stays unusable: it hung in setup in Mission 9.
+* **Windows Sandbox was not needed.**
+
+### 6. TAXII test results
+
+* **Windows, M1: 17/17 in run 3** (2026-11-12T00:04–00:07Z), every credential typed into Windows' own credential dialog. Details: `docs/release/MANUAL_VALIDATION.md`, "Mission 10".
+  * **How it was typed:** through the VM's virtual keyboard, because the dialog runs above the test's integrity level.
+  * **What the local test servers saw:** the typed password, the rotated password and the API key.
+  * **Cancel, Escape and close** stored nothing.
+  * **Deletion:** moving the server, Forget and Remove all deleted the credential.
+  * **No leaks:** no test value appeared in data, exports, the backup, diagnostics, activity or MCP results.
+  * **At the end:** no `taxii_` entry was left.
+* **Runs 1 and 2 had 16/17,** both on step 16 (an early click on Delete is ignored), both through harness errors:
+  * run 1's click was seconds late, after Delete had been enabled, so approving was correct;
+  * run 2 looked up a control ID that task-dialog buttons do not carry.
+* **Run 3's timings:** Delete was disabled when the dialog appeared. A click at 59 ms left the dialog open, Delete was enabled at 993 ms, and a click at 1,105 ms deleted the credential.
+
+### 7. GNOME, KDE and KWallet results
+
+* **GNOME 46 (Mission 9):** M2, M6 and M7 steps 1–7, unchanged.
+* **Plasma 5.27.5 X11 on Debian 12, with GNOME Keyring:** after a fresh boot, M7 steps 1–7 pass. Mission 9's failure was that session's state.
+* **Plasma 5.27.5 X11, with KWallet as the Secret Service** (GNOME Keyring purged; `kwalletd5` from KDE Frameworks 5.103; `pam_kwallet5`):
+  * M7 steps 1–7 pass;
+  * step 5 with KWallet's own password prompt, after the wallet was closed;
+  * a cancelled prompt gives a clear error and no loop.
+* **VM environment issues, not Cyber Hub:**
+  * Plasma's power management suspended the Debian guest after about 40 minutes, and its e1000 adapter hung on resume;
+  * resuming a saved state crashed a VM process under Hyper-V.
+
+### 8. HiDPI results (virtual only)
+
+| Environment | 100 % | 125 % | 150 % | 200 % |
+|---|---|---|---|---|
+| GNOME 46 Wayland, 2560 × 1600 (Mutter `scale-monitor-framebuffer`) | 5/5 | 5/5 | 5/5 (1.5023) | 5/5 |
+| Windows 11, 2560 × 1600 (per-monitor DPI, as Settings sets it) | 5/5 | 5/5 | 5/5 | 5/5 |
+
+The checks at each scale:
+* the page's scale and logical screen;
+* the first window inside the work area (sized to it at 200 %);
+* six pages without sideways scrolling;
+* the native confirmation, with Cancel as the default;
+* the 800 × 480 minimum: a window resize on GNOME, a mouse drag of the corner on Windows;
+* no page error.
+
+On Windows the run was repeated (pass 3, 20/20) with the launcher's console hidden, so the screenshots show the app and its dialogs.
+
+**Observations:**
+* **GNOME:** `devicePixelRatio` is 2 at 125 and 150 %. GTK 3 renders at the next whole scale, and the compositor scales the window down (FEATURE_BACKLOG.md, item 91).
+* **Windows:** another program's `SetWindowPos` can size the window below the minimum. Windows limits only sizing by the user (item 92).
+
+**No physical HiDPI screen was used.** M4 stays blocked on hardware.
+
+**Harness corrections on the way (none in Cyber Hub):**
+* the expected `devicePixelRatio` on GNOME;
+* the confirmation's test ranges: two public ranges were added in the VM's test data and then removed;
+* the Windows scale helper;
+* the Windows minimum check;
+* the console window that covered pass 2's screenshots.
+
+### 9. Linux package installation results
+
+**None.** No deb, AppImage or rpm exists without the candidate. The Ubuntu and Debian VMs are kept for these tests.
+
+### 10. Full regression results
+
+* **The code is unchanged since `63d2cd6`.** Its full regression is CI run 43105721393: 641 passed and 28 ignored on Windows, Ubuntu and Debian, 56 frontend test files, tsc, clippy, MSRV 1.90 and the scans. Run 43107766877 (`c7052bd`) is green too.
+* **This commit's CI run** re-runs everything on the same code; its result is on the repository's Actions page.
+* **Audits on 2026-11-12:**
+  * cargo audit 0.22.2: 0 vulnerabilities, 8 allowed warnings, including the new RUSTSEC-2026-0372 (`zvariant_derive` unmaintained, a transitive dependency of the D-Bus crates);
+  * npm audit 0.
+* **gitleaks and actionlint** run in CI on every push.
+* **Real sessions and VMs:** sections 6–8.
+
+### 11–13. Release artifacts, SHA-256 checksums, signature verification
+
+**None.** No package, installer or release binary was built, so there is nothing to checksum or verify. The VMs' development builds are test builds, not artifacts.
+
+### 14. Database isolation evidence
+
+* **The real database was never opened.** Its modification time is `2026-11-05T15:58:24.8534883Z` (2026-11-05 17:58:24.8534883 +02:00), the same at the start and the end.
+* **Where every Cyber Hub run happened:**
+  * inside the VMs, with their own users;
+  * on Windows, data folders in the VM's temporary folder: `chqa-m1\data` for M1 and `chqa-hidpi\data` for HiDPI, both deleted and recreated per run;
+  * on Linux, the VMs' QA data folders.
+* **The Windows debug build** was compiled on the host and run only inside the VM.
+* **No installer was run anywhere.**
+* **The only QA data changed by mistake:** two public test ranges in the Ubuntu VM's QA project, removed again (section 8).
+
+### 15. Private draft release
+
+**None was created.**
+
+### 16. Every remaining blocker
+
+1. **The update key's password secret.** The owner runs `SIGNING_SETUP.md`, section 5, "Commands". Alternatively, a session may run it if the owner adds a permission rule for that PowerShell command.
+2. **`RELEASE_PUBLISHING`.** The release workflow builds only while this repository variable is `enabled`. Setting it is the owner's authorization. A run still stops at a draft unless *draft* is unchecked and the tag is typed again. FEATURE_BACKLOG.md item 90 proposes a separate build switch.
+3. **Authenticode.** The owner authorizes and buys a certificate (SSL.com IV with eSigner recommended, about $309 a year), completes the identity validation, and adds signing and its verification step (`SIGNING_SETUP.md`, section 6).
+4. **The candidate itself.** Tag `v0.1.0`, build once, then test the installers and packages (M10):
+   * on the clean Windows 11 VM `chqa-win11b`;
+   * on the Ubuntu 24.04 and Debian 12 VMs;
+   * including upgrade from the fixture data folders, backup and restore, uninstall, and M1 on the installed copy.
+5. **M4 on a physical HiDPI screen.**
+6. **Recommended:**
+   * limit the eight third-party GitHub Apps to the repositories that need them. Five of them can administer environments, start workflows or change workflow files (`GITHUB_FIRST_RUN.md`, "Mission 10");
+   * GitHub Pro for tag rulesets, branch protection and required reviewers.
+
+**QA storage (report only, nothing deleted).** `E:\CyberHubQA` holds about 64 GB; E: has 244 GB free.
+
+| What | Size | Advice |
+|---|---|---|
+| `vms\chqa-win11b` (the working Windows VM) | 21 GB | Keep for the candidate's Windows tests |
+| `vms\chqa-win11` (hung in setup in Mission 9) | 16 GB | Unusable: delete in VirtualBox (*Remove* → *Delete all files*) when convenient |
+| `vms\chqa-noble`, `vms\chqa-deb12` | 7.5 GB, 7.1 GB | Keep for the package tests |
+| `iso\` (Windows ISO 7.7 GB, Debian image 3.0 GB, Ubuntu appliance 0.6 GB) | 12 GB | Already imported; keep the Windows ISO only if another Windows VM may be needed |
+| `evidence\`, `win-share\`, `desk\`, `linux-debug\`, `win-debug\`, `fixtures\`, `keys\` | about 0.8 GB | Keep until the release decision. `keys\` holds the VMs' SSH key and password only |
+
+When the release is done: delete the four VMs in VirtualBox, then `E:\CyberHubQA`.
+
+### 17. Final classification
+
+**BLOCKED.**
+* No release candidate exists, so nothing about the packages, installation, upgrade, signing or SmartScreen's reaction is proven.
+* Every check that did not need the candidate passed, and the tests found no defect in Cyber Hub: Windows credentials, Plasma credentials with KWallet, and virtual HiDPI on two platforms.
+* **Cyber Hub must not be released before items 1–4 of section 16 are done.**
+
+**Mission 10's infrastructure:**
+* **The repository:** stays private.
+* **The VMs** `chqa-win11b`, `chqa-noble` and `chqa-deb12`: shut down from inside, never saved, and kept for the candidate.
+* **`chqa-win11`:** off and unusable.

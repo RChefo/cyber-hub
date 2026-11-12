@@ -2,18 +2,18 @@
 
 This is the owner's guide to the signing Cyber Hub needs before its first release. It is based on the review of the signing architecture in Mission 8. [SIGNING.md](../SIGNING.md) compares the Authenticode certificate routes, and [UPDATER.md](../UPDATER.md) covers the update key.
 
-**Status (after Mission 9):**
+**Status (after Mission 10):**
 
 * **Update signing** is configured in the release workflow, and its key exists on the owner's computer.
-  * Mission 9 checked that the public key next to it, `cyberhub-updater.key.pub`, is the one compiled into the app (key ID `957F3F7D955C72FA`).
-  * It checked that the key file is one line with no newline, and that the password's Credential Manager entry exists. Neither value was read or printed.
-* **The `release` environment** of `RChefo/cyber-hub` exists (branches `main` and `release/*`, no administrator bypass), **without secrets**.
-  * Mission 9's attempt to store the key there was refused by the session's permission rules, which do not let the assistant write secrets.
-  * Storing it is the owner's step (section 5, "Commands").
+  * The public key next to it, `cyberhub-updater.key.pub`, is the one compiled into the app: `plugins.updater.pubkey` in `tauri.conf.json` is identical to it (key ID `957F3F7D955C72FA`, compared again in Mission 10).
+  * The key file is one line with no newline, and the password's Credential Manager entry exists. Neither value was read or printed.
+* **The `release` environment** of `RChefo/cyber-hub` exists (branches `main` and `release/*`, no administrator bypass).
+  * **`TAURI_SIGNING_PRIVATE_KEY` is stored there.** `gh secret list --env release` shows it updated 2026-11-11 22:13 UTC (Mission 10, from the key file through standard input; the value was never shown).
+  * **`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is not.** Mission 10's command, which pipes it from Credential Manager into `gh secret set`, was refused by the session's permission classifier. Storing it is the owner's step (section 5, "Commands").
 * **Authenticode signing is not configured, and no certificate exists.**
   * The certificate stores (current user and machine) hold no certificate with the code-signing usage.
   * There is no smart-card reader and no signing client.
-  * The recommended route is below.
+  * Nothing was bought. The recommendation, the SmartScreen facts and the costs are below.
 * **The release workflow has never run.**
 
 Nothing was signed. No certificate, key or production secret was created.
@@ -58,6 +58,55 @@ The research's sources:
 
 `cyberhub-mcp.exe` should be signed by the bundler with the other crate binaries. The verification step checks it either way.
 
+### SmartScreen, identity, renewal and cost (Mission 10, 2026-11-12)
+
+**SmartScreen.** Microsoft's page *SmartScreen reputation for Windows app developers* (learn.microsoft.com, `windows/apps/package-and-deploy/smartscreen-reputation`, dated 2026-05-04) says:
+
+* SmartScreen weighs two signals: the publisher's certificate and the file's hash.
+* **A new file signed with a valid OV or EV certificate still shows the "unrecognized app" warning**, with the verified publisher name, until reputation accumulates. That can take several weeks and hundreds of clean installs.
+* **EV certificates no longer bypass SmartScreen.** Paying more for EV to avoid the warning "is no longer justified".
+* Reputation can carry over to new versions only when they are signed with the same publisher identity. Unsigned files start from zero at every version, and **changing the signing certificate affects the publisher signal**.
+* There is no way to submit a file for SmartScreen review for consumer computers. Enterprise administrators can submit files through the Microsoft Security Intelligence portal for managed deployments.
+* On Windows 11, Smart App Control can block unsigned files unless they have a positive reputation.
+* The Microsoft Store is the only route without the warning: Store apps are re-signed by Microsoft. That route means MSIX packaging and Store distribution, outside the 0.1.0 plan.
+
+So for 0.1.0, **expect the warning on the first downloads whatever certificate is bought**. Say so in the release notes, and keep one signing identity across versions and renewals.
+
+**Individual or organization.**
+
+* An **individual** (IV) certificate names the person: Windows shows the owner's legal name as the verified publisher, in the UAC prompt, in the SmartScreen dialog and in the file's properties. Validation takes a government ID and a selfie or video check.
+* An **organization** (OV) certificate names a registered legal entity. It needs the entity's registration (and often a D-U-N-S or registry listing) and a verified contact, but keeps the person's name off the binaries.
+* Both give the same SmartScreen treatment. Choose by whose name should be on the app and whether an entity exists. Changing later changes the publisher signal.
+
+**Hardware token or cloud key.** A USB token needs a self-hosted Windows runner with the token plugged in, and someone to unlock it. GitHub-hosted runners need a cloud key: SSL.com eSigner, DigiCert KeyLocker, Google Cloud KMS through jsign, or Microsoft Artifact Signing. The recommended route uses eSigner.
+
+**Timestamps.** Every signature must carry an RFC 3161 timestamp from the CA's service. A timestamped signature stays valid after the certificate expires, and after a revocation dated later than the signature. Without one, every installed copy's signature becomes invalid at expiry.
+
+**Renewal.** Certificates last at most 460 days, so plan a yearly renewal with a new identity validation.
+
+* Renew about a month early.
+* Keep exactly the same subject (name, country) so that the publisher signal carries over.
+* Microsoft's page does not promise that reputation survives a new certificate. A Microsoft Q&A thread (`learn.microsoft.com/en-us/answers/questions/5900208`) reports a reset after an EV renewal, and DigiCert's knowledge base says Microsoft does not document how reputation transfers.
+* Expect warnings again after a renewal, and avoid changing identity, CA or key storage at the same time.
+
+**Cost for a year (USD, prices seen 2026-11-11; recheck before buying).**
+
+| Route | First year | Each later year | What limits it |
+|---|---|---|---|
+| SSL.com IV + eSigner Tier 1 (recommended) | About $309: $129 + $180 | About $309 | 240 signatures a year, then $1 each. At about 13 signatures per Windows build, roughly 18 builds a year |
+| Sectigo IV through a reseller + Google Cloud KMS HSM key | About $302 + about $30 for the key + Cloud KMS operation fees | The same | Needs a Google Cloud project and OIDC set up by the owner |
+| Microsoft Artifact Signing (Basic) | $9.99 a month, about $120 | About $120 | Individuals only in the US and Canada; organizations in 12 regions |
+| DigiCert KeyLocker | $696–972 | The same | Organizations only |
+
+**What the owner decides before any purchase.** Nothing has been bought, and nothing will be without the owner's explicit authorization.
+
+* Whether the owner's legal name may appear as the publisher. If not, an organization certificate is needed.
+* The route: SSL.com IV with eSigner is recommended, Sectigo with Cloud KMS is the fallback.
+* That the owner's country is eligible for the route chosen.
+* Authorization to pay the first year (about $309 for the recommendation).
+
+Then follow *Purchase and setup (SSL.com IV)* above, and section 6.
+
 ## 1. What is signed, and how
 
 | What | Format | Tool and key | Where | State |
@@ -67,7 +116,9 @@ The research's sources:
 | Windows executables and installers: `cyber-hub.exe`, `cyberhub-mcp.exe`, `*-setup.exe`, `*.msi` | Authenticode, SHA-256, RFC 3161 timestamp | `signtool`, or Microsoft Artifact Signing, through Tauri's `bundle.windows.certificateThumbprint` or `bundle.windows.signCommand` | To be added to the build job | **Not configured. Release blocker.** |
 | Linux packages: AppImage, deb, rpm | No package signature | Integrity comes from `SHA256SUMS.txt`, GitHub's per-asset digests (both checked by the publish job), and the update signatures | The publish job | By design for 0.1.0. Optionally, sign `SHA256SUMS.txt` with a GPG key (section 7) |
 
-`cyberhub-mcp` is not a Tauri `externalBin`. It is a second binary of the app crate, which the bundler ships next to `cyber-hub` (`scripts/build-sidecar.mjs` explains why). Whether Tauri's Windows signing also signs that binary has not been verified, so the verification step below must check it explicitly.
+`cyberhub-mcp` is not a Tauri `externalBin`. It is a second binary of the app crate (`[[bin]]` in `Cargo.toml`), which the bundler ships next to `cyber-hub` (`scripts/build-sidecar.mjs` explains why).
+
+**How the bundler signs it (Mission 10, from tauri-cli 2.12.4's source, `bundle.rs`):** before packaging, when Windows signing is configured (a certificate thumbprint or a `signCommand`) and `--no-sign` is not given, `sign_binaries_if_needed` signs every binary of the crate except the main one, so `cyberhub-mcp.exe` gets the same signature. It signs the main binary later, for each package type, and `externalBin` sidecars unless they are already signed. This is a reading of the source, not a signed build: the verification step below still checks the file explicitly.
 
 ## 2. Development builds and release builds
 

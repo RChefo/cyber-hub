@@ -107,7 +107,12 @@ Development builds use the same folder unless told otherwise. **Install the cand
 
 **What Mission 9 found about these machines on the owner's computer:**
 * **Linux.** VirtualBox VMs of Ubuntu 24.04 with GNOME and Debian 12 with Plasma work, under Hyper-V too. Mission 9 kept the two it made, `chqa-noble` and `chqa-deb12` (MISSION_REPORT.md, "Mission 9").
-* **Windows.** A Windows 11 VirtualBox VM did not finish Windows Setup while Hyper-V (WSL 2, Docker) was active. For Windows, use one of these instead:
+* **Windows.** A Windows 11 VirtualBox VM did not finish Windows Setup while Hyper-V (WSL 2, Docker) was active.
+* **Windows, after Mission 10.** A second VM, `chqa-win11b`, works under Hyper-V: Windows 11 26H2 with 2 vCPUs, no paravirtualization and an emulated TSC.
+  * M1 and the virtual HiDPI tests ran in it (MANUAL_VALIDATION.md, "Mission 10"). They used a development build copied to a temporary folder, so Cyber Hub was never installed there and the VM is ready for the installers. Only VirtualBox's Guest Additions were installed.
+  * Boot it cold, never from a saved state.
+  * Start GUI tests from its desktop session (Win+R): VirtualBox's guest control starts processes outside that session.
+* **Other ways to get a clean Windows:**
   * **Windows Sandbox:** *Turn Windows features on or off → Windows Sandbox*. It needs an administrator and a restart, and is the simplest isolation: a fresh Windows with its own `%APPDATA%`, discarded when closed;
   * a Hyper-V VM;
   * a spare computer.

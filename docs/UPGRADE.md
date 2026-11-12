@@ -159,7 +159,7 @@ Tested on disposable copies, never on a real user database:
   * a restore keeps the previous database in `backups/before-restore-<time>/` with the evidence files only it refers to, and restoring that copy brings both back;
   * on Linux, *Verify* reported a missing and a modified evidence file, and a file next to the backup whose content did not match its SHA-256 was not copied in;
   * killed 0.3 s after the confirmation, when the copy was made, the restore was applied whole at the next start;
-  * killed while SQLite copied a large backup (395 MB on Windows, 790 MB on Linux), the restore was not applied: the database was unchanged, and only the unfinished copy stayed in the data folder;
+  * killed while SQLite copied a large backup (395 MB on Windows, 790 MB on Linux), the restore was not applied: the database was unchanged, and only the unfinished copy stayed in the data folder (since Mission 9, `ed99331`, the next start removes it);
   * on Linux, a schema-12 backup restored by schema 19 was upgraded after its own pre-upgrade backup, with its evidence copied from the folder next to it and verified.
 * **Newer database.** The current build refuses a database whose `user_version` is higher than it supports and leaves the file unchanged. There is an automated test.
 * **Old build on an upgraded database** (0.1.0 opening schema 12). This is **not supported and not safe**. The old build does not check the version: it opens the file without a warning and then shows wrong counts of open findings, fails to create findings, rejects editing findings in the new statuses, and the Findings tab crashes. Only the current build has the newer-database check. It protects against downgrades from later versions, not against 0.1.0.

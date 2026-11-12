@@ -1434,3 +1434,67 @@ The owner's brief asked for research-driven new capabilities in seven tracks (we
   * the RC procedure has the fixtures, the Windows Sandbox advice and the lack of an approval step.
 * **Other documents:** UPDATER's snippet and environment advice, SIGNING's regions, SECURITY's credential control, and the release notes.
 * **Local checks:** Windows `cargo test` 641 passed, 28 ignored; clippy; tsc; vitest 308 in 56 files; cargo audit 0 (8 allowed); npm audit 0. The Ubuntu 24.04 image: `cargo test` 641 passed, 28 ignored.
+
+## Mission 10 (2026-11-11T22:11Z): release-candidate completion
+
+## 22:11–22:20Z: state, the update key
+
+* **State.** `release/v0.1.0` at `c7052bd`, clean, the same as GitHub; no tag. The real database's modification time was `2026-11-05T15:58:24.8534883Z`.
+* **The update key.** `TAURI_SIGNING_PRIVATE_KEY` was stored in the `release` environment from the key file through `gh`'s standard input. `gh secret list --env release` shows it updated at 22:13:18Z; the value was never shown.
+* **Its password.** The command that pipes it from Credential Manager into `gh secret set` was refused by the session's permission classifier. Not worked around: it stays the owner's step (`SIGNING_SETUP.md`, section 5).
+
+## 22:20–23:40Z: research and the VMs
+
+* **Authenticode.** Microsoft's SmartScreen page confirms that OV and EV certificates both start without reputation, and that changing the certificate affects the publisher signal. Added to `SIGNING_SETUP.md` with identity, renewal and cost. Nothing bought.
+* **The MCP binary's signature.** In tauri-cli 2.12.4's `bundle.rs`, `sign_binaries_if_needed` signs every crate binary except the main one when Windows signing is configured, so `cyberhub-mcp.exe` gets signed. That is a reading of the source; the planned verification step still checks it.
+* **GitHub Apps.** Each app's permissions were read from its check suite; none is needed by the repository (`GITHUB_FIRST_RUN.md`, "Mission 10").
+* **VirtualBox on Hyper-V.** Resuming the Debian VM from its saved state crashed its VM process, and VBoxSVC then hung. Both were stopped and every VM cold-booted.
+* **A new Windows VM, `chqa-win11b`.** Windows 11 Enterprise Evaluation 26H2 with 2 vCPUs, no paravirtualization and an emulated TSC.
+  * Its firmware hung after the setup's reset, until a cold boot from the disk.
+  * Guest Additions and a shared folder were added.
+  * Commands run in the user's session through Win+R typed on the VM's keyboard.
+
+## 23:05–23:25Z: Plasma credentials (Debian 12, Plasma 5.27 X11)
+
+* **GNOME Keyring.** After a fresh boot, `secret-tool` stored and read back, and M7 steps 1–7 passed. Mission 9's failure was that session's state.
+* **KWallet.** GNOME Keyring was purged, and `kwalletd5` then served the Secret Service. `secret-tool` worked against it, and M7 steps 1–7 passed.
+  * Step 5 first got no prompt: the Secret Service *Lock* call answered "Can't lock object", and the wallet opened silently through `pam_kwallet5`'s login.
+  * With the wallet closed first, KWallet's own prompt appeared, and step 5 passed: unlocking, then cancelling.
+
+## 23:49Z–00:07Z: M1 on Windows
+
+All 17 steps ran in the VM, and the host typed into Windows' credential dialog through the VM's keyboard.
+
+* **Run 1 (23:49–23:53Z): 16/17.** Step 16's "early" click was sent seconds late, once Delete was enabled, so it approved, which is correct.
+* **Run 2 (23:59–00:03Z): 16/17.** The new clicker looked the button up by a control ID that task-dialog buttons do not carry.
+* **Run 3 (00:04–00:07Z): 17/17.** The clicker waits for the dialog and finds Delete by its label: an early click at 59 ms is ignored, and Delete is enabled at 993 ms.
+* **After each run:** no `taxii_` entry was left in the VM's Credential Manager.
+
+## 23:52Z–00:11Z: virtual HiDPI on GNOME (Ubuntu 24.04, Wayland)
+
+* **The boot.** The Ubuntu VM got through its boot with 4 vCPUs (the btrfs RAID6 benchmark), and the GDM login was typed.
+* **Harness corrections.**
+  * GTK 3 reports `devicePixelRatio` 2 at 125 and 150 %, so the check now compares the logical screen instead.
+  * The confirmation's test ranges, 198.51.104.0/24 and up, are public addresses, so they were added without a dialog. Two ranges were added in the VM's test data and then removed; the check now uses private 10.x ranges, which it cancels.
+* **Pass 2 (00:09–00:11Z):** 5/5 at each of 100, 125, 150 and 200 %.
+
+## 00:13Z–00:35Z: virtual HiDPI on Windows 11
+
+* **The display.** 2560 × 1600, set inside the session: the host's mode hint was not applied.
+* **The scales.** Set through `SPI_SETLOGICALDPIOVERRIDE`, relative to the recommended 100 %.
+* **Pass 1.** Two harness faults:
+  * the minimum was checked with `SetWindowPos` from another program, which Windows does not limit; it now uses a corner drag;
+  * the scale helper misread the relative value, so 150 % stayed at 125 %.
+* **Pass 2 (00:22–00:28Z): 20/20.** Its screenshots were covered by the debug build's console window.
+* **Pass 3 (00:29–00:34Z): 20/20 again,** with the launcher in a headless console, for clean screenshots.
+
+## 00:35Z–: checks and documents
+
+* **Audits.** cargo audit 0.22.2: 0 vulnerabilities, 8 allowed warnings (new: RUSTSEC-2026-0372, `zvariant_derive` unmaintained). npm audit: 0.
+* **GitHub settings read back:**
+  * selected actions only, SHA pinning, read-only token;
+  * fork pull requests get no runs, tokens or secrets;
+  * the `release` environment's branch rule;
+  * no repository secrets, and no variables (`RELEASE_PUBLISHING` unset).
+* **The update key.** The public key in `tauri.conf.json` is identical to `cyberhub-updater.key.pub`.
+* **Documents:** SIGNING_SETUP, MANUAL_VALIDATION, RELEASE_READINESS, GITHUB_FIRST_RUN and the tracking files.

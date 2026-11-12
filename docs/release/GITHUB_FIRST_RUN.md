@@ -51,6 +51,28 @@ Without them:
 
 **Third-party GitHub Apps can see this private repository.** Each pushed commit received a check suite from eight apps besides GitHub Actions: Vercel, Render, Cursor, Netlify, Wasmer, Mintlify, Claude and Cloudflare Workers and Pages. They are installed on the account with access to *all* repositories, so they can likely read this source. Under *Settings → Applications → Installed GitHub Apps*, give each one access only to the repositories it needs. Mission 9 changed nothing there: these are account-wide settings.
 
+**Mission 10: what each app may do (2026-11-12).** Read from the apps' check suites on `c7052bd`. The installations list itself needs a GitHub App token, which `gh` does not have. Every suite stays *queued*: none of these apps does anything for this repository, and none is needed by it.
+
+| App (owner) | Permissions that matter here |
+|---|---|
+| Vercel (vercel) | **administration: write**, **workflows: write**, contents, deployments, hooks, pull requests, statuses: write |
+| Render (renderinc) | **environments: write**, **actions: write**, **workflows: write**, deployments, hooks, pull requests: write |
+| Cursor (cursor) | **actions: write**, **workflows: write**, contents, discussions, merge queues, pull requests: write; administration: read |
+| Netlify (netlify) | checks, issues, pull requests, statuses: write; contents: read |
+| Wasmer (wasmerio) | **administration: write**, **actions: write**, contents, deployments, pull requests, statuses: write |
+| Mintlify (mintlify) | contents, deployments, issues, pull requests: write |
+| Claude (anthropics) | **actions: write**, **workflows: write**, **repository creation: write**, contents, hooks, pull requests: write; administration: read |
+| Cloudflare Workers and Pages (cloudflare) | **administration: write**, contents, deployments, pull requests: write |
+
+Why it matters for releases:
+* *Administration* can change the `release` environment's protection, such as its branch rule.
+* *Environments* can change environments too.
+* *Actions* can start workflow runs.
+* *Workflows* can change the workflow files themselves.
+* *Contents* can push code.
+
+**Least privilege, for the owner to apply:** for each app choose *Only select repositories* and leave `cyber-hub` out, or uninstall the apps that are no longer used. Mission 10 removed nothing and revoked nothing.
+
 ## 1. What runs, and when
 
 * **`ci.yml`:** on every push and pull request. It verifies; it never builds packages and never uses a secret.

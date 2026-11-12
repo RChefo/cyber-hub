@@ -372,6 +372,82 @@ Those wait for the candidate (`RELEASE_CANDIDATE_PROCEDURE.md`).
 * **M4:** no physical HiDPI screen.
 * **Packaging checks:** need the release candidate, which needs the update-signing secrets.
 
+## Mission 10: Windows, KWallet and virtual HiDPI (2026-11-11 and 12)
+
+**Environments.**
+* **A new Windows VM, `chqa-win11b`.**
+  * Windows 11 Enterprise Evaluation 26H2, build 26300.9457 (the registry's `ProductName` still says "Windows 10", as on every Windows 11).
+  * Local user `tester`, NAT only, Guest Additions 7.2.6, WebView2 157.0.4341.46.
+  * Settings that let it install under VirtualBox with Hyper-V: 2 vCPUs, no paravirtualization, an emulated TSC.
+  * Its Credential Manager held no `taxii_` entry; the test stops if it finds one.
+* **The Mission 9 Linux VMs:** Ubuntu 24.04.5 with GNOME 46 (Wayland) and Debian 12 with Plasma 5.27.5 (X11).
+
+**Build.** Not the packages: development builds of the final code (`63d2cd6`). On Windows: debug profile with the frontend embedded (`--features tauri/custom-protocol`). On Linux: Mission 9's builds.
+
+| Item | Result | Evidence folder (`E:\CyberHubQA\evidence\`) |
+|---|---|---|
+| M1: Windows credential dialog | **PASS, 17/17**, every credential typed into Windows' own dialog (run 3, 2026-11-12T00:04–00:07Z) | `M1-windows` (screenshots), `M1-windows\run1`–`run3` (logs) |
+| M7: Plasma with GNOME Keyring | **PASS**, steps 1–7, Plasma X11 | `M7-kde-x11-gnomekeyring` |
+| M7: Plasma with KWallet as the Secret Service | **PASS**, steps 1–7 with KWallet's own prompt, Plasma X11 | `M7-kde-kwallet`, `M7-kde-kwallet-2` |
+| M4: virtual HiDPI, GNOME Wayland | **PASS, 5/5 at each of 100, 125, 150 and 200 %** (virtual, not a physical screen) | `M4-virtual-gnome` |
+| M4: virtual HiDPI, Windows 11 | **PASS, 5/5 at each of 100, 125, 150 and 200 %** (virtual) | `M4-virtual-windows` |
+| M5: the minimum window | **PASS** at the same four scales: GNOME by a window resize, Windows by a mouse drag | as M4 |
+
+**How M1 ran.** It followed `TAXII_CREDENTIAL_TEST.md`, all 17 steps, inside the VM:
+* `m1-vm.mjs` drove the app through WebView2's DevTools protocol, with the local test servers on `127.0.0.1:18556` and `:18557` and a data folder in the VM's temporary folder.
+* Windows' credential dialog runs above the test's integrity level, so the host typed into it through the VM's virtual keyboard (`typist.mjs`), with a screenshot before and after each dialog.
+
+What it showed:
+* **Store.** The "Store a TAXII credential" dialog (Windows Security) names the server and its host. The typed user name and password become one entry, `taxii_<id>_<16 hex>`, with the password masked. Opening the dialog again shows the user name and an empty password: a stored secret is never shown.
+* **Discover and Sync.** Both ask natively first, and declining sends nothing. Approving sends the stored credential to that server only: the test server confirmed the typed password, then the rotated password, then the API key in its header.
+* **Cancel, Escape and the close box** store nothing, and the earlier password stays in use.
+* **Deletion.** Moving the server to another origin or another header deletes the credential. So do Forget (after the delay) and Remove, whose confirmation names the credential.
+* **No leaks.** No test value appears in the data folder, the STIX export, the backup, diagnostics, the activity or MCP results.
+* **At the end:** no `taxii_` entry is left in the VM's Credential Manager.
+
+**Step 16 in runs 1 and 2: a harness error, not the app.** Runs 1 and 2 passed 16 of 17. Step 16 checks that a click on Delete before its one-second delay does nothing.
+* Run 1 sent the "early" click only after two PowerShell helpers had started, seconds after the dialog opened, when Delete was already enabled. The click therefore approved the deletion, which is correct.
+* Run 2's new clicker looked the button up by a control ID that task-dialog buttons do not carry (they all have 0), so it never clicked.
+* Run 3's clicker waits for the dialog before it opens, and finds the button by its label:
+  * found 13 ms after the dialog appeared, with Delete disabled;
+  * a click at 59 ms left the dialog open;
+  * Delete was enabled at 993 ms;
+  * a click at 1,105 ms deleted the credential.
+
+**M7 in Plasma.**
+* **GNOME Keyring.** After a fresh boot, `secret-tool` stores and reads back, and Cyber Hub's steps 1–7 pass. Mission 9's failure (a `login` collection that was listed but not served) was the state of that session, not a Plasma incompatibility.
+* **KWallet.** GNOME Keyring was removed. `kwalletd5` (KDE Frameworks 5.103) then served `org.freedesktop.secrets` (`apiEnabled=true`), and `pam_kwallet5` opened `kdewallet` at login. `secret-tool` works against it, and Cyber Hub's steps 1–7 pass.
+  * Step 5 needs the wallet closed first. In the first attempt there was no prompt: the Secret Service *Lock* call failed with "Can't lock object", and the wallet opened silently through `pam_kwallet5`'s login.
+  * With the wallet closed first, KWallet's own "KDE Wallet Service" password prompt appeared. After the password, the replacement was stored. Cancelling gave a clear error, stored nothing, and no prompt followed.
+
+**M4: virtual HiDPI (not a physical screen).**
+* **GNOME 46 Wayland**, 2560 × 1600, set through Mutter's `DisplayConfig` with `scale-monitor-framebuffer`. The scales were 100, 125, 150 (Mutter's 1.5023) and 200 %. At each:
+  * the page's screen is the logical one (2560 × 1600 divided by the scale);
+  * the first window fits; at 200 % it is sized to the work area, 1214 × 768;
+  * six pages lay out without sideways scrolling;
+  * the native confirmation has Cancel as the default, with the focus, and Authorize disabled at first;
+  * the 800 × 480 minimum holds;
+  * the page reports no error.
+
+  `devicePixelRatio` is 1 at 100 %, **2 at 125 and 150 %**, and 2 at 200 %. GTK 3, and so WebKitGTK, has whole-number scales only: it renders at the next one and Mutter scales the window down, which can soften text at fractional scales. A physical screen is needed to judge that.
+* **Windows 11**, 2560 × 1600, scales set as Settings sets them. At each:
+  * `devicePixelRatio` and the window's DPI equal the scale (1, 1.25, 1.5 and 2; 96 to 192 DPI);
+  * the page's screen is 2560 × 1600 divided by the scale;
+  * the first window's visible frame lies inside the work area; at 200 % it is sized to 94 % of it, 1203 × 707 logical pixels;
+  * six pages lay out without sideways scrolling;
+  * the native confirmation opens with Cancel as the default, and Cancel answers it;
+  * a mouse drag of the window's corner toward 300 × 200 pixels stops at 800 × 480 logical pixels: 800 × 480, 1000 × 600, 1200 × 720 and 1600 × 960 physical.
+* **Windows, an observation:** a resize sent by another program (`SetWindowPos`) is not limited by the minimum, because Windows applies a window's minimum tracking size to sizing by the user only. No user action produces it (FEATURE_BACKLOG.md, item 92).
+* **Not verified:** sharpness on a physical panel, mixed-DPI monitors, Plasma's scaling.
+
+**VM problems met: the environment, not Cyber Hub.**
+* **VirtualBox on Hyper-V:** resuming a saved state crashed a VM process, and VBoxSVC then hung. Only cold boots are safe.
+* **Ubuntu:** its boot stalls in the btrfs RAID6 benchmark with 2 vCPUs.
+* **Windows:** the first VM hung in setup. In the second, the host's display-mode hint was not applied, so the mode was set from inside the session.
+* **Debian:** Plasma's power management suspended the guest after about 40 idle minutes, and its e1000 network adapter hung on resume. Toggling the virtual link reset it.
+
+**Not done:** the packages (deb, AppImage, rpm, NSIS, MSI), because no release candidate exists.
+
 ## Results
 
 Record each item's result, date, tester, environment and evidence folder in `RELEASE_READINESS.md` (*Manual release-candidate checklist*).

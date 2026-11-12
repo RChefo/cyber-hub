@@ -367,3 +367,28 @@ The brief authorized the repository, CI, VMs, signing with existing credentials,
 | 87 | The desktop harness of Mission 9 (VM agent, AT-SPI helper, `qa-desktop.mjs`) in `scripts/qa/` | It lives in `E:\CyberHubQA\desk`. Worth adding with a short guide once the candidate exists, so the package tests can reuse it |
 | 88 | Two GitHub Actions runs that never started | The next push ran normally. Check the account's usage only if it recurs |
 | 89 | Third-party GitHub Apps with access to all repositories | An account setting: limit them to the repositories that need them |
+
+## Mission 10 (2026-11-11 and 12): release-candidate completion
+
+The brief asked for the remaining blockers to be resolved, and for the candidate to be built, validated and drafted privately once the signing prerequisites were in place. They were not in place, so no candidate was built. No feature was added and no code changed; the tests found no defect in Cyber Hub.
+
+### Status of earlier items
+
+| # | Item | Status |
+|---|---|---|
+| 65 | A physical HiDPI screen | **Still open.** Virtual scaling at 100, 125, 150 and 200 % passes on GNOME Wayland and Windows 11 (`docs/release/MANUAL_VALIDATION.md`, "Mission 10") |
+| 66 | Typing into Windows' credential dialog | **Done:** M1, 17/17, in a disposable Windows 11 VM, typed through the VM's keyboard |
+| 84 | Store the update-signing secrets in the `release` environment | **Half done:** the key is stored (2026-11-11 22:13Z). The password is the owner's step: the session's permission classifier refused the command |
+| 85 | An Authenticode certificate and its CI signing and verification | **Open.** The comparison now covers SmartScreen, identity, renewal and cost (`SIGNING_SETUP.md`). Nothing was bought |
+| 86 | Plasma with KWallet serving the Secret Service | **Done:** M7 steps 1–7 pass on Plasma X11 with KWallet, and with GNOME Keyring |
+| 87 | The desktop harness in `scripts/qa/` | **Open**, now with the Windows harness too (item 93) |
+| 89 | Third-party GitHub Apps with access to all repositories | **Open.** Their permissions are recorded in `GITHUB_FIRST_RUN.md`, "Mission 10" |
+
+### Open, with reasons
+
+| # | Item | Why open |
+|---|---|---|
+| 90 | A switch that lets the release workflow build a draft candidate without also allowing publication | The build job runs only while `RELEASE_PUBLISHING` is `enabled`, the same variable that allows publishing. A run still stops at a draft unless *draft* is unchecked and the tag is typed again, but a separate switch would let the owner authorize a candidate alone. The owner's call |
+| 91 | Sharper text at fractional scales on GNOME | GTK 3, and so WebKitGTK 4.1, has whole-number scales only: at 125 and 150 % the page renders at 2 and Mutter scales it down. Only a GTK 4 WebKitGTK would change that. A physical screen should judge whether it matters (M4) |
+| 92 | Windows: another program can size the window below its minimum | `SetWindowPos` from another process is not limited by the minimum tracking size, which Windows applies to sizing by the user (a corner drag stops at 800 × 480 at every scale). It could be enforced in `WM_WINDOWPOSCHANGING`, which tao does not handle. No user action produces it; low priority |
+| 93 | The Windows harness (M1 typing, the early-click checker, the HiDPI driver) | It lives in `E:\CyberHubQA\win-share` and `desk`. Add it with item 87 |
