@@ -76,6 +76,10 @@ impl From<reqwest::Error> for AppError {
 /// URL is reduced to its host, so a query string, which may carry a key, never reaches the page.
 pub fn describe_reqwest(e: reqwest::Error, host: Option<&str>) -> String {
     let site = host.unwrap_or("the service");
+    if e.is_builder() {
+        // no request was sent: the client could not be set up (no CA certificates, Mission 11)
+        return crate::tls_trust::describe_build_error(&e);
+    }
     if e.is_timeout() {
         return format!("{site} did not answer in time; check the network connection, or try again later");
     }

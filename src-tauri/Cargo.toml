@@ -114,3 +114,5 @@ dbus-secret-service = "4.1.0"
 [dev-dependencies]
 # test oracle only (Markdown report escaping is checked against a real CommonMark parser)
 pulldown-cmark = { version = "=0.13.6", default-features = false }
+# test only: a throwaway self-signed certificate for the TLS refusal test (already in the tree through rustls)
+ring = "0.17"

@@ -285,15 +285,16 @@ impl Builder {
 /// fixed list or the IANA bootstrap can therefore never be pointed at an internal service through
 /// DNS (rebinding or a hostile record).
 pub fn client(timeout_secs: u64) -> Result<reqwest::Client, Error> {
-    reqwest::Client::builder()
-        // no system proxy: a proxy resolves names itself, past the public-only resolver (Mission 7)
-        .no_proxy()
-        .timeout(Duration::from_secs(timeout_secs))
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION")))
-        .dns_resolver(std::sync::Arc::new(PublicOnlyResolver))
-        .build()
-        .map_err(|e| Error::Unavailable(e.to_string()))
+    crate::tls_trust::build(
+        reqwest::Client::builder()
+            // no system proxy: a proxy resolves names itself, past the public-only resolver (Mission 7)
+            .no_proxy()
+            .timeout(Duration::from_secs(timeout_secs))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION")))
+            .dns_resolver(std::sync::Arc::new(PublicOnlyResolver)),
+    )
+    .map_err(Error::Unavailable)
 }
 
 /// Keep only public addresses; fail when none remain.

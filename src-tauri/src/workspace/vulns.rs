@@ -613,12 +613,13 @@ pub async fn epss_fetch(cves: &[String]) -> AppResult<Vec<(String, Epss)>> {
         return Ok(vec![]);
     }
     let list: Vec<String> = cves.iter().take(100).map(|c| normalize_cve(c)).collect::<Result<_, _>>()?;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(20))
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|e| AppError::Internal(format!("HTTP client: {e}")))?;
+    let client = crate::tls_trust::build(
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(20))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION"))),
+    )
+    .map_err(AppError::Network)?;
     let resp = client.get(EPSS_URL).query(&[("cve", list.join(","))]).send().await.map_err(|e| AppError::Network(format!("EPSS (FIRST.org) is not reachable: {e}")))?;
     if !resp.status().is_success() {
         return Err(AppError::Network(format!("EPSS (FIRST.org) returned HTTP {}", resp.status())));

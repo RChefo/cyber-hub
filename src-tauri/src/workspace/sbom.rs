@@ -953,12 +953,13 @@ pub async fn osv_lookup(base: &str, components: &[Component]) -> AppResult<Looku
             None => skipped += 1,
         }
     }
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(60))
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|e| AppError::Internal(format!("HTTP client: {e}")))?;
+    let client = crate::tls_trust::build(
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(60))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION"))),
+    )
+    .map_err(AppError::Network)?;
     let purls: Vec<(String, Vec<usize>)> = by_purl.into_iter().collect();
     let mut affected: BTreeMap<String, BTreeSet<usize>> = BTreeMap::new();
     for chunk in purls.chunks(OSV_BATCH) {

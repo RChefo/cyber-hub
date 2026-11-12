@@ -287,6 +287,8 @@ fn failure(kind: &'static str, message: impl Into<String>) -> Failure {
 pub fn classify(e: &tauri_plugin_updater::Error) -> Failure {
     use tauri_plugin_updater::Error as E;
     match e {
+        // the client could not be built, which on Linux means no CA certificates are installed (Mission 11)
+        E::Reqwest(r) if r.is_builder() => failure("tls", crate::tls_trust::describe_build_error(r)),
         E::Reqwest(r) if is_certificate_error(r) => failure(
             "tls",
             "The update server's TLS certificate is not trusted, so the connection was refused. Updates are only accepted over a verified HTTPS connection.",
@@ -610,7 +612,7 @@ async fn run_check(app: &AppHandle) -> Result<Option<(Update, Release)>, Failure
 
 /// Best-effort size of the package (HEAD request); unknown sizes are shown once downloading.
 async fn download_size(update: &Update, https_only: bool) -> Option<u64> {
-    let client = reqwest::Client::builder().https_only(https_only).timeout(Duration::from_secs(15)).user_agent("CyberHub-Updater").build().ok()?;
+    let client = crate::tls_trust::build(reqwest::Client::builder().https_only(https_only).timeout(Duration::from_secs(15)).user_agent("CyberHub-Updater")).ok()?;
     let res = client.head(update.download_url.clone()).send().await.ok()?;
     if !res.status().is_success() {
         return None;

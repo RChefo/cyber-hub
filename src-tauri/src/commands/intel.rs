@@ -136,11 +136,7 @@ pub async fn http_inspect(db: State<'_, Db>, url: String, method: Option<String>
         "GET" => reqwest::Method::GET,
         _ => return Err(validation("Method must be GET or HEAD")),
     };
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(15))
-        .user_agent(USER_AGENT)
-        .build()?;
+    let client = crate::tls_trust::build(reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(15)).user_agent(USER_AGENT)).map_err(AppError::Network)?;
     let start = std::time::Instant::now();
     let resp = client.request(method, parsed.clone()).send().await?;
     let elapsed_ms = start.elapsed().as_millis();
@@ -383,7 +379,7 @@ pub async fn cve_search(db: State<'_, Db>, query: String, live: bool) -> AppResu
     }
 
     // no redirects: a custom `apiKey` header would otherwise be forwarded to another host
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).user_agent(USER_AGENT).redirect(reqwest::redirect::Policy::none()).build()?;
+    let client = crate::tls_trust::build(reqwest::Client::builder().timeout(Duration::from_secs(30)).user_agent(USER_AGENT).redirect(reqwest::redirect::Policy::none())).map_err(AppError::Network)?;
     let mut req = client.get(url);
     if let Some(key) = read_secret(NVD_KEY) {
         req = req.header("apiKey", key);

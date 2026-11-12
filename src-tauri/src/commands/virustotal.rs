@@ -40,7 +40,8 @@ struct PickedFile {
 }
 
 pub struct VtState {
-    pub(crate) http: reqwest::Client,
+    /// built on first use (`tls_trust`): a system without CA certificates still starts
+    pub(crate) http: crate::tls_trust::LazyClient,
     pub(crate) base: String,
     pub(crate) limiter: RateLimiter,
     files: Mutex<HashMap<String, PickedFile>>,
@@ -53,15 +54,20 @@ impl VtState {
         self.uploads.lock().map(|m| m.len()).unwrap_or(0)
     }
 
-    pub fn new() -> AppResult<Self> {
+    pub fn new() -> Self {
         let (max, window) = ProviderId::Virustotal.rate();
-        Ok(Self {
-            http: crate::ti::http::client(Duration::from_secs(20)).map_err(AppError::Internal)?,
+        Self {
+            http: crate::tls_trust::LazyClient::new(|| crate::ti::http::client(Duration::from_secs(20))),
             base: ProviderId::Virustotal.base(),
             limiter: RateLimiter::new(max, window),
             files: Mutex::new(HashMap::new()),
             uploads: Mutex::new(HashMap::new()),
-        })
+        }
+    }
+
+    /// The HTTP client; without CA certificates, the reason (`tls_trust::NO_TRUST_ROOTS`).
+    fn client(&self) -> AppResult<reqwest::Client> {
+        self.http.get().map_err(AppError::Network)
     }
 
     fn acquire(&self) -> AppResult<()> {
@@ -139,8 +145,9 @@ pub async fn fetch(db: &Db, st: &VtState, ind: &Indicator, refresh: bool, log_ac
         }
     }
     let key = key()?;
+    let http = st.client()?;
     st.acquire()?;
-    let outcome = vt::get(&st.http, &st.base, &vt::path(ind), &key).await;
+    let outcome = vt::get(&http, &st.base, &vt::path(ind), &key).await;
     drop(key);
     let report = match outcome {
         Ok(body) => Some(vt::parse_report(ind, &body).map_err(AppError::Network)?),
@@ -343,6 +350,8 @@ pub async fn vt_file_upload(
         (f.path.clone(), f.name.clone(), f.hashes.clone())
     };
     let key = key()?;
+    // before any confirmation: without CA certificates nothing could be sent
+    let http = vtst.client()?;
     let limit = upload_limit(&db);
     if hashes.size > limit.min(vtfile::API_MAX) {
         return Err(AppError::Validation(UploadError::TooLarge { size: hashes.size, limit: limit.min(vtfile::API_MAX) }.message()));
@@ -367,7 +376,7 @@ pub async fn vt_file_upload(
     let app2 = app.clone();
     let outcome = vtfile::upload(
         vtfile::Plan {
-            client: &vtst.http,
+            client: &http,
             base: &vtst.base,
             key: &key,
             source: &path,
@@ -418,8 +427,9 @@ pub async fn vt_analysis(vtst: State<'_, VtState>, analysis_id: String) -> AppRe
         return Err(validation("Invalid analysis id"));
     }
     let key = key()?;
+    let http = vtst.client()?;
     vtst.acquire()?;
-    let body = vt::get(&vtst.http, &vtst.base, &vtfile::analysis_path(&analysis_id), &key).await.map_err(api_error)?;
+    let body = vt::get(&http, &vtst.base, &vtfile::analysis_path(&analysis_id), &key).await.map_err(api_error)?;
     vtfile::parse_analysis(&body).map_err(api_error)
 }
 

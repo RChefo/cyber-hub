@@ -882,6 +882,7 @@ dependencies = [
  "quick-xml",
  "regex",
  "reqwest",
+ "ring",
  "rmcp",
  "rpassword",
  "rusqlite",

@@ -60,13 +60,14 @@ pub fn observed_state(r: &ProviderResult) -> Option<&'static str> {
 }
 
 pub struct TiState {
-    http: reqwest::Client,
+    /// built on first use (`tls_trust`): a system without CA certificates still starts
+    pub(crate) http: crate::tls_trust::LazyClient,
     limiters: HashMap<ProviderId, RateLimiter>,
     health: Mutex<HashMap<ProviderId, Health>>,
 }
 
 impl TiState {
-    pub fn new() -> AppResult<Self> {
+    pub fn new() -> Self {
         let limiters = ProviderId::ALL
             .into_iter()
             .filter(|p| *p != ProviderId::Virustotal) // VirusTotal shares VtState's limiter
@@ -75,11 +76,11 @@ impl TiState {
                 (p, RateLimiter::new(max, window))
             })
             .collect();
-        Ok(Self {
-            http: crate::ti::http::client(Duration::from_secs(20)).map_err(AppError::Internal)?,
+        Self {
+            http: crate::tls_trust::LazyClient::new(|| crate::ti::http::client(Duration::from_secs(20))),
             limiters,
             health: Mutex::new(HashMap::new()),
-        })
+        }
     }
 
     fn record(&self, p: ProviderId, r: &ProviderResult) {
@@ -244,9 +245,8 @@ fn from_parts(p: ProviderId, found: bool, report: Report, quota: Option<String>,
     r
 }
 
-async fn call(p: ProviderId, tist: &TiState, key: &str, ind: &Indicator) -> Result<(Parsed, Option<String>), ApiError> {
+async fn call(p: ProviderId, c: &reqwest::Client, key: &str, ind: &Indicator) -> Result<(Parsed, Option<String>), ApiError> {
     let base = p.base();
-    let c = &tist.http;
     match p {
         ProviderId::Abuseipdb => abuseipdb::lookup(c, &base, key, ind).await,
         ProviderId::Otx => otx::lookup(c, &base, key, ind).await.map(|x| (x, None)),
@@ -304,10 +304,15 @@ async fn run_provider(db: &Db, vtst: &VtState, tist: &TiState, p: ProviderId, in
     let Some(key) = read_secret(p.key().secret_name()) else {
         return base_result(p, Status::NoKey, Some(not_configured(p)));
     };
+    // without CA certificates nothing can be sent: say why, before the provider's quota is used
+    let client = match tist.http.get() {
+        Ok(c) => c,
+        Err(m) => return base_result(p, Status::Error, Some(m)),
+    };
     if let Err(wait) = tist.limiters[&p].try_acquire(Instant::now()) {
         return base_result(p, Status::RateLimited, Some(format!("Cyber Hub limits {} to {}. Try again in {wait} s.", p.name(), tist.limiters[&p].describe())));
     }
-    let outcome = call(p, tist, &key, ind).await;
+    let outcome = call(p, &client, &key, ind).await;
     drop(key);
     match outcome {
         Ok((parsed, quota)) => {

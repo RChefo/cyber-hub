@@ -78,12 +78,12 @@ impl Response {
 }
 
 pub fn client(timeout: Duration) -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(timeout)
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|e| e.to_string())
+    crate::tls_trust::build(
+        reqwest::Client::builder()
+            .timeout(timeout)
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION"))),
+    )
 }
 
 /// Send a prepared request. Any status is returned as a `Response`; only transport

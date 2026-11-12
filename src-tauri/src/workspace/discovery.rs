@@ -537,7 +537,7 @@ pub async fn http_collect(hosts: &[String], entries: &[ScopeEntry], cancel: &Ato
                 if named {
                     b = b.resolve_to_addrs(&host, &pinned);
                 }
-                b.build().map_err(|e| e.to_string())
+                crate::tls_trust::build(b)
             };
             let (v, i) = match (client(false), client(true)) {
                 (Ok(v), Ok(i)) => (v, i),

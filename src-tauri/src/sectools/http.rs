@@ -214,14 +214,14 @@ pub async fn send(p: Prepared, body: String, insecure: bool, pin: Option<(String
     if let Some((host, addrs)) = &pin {
         builder = builder.resolve_to_addrs(host, addrs);
     }
-    let client = builder
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(20))
-        .connect_timeout(Duration::from_secs(8))
-        .danger_accept_invalid_certs(insecure)
-        .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = crate::tls_trust::build(
+        builder
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(20))
+            .connect_timeout(Duration::from_secs(8))
+            .danger_accept_invalid_certs(insecure)
+            .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION"))),
+    )?;
     let started = Instant::now();
     let mut rb = client.request(p.method, p.url).headers(p.headers);
     if !body.is_empty() {

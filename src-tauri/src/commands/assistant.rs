@@ -313,12 +313,13 @@ pub fn error_message(status: u16, body: &str, retry_after: Option<&str>) -> Stri
 }
 
 pub async fn call(key: &str, endpoint: &Endpoint, messages: &[Value], fallback: bool) -> AppResult<(Answer, Value)> {
-    let client = reqwest::Client::builder()
-        .timeout(endpoint.timeout)
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|e| AppError::Internal(format!("HTTP client: {e}")))?;
+    let client = crate::tls_trust::build(
+        reqwest::Client::builder()
+            .timeout(endpoint.timeout)
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION"))),
+    )
+    .map_err(AppError::Network)?;
     let mut req = client.post(&endpoint.url).header("x-api-key", key).header("anthropic-version", API_VERSION);
     if fallback {
         req = req.header("anthropic-beta", FALLBACK_BETA);

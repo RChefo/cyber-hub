@@ -125,12 +125,12 @@ fn scrub(text: &str, auth: &Auth) -> String {
 
 impl Client {
     pub fn new(auth: Auth) -> Result<Client, String> {
-        let http = reqwest::Client::builder()
-            .timeout(TIMEOUT)
-            .redirect(reqwest::redirect::Policy::none())
-            .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .map_err(|e| e.to_string())?;
+        let http = crate::tls_trust::build(
+            reqwest::Client::builder()
+                .timeout(TIMEOUT)
+                .redirect(reqwest::redirect::Policy::none())
+                .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION"))),
+        )?;
         Ok(Client { http, auth })
     }
 

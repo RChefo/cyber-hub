@@ -142,15 +142,16 @@ pub async fn run(t: EntityType, value: &str) -> Result<Output, Error> {
     // port 0: reqwest connects to the scheme's port (or the URL's explicit port); a fixed port here
     // would also be used for the plain-HTTP fallback and connect to the wrong service
     let pinned: Vec<SocketAddr> = pinned_addrs(&addrs);
-    let client = reqwest::Client::builder()
-        // straight to the checked addresses: a system proxy would resolve names itself
-        .no_proxy()
-        .timeout(Duration::from_secs(12))
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION"), " (OSINT fingerprint)"))
-        .resolve_to_addrs(&host, &pinned)
-        .build()
-        .map_err(|e| Error::Unavailable(e.to_string()))?;
+    let client = crate::tls_trust::build(
+        reqwest::Client::builder()
+            // straight to the checked addresses: a system proxy would resolve names itself
+            .no_proxy()
+            .timeout(Duration::from_secs(12))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(concat!("CyberHub/", env!("CARGO_PKG_VERSION"), " (OSINT fingerprint)"))
+            .resolve_to_addrs(&host, &pinned),
+    )
+    .map_err(Error::Unavailable)?;
     let mut url = url;
     let mut resp = match client.head(url.clone()).send().await {
         Ok(r) => r,

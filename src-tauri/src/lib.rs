@@ -25,6 +25,7 @@ mod scope;
 mod sectools;
 mod targets;
 mod ti;
+mod tls_trust;
 mod updates;
 mod util;
 mod vt;
@@ -574,8 +575,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         tools::sync_catalog(&database)?;
         app.manage(database);
         app.manage(process::ProcessManager::default());
-        app.manage(virustotal::VtState::new()?);
-        app.manage(threat_intel::TiState::new()?);
+        // their HTTP clients are built on first use: start-up never depends on CA certificates (Mission 11)
+        app.manage(virustotal::VtState::new());
+        app.manage(threat_intel::TiState::new());
         app.manage(std::sync::Arc::new(mcp::bridge::Bridge::default()));
         app.manage(mcp::ops::LiveRuns::default());
         app.manage(std::sync::Arc::new(osint::discovery::OsintState::default()));
