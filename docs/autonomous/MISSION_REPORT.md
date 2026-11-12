@@ -2538,3 +2538,211 @@ https://github.com/RChefo/cyber-hub/releases/tag/untagged-be186ef1d1191b08b196
   * physical HiDPI is untested;
   * the CA-certificate start-up issue is open.
 * **Nothing was published,** the repository stays private, and `RELEASE_PUBLISHING` is unset.
+
+## Mission 11: final release hardening and the second release candidate (2026-11-12)
+
+**The authorization.** The owner authorized autonomous engineering, regression testing, private repository operations and an isolated release candidate. A public release and any purchase were not authorized. Neither happened.
+
+**Classification: RELEASE CANDIDATE PARTIALLY VERIFIED.**
+
+**Times:** 2026-11-12T17:35Z to the commit that adds this section.
+
+### A. Executive summary
+
+* **Fixed, with regression tests:**
+  * **Start-up without CA certificates.** Cyber Hub now starts and works offline on a system without CA certificates, and every network feature says what to install. Verification is not weakened, and nothing is sent without it.
+  * **The MSI's install folder.** An MSI installed after an NSIS uninstall now goes to Program Files instead of the removed per-user folder.
+  * **Two front-end defects** found by a new HiDPI layout audit: the Projects page scrolled sideways, and the ASVS section failed on a history status it did not know.
+* **Decided:** the publisher stays "cyberhub" for 0.1.0, because it is part of the NSIS install identity. What Windows shows, and what needs Authenticode, is documented. A test pins the install identity.
+* **The release workflow** builds `vX.Y.Z-rc.N` tags as draft pre-releases and never publishes them. So the second candidate did not need the `v0.1.0` tag moved.
+* **The second candidate** is the private draft pre-release of `v0.1.0-rc.2` (`f049e08`), built by run 43288379505.
+  * Checksums and signatures were verified twice.
+  * It passed on Windows 11 (an 8-scenario install matrix), on Ubuntu 24.04 GNOME, on bare Ubuntu and Debian images without CA certificates, on Fedora, and in GUI containers.
+  * Virtual HiDPI at 100–200 % (175 % included) passed on Windows and GNOME, in the largest and the smallest window.
+* **Found, not changed:** the GitHub repository is **public**. It was private at 00:06Z the same day, and no session changed it. Mission 10's closing line ("the repository stays private") was not re-checked when it was written. The owner was notified (item 99).
+* **Not verified:**
+  * Authenticode: there is no certificate, so the installers are unsigned;
+  * an update end to end, which is possible only after publication;
+  * physical HiDPI, for lack of hardware.
+
+### B. Changes
+
+| Commit | What |
+|---|---|
+| `1c98af4` | fix(network): start without CA certificates and say why requests fail. New `src-tauri/src/tls_trust.rs`: `LazyClient` (the VirusTotal and threat-intelligence clients are built on first use, a failure is not cached), `build()` (every client; a failure caused by missing CA certificates becomes one actionable message), `describe_build_error()` (also for the updater's `classify` and `describe_reqwest`). Every `reqwest::ClientBuilder::build()` call site moved to it (14 files). `ring`, already in the tree through rustls, became a dev-dependency for a run-time test certificate |
+| `1aed064` | fix(installer): forget the NSIS install folder after an uninstall. `src-tauri/windows/installer-hooks.nsh` (`NSIS_HOOK_POSTUNINSTALL`) and `bundle.windows.nsis.installerHooks`; tests pin the hook's commands and the Windows install identity |
+| `00939e1` | feat(release): build release candidates under `vX.Y.Z-rc.N` tags (draft pre-releases the workflow never publishes); tests for the tag pattern, the pre-release draft and the refusal to publish |
+| `4d1a902` | fix(projects): a project row's details give way to the name (at least 10rem), long values end with an ellipsis, the dates keep a tooltip |
+| `7e62a10` | fix(asvs): `statusLabel()` shows an unknown history status as stored; unit test |
+| `44a0384` | fix(release): one redirect for the three outputs (shellcheck SC2129, found by CI's actionlint) |
+| `f049e08` | docs(release): the 0.1.0 notes state the signing, CA-certificate and scaling limits (the old text read as if the release were signed) |
+| this commit | docs: mission state, log, report, backlog, readiness, procedures, platforms, updater, signing |
+
+The application's architecture, visual identity, updater key and signing architecture are unchanged. No runtime dependency was added.
+
+### C. CA certificates (Priority A)
+
+* **The exact path.**
+  * reqwest 0.13.5 builds each client's verifier with rustls-platform-verifier 0.7.1.
+  * On **Linux** (and other Unix systems except Android and Apple), `Verifier::new` loads the system's CA certificates through rustls-native-certs 0.8.5 while the client is **built**. Without any certificate it returns an error, which reqwest reports as "builder error".
+  * On **Windows** the verifier asks Windows' certificate store during each connection, so building never fails there. (macOS is not supported.)
+  * `setup_app` built two clients (`VtState::new()`, `TiState::new()`). A Linux system without `ca-certificates`, such as a bare container or a minimal install, therefore could not start Cyber Hub at all.
+* **The fix.**
+  * The two start-up clients are built when a request first needs them.
+  * Every client is built through `tls_trust::build`. Missing CA certificates become one message: "Secure connections are not available: no trusted CA certificates were found on this computer, so Cyber Hub cannot verify any server's certificate and sends no request. Install the system's CA certificates (the ca-certificates package on Debian, Ubuntu and Fedora), then try again. Offline features keep working."
+  * The message reaches the user through the existing error paths:
+    * `AppError::Network` toasts and inline errors;
+    * the threat-intelligence results' per-provider status;
+    * OSINT's provider errors;
+    * the HTTP tools' errors;
+    * the Update Center's failure kind `tls`.
+  * No request is attempted, and nothing retries at start-up. Nothing disables verification or falls back to HTTP: without CA certificates no client exists. A failure is not cached, so installing the certificates is enough, without a restart.
+  * The TLS analyzer still analyzes a server and reports "No trusted root certificates are available on this system" as its trust result (unchanged).
+  * Not done, on purpose: declaring `ca-certificates` as a package dependency. It would make an offline install fail on a minimal system, and Cyber Hub is local-first.
+* **Regression tests,** with the six cases of the brief:
+  1. **A normal system:** `a_client_builds_with_the_systems_ca_certificates` (Windows and Debian), and every other network test.
+  2. **No CA certificates:** `without_ca_certificates_cyber_hub_starts_and_says_why_requests_cannot_be_made`, a Linux child process with `SSL_CERT_FILE` and `SSL_CERT_DIR` pointing at empty places. The start-up states are created, and every path gives the message: `build`, the threat-intelligence client, both lazy clients, and the updater's `classify`.
+  3. **A request without roots:** the same test, plus `the_start_up_states_build_no_client`.
+  4. **Recovery:** the child test points the variable at the system bundle, and the next `get()` builds the client. `a_lazy_client_is_built_on_first_use_tried_again_after_a_failure_and_then_kept` covers the same on every platform.
+  5. **Invalid certificates still refused:** `an_untrusted_certificate_is_still_refused`. A self-signed ECDSA certificate is made at run time and served over TLS on 127.0.0.1. Cyber Hub's client refuses it for its certificate, and a client that trusts that certificate explicitly reaches the same server (the control).
+  6. **Offline work:** the child test writes and reads the database.
+* **On real packages** (the second candidate):
+  * **Bare `ubuntu:24.04` and `debian:12`, no `ca-certificates`:** the deb installs without pulling them in. Cyber Hub starts, shows its window and opens schema 32. The first candidate printed "Cyber Hub could not start: builder error" here.
+  * **Fedora 43:** the rpm starts with its certificates and with them hidden from the app.
+  * **GUI containers, Ubuntu 24.04 and Debian 12, certificates hidden:** 5/5 each. The HTTP header analyzer and a live CVE search refuse with the message, a project is created offline, and after the bundle is written into the same file, the next request builds its client without a restart.
+  * **The AppImage** starts with the certificates hidden.
+  * **Windows** is not affected by this failure; its certificate store is always there.
+* **Limitations.** On Linux, `SSL_CERT_FILE` / `SSL_CERT_DIR`, when set, replace the system's certificates for Cyber Hub (rustls-native-certs' rule). The message is shown on each network attempt; there is no banner at start-up. The user cannot tell that the certificates are missing until a network feature is used.
+
+### D. Windows installers (Priority B)
+
+* **The cause.** Tauri's NSIS installer saves its folder as the default value of `HKCU\Software\cyberhub\Cyber Hub`, and its uninstaller deletes that key only when *Delete the application data* is ticked. Tauri's MSI template searches that value for its `INSTALLDIR` (then its own `InstallDir` value). Both templates were read from the Tauri CLI 2.12.4 that builds the release.
+* **The fix.** A supported Tauri hook, not a template fork. After a real uninstall the hook deletes only that value, then the two keys if they are empty. NSIS 3.13's `/ifempty` was checked in its help: no values and no subkeys. An update (`/UPDATE`) keeps the value.
+  * It touches nothing else: no files, no data, no other value. `Installer Language` and the MSI's values stay.
+  * A newer installer that removes the old copy first has already read the folder, and writes it again.
+* **The matrix** with the second candidate's NSIS and MSI and the first candidate's for upgrades. Details: RELEASE_READINESS.md, "Windows installers".
+  * Fresh NSIS: 10/10 + 1/1.
+  * NSIS uninstall: the data is kept and the folder forgotten.
+  * The MSI after it: Program Files.
+  * The MSI on the same data: no migration.
+  * MSI uninstall, then NSIS: the per-user folder.
+  * NSIS over the first candidate's NSIS, in place.
+  * MSI over the first candidate's MSI: a major upgrade with one entry.
+  * Fresh MSI: 10/10 + 1/1, then an upgrade from schema 31 and a rollback, 4/4.
+  * Shortcuts and uninstall entries were checked after every step. The data stayed throughout.
+* **Limitations.**
+  * A machine whose earlier NSIS copy was removed by an older uninstaller keeps the stale value until the next NSIS uninstall. Only the QA VMs had the first candidate.
+  * While an NSIS copy is installed, Tauri's MSI follows its folder: install one Windows package at a time (PLATFORMS.md).
+  * SmartScreen and the interactive wizards were not repeated; the files are unsigned exactly as before.
+
+### E. Publisher identity (Priority C)
+
+* **What exists.**
+  * No publisher identity is documented beyond Cargo.toml's `authors = ["Cyber Hub contributors"]`, which is the deb's Maintainer.
+  * `bundle.publisher` is unset, so Tauri derives "cyberhub" from `dev.cyberhub.workstation`.
+  * "cyberhub" is consistent across the exe's CompanyName (the app and the MCP sidecar), the NSIS Publisher and the MSI Manufacturer.
+  * Product name and file description are "Cyber Hub"; the copyright is empty. The NSIS installer's own version info has no Company field (Tauri's template).
+* **What needs Authenticode.** Only the signer that SmartScreen ("Unknown publisher"), the UAC prompt ("Unknown") and the *Digital Signatures* tab show. *Apps & features* and file details show `bundle.publisher` whether or not the file is signed.
+* **Decision: unchanged for 0.1.0, and pinned by a test.** The publisher names the NSIS key that holds the install folder. The next NSIS installer reads it to find and remove the old copy, and the MSI reads it for its folder. With another value, a manual NSIS upgrade from a build with the old value would find no folder there. This follows from the template's code and was not tried.
+  * The MSI's upgrade code (`{35C1D9FD-CFC7-5020-B4AC-A031E55D0494}`, from the product name) and the NSIS uninstall entry (named after the product) do not depend on the publisher.
+  * No legal name was invented, and nothing implies a signature.
+* **The owner's decision, before the first public release:** keep "cyberhub", or set the final value once, for example the certificate's subject. Afterwards a change needs a migration.
+
+### F. HiDPI (Priority D)
+
+* **The audit** (`audit.js`, the same code in WebView2 and WebKitGTK) visits:
+  * every sidebar page (17);
+  * every section of a project (19);
+  * the command palette, the new-project form and the scan import.
+
+  It reports sideways scrolling of the page or of `<main>`, tables cut off by a container, controls no scrolling can reach, and dialogs that do not fit or whose controls stick out. Its data is a copy of the schema-31 upgrade fixture, so every table has a row.
+* **Results, virtual displays at 2560 × 1600:**
+  * **Windows 11** (QA debug build of the candidate's code), 100, 125, 150, 175 and 200 %: **20/20**. Each scale covers the page scale, a maximized window, the smallest window a user can drag to (800 × 480 logical) and the native confirmation.
+  * **GNOME 46 on Wayland** (a Linux build of the same code), Mutter's 1, 1.25, 1.502, 1.749 and 2: **20/20**.
+  * **The installed candidate deb** at 1 and 1.749: **8/8**.
+  * Every window size: 17 pages, 19 project sections, 3 dialogs, no problem.
+* **Fixed** after the audit's first run on the host:
+  * the Projects page scrolled sideways by 230 px at 1354 px, because a project row's details could not shrink; with dates it happens just above the `lg` breakpoint;
+  * the ASVS section failed to render on a history status it did not know.
+* **Physical HiDPI: NOT TESTED.** No physical high-DPI display was available. At fractional scales GNOME draws the window at 2× and scales it down, as before.
+
+### G. Security and regression (Priorities E and F)
+
+* **Tests,** compared with Mission 10 (641 passed, 28 ignored, 56 frontend files):
+  * Windows: 647 passed, 29 ignored; clippy `-D warnings` clean.
+  * Debian 12 (Rust 1.99.1): 648 passed, 29 ignored.
+  * Frontend: 56 files and 310 tests; tsc clean.
+  * CI 43286877265 on `f049e08` green on `windows-2022`, `ubuntu-24.04`, Debian 12 and MSRV 1.90, with gitleaks and actionlint; CI on the tag green too.
+  * The difference is the new tests: 4 TLS tests on every platform plus the Linux-only parent, 2 installer-identity tests, and the ignored child. No test was weakened. The release-workflow test changed with the policy: pre-release tags other than `-rc.N` are still refused.
+* **Audits:** npm 0 vulnerabilities; cargo audit 0 vulnerabilities in 652 crates, the same 8 allowed warnings; Dependabot, the same two medium alerts (item 94).
+* **Formatting:** `cargo fmt` is not used by the project (no configuration, no CI step). A run in this mission reformatted 184 files and was undone before any commit.
+* **Database:** upgrades from every schema (`db_upgrade_tests.rs`); on the installed MSI, schema 31 to 32 with its backup and a rollback.
+* **Backup and restore:** RC-8/RC-9 on both Windows packages. **MCP:** its security tests, and the installed sidecar's 62 tools on Windows (NSIS, MSI) and Ubuntu (deb). **End to end:** the installed-build checks, the audits and the no-CA GUI test above.
+* **The release pipeline,** reviewed:
+  * **Secrets.** Both update secrets are only in the `release` environment and only in the build step, never echoed. The password has no BOM: the build signed. `RELEASE_PUBLISHING` existed from 19:15:58Z to 19:50:58Z only.
+  * **Notes.** The manifest's notes are 19,736 characters (limit 20,000), and the draft carries the full notes.
+  * **Checksums and signatures.** `SHA256SUMS.txt` is checked against GitHub's digests in the run and again locally. The signatures were checked against the compiled key by the repository's validator and by the reference minisign.
+  * **The commit.** The artifacts come from the validated commit: the tag check in the run says `v0.1.0-rc.2 names f049e08…`, and the run's head is `f049e08`.
+  * **Actions and permissions.** Every action is pinned by SHA (a test, and the repository's SHA-pinning setting). Permissions are minimal: none at the top; `contents: read` for validation and build, `write` only for publish; read-only CI.
+  * **No accidental publishing.** A stable tag publishes only with *draft* unchecked and the tag typed again; a candidate never.
+  * **Defects found:** SC2129, fixed before the build. The update key and the signing architecture are unchanged.
+* **Repository settings, now that it is public (item 99):** secret scanning and push protection are off (free for public repositories); the `release` environment has no required reviewers (now available); outside contributors' first workflow runs need approval.
+* **The owner's database** (`%APPDATA%\dev.cyberhub.workstation\cyberhub.db`) kept its modification time `2026-11-05T15:58:24.8534883Z`. All QA used VMs, containers and disposable data folders.
+
+### H. The second candidate's artifacts
+
+* **Tag** `v0.1.0-rc.2` (annotated, object `d0d85cf8…`) names `f049e08c6ac9e81e03eec81b8bab1946154dca9a`. Run [43288379505](https://github.com/RChefo/cyber-hub/actions/runs/43288379505), 19:16–19:50Z, green; *Publish the release* was skipped.
+* **Draft pre-release** "Cyber Hub 0.1.0, release candidate 2": https://github.com/RChefo/cyber-hub/releases/tag/untagged-232774a6d0480a7f3d47. The address changes when the draft is edited. Anonymous readers see no release.
+* **SHA-256:**
+
+  ```
+  5b0c80925312b6f494e770dae221f350d9b47c43003030db4dc5212dbbf19deb  Cyber.Hub-0.1.0-1.x86_64.rpm
+  af39bbc4611f91bb5f9a9dcf7df5c770d224db1f506006fd92171dba98849e22  Cyber.Hub_0.1.0_amd64.AppImage
+  cfea5b3511a56416cc4113b4e153fab9a4b9b6cd9e574d3d3cb572661d8fca81  Cyber.Hub_0.1.0_amd64.deb
+  8c7c136ca27a36ec38e027c59ca2744cb12c7f6d39dc635140de21c1b1c8b4fb  Cyber.Hub_0.1.0_x64-setup.exe
+  ded2c1be72dd298bfd9d77adbbc8c0c4742f5249af2b60c85ad43b93a4c91b74  Cyber.Hub_0.1.0_x64_en-US.msi
+  7a83e7a68977deaa51a8599d8fec134f0aa6216995e7edb9f8c539cca5d85849  latest.json
+  ```
+
+  The `.sig` files are listed in the draft's `SHA256SUMS.txt`.
+* **Verification** (`E:\CyberHubQA\evidence\M11\rc2\verify.log`):
+  * every file matches `SHA256SUMS.txt`;
+  * the repository's validator passes;
+  * the reference minisign verifies all five packages against key `957F3F7D955C72FA`, each trusted comment naming version 0.1.0;
+  * Authenticode says `NotSigned`.
+* **The two candidates.**
+  * The first is the draft of `v0.1.0`, tag on `add894e`, run 43242424304. It was **kept** and still has its old defects (no start without CA certificates; the MSI's folder).
+  * The second is the draft pre-release of `v0.1.0-rc.2`. Both report version 0.1.0.
+  * The stable `v0.1.0` must name the validated commit before a final build (item 101).
+* **Evidence:** `E:\CyberHubQA\evidence\M11\`: `win`, `win-hidpi`, `noble-hidpi-build`, `noble-rc2`, `linux`, `rc2`, and `E:\CyberHubQA\win-share\m11\out` for the matrix logs.
+
+### I. Remaining blockers
+
+* **Mandatory before a public release:**
+  1. **Authenticode** for the Windows installers and programs. This is a purchase: not authorized and not made (`SIGNING_SETUP.md`). Signing changes the binaries, so a new candidate follows.
+  2. **The owner's publication decision.** The stable build needs the first draft deleted and `v0.1.0` pointed at the validated commit (a rewrite of a public tag), or a later version (item 101).
+* **Owner decisions:**
+  1. **The repository's visibility.** It is public; confirm or change it. If public: secret scanning, push protection, and a required reviewer on `release`.
+  2. **The publisher name,** before the first public release.
+  3. Whether to delete the first candidate's draft now; it was kept per the brief.
+* **External hardware or certificates:**
+  1. a physical HiDPI screen (M4);
+  2. the Authenticode certificate;
+  3. after publication, the update path end to end (item 98).
+* **Optional:**
+  1. the rpm in a desktop session;
+  2. the AppImage and M7 on Plasma again with this candidate;
+  3. M1 on an installed build;
+  4. limiting the third-party GitHub Apps;
+  5. running actionlint locally before every workflow push (item 100).
+
+### J. Final classification
+
+**RELEASE CANDIDATE PARTIALLY VERIFIED.**
+* The second candidate fixes Mission 10's start-up and installer findings. It passed every automated and installed-build check that this environment allows on Windows 11, Ubuntu 24.04, Debian 12 and Fedora 43, and its artifacts verify.
+* It is not ready for a final owner review as a release:
+  * the Windows files are unsigned, and signing will rebuild them;
+  * an update cannot be checked before publication;
+  * physical HiDPI is untested.
+* Passing tests do not make it production-ready.
+* **Nothing was published.** No visibility was changed, nothing was bought, and `RELEASE_PUBLISHING` is unset.

@@ -1650,3 +1650,67 @@ All 17 steps ran in the VM, and the host typed into Windows' credential dialog t
   * Disk resets were logged at about 14:27Z and 16:35Z under host load.
   * VirtualBox on Hyper-V; the Linux VMs were shut down to lower the load.
 * **The draft's body** now starts with a candidate section: signature status, the checksums, installation, upgrade and rollback, these validation results and the limitations. The release notes follow unchanged. The draft stayed a draft.
+
+## Mission 11 (2026-11-12T17:35Z): final release hardening and the second release candidate
+
+The owner authorized autonomous engineering, regression testing, private repository operations and an isolated release candidate; not a public release and not any purchase.
+
+## 17:35–18:25Z: the CA-certificate start-up (Priority A)
+
+* **The path.** reqwest 0.13 builds every client's certificate verifier with `rustls-platform-verifier` 0.7. On Linux, `Verifier::new` loads the system's CA certificates through `rustls-native-certs` 0.8 while the client is *built*, and fails without them; reqwest reports only "builder error". On Windows the verifier asks Windows' store during each connection, so building never fails. `VtState::new()` and `TiState::new()` built their clients in `setup_app`, so a Linux system without CA certificates could not start.
+* **The fix** (`src-tauri/src/tls_trust.rs`):
+  * the two start-up clients are `LazyClient`s: built on first use, a failure not remembered, a built client kept;
+  * every client is built through `tls_trust::build`, which turns a failure caused by missing CA certificates into one message (`NO_TRUST_ROOTS`): no trusted CA certificates, nothing sent, install `ca-certificates`, offline features keep working;
+  * the updater's `classify` and `describe_reqwest` treat a client that could not be built the same way;
+  * nothing weakens verification: without CA certificates no client exists and no request is made.
+* **Tests.** The start-up states build no client; a lazy client is tried again after a failure and then kept; a self-signed certificate (made at run time with `ring`, served by a rustls server on 127.0.0.1) is refused, and the same server is reached when its certificate is trusted explicitly; on Linux, a child process with `SSL_CERT_FILE` and `SSL_CERT_DIR` pointing at empty places starts the states, gets the message from every path, writes the database, and recovers when the variable names the system bundle.
+* **A mistake, undone.** `cargo fmt` reformatted 184 files (the project has no rustfmt configuration and CI has no format check). The session's own edits were replayed from its transcript onto `HEAD`, shown identical to the formatted tree after rustfmt, and the working tree was restored with them only.
+
+## 18:13–18:35Z: installers and publisher identity (Priorities B and C)
+
+* **Tauri's templates**, read from the CLI 2.12.4 binary: the NSIS installer writes the folder as the default value of `HKCU\Software\<publisher>\<product>`; its uninstaller deletes that key only with *Delete the application data*; the MSI's `INSTALLDIR` searches that value, then its own `InstallDir`. The MSI's upgrade code is UUIDv5(DNS, "Cyber Hub.exe.app.x64"), `{35C1D9FD-CFC7-5020-B4AC-A031E55D0494}`, independent of the publisher.
+* **The hook.** `src-tauri/windows/installer-hooks.nsh` (`NSIS_HOOK_POSTUNINSTALL`): unless `$UpdateMode = 1`, delete the default value, then the product and publisher keys only if empty (NSIS 3.13's `/ifempty`: no values and no subkeys, read in its help).
+* **Publisher.** Unset, so Tauri derives "cyberhub" from the identifier; the exe's CompanyName, the NSIS Publisher and the MSI Manufacturer agree. It names the NSIS key above, which the next NSIS installer's reinstall page reads to find the old copy: changing it would break a manual upgrade from the first candidate. Kept, and pinned by a test.
+* **The repository is public** (GitHub API at 18:13Z), although it was private at 00:06Z and no session changed it. Drafts stay hidden from anonymous readers. Not changed; the owner was notified.
+
+## 18:25–18:55Z: the second candidate's tag, the HiDPI audit, commits
+
+* **Release candidates** (Priority G). The release workflow refused every pre-release tag, so a second candidate of 0.1.0 needed the `v0.1.0` tag, whose draft holds the first. `vMAJOR.MINOR.PATCH-rc.N` is now accepted: the version files stay `X.Y.Z`, the draft is a GitHub pre-release titled "release candidate N", and the publish step refuses it.
+* **The HiDPI audit** (`audit.js`, in `E:\CyberHubQA\win-share\hidpi`), the same code in WebView2 (CDP) and WebKitGTK (WebDriver): every sidebar page, every project section, the command palette, the new-project form and the scan import; sideways scrolling, clipped tables, unreachable controls and dialogs that do not fit. Its first run on the host, with a copy of the schema-31 fixture, found:
+  * the Projects page scrolled sideways by 230 px at 1354 px: a project row's details could not shrink (fixed, `4d1a902`);
+  * the ASVS section failed to render on the fixture's history row, whose statuses the app does not know (fixed, `7e62a10`).
+* **The MSI smoke test** with a local NSIS and MSI build, in `chqa-win11b`: the stale key left by the first candidate's uninstall was there before the test; after the new uninstaller only `Installer Language` stayed; the MSI then went to `C:\Program Files\Cyber Hub\`; an `/UPDATE` run kept the folder; data kept throughout.
+* **Commits** `1c98af4`, `1aed064`, `00939e1`, `4d1a902`, `7e62a10`; Windows: clippy clean, 647 passed, 29 ignored; Debian 12 (Rust 1.99.1, container): 648 passed, 29 ignored; vitest 56 files, 310 tests; tsc clean.
+
+## 18:48–19:16Z: CI, Windows HiDPI, no CA certificates on Linux, the tag
+
+* **CI 43284751500 failed** in actionlint: shellcheck SC2129, three `>> "$GITHUB_OUTPUT"` lines in a row. Fixed (`44a0384`) and checked locally with the pinned actionlint 1.7.7 and shellcheck 0.9.0 in a container. The release notes now state the signing, CA-certificate and scaling limits (`f049e08`). CI 43286877265 green on `f049e08`.
+* **Windows HiDPI** (`chqa-win11b`, 2560 × 1600, QA debug build of the fixed code, schema-31 fixture): 100, 125, 150, 175 and 200 %, each with the page scale, a maximized window, the smallest window (800 × 480 logical) and the native confirmation: **20/20**. Every window size: 17 pages, 19 project sections, 3 dialogs, no problem.
+* **No CA certificates, Linux build of the same code:**
+  * bare `ubuntu:24.04` and `debian:12` (no `ca-certificates`, no certificate file): Cyber Hub starts and shows its window within 3 s (the first candidate: "Cyber Hub could not start: builder error");
+  * GUI containers (Ubuntu 24.04, Debian 12) with the certificates hidden: 5/5 each: the HTTP header analyzer and a live CVE search refuse with the message, a project is created offline, and after the bundle is written into the same file the next request builds its client without a restart (then fails to resolve the name: the container has no network).
+* **The tag.** `v0.1.0-rc.2` (annotated) on `f049e08`. Its push started a validation-only release run (43288219868), cancelled as in Mission 10 because the manual run repeats it, and CI 43288219836 (green). `RELEASE_PUBLISHING` was set at 19:15:58Z for the manual draft run 43288379505.
+
+## 19:16–19:51Z: run 43288379505, the second candidate's draft
+
+* Validation of the tag (the `rc.2` candidate output, version 0.1.0, the notes of 0.1.0), both builds and their update signatures, `latest.json` (notes 19,736 characters), the tag check (`v0.1.0-rc.2 names f049e08…`), the upload to a **draft pre-release** "Cyber Hub 0.1.0, release candidate 2", GitHub's digests equal to `SHA256SUMS.txt`; *Publish the release* skipped by design. Green end to end in 35 minutes.
+* `RELEASE_PUBLISHING` was deleted at 19:50:58Z, 16 s after the run ended. No variable is left in the repository or the environment.
+* **Verification** of the downloaded assets (`E:\CyberHubQA\evidence\M11\rc2\verify.log`): every file against `SHA256SUMS.txt`; the repository's validator at `f049e08`; the reference minisign against the compiled key `957F3F7D955C72FA`, each trusted comment naming version 0.1.0; Authenticode `NotSigned` as expected; the draft's body is the full notes file.
+
+## 19:23–19:58Z: GNOME, Ubuntu 24.04 (`chqa-noble`)
+
+* **HiDPI, Linux build of the candidate's code, schema-31 fixture:** Mutter's 1, 1.25, 1.502, 1.749 and 2, in the maximized and the smallest window: 20/20, every size 17 pages, 19 project sections, 3 dialogs, no problem, no page error. Two harness slips were corrected and their runs repeated: the first scale check compared against 1.5, not Mutter's 1.502; and a stopped sequence kept running beside its replacement (its logs are set aside in `superseded/`).
+* **The candidate's deb:** installed (`cfea5b35…`), release checks RC-1–RC-4 5/5 (0.1.0, schema 32, the feed, the data folder 0700, the update check finding no published manifest, the MCP sidecar's 62 tools); the audit at 1 and 1.749 on the installed build 8/8; removed with the data kept; reinstalled without a migration; Alt+F4 closes it.
+
+## 19:53–20:12Z: clean images and containers
+
+* **Bare `ubuntu:24.04` and `debian:12`, the candidate's deb:** no `ca-certificates` before or after the install, no certificate file; it depends on `libwebkit2gtk-4.1-0` and `libgtk-3-0` only; it starts and shows its window in 2 s, schema 32, data folder 0700; removal keeps the data. (The first candidate: "Cyber Hub could not start: builder error".)
+* **Fedora 43, the rpm:** with its CA certificates, and again with them hidden from the app: it starts, shows its window, no start-up error; removal keeps the data.
+* **GUI containers (Ubuntu 24.04, Debian 12), the deb, certificates hidden:** 5/5 each (start; the HTTP header analyzer and a live CVE search refuse with the message; offline work; recovery without a restart).
+* **The AppImage:** with the certificates hidden in the GUI container, it starts and shows its window in 3 s. On a bare image it stops at missing desktop libraries (`libwayland-client`, then `libEGL`), as an AppImage expects them from the system.
+
+## 20:00–20:12Z: the Windows install matrix (`chqa-win11b`)
+
+* NSIS silently, the MSI with basic UI and UAC answered from the host (7 prompts); the first candidate's files for the upgrades.
+* 1 fresh NSIS 10/10 and 1/1; 6 NSIS uninstall keeps the data and forgets the folder; 2 the MSI then goes to Program Files; 7 that MSI opens the same data without a migration; 4 MSI uninstall, then NSIS back in `%LOCALAPPDATA%`; 8 the second NSIS over the first, in place; 5 the second MSI over the first (major upgrade, one entry); 3 fresh MSI 10/10 and 1/1, then upgrade from schema 31 and rollback 4/4. Details: RELEASE_READINESS.md, "Windows installers".
+* Both VMs were shut down from inside. The owner's database kept its modification time `2026-11-05T15:58:24.8534883Z` throughout.

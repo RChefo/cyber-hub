@@ -239,7 +239,8 @@ Observed and **not** an updater defect:
 
 * No automatic rollback (see [Data during an update](#data-during-an-update)).
 * No delta updates: every update downloads the full package (tens of MB).
-* The feed is GitHub's `releases/latest`; a draft or pre-release is never served by it.
+* The feed is GitHub's `releases/latest`; a draft or pre-release is never served by it. Release candidates (`vX.Y.Z-rc.N`, Mission 11) are draft pre-releases for that reason, and the release workflow never publishes them.
+* On a Linux system without CA certificates the check says "Secure connections are not available: no trusted CA certificates were found…" (failure kind `tls`) and contacts nothing; it works again once `ca-certificates` is installed (Mission 11).
 * Windows Authenticode signing of the installers is not set up; update signatures are independent of it.
 * Linux deb/rpm updates need an administrator password each time; a headless session without `pkexec`, zenity/kdialog or a terminal cannot authenticate.
 * An AppImage stored in a folder you cannot write to cannot replace itself (the error says so).

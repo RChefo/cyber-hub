@@ -80,6 +80,7 @@ So for 0.1.0, **expect the warning on the first downloads whatever certificate i
 * An **individual** (IV) certificate names the person: Windows shows the owner's legal name as the verified publisher, in the UAC prompt, in the SmartScreen dialog and in the file's properties. Validation takes a government ID and a selfie or video check.
 * An **organization** (OV) certificate names a registered legal entity. It needs the entity's registration (and often a D-U-N-S or registry listing) and a verified contact, but keeps the person's name off the binaries.
 * Both give the same SmartScreen treatment. Choose by whose name should be on the app and whether an entity exists. Changing later changes the publisher signal.
+* **The certificate's subject is not Tauri's `bundle.publisher`** (Mission 11). SmartScreen, the UAC prompt and the *Digital Signatures* tab show the subject. *Apps & features*, the exe's *Company* field and the NSIS install key (`HKCU\Software\<publisher>\Cyber Hub`) show `bundle.publisher`, which is unset and therefore "cyberhub". To make them agree, set `bundle.publisher` to the subject **before the first public release**: afterwards a change breaks manual NSIS upgrades (RELEASE_READINESS.md, "Publisher identity").
 
 **Hardware token or cloud key.** A USB token needs a self-hosted Windows runner with the token plugged in, and someone to unlock it. GitHub-hosted runners need a cloud key: SSL.com eSigner, DigiCert KeyLocker, Google Cloud KMS through jsign, or Microsoft Artifact Signing. The recommended route uses eSigner.
 

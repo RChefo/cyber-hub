@@ -422,3 +422,37 @@ The owner authorized the password secret and the draft builds. The candidate was
 | 96 | **The MSI installs into the NSIS folder after an NSIS install was removed** | The NSIS uninstaller leaves `HKCU\Software\cyberhub\Cyber Hub` (`(Default)` is the install folder). Tauri's MSI template reads that key to follow an NSIS install, so the per-machine MSI went to `C:\Users\<user>\AppData\Local\Cyber Hub\`. Options: clean the key in the NSIS uninstaller (a template hook), or document it. An MSI on a machine that never had the NSIS version was not tested |
 | 97 | **Windows lists the publisher as "cyberhub"** | No `bundle.publisher` is set, so Tauri derives it from the identifier. Set it, for example to the certificate's subject, when Authenticode is added |
 | 98 | **Test an update end to end after publication** | The feed is `releases/latest` of the repository. Before publication every package correctly reports that no update manifest is published. Check 0.1.0 against the published feed, then a 0.1.1 update signed with the same key |
+
+## Mission 11 (2026-11-12): final release hardening and the second release candidate
+
+The CA-certificate start-up and the MSI folder are fixed, the publisher name is decided (kept), the release workflow builds release candidates under their own tags, and the HiDPI audit found and fixed two front-end defects. Details: MISSION_REPORT.md, "Mission 11".
+
+### Status of earlier items
+
+| # | Item | Status |
+|---|---|---|
+| 95 | Start-up without CA certificates | **Done** (`1c98af4`). The two start-up clients are built on first use (`tls_trust::LazyClient`), every client is built through `tls_trust::build`, and a client that cannot be built says that no CA certificates were found and what to install. Verification is unchanged: no client exists, so nothing is sent. A failure is not remembered, so installing the certificates is enough. Checked on bare Ubuntu 24.04 and Debian 12 images without `ca-certificates`, and in GUI containers with the certificates hidden and given back. **Not done, on purpose:** declaring `ca-certificates` as a package dependency. Cyber Hub is local-first, and a hard dependency would make an offline `apt install ./…deb` fail on a minimal system; every desktop installs the package, and the message names it |
+| 96 | The MSI installs into the NSIS folder after an NSIS uninstall | **Done** (`1aed064`). An `NSIS_HOOK_POSTUNINSTALL` hook deletes the folder value after a real uninstall; an update keeps it. Tested in the Windows 11 VM: the MSI now goes to Program Files. **Limit:** a machine whose earlier copy was removed by an older uninstaller (only the first candidate, in QA VMs) keeps the stale value until the next NSIS uninstall |
+| 97 | Windows lists the publisher as "cyberhub" | **Decided: unchanged for 0.1.0.** The value is part of the NSIS install identity (`HKCU\Software\<publisher>\Cyber Hub` holds the folder that the next installer reads), so changing it breaks a manual NSIS upgrade from a build with the old value: the reinstall page cannot find the old copy's folder. The exe's CompanyName, the NSIS Publisher and the MSI Manufacturer all say "cyberhub" consistently; the deb's Maintainer is Cargo.toml's "Cyber Hub contributors". A test now pins the identity. Choosing another value is the owner's decision **before the first public release**, after which it should never change; Authenticode's certificate subject is shown by SmartScreen and UAC independently of it |
+| 90 | A switch that builds a draft without allowing publication | **Partly addressed.** A release candidate's tag (`vX.Y.Z-rc.N`) can never be published by the workflow, so enabling `RELEASE_PUBLISHING` for a candidate run cannot publish anything. A stable tag's run still depends on the *draft* box and the typed confirmation |
+
+### Fixed
+
+| What | Commit |
+|---|---|
+| No start without CA certificates ("builder error"); every network feature now says what to install | `1c98af4` |
+| The MSI installed into the removed NSIS copy's per-user folder | `1aed064` |
+| A second candidate of the same version needed the `v0.1.0` tag moved: the workflow now builds `vX.Y.Z-rc.N` tags as draft pre-releases and refuses to publish them | `00939e1` |
+| The Projects page scrolled sideways just above the `lg` width when a project had dates (the row's details could not shrink) | `4d1a902` |
+| The ASVS section failed to render when its history held a status the app does not know | `7e62a10` |
+| Shellcheck SC2129 in the release workflow (found by CI's actionlint) | `44a0384` |
+| The 0.1.0 notes read as if the Windows files were signed; they now state the signing, CA-certificate and scaling limits | `f049e08` |
+
+### New
+
+| # | Item | Why open |
+|---|---|---|
+| 99 | **The repository is public** | GitHub reports `RChefo/cyber-hub` as public (checked 2026-11-12T18:13Z); it was private at 00:06Z the same day, and no session on this machine changed it. Drafts stay hidden (an anonymous listing shows no release), but the source, the tags, the documentation and the Actions logs are public. The owner should confirm it is intended. If it is: turn on secret scanning and push protection (free for public repositories), consider required reviewers on the `release` environment (available for public repositories on GitHub Free), and consider requiring approval for all outside contributors' workflow runs |
+| 100 | **Run actionlint before pushing a workflow change** | CI's pinned actionlint 1.7.7 with shellcheck runs locally in an `ubuntu:24.04` container (download, check the SHA-256, run). Mission 11's first push failed on a shellcheck style rule that the Rust workflow tests cannot see |
+| 101 | **The final 0.1.0 release path** | The second candidate is the draft pre-release of `v0.1.0-rc.2`; the first is still the draft of `v0.1.0` (tag on `add894e`). To release 0.1.0, the owner deletes the first draft, moves `v0.1.0` to the validated commit (`git tag -f` and a forced tag push, a rewrite of a public tag to be done knowingly) or chooses a later version, builds the stable draft, checks it like the candidate, and publishes it. The stable build is a new build of the same commit, so its checksums differ from the candidate's |
+| 102 | **"Installer Language" stays in `HKCU\Software\cyberhub\Cyber Hub`** | Tauri's NSIS installer writes it, and its uninstaller removes it only with *Delete the application data*. Harmless: the MSI reads only the folder value and `InstallDir`. Left as Tauri does it |

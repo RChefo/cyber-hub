@@ -2,6 +2,12 @@
 
 This is how the one release-candidate build is made and validated. Mission 8 prepared it.
 
+**Status after Mission 11 (2026-11-12): carried out twice.**
+* **The second candidate** is the private draft **pre-release** of `v0.1.0-rc.2` (tag on `f049e08`), built by [run 43288379505](https://github.com/RChefo/cyber-hub/actions/runs/43288379505). It contains Mission 11's fixes: start-up without CA certificates, the MSI folder after an NSIS uninstall, two front-end layout and rendering defects, and the corrected notes.
+* **The first candidate** is unchanged: the draft of `v0.1.0` (tag on `add894e`). It was kept until the second was validated. Delete it before building the stable release (section 12).
+* **Release-candidate tags** (Mission 11, `00939e1`): the workflow accepts `vMAJOR.MINOR.PATCH-rc.N` on the same version files, makes the draft a GitHub pre-release (never the "latest" release the update feed points to) and refuses to publish it. A candidate therefore never needs the stable tag moved.
+* **Results:** MISSION_REPORT.md, "Mission 11".
+
 **Status after Mission 10 (2026-11-12): carried out once.**
 * **The candidate is a private draft release** of `v0.1.0` (tag on `add894e`), built by [run 43242424304](https://github.com/RChefo/cyber-hub/actions/runs/43242424304). Nothing was published.
 * **Sections 3–9 were run** in disposable VMs and clean containers; the results are in MISSION_REPORT.md, "Mission 10, continued". `RELEASE_PUBLISHING` was set only during each draft run.
@@ -50,7 +56,11 @@ Each of these is the owner's decision, made separately:
   git rev-parse "v0.1.0^{commit}"    # must print that commit
   ```
 
-* **Version.** 0.1.0 in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`. The release workflow refuses a tag that differs from them. The tag must be `vMAJOR.MINOR.PATCH`: pre-release tags are refused, because the update channel has none. The release candidate is therefore the **draft release of `v0.1.0`**. If it fails, nothing was published: delete the draft and the tag, fix, and tag again.
+* **Version.** 0.1.0 in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`. The release workflow refuses a tag that differs from them. The tag is either `vMAJOR.MINOR.PATCH`, the release itself, or **`vMAJOR.MINOR.PATCH-rc.N`** (N ≥ 1), a release candidate of that version (Mission 11). A candidate is built from the same version files, so its app says 0.1.0. Its draft is a GitHub pre-release titled "Cyber Hub 0.1.0, release candidate N", and the workflow never publishes it. Other pre-release tags are refused, because the update channel has none. If a candidate fails, nothing was published: delete its draft and its tag, fix, and tag the next number.
+
+  ```bash
+  git tag -a v0.1.0-rc.3 -m "Cyber Hub 0.1.0, release candidate 3" <commit>
+  ```
 * **Metadata.**
   * Product name *Cyber Hub*; identifier `dev.cyberhub.workstation`, shared with development builds (see section 4).
   * The update feed is compiled in by the workflow, `https://github.com/<owner>/<repo>/releases/latest/download/latest.json`.
@@ -68,10 +78,12 @@ Each of these is the owner's decision, made separately:
 1. Set `RELEASE_PUBLISHING` to `enabled` (*Settings → Secrets and variables → Actions → Variables*).
 2. Choose *Actions → Release → Run workflow*:
    * *Use workflow from* `release/v0.1.0`;
-   * *tag* `v0.1.0`;
+   * *tag* `v0.1.0`, or the candidate's tag, for example `v0.1.0-rc.2`;
    * *draft* **checked**;
    * *confirm* empty.
-3. Approve the `release` deployment twice when asked: *Build and sign*, then *Publish*. **On GitHub Free there is no approval step:** a private repository's environment cannot have required reviewers (Mission 9). The run goes on by itself, so set `RELEASE_PUBLISHING` only just before this run.
+
+   Pushing the tag starts a validation-only run first. It builds nothing; Missions 10 and 11 cancelled it so that the manual run did not wait behind it.
+3. Approve the `release` deployment twice when asked: *Build and sign*, then *Publish*. **Without required reviewers there is no approval step.** A private repository on GitHub Free cannot have them (Mission 9). A public repository can: the repository was public on 2026-11-12, and adding the owner as a required reviewer is recommended (FEATURE_BACKLOG.md, item 99). Without them the run goes on by itself, so set `RELEASE_PUBLISHING` only just before this run.
 4. When the run ends, **set `RELEASE_PUBLISHING` back** (delete it, or set it to anything but `enabled`), so no later run can build.
 
 **What the workflow runs:**
@@ -226,9 +238,9 @@ The candidate upgrades their database to schema 32 at its first start, after wri
 
 * **Before publishing** (the draft is the release candidate):
   1. delete the draft release;
-  2. delete the tag with `git push --delete origin v0.1.0` and `git tag -d v0.1.0`;
+  2. a candidate's tag (`v0.1.0-rc.N`) can stay, as a record; or delete the tag with `git push --delete origin <tag>` and `git tag -d <tag>`;
   3. turn `RELEASE_PUBLISHING` off;
-  4. fix the problem on `release/v0.1.0`, then tag and build again.
+  4. fix the problem on `release/v0.1.0`, then tag the next candidate and build again.
 
   Nothing reached users.
 * **After publishing:**
@@ -252,6 +264,13 @@ Keep it in `evidence/M10/<date>/`, and record it in `RELEASE_READINESS.md`:
 * the tester, the date, and each machine's operating-system build.
 
 ## 12. Publish (the owner's decision, after everything above passes)
+
+**A release candidate is never published.** Its draft names `v0.1.0-rc.N` in its tag and in `latest.json`'s download addresses, and the workflow refuses it. To release the version the candidate validated (Mission 11):
+
+1. Delete the first candidate's draft (the draft of `v0.1.0`). The workflow refuses a tag that already has a release, drafts included.
+2. Point `v0.1.0` at the validated commit. That tag exists on `add894e` and the repository is public, so this is a rewrite of a public tag: do it knowingly, `git tag -f -a v0.1.0 -m "Cyber Hub 0.1.0" <commit>` then `git push --force origin v0.1.0`. Or release a later version (0.1.1) instead.
+3. Run section 3 with the stable tag. The build is new, so its checksums differ from the candidate's: repeat section 5 and a short installation check of each package.
+4. Then publish in one of the two ways below.
 
 Publish in one of two ways:
 

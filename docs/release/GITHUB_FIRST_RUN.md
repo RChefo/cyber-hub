@@ -5,7 +5,7 @@ This guide is for the owner. It covers the static review, the repository setting
 ## Mission 9: the private repository and the first CI runs (2026-11-11)
 
 **The repository** is `https://github.com/RChefo/cyber-hub`.
-* **Visibility:** private.
+* **Visibility:** private when Mission 9 created it. **Mission 11 found it public** (2026-11-12T18:13Z; it was private at 00:06Z), changed by no session. The owner decides (FEATURE_BACKLOG.md, item 99). If it stays public, turn on secret scanning and push protection and consider a required reviewer on the `release` environment, which public repositories can have on GitHub Free.
 * **Creation:** no README or licence was added on GitHub.
 * **Before pushing:** gitleaks scanned the whole history first: 191 commits, no leaks.
 * **What was pushed:** only `release/v0.1.0`, which is therefore the default branch. No tag was pushed.
