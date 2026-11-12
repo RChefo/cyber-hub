@@ -4,6 +4,9 @@ name: Release
 #
 # - Runs only for a pushed version tag (vMAJOR.MINOR.PATCH) or a manual run naming an existing tag;
 #   never for pull requests, so untrusted code never sees the signing secrets.
+# - A release candidate's tag is vMAJOR.MINOR.PATCH-rc.N on the same version files (Mission 11). It is
+#   built and checked like the release, its draft is a GitHub pre-release (never the "latest" release
+#   that the update feed points to), and this workflow never makes it public.
 # - validate: version, tag and branch checks, tests, clippy and security checks (no secrets).
 # - build and publish run only in a manual run (Actions → Release → Run workflow) and only while the
 #   repository variable RELEASE_PUBLISHING is `enabled` (Settings → Secrets and variables → Actions →
@@ -26,7 +29,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to release, for example v0.2.0"
+        description: "Existing tag to release, for example v0.2.0 (or a release candidate, v0.2.0-rc.1)"
         required: true
         type: string
       draft:
@@ -61,6 +64,7 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
+      candidate: ${{ steps.version.outputs.candidate }}
       sha: ${{ steps.version.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -73,10 +77,12 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          if ! [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::Tag '$TAG' is not vMAJOR.MINOR.PATCH (the stable channel has no pre-releases)"; exit 1
+          if ! [[ "$TAG" =~ ^v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))(-rc\.([1-9][0-9]*))?$ ]]; then
+            echo "::error::Tag '$TAG' is not vMAJOR.MINOR.PATCH or a release candidate vMAJOR.MINOR.PATCH-rc.N (the stable channel has no other pre-releases)"; exit 1
           fi
-          version="${TAG#v}"
+          # a release candidate builds the version it is a candidate for: the files carry no suffix
+          version="${BASH_REMATCH[1]}"
+          candidate="${BASH_REMATCH[6]}"
           for f in package.json src-tauri/tauri.conf.json; do
             v=$(jq -r .version "$f")
             [ "$v" = "$version" ] || { echo "::error::$f has version $v but the tag is $TAG"; exit 1; }
@@ -88,6 +94,7 @@ jobs:
             echo "::error::$sha is not on main or a release/* branch"; exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Updater configuration
@@ -113,6 +120,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${TAG#v}"
+          version="${version%-rc.*}"
           if [ -s "docs/releases/$version.md" ]; then cp "docs/releases/$version.md" notes.md
           else git tag -l --format='%(contents)' "$TAG" | sed '/-----BEGIN/,$d' > notes.md; fi
           [ -s notes.md ] || { echo "::error::No release notes: add docs/releases/$version.md or annotate the tag"; exit 1; }
@@ -265,6 +273,7 @@ jobs:
       contents: write
     env:
       VERSION: ${{ needs.validate.outputs.version }}
+      CANDIDATE: ${{ needs.validate.outputs.candidate }}
       SHA: ${{ needs.validate.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -321,8 +330,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
-            --title "Cyber Hub $VERSION" --notes-file notes.md assets/*
+          if [ -n "$CANDIDATE" ]; then
+            # a release candidate is a pre-release: never the "latest" release the update feed names
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --prerelease --verify-tag \
+              --title "Cyber Hub $VERSION, release candidate $CANDIDATE" --notes-file notes.md assets/*
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+              --title "Cyber Hub $VERSION" --notes-file notes.md assets/*
+          fi
           expected=$(find assets -maxdepth 1 -type f -printf '%f\n' | sort)
           actual=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)
           if [ "$expected" != "$actual" ]; then
@@ -353,6 +368,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          if [ -n "$CANDIDATE" ]; then
+            echo "::error::$TAG is a release candidate: it stays a draft (release the version under its own tag)"; exit 1
+          fi
           # the tag is checked again just before the release becomes public (Mission 8)
           ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.type + " " + .object.sha')
           obj=${ref#* }

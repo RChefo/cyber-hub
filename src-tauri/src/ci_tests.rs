@@ -243,7 +243,17 @@ fn verification_and_release_stay_apart_and_the_release_names_the_commit_it_built
     assert_eq!(inputs["tag"]["required"], true);
     assert_eq!(inputs["draft"]["default"], true, "a manual run stops at a draft unless asked otherwise");
     assert_eq!(inputs["confirm"]["default"], "");
-    assert!(release.contains(r#"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"#), "pre-release tags are refused");
+    // a stable version, or a release candidate of one (Mission 11); no other pre-release
+    const TAG_RE: &str = r#"^v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))(-rc\.([1-9][0-9]*))?$"#;
+    assert!(release.contains(&format!("[[ \"$TAG\" =~ {TAG_RE} ]]")), "the tag check");
+    let re = regex::Regex::new(TAG_RE).unwrap();
+    for (tag, version, candidate) in [("v0.1.0", "0.1.0", ""), ("v0.1.0-rc.2", "0.1.0", "2"), ("v10.20.30-rc.11", "10.20.30", "11")] {
+        let c = re.captures(tag).unwrap_or_else(|| panic!("{tag} is accepted"));
+        assert_eq!((&c[1], c.get(6).map_or("", |m| m.as_str())), (version, candidate), "{tag}");
+    }
+    for tag in ["v0.1.0-rc.0", "v0.1.0-rc.01", "v0.1.0-rc2", "v0.1.0-beta.1", "v0.1.0-rc.1.1", "v01.0.0", "0.1.0", "v0.1", "v0.1.0 "] {
+        assert!(!re.is_match(tag), "{tag} is refused");
+    }
     for cache in ["cache:", "rust-cache", "actions/cache"] {
         assert!(!release.contains(cache), "release.yml uses a cache: {cache}");
     }
@@ -267,6 +277,14 @@ fn verification_and_release_stay_apart_and_the_release_names_the_commit_it_built
     }
     let publish = steps[position("Publish the release")]["run"].as_str().unwrap();
     assert!(publish.find("!= \"$SHA\"").unwrap() < publish.find("--draft=false").unwrap(), "checked before it becomes public");
+    // a release candidate's draft is a pre-release, never the "latest" release of the update feed,
+    // and is never made public (Mission 11)
+    assert_eq!(jobs["validate"]["outputs"]["candidate"], "${{ steps.version.outputs.candidate }}");
+    assert_eq!(jobs["publish"]["env"]["CANDIDATE"], "${{ needs.validate.outputs.candidate }}");
+    let upload = steps[position("Upload to a draft release")]["run"].as_str().unwrap();
+    assert!(upload.contains("if [ -n \"$CANDIDATE\" ]; then") && upload.contains("--draft --prerelease --verify-tag"), "{upload}");
+    let refused = publish.find("if [ -n \"$CANDIDATE\" ]").expect("the publish step refuses a release candidate");
+    assert!(refused < publish.find("--draft=false").unwrap(), "refused before anything is made public");
 }
 
 /// Mission 8: every run script parses as bash (the shell of the Linux jobs and of the Windows
