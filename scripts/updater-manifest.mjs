@@ -9,7 +9,8 @@
 // `validate` refuses a manifest unless every entry points at a file that exists in <dir>, uses
 // HTTPS, and carries a minisign signature that verifies against the public key in tauri.conf.json
 // and is bound to the manifest's version (the app enforces the same with `requireSignedVersion`).
-// It never reads or needs the private key.
+// It never reads or needs the private key. `generate` shortens release notes that are longer than
+// the app shows (20,000 characters) at a paragraph and links the full notes on the release page.
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { createReadStream, existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -98,6 +99,26 @@ export function normalizeNames(dir) {
   }
 }
 
+/**
+ * The notes the app shows in its Update Center: at most MAX_NOTES characters. Longer release
+ * notes are cut at the last blank line that fits and end with a link to the full release notes
+ * on the release page, so the app never shows a text cut off mid-sentence. The release itself
+ * keeps the full notes. (Mission 10: 0.1.0's notes, 25,720 characters, stopped the first release
+ * run at `validate`.)
+ */
+export function manifestNotes(notes, baseUrl) {
+  const text = (notes ?? "").trim();
+  if (text.length <= MAX_NOTES) return text;
+  const page = baseUrl.replace(/\/releases\/download\/([^/]+)\/?$/, "/releases/tag/$1");
+  const tail = `\n\n…\n\nThe full release notes: ${page}`;
+  const room = text.slice(0, MAX_NOTES - tail.length);
+  const cut = room.lastIndexOf("\n\n");
+  let kept = cut > 0 ? room.slice(0, cut) : room;
+  // never end on a heading whose text was cut away
+  for (let i = kept.lastIndexOf("\n\n"); i > 0 && /^#{1,6} /.test(kept.slice(i + 2)); i = kept.lastIndexOf("\n\n")) kept = kept.slice(0, i);
+  return kept.trimEnd() + tail;
+}
+
 export function generate({ version, assets, baseUrl, notes, pubDate }) {
   if (!SEMVER.test(version ?? "")) fail(`"${version}" is not a semantic version (use 1.2.3, without a leading v)`);
   if (!/^https:\/\//.test(baseUrl ?? "")) fail("--base-url must be an https URL");
@@ -115,7 +136,7 @@ export function generate({ version, assets, baseUrl, notes, pubDate }) {
   }
   for (const [fallback, target] of Object.entries(DEFAULTS)) if (platforms[target]) platforms[fallback] = { ...platforms[target] };
   if (!Object.keys(platforms).length) fail(`No updater artifacts for version ${version} were found in ${assets}`);
-  return { version, notes: (notes ?? "").trim(), pub_date: pubDate ?? new Date().toISOString().replace(/\.\d+Z$/, "Z"), platforms };
+  return { version, notes: manifestNotes(notes, baseUrl), pub_date: pubDate ?? new Date().toISOString().replace(/\.\d+Z$/, "Z"), platforms };
 }
 
 /**

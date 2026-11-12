@@ -91,6 +91,24 @@ describe("update manifest", () => {
     expect((await validate(m, { assets: old.dir, pubkey: kp.pubkey })).join()).toMatch(/the signature is for version 0.1.0, the manifest announces 0.2.0/);
   });
 
+  it("shortens release notes longer than the app shows, at a paragraph, with a link to the full notes", async () => {
+    const { dir } = release("0.2.0", kp);
+    const para = "A sentence of the release notes. ".repeat(28).trim();
+    const long = Array.from({ length: 30 }, (_, i) => `## Part ${i}\n\n${para}`).join("\n\n");
+    expect(long.length).toBeGreaterThan(20000);
+    const m = generate({ version: "0.2.0", assets: dir, baseUrl: BASE, notes: long, pubDate: "2026-11-05T10:00:00Z" });
+    expect(m.notes.length).toBeLessThanOrEqual(20000);
+    expect(m.notes.endsWith("\n\n…\n\nThe full release notes: https://github.com/owner/cyber-hub/releases/tag/v0.2.0")).toBe(true);
+    const kept = m.notes.slice(0, m.notes.indexOf("\n\n…"));
+    // a prefix of the notes that ends with a whole paragraph
+    expect(long.startsWith(kept)).toBe(true);
+    expect(kept.endsWith(para)).toBe(true);
+    expect(await validate(m, { assets: dir, pubkey: kp.pubkey, baseUrl: BASE })).toEqual([]);
+    // notes that fit are kept as they are; a manifest written by hand is still held to the limit
+    expect(generate({ version: "0.2.0", assets: dir, baseUrl: BASE, notes: "  Fixes\n", pubDate: "2026-11-05T10:00:00Z" }).notes).toBe("Fixes");
+    expect(await validate({ ...m, notes: "x".repeat(20001) }, { assets: dir, pubkey: kp.pubkey })).toContain("notes are longer than 20000 characters (the app shows the first 20000)");
+  });
+
   it("refuses missing files, plain HTTP, unknown platforms and bad metadata", async () => {
     const { dir } = release("0.2.0", kp);
     const m = generate({ version: "0.2.0", assets: dir, baseUrl: BASE, pubDate: "2026-11-05T10:00:00Z" });
