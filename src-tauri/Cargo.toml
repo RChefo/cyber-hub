@@ -50,7 +50,7 @@ getrandom = "0.3.4"
 # decoding imported files saved as UTF-16 or Windows-1252 (already in the dependency tree)
 encoding_rs = "0.8"
 hickory-resolver = "0.26"
-hmac = "0.12.1"
+hmac = "0.13.0"
 ipnet = "2.12.2"
 keyring = { version = "3.6.3", features = ["windows-native", "sync-secret-service", "crypto-rust"] }
 # wipes a credential typed into the native dialog (already in the tree through keyring and rustls)
