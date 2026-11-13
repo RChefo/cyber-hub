@@ -571,3 +571,40 @@ Third-party blockers replaced, notices shipped with every package, the AppImage'
 | 127 | **Website Dependabot alert: minimatch** | Medium, development only (ESLint 10 and typescript-eslint require minimatch 10; the fix is 11.0.1). Wait for ESLint, or test an override |
 | 128 | **Website visibility** | RChefo/ExploitX-Web is private; making it public with the license is the owner's choice |
 | 129 | **exploitx.net answers HTTP 522** | Cloudflare reaches no origin. Hosting is the owner's (item 119) |
+
+## Mission 15 (2026-11-13): open-source licensing, website recovery, release candidate
+
+Apache-2.0 and the DCO applied to both repositories, the AppImage's obligations strengthened with libjbig kept, exploitx.net diagnosed, and an ExploitX release candidate prepared. Details: MISSION_REPORT.md, "Mission 15".
+
+### Status of earlier items
+
+| # | Item | Status |
+|---|---|---|
+| 103 | Select the project license | **Done:** Apache-2.0, approved and applied to both repositories (`475fba1`, website `af7dced`) |
+| 106, 123 | The AppImage's LGPL/GPL libraries, `libjbig` | **Decided:** keep `libjbig` and TIFF. The release ships notices and verified sources (`e55524b`); legal review of the "combined work" question remains optional |
+| 109 | Limit the GitHub Apps | Still the owner's: the CLI token cannot change installations. Recommended scopes are in REPOSITORY_SECURITY.md, "Mission 15 review" |
+| 110 | Commit e-mail privacy | Unchanged: the noreply address is still unverifiable; owner steps in EMAIL_PRIVACY.md |
+| 117, 124 | Rebuild the release under ExploitX; the first release run with notices and sources | **Done:** `v0.1.0-rc.3`, a private, update-signed ExploitX draft carrying the notices and the AppImage sources; verified and install-tested (MISSION_REPORT.md, "Mission 15", G) |
+| 119, 125, 129 | The website live; its build variable; HTTP 522 | **Diagnosed, owner action:** likely parking records in the Cloudflare zone and no Custom Domain on the Worker; steps in RChefo/ExploitX-Web docs/WEBSITE.md |
+| 126 | Dependabot #9–#12 | Open: #10 (toml 1.2.1) passed the new DCO check after a rebase; none reviewed for merging in this mission |
+
+### Done
+
+| What | Where |
+|---|---|
+| Apache-2.0: LICENSE, NOTICE, manifests, SPDX lines, enforcement, packages, About | app `475fba1`, website `af7dced` |
+| DCO: certificate, guide, check, tests, required check (app) | app `5d1cca4`, ruleset 27194018; website `90baa0f` |
+| AppImage check: license texts, source versions and checksums | `e55524b` |
+| Website: actionlint, the old-name check, deployment and domain documentation | website `90baa0f`, `278e0e1` |
+| ExploitX release notes | `11c9aa7` |
+
+### New
+
+| # | Item | Why open |
+|---|---|---|
+| 130 | **rpm upgrades between same-version builds** | `dnf install` of RC3 over RC2 (both `cyber-hub-0.1.0-1`) does nothing; `dnf reinstall` works. The final 0.1.0 needs a higher rpm release or version to upgrade the candidates |
+| 134 | **The AppImage and the rpm in desktop sessions** | Verified in containers only in Mission 15 (contents, start); the GNOME/Plasma VMs were not run |
+| 135 | **Release runs need the owner twice** | The `release` environment's approval (build, then publish) is the owner's in the GitHub interface; automation may not give it |
+| 131 | **Cloudflare preview builds fail** | Every branch preview of RChefo/ExploitX-Web fails; production builds pass. The log is in the dashboard only |
+| 132 | **The website's DCO check cannot be required** | A private repository on GitHub Free has no rulesets or required checks; the maintainer must not merge a pull request it fails |
+| 133 | **A license row for the website** | The site states the app's license nowhere on its pages; a footer link to RChefo/ExploitX's LICENSE would help |

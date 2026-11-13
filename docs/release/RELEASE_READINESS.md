@@ -1,6 +1,38 @@
-# Release readiness: Cyber Hub 0.1.0 (after the second release candidate)
+# Release readiness: ExploitX 0.1.0 (after the third release candidate)
 
 This is the checklist for the first release. It separates what was verified from what still needs a person, hardware, a GitHub run or a signing key.
+
+**Mission 15 (2026-11-13): the third release candidate, the first ExploitX build.**
+* **The candidate:**
+  * `v0.1.0-rc.3`, a private draft pre-release titled "ExploitX 0.1.0, release candidate 3";
+  * tag on `11c9aa7`, built and update-signed by [run 43468333936](https://github.com/RChefo/ExploitX/actions/runs/43468333936), whose build and publish jobs the owner approved;
+  * `RELEASE_PUBLISHING` was set for this run only and deleted afterwards. The run's build artifacts were deleted by the publish job.
+* **It carries:**
+  * the ExploitX identity (window, About, Linux menu entry);
+  * Apache-2.0 (`LICENSE`, `NOTICE`), `THIRD_PARTY_LICENSES.txt`;
+  * in the AppImage, the libraries' copyright files and license texts;
+  * next to it, `ExploitX-AppImage-library-sources_0.1.0.tar` (67 source packages, 430 MB).
+* **Verified on the draft's own files:**
+  * every SHA-256 in `SHA256SUMS.txt`, and GitHub's digest of all 13 assets;
+  * `latest.json` with every update signature checked against the app's public key;
+  * the release's package check on the runners: 170 AppImage libraries with copyright files at the listed versions, 17 license texts, 67 GPL/LGPL source packages at the shipped versions with matching checksums, and LICENSE, NOTICE and the notices in all five packages.
+* **Windows (disposable VM, unsigned installers):**
+  * fresh NSIS and fresh MSI: 10 of 10 installed-build checks each (ExploitX 0.1.0 with the license, schema 32, MCP, pages, confirmations, backup and restore);
+  * NSIS and MSI over the second candidate: the executable replaced, data kept;
+  * uninstall keeps the data; MSI after NSIS and NSIS after MSI work;
+  * a schema-31 database upgrades with a backup (87 of 87 tables) and rolls back.
+* **Linux (clean containers):**
+  * deb on Ubuntu 24.04 and Debian 12: upgrade from the second candidate, license files, the ExploitX menu entry, data kept through upgrade, removal and reinstall;
+  * rpm on Fedora 43: a fresh install says `License: Apache-2.0` and shows the ExploitX window, and the data is kept;
+  * AppImage: its license files, 133 copyright files, 17 license texts, `libjbig` and the TIFF loader; it starts and creates its database once the base desktop libraries are present.
+* **Found:**
+  * **`dnf install` does not upgrade the second candidate's rpm to this one.** Both are `cyber-hub-0.1.0-1`, so dnf says "already installed"; `dnf reinstall ./Cyber.Hub-0.1.0-1.x86_64.rpm` does. A final 0.1.0 built the same way would meet the same problem: give the final release a higher rpm release or version.
+  * The AppImage needs the base libraries every desktop has (`libwayland-client`, `libGL`/`libEGL`/`libGLES`, `libharfbuzz`, `libfribidi`, which AppImages leave to the host); minimal containers lack them.
+* **Not verified:**
+  * Authenticode (still none);
+  * an update applied end to end (no published manifest);
+  * the AppImage and the rpm in full desktop sessions;
+  * physical HiDPI.
 
 **Mission 14 (2026-11-13): licensing remediation.** The drafts are unchanged. The next candidate, built from `840f6c9` or later, is the first to carry:
 * **`THIRD_PARTY_LICENSES.txt` in every package** (NSIS, MSI, deb, rpm, AppImage; also `/usr/share/doc/cyber-hub/` and `/usr/share/licenses/cyber-hub/`), shown in Settings > About. The release checks every signed package for it before the upload (`scripts/check-package-notices.mjs`).

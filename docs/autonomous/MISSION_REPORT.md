@@ -3409,3 +3409,256 @@ Everything was written from scratch: no React Bits or Ink Orbit code was copied 
   * the legal questions recorded in DISTRIBUTION_LICENSE_COMPLIANCE.md;
   * the first real release run with these changes.
 * **Not done, by design:** no license was applied, nothing was published, bought or deleted, and no history, tag, draft or visibility changed. `RELEASE_PUBLISHING` is unset.
+
+## Mission 15: open-source licensing, website recovery and release-candidate preparation (2026-11-13)
+
+**The owner's decisions (final for this mission):**
+* **Apache-2.0** for RChefo/ExploitX and RChefo/ExploitX-Web, contributions under the **DCO**;
+* **keep `libjbig` and TIFF loading** in the AppImage, with its notices and source;
+* **visibility:** ExploitX public, ExploitX-Web private;
+* **a private ExploitX release candidate**, prepared and tested in isolation.
+
+**Not authorized, and not done:**
+* a public or stable release, public binaries;
+* purchases, DNS or registrar changes;
+* history rewrites, force pushes, deleting drafts, tags or data;
+* visibility changes.
+
+**Classification: OPEN SOURCE LICENSE APPLIED — WEBSITE BLOCKED.**
+
+### A. Executive summary
+
+* **License: applied.**
+  * Apache-2.0 in both repositories: the official `LICENSE` (checked by hash in CI), a `NOTICE`, the manifests;
+  * an SPDX line in all 476 app and 33 website source files, copied code keeping its own;
+  * `LICENSE` and `NOTICE` installed by every package, and named in Settings > About.
+* **DCO: implemented, tested and enforced.**
+  * the certificate in `DCO`, the rules in CONTRIBUTING.md, a pull-request check;
+  * on GitHub: signed (passes), unsigned (fails), Dependabot (passes); a required check on the app's default branch;
+  * on the private website it reports only, because GitHub's Free plan has no required checks for private repositories.
+* **AppImage obligations: strengthened.** `libjbig` and TIFF are kept. The release now also fails on:
+  * a missing referenced license text;
+  * a GPL/LGPL source package missing or not at the shipped version;
+  * a source file whose checksum does not match its `.dsc`.
+
+  It was verified on a real Debian 12 build: 201 libraries, 17 texts and 69 source packages pass; four failure cases fail.
+* **Website: diagnosed, blocked on the owner.**
+  * exploitx.net answers 522 (apex) and 525 (`www`): Cloudflare proxies both names to origins, most likely the registrar's parking records, instead of serving the `exploitx-web` Worker;
+  * the fix is a DNS change, which needs the owner (or Cloudflare access, which needs the owner's authorization);
+  * the license and the DCO were merged after CI passed, and production Worker builds succeed.
+* **Release candidate:** **built, verified and tested.** `v0.1.0-rc.3` (tag on `11c9aa7`) is a private, update-signed draft pre-release built by run 43468333936, whose build and publish the owner approved in GitHub. Checksums, GitHub digests and every update signature were verified. Windows: 8 install scenarios in a disposable VM, 10/10 installed-build checks for NSIS and MSI, upgrades from RC2. Linux: deb, rpm and AppImage on clean Ubuntu 24.04, Debian 12 and Fedora 43. One limitation: rpm needs `dnf reinstall` between same-version candidates.
+* **Commits:**
+  * app `release/v0.1.0`: `475fba1`, `5d1cca4`, `e55524b`, `1ee1a48`, `11c9aa7`, `1e6e72e`, and this record;
+  * website `main`: `af7dced`, `90baa0f`, `278e0e1`;
+  * tag `v0.1.0-rc.3` on `11c9aa7`.
+* **CI:** app CI green at `e55524b` (43465940464), `1ee1a48` (43466889022), `11c9aa7` (43467158483) and `1e6e72e`, with all six jobs and the DCO job skipped on pushes as designed; release run 43468333936 green; website CI green at `278e0e1` (43470514130), and its production Worker build succeeded.
+
+### B. Apache-2.0
+
+* **App repository:**
+  * `LICENSE`: the official text, SHA-256 `cfc7749b…3d30`, 11,358 bytes; `scripts/licenses.mjs check` fails if it changes;
+  * `NOTICE`: "Copyright 2026 The ExploitX Authors". It lists what stays under other licenses (MIT components, OWASP CC BY-SA, MITRE ATT&CK terms, FIRST BSD-2-Clause, the dependencies) and says the name and logos are not licensed beyond Apache-2.0 §6;
+  * `package.json` and both Cargo manifests say `Apache-2.0`;
+  * Tauri takes the rpm `License:` from Cargo.toml (measured: `Apache-2.0`), and `bundle.copyright` goes into the Windows file details. There is no `licenseFile`, so no installer license page.
+* **SPDX lines:**
+  * 475 project files got `SPDX-License-Identifier: Apache-2.0`, including the two generated brand files, whose generators now emit it;
+  * the four vendored components say `MIT`, and `v4_lookup.rs` kept `BSD-2-Clause`;
+  * the check compares each file with `license-assets.json`, so Apache-2.0 cannot be put on copied code. Project assets are now `Apache-2.0` instead of `LicenseRef-ExploitX`.
+* **Packages:** `LICENSE` and `NOTICE` are next to the app in all five formats, and also in `/usr/share/doc/cyber-hub/` and `/usr/share/licenses/cyber-hub/`. The release check requires them. Measured in debug builds of all five formats.
+* **Website repository:**
+  * the same `LICENSE`, a website `NOTICE` (GSAP named as third-party), `package.json` and SPDX lines in all 33 files;
+  * its license check enforces them, and the served notices say Apache-2.0;
+  * the README separates the license from the source being public: the repository is private.
+* **Exceptions:** the app has none. The website has GSAP and `@gsap/react` (reviewed 2026-11-13, due 2027-05-13).
+
+### C. DCO
+
+* **The certificate:** `DCO` (version 1.1, compared byte for byte with developercertificate.org).
+* **Contributor guide:** CONTRIBUTING.md "Sign-off" covers:
+  * `git commit -s` with an example, and what the sign-off certifies (it transfers no copyright, and there is no CLA);
+  * fixing a missing sign-off with `--amend -s` or `rebase --signoff`;
+  * editors, web commits, the noreply address.
+
+  The pull request template asks for it.
+* **The check:** `scripts/check-dco.mjs`, the same in both repositories.
+  * Every commit except merges needs a sign-off whose email is the author's.
+  * Dependabot's signed-off commits pass only in Dependabot's own pull requests.
+  * There is no third-party action or secret, and pull request data reaches it only through `env`.
+* **Tests:**
+  * 7 automated (rules; a real repository with `-s`, a merge, an unsigned commit and its `rebase --signoff` fix);
+  * pull requests on GitHub: #13 signed off, **passed**; #14 unsigned, **failed** with the fix instructions; Dependabot's #10 after a rebase, **passed**; website #3 (maintainer, signed off), **passed**.
+  * Updating #14 by force-push was refused by this session's safety rules, so the fix was tested locally only.
+  * #13 and #14 were closed and their test branches deleted.
+* **Enforcement:** *Developer Certificate of Origin* added to the required checks of ruleset 27194018 after the tests (#14 then showed `required=true`, `BLOCKED`). Direct pushes by the owner are not pull requests and are not checked.
+
+### D. AppImage and distribution compliance
+
+* **Bundled libraries:** on the Ubuntu 22.04 runner the collector finds 133 packages, a superset of the 108 the RC2 AppImage carried. A Debian 12 build carries 201 shared objects from 141 packages.
+  * All are shared libraries, linked dynamically. Rust crates are linked statically and are covered by `THIRD_PARTY_LICENSES.txt`.
+  * Each package's exact version, source package and source version and the licenses its copyright file names are in `PACKAGES.tsv`, inside the AppImage.
+* **`libjbig`: kept** (jbigkit, GPL-2.0-or-later), with the TIFF loader. Its copyright file, the GPL texts and its source package at the shipped version are required by the release check.
+* **GPL/LGPL sources:**
+  * every package whose copyright file names the GNU GPL or LGPL, free-form files included;
+  * 67 source packages (410 MB) on Ubuntu 22.04 in Mission 14, 69 (439 MB) on Debian 12 in Mission 15;
+  * retrieved with `apt-get source` (checked against the archive's signed index), verified against each `.dsc`'s SHA-256, and published next to the AppImage.
+* **License texts:** 17 from `/usr/share/common-licenses`, which 90 of 133 copyright files refer to; Pango's `GPL-2.0` typo is mapped to `GPL-2`.
+* **Package verification:** every format of the real candidate: the release's own check on GitHub's runners (all five packages, 170 AppImage libraries, 17 texts, 67 source packages), then installed in VMs and containers (section G).
+* **Remaining for legal review:**
+  * whether `libjbig` beside ExploitX forms a work that must be under the GPL;
+  * the quoted WiX and NSIS positions;
+  * keeping each release's source as long as its AppImage.
+
+### E. Website recovery
+
+* **Root cause, as far as it can be seen without Cloudflare access:**
+  * the zone is on Cloudflare (`daphne`/`nash.ns.cloudflare.com`) and the domain is registered at Namecheap (its email-forwarding MX/SPF);
+  * `https://exploitx.net/` gives **522** (Cloudflare cannot connect to the origin) and `https://www.exploitx.net/` gives **525** (TLS with the origin fails);
+  * Namecheap's parking host `parkingpage.namecheap.com` answers HTTP but has no TLS, which reproduces the 525, and Mission 13 saw that parking page on the domain;
+  * so the zone most likely still holds the registrar's parking records, proxied, and the `exploitx-web` Worker has no Custom Domain.
+  * The records themselves need the dashboard to confirm. The Cloudflare plugin's read-only OAuth was requested and was not completed during the mission.
+* **Cloudflare findings:**
+  * Workers Builds deploys every push to the website's `main` as production: the builds of `199cb07` and `278e0e1` succeeded, and the check for `1411b62` stayed queued;
+  * every branch preview failed, with logs only in the dashboard;
+  * no `wrangler` file is in the repository.
+* **Fixes in the repository:**
+  * `VITE_GITHUB_REPOSITORY=RChefo/ExploitX` (Mission 14);
+  * the old-name check in CI could never fail (`! grep` under `bash -e`) and now can;
+  * workflow lint;
+  * no source maps;
+  * the deployment and domain documentation rewritten, with the exact owner steps and the undo.
+* **Preview:** CI built the production configuration on the pull request and passed. Cloudflare's own preview failed, as for every branch.
+* **Production:** `main` was fast-forwarded to `278e0e1` after CI passed, and its production Worker build succeeded. The domain still does not serve it.
+* **Official domain: still 522/525. The website is not live.**
+* **Owner actions:**
+  * replace the `@`/`www` web records with Custom Domains on the Worker (DNS, reversible, steps in docs/WEBSITE.md);
+  * set the build variable;
+  * check the live pages.
+
+### F. Repository security
+
+* **Visibility:** ExploitX **public**, ExploitX-Web **private**, both unchanged.
+* **Main repository:**
+  * secret scanning, push protection and Dependabot security updates on;
+  * six selected actions, SHA pinning required;
+  * read-only token; no webhook or deploy key;
+  * the DCO check is now required.
+* **Website:**
+  * selected actions with SHA pinning, Dependabot alerts and security updates (Mission 14), actionlint in CI (Mission 15);
+  * secret scanning and required checks are unavailable for a private repository on the Free plan.
+* **GitHub Apps:**
+  * none can be listed or changed with the CLI token (GitHub requires a GitHub App user token);
+  * per-app recommended scopes are in REPOSITORY_SECURITY.md, "Mission 15 review" (Cloudflare kept on the website, removed from the app; the unused apps removed from both);
+  * not applied: owner only.
+* **Email:** the noreply address is still unverifiable (no `user` scope), so nothing was changed.
+* **CI permissions:**
+  * pull request workflows read no secret;
+  * the release workflow cannot run for pull requests, and its secrets are only in the `release` environment, which needs the owner's approval;
+  * build artifacts live one day;
+  * license and DCO checks run on every pull request.
+* **Approving the release environment through the API was refused** by this session's safety rules ("undermining oversight"). The owner approves release runs.
+
+### G. Release candidate
+
+* **Tag and commit:** `v0.1.0-rc.3` (annotated tag `9ac4fe2`) on `11c9aa7`.
+* **The run:** release run 43468333936. Validate, both builds and publish were green; the build and the publish needed the owner's approval of the `release` environment, given in the GitHub interface.
+* **The draft:** a private pre-release, "ExploitX 0.1.0, release candidate 3". `RELEASE_PUBLISHING` was set for this run and deleted right after, and the run's build artifacts were deleted by the publish job (0 left). RC1 and RC2 and their tags are unchanged.
+* **Artifacts** (SHA-256 from the draft's `SHA256SUMS.txt`):
+
+| File | Size | SHA-256 |
+|---|---|---|
+| `Cyber.Hub_0.1.0_x64-setup.exe` (NSIS) | 8,969,992 | `9c50e6f38549e2e760a44381435468130e773470ff00d324bd55547f9bf3b5f4` |
+| `Cyber.Hub_0.1.0_x64_en-US.msi` | 11,800,576 | `61d2b03d3cf78de68c899c88b1a02869bdd593605d62d83a5ec763972d89c78f` |
+| `Cyber.Hub_0.1.0_amd64.deb` | 13,707,338 | `6425adf69801a357129eb948bcbd08205f99b6e96d81107fc5eb3e9797b75b91` |
+| `Cyber.Hub-0.1.0-1.x86_64.rpm` | 13,710,359 | `3ed3f1212503cda3b848a24c5c24f10433d5afa18014bd900645aac8ffd44d1c` |
+| `Cyber.Hub_0.1.0_amd64.AppImage` | 91,179,512 | `24b35b04b06e82fda855871182deb03cf9dd00b5ba7812486781483f3563d177` |
+| `ExploitX-AppImage-library-sources_0.1.0.tar` | 429,885,440 | `689f991bc2c715ba76db3ffbf128188e9803e33b9eaf7ce7f72944ae29fcb674` |
+| `latest.json` | 24,202 | `2d9c7037475f83d19f96780e7deb6829676fa4d4862bdb725b2bea7e21ab1bbf` |
+
+  Plus five `.sig` files and `SHA256SUMS.txt`.
+
+* **Verification of the draft's own files:**
+  * `sha256sum -c` passes for all 12 listed files; GitHub's digest equals SHA256SUMS for all 13 assets;
+  * `updater-manifest.mjs validate`: version 0.1.0, seven platform entries, **every signature verified** with the public key in `tauri.conf.json`, URLs on `RChefo/ExploitX`.
+* **The release's own package check on GitHub's runners:**
+  * the AppImage's 170 libraries have their copyright files at the listed versions, and its 17 license texts are present;
+  * the 67 GPL/LGPL source packages are at the shipped versions with matching checksums;
+  * LICENSE, NOTICE and the notices are in NSIS, MSI, deb, rpm and AppImage.
+
+**Installation matrix:**
+
+| Platform | Scenario | Result |
+|---|---|---|
+| Windows 11 VM (chqa-win11b, unsigned installers, from snapshot `m15-before`) | fresh NSIS | exit 0; LICENSE 11,358, NOTICE 1,089, THIRD_PARTY_LICENSES.txt 1,107,180 bytes installed; **10/10** installed-build checks (About "ExploitX 0.1.0" with the license, schema 32, update check, MCP 62 tools, window, 17 pages, native confirmation, backup, restore refused and checked), restored data after restart |
+| | NSIS uninstall | data kept, install folder forgotten |
+| | MSI after it, then MSI reinstall on the same data | exit 0, license files, data and marker kept |
+| | MSI uninstall, then NSIS | exit 0, data kept |
+| | **RC2 NSIS → RC3 NSIS** | exe replaced (`464165…` → `4D4825…`), license files appear, ExploitX on the existing data, marker kept |
+| | **RC2 MSI → RC3 MSI** | exe replaced (`7B530C…` → `F0194C…`), license files appear, ExploitX, data kept |
+| | fresh MSI | **10/10**; a schema-31 database upgraded with a backup first (87/87 tables), rolled back, upgraded again |
+| | Apps & features, shortcuts | "Cyber Hub" [cyberhub] 0.1.0, `Cyber Hub.lnk`: the kept package identity |
+| Ubuntu 24.04 container | RC2 deb → RC3 deb, remove, reinstall | upgraded; LICENSE/NOTICE/notices in `/usr/share/doc/cyber-hub/` and `/usr/lib/Cyber Hub/`; 0 missing libraries; menu entry `Name=ExploitX`; `cyberhub-mcp 0.1.0`; data marker kept through all steps |
+| Debian 12 container | the same | the same |
+| Fedora 43 container | RC2 rpm → RC3 rpm | **`dnf install` is a no-op** (both are `cyber-hub-0.1.0-1`: "already installed"); `dnf reinstall` upgrades. Then `License: Apache-2.0`, LICENSE in `/usr/share/licenses/cyber-hub/`, window "ExploitX", data kept through removal and reinstall |
+| Ubuntu 24.04 and Debian 12 containers | AppImage | LICENSE, NOTICE and the notices in `usr/lib/Cyber Hub/`; 133 copyright files, 17 license texts, 133 packages in `PACKAGES.tsv`; `libjbig.so.0` and the TIFF loader present; the README points at the source archive. It starts and creates its schema-32 database once the base desktop libraries are installed (`libwayland-client`, GL/EGL/GLES, HarfBuzz, FriBidi, which AppImages leave to the host); a minimal image lacks them |
+
+**Remaining limitations:**
+* **Windows signing:** the installers and programs are not Authenticode-signed; SmartScreen and UAC show "unknown publisher". No certificate was bought.
+* **Not tested:**
+  * an update applied end to end (no published manifest);
+  * the AppImage and the rpm in full desktop sessions;
+  * physical HiDPI.
+* **rpm upgrades between same-version candidates** need `dnf reinstall`. The final 0.1.0 needs a higher rpm release or version to upgrade a candidate with `dnf install`.
+* **The package identity is still "Cyber Hub"** on Windows (installer names, Apps & features, shortcuts) and in the Linux package names, by design (NAME_MIGRATION.md).
+
+### H. Regression
+
+| Check | Mission 14 | Mission 15 |
+|---|---|---|
+| Rust, Windows (local) | 652 | **653** passed, 29 ignored (+1: the DCO pinning test) |
+| Rust, CI | Windows 652, Ubuntu 24.04 653, Debian 12 653 | Windows 652 + Ubuntu 24.04 653 + Debian 12 653 at `e55524b`, the DCO pinning test added since (local: 653) |
+| Frontend | 340 | **351** (62 files: +2 license lines, +2 package license files, +7 DCO) |
+| Website tests | 28 | **35** (+7 DCO) |
+| clippy, tsc, production builds | clean | clean |
+| cargo audit | 0 vulnerabilities, 8 allowed warnings | 0 vulnerabilities, 8 allowed warnings (CI) |
+| npm audit (runtime) | 0 | 0 (app and website); the website's development lint tools have 10 moderate advisories (minimatch) |
+| gitleaks | 236 commits, no leak | no leak (CI, every push of the mission) |
+| License check | 649 crates, 226 npm, 14 assets | the same, plus the license lines of 476 source files and LICENSE; website: 231 packages and 33 files |
+| DCO | n/a | 7 tests; 4 real pull requests as expected |
+| Links, actionlint | clean | clean (both repositories) |
+| Formatting | not run | not run by rule: the project forbids `cargo fmt` (CONTRIBUTING.md) and has no formatter configured |
+| Migrations, backup and restore | in the Rust suite | in the Rust suite |
+| End to end | | the debug app on a disposable data folder: Settings > About shows the license, the notices path and both links |
+| Real database | untouched | **untouched** (modified 2026-11-05T15:58:24Z); every app check used a disposable data folder, a VM or a container |
+
+### I. Remaining owner decisions and external blockers
+
+1. **exploitx.net (DNS, reversible):** in Cloudflare, replace the `@` and `www` web records (likely the registrar's parking records) with Custom Domains on the `exploitx-web` Worker, set `VITE_GITHUB_REPOSITORY=RChefo/ExploitX` in its build settings, and check the live pages. The steps and the undo are in RChefo/ExploitX-Web docs/WEBSITE.md. Optionally, authorize the Cloudflare plugin (read-only) so the zone can be checked instead of inferred.
+2. **GitHub Apps:** set each app's repository access (REPOSITORY_SECURITY.md, "Mission 15 review"). Only the owner can; the CLI token cannot.
+3. **Email privacy:** the noreply address and GitHub's two email settings (EMAIL_PRIVACY.md).
+4. **The third candidate's review:** the draft `v0.1.0-rc.3` is ready for the owner's own look. Publishing it, or deleting the RC1/RC2 drafts, is the owner's decision.
+5. **Before a final 0.1.0:**
+   * a version or rpm release above `0.1.0-1`, so `dnf` upgrades the candidates;
+   * Authenticode (a purchase);
+   * the existing decisions on the `v0.1.0` tag and the package identity (NAME_MIGRATION.md);
+   * a desktop-session check of the AppImage and the rpm.
+6. **Optional legal review:**
+   * `libjbig` (GPL-2.0-or-later) next to the Apache-2.0 app;
+   * the WiX and NSIS positions quoted in DISTRIBUTION_LICENSE_COMPLIANCE.md;
+   * keeping each release's source as long as its AppImage.
+
+### J. Final classification
+
+**OPEN SOURCE LICENSE APPLIED — WEBSITE BLOCKED.**
+
+* **Applied and verified:**
+  * Apache-2.0 in both repositories, the DCO enforced where GitHub allows it;
+  * `libjbig` kept, with its notices and verified source;
+  * license files and notices in all five installer formats of a real, update-signed ExploitX release candidate;
+  * that candidate's install, upgrade, uninstall, reinstall, data-preservation and rollback tests on Windows, Debian, Ubuntu and Fedora;
+  * every regression and security check green; the repositories' visibility unchanged.
+* **Why "website blocked":** https://exploitx.net still answers 522/525. The fix is a DNS change in the owner's Cloudflare zone, which this mission was not allowed, and had no access, to make. The website's code, license and build are ready, and its production Worker builds succeed.
+* **Not "RC ready":** with the website unresolved, and with the rpm same-version upgrade, the untested desktop sessions of the AppImage and rpm, and no Authenticode, the candidate is a verified private draft, not a release-ready build.
+* **Not done, by design:**
+  * nothing was published, bought or deleted beyond the two DCO test pull requests and branches made for the test;
+  * no history was rewritten; no visibility, DNS or tag changed;
+  * the real database is untouched.
