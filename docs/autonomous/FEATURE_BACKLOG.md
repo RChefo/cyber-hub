@@ -529,3 +529,45 @@ The owner renamed the product ExploitX (official website exploitx.net) and moved
 | 120 | **Windows VM checks of the rebranded installers** | Install, upgrade from RC2, uninstall, data kept, Start menu and taskbar icons; GNOME and KDE menu entries in real sessions |
 | 121 | **Keep the website's copies in step** | Tokens, logo geometry, favicons, `og.png`, screenshots and the package patterns are copied into RChefo/ExploitX-Web (its docs/BRAND.md); sync when they change |
 | 122 | **Installer wizard artwork** | NSIS header and sidebar images and WiX banners in the ExploitX style (display only); not done |
+
+## Mission 14 (2026-11-13): open-source completion and licensing remediation
+
+Third-party blockers replaced, notices shipped with every package, the AppImage's library obligations implemented, the license decision prepared. Details: MISSION_REPORT.md, "Mission 14".
+
+### Status of earlier items
+
+| # | Item | Status |
+|---|---|---|
+| 103 | Select the project license | **Prepared, not applied.** Re-evaluated after the remediation: Apache-2.0 still recommended; LICENSE_COMPARISON.md, "Decision requested", lists the exact replies. Owner decision |
+| 104 | Replace the React Bits components | **Done:** `NavTree`, `AnimatedNumber` (app, `6ca7e79`), `ScreenOrbit` (website, `44f94f7`); `motion` removed |
+| 105 | Replace the website's Ink Orbit component | **Done:** `EvidenceFlow` (website, `44f94f7`) |
+| 106 | The AppImage's LGPL libraries and `libjbig` | **Implemented, unproven in a release run:** copyright files and license texts in the AppImage, Debian sources published with the release, the release fails on a gap (`1982193`). `libjbig` remains a legal question (new item 123) |
+| 107 | Ship third-party license texts with the installers | **Done** (`19bd19c`): `THIRD_PARTY_LICENSES.txt` in every package, verified in debug builds of all five formats; the next candidate is the first release build with it |
+| 109 | Limit the GitHub Apps | Re-checked: unchanged, still the owner's account setting (REPOSITORY_SECURITY.md, "Mission 14 review") |
+| 110 | Commit e-mail privacy | **Documented** (EMAIL_PRIVACY.md); the noreply address could not be verified, so nothing was changed; owner steps |
+| 114 | Lightswind and the app icons | Unchanged |
+| 115 | Dependabot #1–#8 | **Reviewed individually:** #3, #4, #8 merged; #5–#7 not merged (replaced by the `rustcrypto` group, #9); #1, #2 closed as superseded; website #1 merged, #2 open |
+
+### Done
+
+| What | Where |
+|---|---|
+| Original sidebar tree and animated counters; website orbit and evidence cards | `src/components/ui/`, RChefo/ExploitX-Web |
+| License categories, dated exceptions, asset tracking, unknown/prohibited fail CI | `scripts/license-policy.json`, `scripts/license-assets.json`, `scripts/licenses.mjs`, DEPENDENCY_LICENSE_POLICY.md |
+| Bundled notices, About entry, CI freshness check, release package check | `src-tauri/resources/THIRD_PARTY_LICENSES.txt`, `scripts/check-package-notices.mjs` |
+| AppImage library notices and sources in the release workflow | `scripts/appimage-licenses.sh`, `.github/workflows/release.yml`, DISTRIBUTION_LICENSE_COMPLIANCE.md |
+| DCO/CLA comparison, sign-off guide, proposed check | CONTRIBUTOR_TERMS.md |
+| Website repository: allowed actions, SHA pinning, Dependabot alerts and security updates; the rename fix | GitHub settings; RChefo/ExploitX-Web `1411b62` |
+| Links moved to the renamed repository RChefo/ExploitX | `199c7bf` |
+
+### New
+
+| # | Item | Why open |
+|---|---|---|
+| 123 | **`libjbig` in the AppImage** | GPL-2.0-or-later, reached through GDK-Pixbuf's TIFF loader; its source is now published. Legal review, or drop the TIFF loader from the AppImage (needs a test build), or ship only deb and rpm |
+| 124 | **The first release run with the notices and sources** | The collection, the source download and the package checks ran in containers and local builds, not yet on GitHub's runner. Check the next candidate's draft: the source archive attached, `usr/share/doc/exploitx-appimage/` in the AppImage |
+| 125 | **The website's build variable** | Set `VITE_GITHUB_REPOSITORY=RChefo/ExploitX` in the Cloudflare build settings (CI and the documentation already use it); never create a new `RChefo/cyber-hub` |
+| 126 | **Dependabot #9–#12** | Opened during the mission: the `rustcrypto` group (same reasoning as #5–#7), toml 1.2.1, sysinfo 0.40 (major), windows-sys 0.61 (major). Review each with CI green |
+| 127 | **Website Dependabot alert: minimatch** | Medium, development only (ESLint 10 and typescript-eslint require minimatch 10; the fix is 11.0.1). Wait for ESLint, or test an override |
+| 128 | **Website visibility** | RChefo/ExploitX-Web is private; making it public with the license is the owner's choice |
+| 129 | **exploitx.net answers HTTP 522** | Cloudflare reaches no origin. Hosting is the owner's (item 119) |

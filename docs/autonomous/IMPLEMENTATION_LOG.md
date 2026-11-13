@@ -1879,3 +1879,64 @@ Not authorized: changing package identities for branding, publishing, deploying,
   * docs/WEBSITE.md explains which repository owns what.
 * **Pushed** `2d098e1..02a1285`; CI run 43431983821 started. Repository descriptions updated; the main repository's homepage `exploitx.net` was already set outside this session.
 * **Main repository CI run 43431983821 on `02a1285`: green.** Windows 649 passed, Ubuntu 24.04 and Debian 12 650 passed, 29 ignored each; 319 frontend tests on each; MSRV 1.90; repository checks (649 crates, 230 npm packages, 0 exceptions, links); gitleaks 229 commits; audits.
+
+## Mission 14 (2026-11-13): open-source completion and licensing remediation
+
+* **Reassessment.** Both repositories, after Mission 13:
+  * the app had React Bits `BranchedMenu`, `CountUp` and `motion`;
+  * the website had React Bits `OrbitImages` and the unlicensed Ink Orbit section;
+  * no package shipped third-party license texts;
+  * the AppImage had no source offer;
+  * Dependabot #1–#8 were open.
+* **Components.** `NavTree` and `AnimatedNumber` (app) and `ScreenOrbit` and `EvidenceFlow` (website) were written from scratch, each with tests and checked on screen against a disposable data folder:
+  * the sidebar open and folded (a 2 px leak of the folded list's padding fixed);
+  * keyboard activation;
+  * the website at 1440 and 390 px (the orbit's narrow-screen scale fixed).
+
+  Website commits `44f94f7` (components) and `e70860a` (its license check and served notices), CI 43444016461 green.
+* **Notices.** `scripts/licenses.mjs` was rewritten with categories, assets and notices. The original `acceptable()` was kept verbatim: a first rewrite had dropped the `+` and `WITH` handling, caught by comparison. The generated `THIRD_PARTY_LICENSES.txt` is bundled through `bundle.resources` and deb/rpm `files`. A command returns its installed path for Settings > About (Windows' `\\?\` prefix is removed, with a test; the first screenshot still showed it because the app predated the fix).
+* **AppImage.**
+  * **Inventory of the RC2 AppImage** in `ubuntu:22.04`: 170 shared objects, 108 packages, 98 copyright files; 10 packages had none.
+  * **`scripts/appimage-licenses.sh` was iterated in containers.** Under `set -euo pipefail`, `find` on a missing folder, `ldd` on non-ELF files and `grep` without match stopped it silently; they are now guarded.
+  * **The `--check` mode found real gaps on its first full build (Debian 12):**
+    * GTK's modules were not collected (libcups, Avahi, colord);
+    * GTK 2 and GTK 3 modules with the same file name were confused;
+    * unversioned `.so` links were attributed to `-dev` packages.
+  * **Later fixes:** source selection includes free-form copyright files that name the LGPL (Avahi), and the `/usr/share/common-licenses` texts are copied (90 of 133 copyright files refer to them).
+  * **Final results:**
+    * Ubuntu 22.04: 133 packages ⊇ the 108, 67 source packages, 410 MB;
+    * Debian 12 debug AppImage: 201 libraries all covered;
+    * negative test: 18 errors.
+* **Packages.** Debug NSIS and MSI (Windows) and deb, rpm and AppImage (Debian 12 container) were built from the tree:
+  * the notices are present in all five formats, 1,087,996 bytes;
+  * the MSI was read through the Windows Installer API, read-only;
+  * NSIS was listed with 7-Zip in a container, because no 7-Zip is on the host.
+
+  Nothing was installed on the host.
+* **Installer toolchain.** The MSI's `Binary` table holds WiX's `WixUIWixca` and its images; NSIS's LZMA module is CPL-1.0 with a linking exception. Both licenses were added verbatim to THIRD_PARTY_NOTICES.md, and WiX's statement on installer packages was checked on its documentation.
+* **A Windows trap, recorded in memory:** Python's `write_text` writes CRLF on Windows. It turned a bash script into CRLF ("set: pipefail: invalid option name" in the container). Patches now use `write_bytes`, and line endings are checked with `git ls-files --eol`.
+* **Repository rename.** `gh` comment links showed RChefo/ExploitX: the owner had renamed the repository. The website's download page compares asset URLs with `VITE_GITHUB_REPOSITORY`, so with the old name it would have offered nothing. Fixed in both repositories (`199c7bf`, website `1411b62`); the local remote now points to the new URL.
+* **Dependabot.** Each pull request was evaluated (MISSION_REPORT.md, "Mission 14", G).
+  * The npm group conflicted on `motion`. The pull request's own lockfile was used minus `motion`: a fresh `npm install` had resolved newer, untested build-tool versions. A leftover Vite dev server (port 1420, this session's) locked the rolldown binary and was stopped.
+  * The website's #1 was fast-forwarded after a local CI rerun.
+  * Comments were posted on #5–#7 and the website's #2; #1 and #2 were closed as superseded.
+  * After the `rustcrypto` group was pushed, Dependabot closed #5–#7 itself and opened #9.
+* **Security settings.** In the website repository: selected actions only with SHA pinning; Dependabot alerts and security updates on. Secret scanning is not available for a private repository. The update job then failed on minimatch (no compatible fix).
+* **Email.** The noreply address could not be verified (no `user` scope; the web-made commit used the personal address), so nothing was changed.
+* **Verification before the push** (Windows):
+  * 652 Rust tests (29 ignored), clippy clean;
+  * tsc, 340 frontend tests, the build;
+  * npm audit 0; cargo audit with 8 allowed warnings;
+  * the license check (649 crates, 226 npm packages, 14 assets);
+  * 256 links.
+* **Commits:**
+  * `6ca7e79` feat(app), `19bd19c` feat(licenses), `1982193` build(release), `199c7bf` docs (rename), `6cea535` docs(governance), `86872da` ci(dependabot);
+  * the merges `e3ceb46`, `5c917ea` and `7f6f7f7`;
+  * `840f6c9` fix(release).
+
+  Each staged diff was reviewed, and no message carries attribution metadata. `ci_tests.rs` was staged in two parts: the notices test with the licenses commit, the release test with the release commit.
+* **CI.**
+  * Run 43454312977 on `7f6f7f7`: the scan job failed in actionlint (shellcheck SC2031, `. /etc/os-release` in a subshell assigns `VERSION`); every other job passed (Windows, Ubuntu, Debian, MSRV, repository checks).
+  * Fixed in `840f6c9`. The local actionlint image passes the old file too, because its shellcheck does not follow `/etc/os-release`.
+  * Run 43455504280 on `840f6c9`: **green**: Windows 652, Ubuntu 24.04 and Debian 12 653 Rust tests (29 ignored), 340 frontend tests on each, MSRV 1.90, repository checks (649 crates, 226 npm packages, 14 assets, notices current, links), cargo audit (0 vulnerabilities, 8 allowed warnings), gitleaks (236 commits, no leak), actionlint.
+  * Website runs 43450114465 (`199cb07`) and 43454659501 (`1411b62`): green.

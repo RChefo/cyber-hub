@@ -2,6 +2,17 @@
 
 This is the checklist for the first release. It separates what was verified from what still needs a person, hardware, a GitHub run or a signing key.
 
+**Mission 14 (2026-11-13): licensing remediation.** The drafts are unchanged. The next candidate, built from `840f6c9` or later, is the first to carry:
+* **`THIRD_PARTY_LICENSES.txt` in every package** (NSIS, MSI, deb, rpm, AppImage; also `/usr/share/doc/cyber-hub/` and `/usr/share/licenses/cyber-hub/`), shown in Settings > About. The release checks every signed package for it before the upload (`scripts/check-package-notices.mjs`).
+* **In the AppImage**, the copyright file of every bundled library and the license texts they refer to (`usr/share/doc/exploitx-appimage/`). The release fails if a bundled library has none.
+* **A new release asset, `ExploitX-AppImage-library-sources_<version>.tar`** (about 410 MB): the Debian source packages of the AppImage's GPL and LGPL libraries. It is listed in `SHA256SUMS.txt` and not update-signed. The release's Linux job downloads it from the Ubuntu archive (its duration on GitHub's runner is not measured yet).
+
+Check on the first such draft that the source archive is attached and that the AppImage contains `usr/share/doc/exploitx-appimage/` (`docs/governance/DISTRIBUTION_LICENSE_COMPLIANCE.md`, "Legal review and owner decisions").
+
+Also from Mission 14:
+* **Repository renamed.** The owner renamed the repository to **RChefo/ExploitX**. The release workflow takes the name from `$GITHUB_REPOSITORY`, so new builds name it in their update feed. The drafts' compiled feed (`RChefo/cyber-hub/releases/latest/download/latest.json`) keeps working through GitHub's redirect, as long as no new repository is named `cyber-hub`.
+* **Licensing.** The React Bits components are replaced (no non-open third-party code remains), and the license decision is prepared but not applied.
+
 **Mission 13 (2026-11-13): ExploitX.** The product is now called ExploitX (website exploitx.net, its code in RChefo/ExploitX-Web). For releases this means:
 * the two drafts (`v0.1.0`, `v0.1.0-rc.2`) are **Cyber Hub builds** and stay as they are; an ExploitX release needs a new candidate built from `02a1285` or later, with updated notes (`docs/releases/0.1.0.md`) and the owner's authorization;
 * the **package identity is unchanged** (productName "Cyber Hub", identifier, MSI upgrade code, package and binary names), so an ExploitX build upgrades existing installations in place; the Windows installer, Start menu and *Apps & features* still show "Cyber Hub" until the owner decides on an identity migration (docs/brand/NAME_MIGRATION.md);
@@ -169,4 +180,5 @@ The second candidate's NSIS installer (`8c7c136c…`) and MSI (`ded2c1be…`), a
   * how `v0.1.0` gets the validated commit: move the tag (a rewrite of a public tag) or release 0.1.1 (item 101);
   * deleting the first candidate's draft, which the stable build requires.
 * **Release builds share the data folder of development builds,** because the identifier is `dev.cyberhub.workstation`. Install candidates only where no real data is: a VM, Windows Sandbox or another account.
-* **Third-party GitHub Apps.** Eight apps installed on the owner's account can reach this repository, some with permissions on the release path (`GITHUB_FIRST_RUN.md`, "Mission 10"). Limit them to the repositories that need them.
+* **Third-party GitHub Apps.** Eight apps installed on the owner's account can reach this repository, some with permissions on the release path (`GITHUB_FIRST_RUN.md`, "Mission 10"; re-checked in `docs/governance/REPOSITORY_SECURITY.md`, "Mission 14 review"). Limit them to the repositories that need them.
+* **The AppImage's `libjbig` (GPL-2.0-or-later)** ships with its source since Mission 14; whether that settles it is a legal question (`docs/governance/DISTRIBUTION_LICENSE_COMPLIANCE.md`). Alternatives: drop GDK-Pixbuf's TIFF loader from the AppImage, or ship only deb and rpm for Linux.

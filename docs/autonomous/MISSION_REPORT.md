@@ -3196,3 +3196,216 @@ Exact paths and formats are in `docs/brand/ASSET_CATALOG.md`. In short:
   * The two existing release candidates are Cyber Hub builds.
   * The name has serious prior uses in cybersecurity that need legal review.
 * **Nothing was published, deployed or bought.** No visibility, repository name, history or tag changed, and `RELEASE_PUBLISHING` is unset.
+
+## Mission 14: open-source completion and licensing remediation (2026-11-13)
+
+**The authorization.**
+* **Authorized:**
+  * public repository maintenance and repository security improvements;
+  * license research, and preparing for a license without applying one;
+  * replacing third-party components, and dependency updates where safe;
+  * documentation and CI;
+  * commits and pushes to both repositories.
+* **Not authorized, and not done:**
+  * selecting or applying a license (no `LICENSE` file, no `license` field);
+  * purchases, a stable release, visibility changes;
+  * rewriting history, or deleting drafts, tags, data or pull requests;
+  * legal claims or trademark clearance.
+
+**Classification: OPEN SOURCE READY — LICENSE APPROVAL PENDING.**
+
+**Times:** 2026-11-13, after Mission 13, to the commit that adds this section.
+
+### A. Executive summary
+
+* **Third-party blockers removed.** The code that could not be open-source licensed is gone from both repositories' current trees:
+  * React Bits (MIT + Commons Clause): the app's `BranchedMenu`, `CountUp` and the website's `OrbitImages`;
+  * the website's unlicensed Ink Orbit section.
+
+  Each was replaced by original code, with tests, and checked on screen.
+* **Notices ship with every package.** `THIRD_PARTY_LICENSES.txt` (license texts of every shipped crate and runtime npm package, 333 distinct texts, plus `THIRD_PARTY_NOTICES.md`) is installed by NSIS, MSI, deb, rpm and AppImage, shown in Settings > About, and checked by CI and by the release workflow. Verified in locally built debug packages of all five formats.
+* **AppImage obligations implemented.** The release now puts the copyright file of every bundled library and the license texts they refer to into the AppImage. It publishes the Debian source of every GPL/LGPL library next to it, and stops if a bundled library lacks its copyright file. It is not yet proven in a real release run; `libjbig` (GPL-2.0-or-later) remains a legal question.
+* **Policy enforced.** License categories, dated exceptions and asset tracking; CI fails on unknown or prohibited licenses.
+* **Decisions prepared, not taken:**
+  * the license comparison was re-evaluated; Apache-2.0 is still recommended, awaiting the owner's approval of one exact license;
+  * the DCO is recommended and a sign-off check proposed, not enforced.
+* **Dependencies reviewed one by one:** four updates merged (three in the app repository, one in the website repository); the others left open or closed with written reasons.
+* **Found during the mission:**
+  * the owner renamed the app repository to **RChefo/ExploitX**. The website's download page would have offered no package from the new name; fixed in both repositories;
+  * the owner's Cloudflare integration builds and deploys the website's `main`;
+  * exploitx.net answers HTTP 522.
+* **Commits:**
+  * app repository `release/v0.1.0`: `6ca7e79`, `19bd19c`, `1982193`, `199c7bf`, `6cea535`, `86872da`, `e3ceb46`, `5c917ea`, `7f6f7f7`, `840f6c9`, and this record;
+  * website repository `main`: `44f94f7`, `e70860a`, `199cb07` (Dependabot's commit, fast-forwarded), `1411b62`.
+* **CI:** app repository run 43455504280 on `840f6c9`, **green** (all six jobs; the earlier run 43454312977 on `7f6f7f7` failed only in actionlint, section I); website runs 43450114465 (`199cb07`) and 43454659501 (`1411b62`), **green**.
+
+### B. Third-party component replacement (React Bits, Ink Orbit)
+
+| Was | License | Now | Tests and checks |
+|---|---|---|---|
+| App: `BranchedMenu` (sidebar) | MIT + Commons Clause | `src/components/ui/NavTree.tsx` + `NavTree.css`, `src/lib/navTree.ts`: disclosure buttons, `aria-expanded`/`aria-controls`, `aria-current="page"`, arrow/Home/End keys, folded groups `inert`, CSS connectors and a 0fr→1fr fold, reduced motion | 4 tests (keyboard, initial state, ARIA, closed groups); screenshots of the open and folded sidebar; keyboard activation in the running app |
+| App: `CountUp` (dashboard) | MIT + Commons Clause | `src/components/ui/AnimatedNumber.tsx`, `src/lib/animatedNumber.ts`: counts from the previous value, ease-out, final value for screen readers, none under reduced motion | 4 tests; dashboard screenshot |
+| App: `motion` | MIT | Removed (only the old components used it) | npm audit 0 |
+| Website: `OrbitImages` | MIT + Commons Clause | `ScreenOrbit.tsx`, `src/lib/orbit.ts`: transforms set by `requestAnimationFrame`, paused on hover, off screen and in a hidden tab; static under reduced motion; fitted to narrow screens | 5 tests; desktop and 390 px checks |
+| Website: Ink Orbit section | **No license** (repository `Kedhareswer/21stdev-my-components`: GitHub reports none, no license file, `"private": true`) | `EvidenceFlow.tsx`: four cards with SVG diagrams, a chart readable by pointer or keyboard, reduced-motion fallbacks | Lint, type check, build; visual check |
+
+Everything was written from scratch: no React Bits or Ink Orbit code was copied or renamed. The old files remain only in the Git history, which is not rewritten. The authors were not contacted, and no permission was claimed.
+
+### C. Distribution license compliance (`docs/governance/DISTRIBUTION_LICENSE_COMPLIANCE.md`)
+
+* **Measured in the second candidate's AppImage:**
+  * 170 shared objects from 108 Ubuntu 22.04 packages, mostly LGPL, with `libjbig0` under GPL-2.0-or-later;
+  * linuxdeploy had copied 98 copyright files; 10 packages had none;
+  * no source was offered.
+* **`scripts/appimage-licenses.sh`, run by the release's Linux job before `tauri build`:**
+  * collects the dependency closure (WebKitGTK, GTK and its modules, GDK-Pixbuf loaders, GIO modules, WebKit helpers), maps it to packages, and copies the copyright files and `/usr/share/common-licenses/` texts (90 of 133 copyright files refer to them);
+  * writes `PACKAGES.tsv` and `README.txt`, and downloads the Debian source packages of every GPL/LGPL library into `ExploitX-AppImage-library-sources_<version>.tar`;
+  * passes `usr/share/doc/exploitx-appimage/` into the AppImage through a generated `bundle.linux.appimage.files` configuration.
+* **On Ubuntu 22.04:**
+  * 133 packages, covering all 108 of the candidate;
+  * 83 packages name the GNU GPL or LGPL; their 67 source packages make 410 MB.
+* **`--check` and `check-package-notices.mjs` after the build.** In a Debian 12 debug build, all 201 bundled libraries had their copyright files; with two removed, the check failed on exactly the 18 affected libraries.
+* **Real gaps the check caught and that were fixed:**
+  * GTK's print and input-method modules were not collected (libcups, Avahi, colord);
+  * GTK 2 and GTK 3 modules with the same name were confused;
+  * unversioned `.so` links were attributed to `-dev` packages;
+  * free-form copyright files naming the LGPL were not selected for source (Avahi).
+* **Windows:**
+  * no native library is bundled, and WebView2 is downloaded, not redistributed;
+  * the NSIS runtime (zlib/libpng; the LZMA module CPL-1.0 with its linking exception) and WiX 3.14.1's UI custom action (MS-RL; WiX states that installer packages normally fall outside it) are in the installers. Their licenses and source locations are now in the notices.
+* **deb and rpm:** no system library bundled.
+* **Open, for legal review:**
+  * `libjbig` (or drop the TIFF loader from the AppImage);
+  * the first real release run;
+  * keeping each release's source as long as its AppImage.
+
+### D. Third-party notices in the packages
+
+* `node scripts/licenses.mjs notices` writes `src-tauri/resources/THIRD_PARTY_LICENSES.txt` (about 1.1 MB). It covers:
+  * 6 sections: crates, runtime npm packages, copied code and data, native libraries per package, license texts, `THIRD_PARTY_NOTICES.md`;
+  * texts verbatim from each package, NOTICE files included, deduplicated by content;
+  * for the 9 packages that publish no license file: the standard SPDX 3.26.0 text, marked as such;
+  * where every crate's and npm package's source is (MPL-2.0 §3.2).
+* **Bundled** through `bundle.resources`, plus `/usr/share/doc/cyber-hub/` (deb) and `/usr/share/licenses/cyber-hub/` (rpm).
+* **Measured in debug builds:** in NSIS (7-Zip), MSI (File table), deb, rpm and AppImage, at 1,087,996 bytes before the installer-toolchain notices were added.
+* **Settings > About** shows the installed path (`\\?\` prefix removed, with a test) and links to the notices online.
+* **Checked:** CI ("Repository checks", with `npm ci --ignore-scripts`) fails if the file is out of date; the release checks every signed package (`check-package-notices.mjs`, 6 tests on real listings).
+* **Website:** serves `/third-party-licenses.txt` (8 runtime packages), linked from its footer; CI checks it.
+
+### E. License recommendation (`docs/governance/LICENSE_COMPARISON.md`)
+
+* **Re-evaluated after the remediation.** No third-party component limits the choice for the app any more. GSAP limits only the website, and only under the GPL.
+* **Recommendation unchanged: Apache-2.0**, for both repositories, with a NOTICE, the DCO and a trademark note. GPL-3.0-or-later is the alternative if preventing closed forks matters more.
+* **"Decision requested" lists the exact replies** and what each one triggers.
+* **Not done:** no `LICENSE` file, no `license` field, and no claim that ExploitX is open-source licensed. The public documents say "publicly developed; its project license is pending the owner's selection".
+
+### F. Contribution terms (`docs/governance/CONTRIBUTOR_TERMS.md`)
+
+* **DCO and CLA compared:** rights, relicensing, friction, administration, who uses each.
+* **DCO 1.1 recommended.** Its text is reproduced and was checked identical to developercertificate.org.
+* **Sign-off guide:** `git commit -s`, amending, `git rebase --signoff`, editors, web commits, using the noreply address.
+* **Proposed CI step:** pure Git, no app or secret. **Not enabled**; no CLA introduced.
+
+### G. Dependency updates
+
+| Pull request | Decision | Why |
+|---|---|---|
+| app #3 npm minor/patch group | **Merged** (`7f6f7f7`) without its `motion` update | CI green; lockfile taken from the pull request minus `motion`; verified locally (tsc, 340 frontend tests, build, npm audit 0) |
+| app #4 rust minor/patch group (toml 1.2.0, tauri-plugin-opener 2.7.3) | **Merged** (`e3ceb46`) | CI green; clippy, 652 Rust tests |
+| app #8 getrandom 0.4.3 | **Merged** (`5c917ea`) | CI green including MSRV; `getrandom::fill` unchanged. Until tauri moves to 0.4, the binaries also carry getrandom 0.3 and 0.2 |
+| app #5 sha2 0.11, #6 sha1 0.11, #7 hmac 0.13 | **Not merged**; explained on each; Dependabot closed them itself when the new `rustcrypto` group replaced them with **#9** | They compile only together. Even together they would not remove the 0.10 line, which boreal, wry, dbus-secret-service, hkdf and tauri-codegen keep, so the binaries would carry each hash twice for no fix |
+| app #1, #2 (`/website`) | **Closed as superseded**, with a comment (reopenable; nothing deleted) | The folder moved to RChefo/ExploitX-Web, where the same updates are handled |
+| website #1 dev minor/patch group | **Merged** (fast-forward to Dependabot's `199cb07`) | Its CI green; locally lint, licenses, type check, 28 tests, build, audit; "Workers Builds" failed for both Dependabot branches while every `main` build passed (logs only in the owner's Cloudflare dashboard) |
+| website #2 TypeScript 7 | **Left open**, explained | typescript-eslint 8.72 declares `typescript <6.1.0`; `npm ci` cannot resolve |
+| app #9–#12 (opened during the mission: rustcrypto group, toml 1.2.1, sysinfo 0.40, windows-sys 0.61) | Left open for the next review | Outside #1–#8; CI runs on them |
+
+* **Alerts:**
+  * app: glib (medium) is fixable only when Tauri leaves glib 0.18;
+  * website: minimatch (medium, development only, through ESLint 10, whose range excludes the fixed 11.x). Both stay open.
+
+### H. Repository security: GitHub Apps and email privacy
+
+* **GitHub Apps** (`docs/governance/REPOSITORY_SECURITY.md`, "Mission 14 review"): eight third-party apps have access to both repositories. Only Cloudflare Workers and Pages acts, and only on the website, where it builds and deploys every push. Nothing was revoked. The owner should limit each app to the repositories it serves.
+* **Website repository hardened:**
+  * allowed actions limited to `actions/checkout` and `actions/setup-node`, with SHA pinning required;
+  * Dependabot alerts and security updates on.
+  * Its CI passed under the new settings (`1411b62`).
+  * Secret scanning is not available for a private repository without GitHub Advanced Security.
+* **Webhooks and deploy keys:** none in either repository.
+* **Email privacy** (`docs/governance/EMAIL_PRIVACY.md`):
+  * every maintainer commit carries a personal address;
+  * GitHub's "Keep my email addresses private" is off (a commit made on github.com used the personal address);
+  * the noreply address could not be verified (no `user` scope, no GitHub-made commit carries it), so the local configuration was not changed and nothing was guessed;
+  * history is not rewritten. The steps are documented in a safe order.
+
+### I. CI enforcement and the dependency license policy
+
+* **CI "Repository checks":**
+  * installs npm packages without scripts;
+  * checks every crate, npm package and asset against the categories, with dated exceptions;
+  * checks that the notices are current;
+  * checks links and the pull request title.
+* **Release workflow:**
+  * library notices and sources before the build;
+  * the notices check on every signed package before upload;
+  * the source archive unsigned, in SHA256SUMS;
+  * pinned by a new `ci_tests.rs` test.
+* **Unchanged guarantees:**
+  * secrets only in the `release` environment;
+  * `RELEASE_PUBLISHING` unset;
+  * nothing runs for `pull_request_target`;
+  * actions pinned by SHA;
+  * minimal permissions.
+* **Dependabot:** groups the RustCrypto crates.
+* **Policy text:** `docs/governance/DEPENDENCY_LICENSE_POLICY.md`, with 7 new policy tests (categories never overlap; unknown, missing and deprecated identifiers fail closed; exceptions need dates).
+* **A slip and its fix:** the first push failed actionlint (shellcheck SC2031: sourcing `/etc/os-release` assigns `VERSION`). It was fixed in `840f6c9`. The container image of actionlint does not reproduce it, because shellcheck there does not follow that file; CI's actionlint remains the reference.
+
+### J. Regression and documentation
+
+| Check | Mission 13 | Mission 14 |
+|---|---|---|
+| Rust tests, Windows | 649 | **652** passed, 29 ignored (3 new tests) |
+| Rust tests, Ubuntu 24.04 / Debian 12 | 650 | **653** passed, 29 ignored, on each (CI run 43455504280) |
+| Frontend tests | 319 | **340** (61 files: +8 components, +7 policy, +6 package notices) |
+| clippy `-D warnings`, tsc, production build | clean | clean |
+| cargo audit | 0 vulnerabilities | 0 vulnerabilities, 8 allowed warnings (unmaintained zbus parts, glib) |
+| npm audit (runtime) | 0 | 0 |
+| License check | 649 crates, 229 npm | 649 crates, 226 npm, 14 asset entries, 0 exceptions; notices current |
+| Links | clean | 256 relative links clean |
+| Website | CI green | CI green at `e70860a`, `199cb07`, `1411b62`; 28 tests |
+| Real database | untouched | untouched (modified 2026-11-05T15:58:24Z); every app check used a disposable data folder |
+
+**Documentation:**
+* New: `DEPENDENCY_LICENSE_POLICY.md`, `DISTRIBUTION_LICENSE_COMPLIANCE.md`, `CONTRIBUTOR_TERMS.md`, `EMAIL_PRIVACY.md`, `scripts/license-texts/README.md`.
+* Updated: LICENSE_COMPARISON, THIRD_PARTY_LICENSE_AUDIT (status of each issue), REPOSITORY_SECURITY, THIRD_PARTY_NOTICES, README, CONTRIBUTING, the development guide, the docs index and NAME_MIGRATION (the rename).
+* The website: README, BRAND, WEBSITE, THIRD_PARTY_NOTICES.
+
+### K. Owner decisions and final classification
+
+**Decisions only the owner can make:**
+1. **Approve one exact license.** Recommended reply: "Approve Apache-2.0 for RChefo/ExploitX and RChefo/ExploitX-Web, contributions under the DCO". Then `LICENSE`, `NOTICE`, the metadata and the DCO check are applied as LICENSE_COMPARISON.md describes.
+2. **`libjbig` in the AppImage** (GPL-2.0-or-later): keep it with its source published (legal review advised), drop the TIFF loader, or ship only deb and rpm.
+3. **The website's build variable:** set `VITE_GITHUB_REPOSITORY=RChefo/ExploitX` in the Cloudflare build settings. Never create a new repository named `cyber-hub`, so that the old name keeps redirecting.
+4. **Limit the eight GitHub Apps** to the repositories they serve. Cloudflare Workers and Pages deploys the website's `main` on every push.
+5. **Email privacy:** copy the noreply address from GitHub's settings, use it for commits, then turn on "Keep my email addresses private" and "Block command line pushes that expose my email".
+6. **Website visibility:** RChefo/ExploitX-Web is private. Whether it becomes public with the license is the owner's choice.
+7. **Unchanged from earlier missions:**
+   * the package identity (Cyber Hub inside);
+   * name clearance;
+   * Authenticode;
+   * a new candidate built under ExploitX, which will also be the first with the notices and the AppImage sources;
+   * exploitx.net hosting (it answers 522).
+
+**Final classification: OPEN SOURCE READY — LICENSE APPROVAL PENDING.**
+
+* **Ready:**
+  * no third-party component with a non-open license remains;
+  * every dependency is checked against an enforced policy;
+  * every package carries its third-party license texts, verified in all five formats;
+  * the AppImage's LGPL/GPL obligations are handled by the release workflow;
+  * the contribution terms and the license decision are prepared.
+* **Pending:**
+  * the owner's approval of the exact license;
+  * the legal questions recorded in DISTRIBUTION_LICENSE_COMPLIANCE.md;
+  * the first real release run with these changes.
+* **Not done, by design:** no license was applied, nothing was published, bought or deleted, and no history, tag, draft or visibility changed. `RELEASE_PUBLISHING` is unset.
