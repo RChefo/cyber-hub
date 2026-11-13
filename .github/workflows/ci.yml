@@ -153,6 +153,42 @@ jobs:
           tar -xzf actionlint.tar.gz actionlint
           ./actionlint -color
 
+  checks:
+    # Mission 12: open-source repository checks that need no build. Each one runs locally with the
+    # same command (CONTRIBUTING.md, "Checks").
+    name: Repository checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Dependency licenses (every crate and npm package against scripts/license-policy.json)
+        run: node scripts/licenses.mjs check
+
+      - name: Relative links in the Markdown documentation
+        run: node scripts/check-links.mjs
+
+      - name: Pull request title (Conventional Commits, as the commit messages)
+        if: github.event_name == 'pull_request'
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # the title reaches the script as data, never as code
+          if ! printf '%s' "$TITLE" | grep -Eq '^(feat|fix|refactor|perf|test|docs|build|ci|chore|revert)(\([a-z0-9._/-]+\))?!?: [^ ].{0,99}$'; then
+            echo "::error::The title must be a Conventional Commit, for example 'fix(osint): keep graph positions after an import' (CONTRIBUTING.md, \"Commits\")"
+            exit 1
+          fi
+
   msrv:
     # rust-version in src-tauri/Cargo.toml: the locked Tauri 2 crates need 1.90 (Cargo refuses 1.89)
     name: Minimum Rust version (1.90.0)

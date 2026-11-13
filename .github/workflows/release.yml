@@ -262,7 +262,9 @@ jobs:
           name: bundles-${{ matrix.name }}
           path: release-assets/
           if-no-files-found: error
-          retention-days: 7
+          # Mission 12: in a public repository any signed-in user can download a run's artifacts.
+          # The publish job deletes them once the draft holds the files; one day bounds a failed run.
+          retention-days: 1
 
   publish:
     name: Publish
@@ -273,6 +275,8 @@ jobs:
     environment: release
     permissions:
       contents: write
+      # only to delete this run's build artifacts after the upload (Mission 12)
+      actions: write
     env:
       VERSION: ${{ needs.validate.outputs.version }}
       CANDIDATE: ${{ needs.validate.outputs.candidate }}
@@ -362,6 +366,21 @@ jobs:
             fi
           done < assets/SHA256SUMS.txt
           echo "Every asset digest matches SHA256SUMS.txt."
+
+      - name: Delete this run's build artifacts (the draft holds the files)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # In a public repository a workflow artifact can be downloaded by any signed-in GitHub user,
+          # which would make the draft's binaries public (Mission 12). Only this run's bundles-* go.
+          ids=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '.artifacts[] | select(.name | startswith("bundles-")) | .id')
+          for id in $ids; do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"
+            echo "deleted artifact $id"
+          done
+          left=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '[.artifacts[] | select(.name | startswith("bundles-"))] | length')
+          [ "$left" = 0 ] || { echo "::error::$left build artifacts are still attached to this run"; exit 1; }
 
       - name: Publish the release
         # a run stops at the draft unless draft is unchecked and the tag is typed again

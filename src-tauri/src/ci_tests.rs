@@ -23,7 +23,7 @@ fn workflows_parse_and_pin_every_action_by_commit() {
     }
     let doc = crate::yaml::parse_one(ci).unwrap();
     let jobs = doc["jobs"].as_object().unwrap();
-    for job in ["verify", "debian", "audit", "msrv"] {
+    for job in ["verify", "debian", "audit", "msrv", "checks"] {
         assert!(jobs.contains_key(job), "ci.yml has the {job} job");
     }
     // exact versions, never a floating toolchain
@@ -342,4 +342,38 @@ fn the_windows_install_identity_stays_the_same() {
     assert!(conf["bundle"].get("publisher").is_none(), "the publisher stays the derived \"cyberhub\"");
     assert!(conf["bundle"]["windows"].get("wix").is_none(), "no upgrade code or template override");
     assert!(conf.get("mainBinaryName").is_none(), "the binary stays cyber-hub.exe");
+}
+
+/// Mission 12: the repository is public. A release run's build artifacts could be downloaded by any
+/// signed-in GitHub user, which would make a private draft's binaries public, so they live one day
+/// and the publish job deletes them once the draft holds the files. CI also checks dependency
+/// licenses, documentation links and pull request titles, the title reaching its script as data.
+#[test]
+fn public_repository_release_artifacts_are_short_lived_and_ci_checks_licenses_links_and_titles() {
+    let release = include_str!("../../.github/workflows/release.yml");
+    let doc = crate::yaml::parse_one(release).unwrap();
+    let jobs = doc["jobs"].as_object().unwrap();
+    let upload = jobs["build"]["steps"].as_array().unwrap().iter().find(|s| s["uses"].as_str().is_some_and(|u| u.starts_with("actions/upload-artifact@"))).expect("the build uploads its bundles");
+    let days = &upload["with"]["retention-days"];
+    assert_eq!(days.as_u64().or_else(|| days.as_str().and_then(|s| s.parse().ok())), Some(1), "build artifacts live one day");
+    assert_eq!(jobs["publish"]["permissions"], serde_json::json!({ "contents": "write", "actions": "write" }));
+    let steps = jobs["publish"]["steps"].as_array().unwrap();
+    let position = |name: &str| steps.iter().position(|s| s["name"].as_str().is_some_and(|n| n.starts_with(name))).unwrap_or_else(|| panic!("publish has the step {name}"));
+    let delete = position("Delete this run's build artifacts");
+    assert!(delete > position("Check GitHub's asset digests"), "artifacts go only after the draft is verified");
+    let run = steps[delete]["run"].as_str().unwrap();
+    assert!(run.contains("actions/runs/$GITHUB_RUN_ID/artifacts") && run.contains("-X DELETE") && run.contains("startswith(\"bundles-\")"), "{run}");
+    // CI: the repository checks
+    let ci = include_str!("../../.github/workflows/ci.yml");
+    let ci_doc = crate::yaml::parse_one(ci).unwrap();
+    let checks = &ci_doc["jobs"]["checks"];
+    assert_eq!(checks["name"], "Repository checks");
+    let runs: Vec<&str> = checks["steps"].as_array().unwrap().iter().filter_map(|s| s["run"].as_str()).collect();
+    for cmd in ["node scripts/licenses.mjs check", "node scripts/check-links.mjs"] {
+        assert!(runs.iter().any(|r| r.contains(cmd)), "CI runs {cmd}");
+    }
+    let title = checks["steps"].as_array().unwrap().iter().find(|s| s["name"].as_str().is_some_and(|n| n.starts_with("Pull request title"))).expect("a title check");
+    assert_eq!(title["if"], "github.event_name == 'pull_request'");
+    assert_eq!(title["env"]["TITLE"], "${{ github.event.pull_request.title }}");
+    assert!(!title["run"].as_str().unwrap().contains("${{"), "the title is never expanded into the script");
 }
