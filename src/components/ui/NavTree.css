@@ -1,0 +1,154 @@
+/* NavTree (Mission 14): the sidebar's grouped navigation. Original styles; colours come from the theme tokens. */
+
+.navtree {
+  --nt-row: 32px;
+  --nt-trunk: 21px; /* x of the trunk, from the list's left edge */
+  --nt-elbow: 12px; /* width of an elbow, from the trunk to the row */
+  --nt-radius: 9px;
+  --nt-line: #2a2d3b;
+  --nt-stroke: 1.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13.5px;
+}
+
+.navtree-group {
+  position: relative;
+}
+
+/* the group that holds the current page: a short accent bar beside its name */
+.navtree-group[data-active]::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 7px;
+  width: 2px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--ex-uv-500);
+}
+
+.navtree-head {
+  display: flex;
+  width: 100%;
+  height: var(--nt-row);
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 0 4px;
+  border-radius: 6px;
+  color: var(--foreground);
+  font-weight: 600;
+  font-size: 14px;
+  text-align: left;
+}
+.navtree-head:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+.navtree-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--muted);
+  opacity: 0;
+  transition: transform var(--ex-motion-base) var(--ex-motion-ease), opacity var(--ex-motion-fast);
+}
+.navtree-head:hover .navtree-chevron,
+.navtree-head:focus-visible .navtree-chevron,
+.navtree-head[aria-expanded="false"] .navtree-chevron {
+  opacity: 1;
+}
+.navtree-head[aria-expanded="false"] .navtree-chevron {
+  transform: rotate(-90deg);
+}
+
+/* folding: the row heights animate from 0fr to 1fr */
+.navtree-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--ex-motion-base) var(--ex-motion-ease);
+}
+.navtree-fold[data-open] {
+  grid-template-rows: 1fr;
+}
+.navtree-list {
+  min-height: 0;
+  overflow: hidden;
+  margin: 0;
+  /* no padding: a folded (0fr) list must take no height at all */
+  padding: 0;
+  list-style: none;
+}
+
+.navtree-item {
+  position: relative;
+  padding-left: calc(var(--nt-trunk) + var(--nt-elbow) + 4px);
+}
+
+/* the trunk continues past every item but the last */
+.navtree-item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: var(--nt-trunk);
+  top: 0;
+  bottom: 0;
+  border-left: var(--nt-stroke) solid var(--nt-line);
+}
+
+/* the elbow: down from the trunk, then a rounded turn into the row */
+.navtree-item::after {
+  content: "";
+  position: absolute;
+  left: var(--nt-trunk);
+  top: 0;
+  width: var(--nt-elbow);
+  height: 50%;
+  border-left: var(--nt-stroke) solid var(--nt-line);
+  border-bottom: var(--nt-stroke) solid var(--nt-line);
+  border-bottom-left-radius: var(--nt-radius);
+  pointer-events: none;
+}
+.navtree-item[data-active]::after {
+  border-color: var(--ex-uv-500);
+}
+
+.navtree-row {
+  display: flex;
+  width: 100%;
+  height: var(--nt-row);
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--muted);
+  text-align: left;
+  transition: background-color var(--ex-motion-fast), color var(--ex-motion-fast);
+}
+.navtree-row:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--foreground);
+}
+.navtree-item[data-active] .navtree-row {
+  color: var(--ex-uv-400);
+}
+.navtree-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* keyboard focus stays visible on every row */
+.navtree-head:focus-visible,
+.navtree-row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navtree-fold,
+  .navtree-chevron,
+  .navtree-row {
+    transition: none;
+  }
+}

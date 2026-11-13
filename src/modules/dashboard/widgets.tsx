@@ -24,7 +24,7 @@ import { CopyButton } from "@/components/ui/Code";
 import { EmptyBlock, QueryView } from "@/components/ui/Feedback";
 import { TextInput } from "@/components/ui/Fields";
 import { Panel } from "@/components/ui/Panel";
-import CountUp from "@/components/vendor/reactbits/CountUp";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { DotPattern } from "@/components/vendor/lightswind/DotPattern";
 import { FeaturedIcon } from "@/components/vendor/untitledui/FeaturedIcon";
 import { RESOURCES } from "@/data/resources";
@@ -229,7 +229,7 @@ export function KpiWidget() {
           <div className="min-w-0">
             <div className="text-[12.5px] text-muted">{t.label}</div>
             <div className="tabular mt-0.5 text-[22px] leading-tight font-semibold tracking-tight">
-              {runtime ? <CountUp to={t.value} duration={0.6} trigger="load" /> : "—"}
+              {runtime ? <AnimatedNumber value={t.value} duration={600} /> : "—"}
             </div>
             <div className={cn("mt-0.5 flex items-center gap-1.5 text-[12px]", t.tone === "warning" ? "text-warning-soft-foreground" : t.tone === "success" ? "text-success-soft-foreground" : "text-muted")}>
               {t.tone !== "default" && <StatusDot tone={t.tone} />}

@@ -5,7 +5,7 @@ import { api } from "@/lib/ipc";
 import { useQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
 import { sidebarCollapsed, useNarrowWindow } from "@/lib/viewport";
-import BranchedMenu from "@/components/vendor/reactbits/BranchedMenu";
+import { NavTree } from "@/components/ui/NavTree";
 import { BrandSymbol, Logo } from "@/components/brand/Logo";
 import { NAV_GROUPS, SETTINGS_ITEM, type NavItem, type PageId } from "./routes";
 import { useApp } from "./store";
@@ -91,40 +91,32 @@ export function Sidebar() {
           ))}
         </nav>
       ) : (
-        // expanded: the groups as a branched tree (React Bits BranchedMenu); every group starts open
+        // expanded: the groups as a tree (NavTree); every group starts open
         <div className="scroll-area flex-1 px-3 pt-1 pb-3">
-          <BranchedMenu
+          <NavTree
             aria-label="Sections"
-            items={NAV_GROUPS.map((group) => ({
+            groups={NAV_GROUPS.map((group) => ({
               label: group.label,
               children: group.items.map((item) => ({
                 value: item.id,
                 icon: item.icon,
-                label:
-                  item.id === "mcp" && mcpPending ? (
-                    <span className="flex items-center gap-2">
-                      {item.label}
-                      <span className="tabular rounded-full bg-warning-soft px-1.5 text-[11px] leading-[18px] text-warning-soft-foreground" aria-label={`${mcpPending} waiting for approval`}>
-                        {mcpPending}
-                      </span>
-                    </span>
-                  ) : (
-                    item.label
-                  ),
+                ...(item.id === "mcp" && mcpPending
+                  ? {
+                      ariaLabel: `${item.label}, ${mcpPending} waiting for approval`,
+                      label: (
+                        <span className="flex items-center gap-2">
+                          {item.label}
+                          <span className="tabular rounded-full bg-warning-soft px-1.5 text-[11px] leading-[18px] text-warning-soft-foreground" aria-hidden>
+                            {mcpPending}
+                          </span>
+                        </span>
+                      ),
+                    }
+                  : { label: item.label }),
               })),
             }))}
-            defaultOpen={NAV_GROUPS.map((_, i) => i)}
             value={route.page}
             onSelect={(id) => navigate(id as PageId)}
-            color="#eceef4"
-            accentColor="#9a8cff"
-            lineColor="#2a2d3b"
-            width={228}
-            rowHeight={32}
-            indent={34}
-            trunk={11}
-            radius={9}
-            fontSize={13.5}
           />
         </div>
       )}
