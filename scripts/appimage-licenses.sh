@@ -7,8 +7,10 @@
 #       --sources <file.tar>   also the Debian source packages of the LGPL/GPL-licensed libraries (needs deb-src)
 #       --tauri-config <file>  a Tauri configuration that puts <out-dir> into the AppImage at
 #                              usr/share/doc/exploitx-appimage/ (pass it to `tauri build --config`)
-#   scripts/appimage-licenses.sh --check <extracted AppImage dir>
-#       fails unless every shared library in the AppImage has its package's copyright file next to it
+#   scripts/appimage-licenses.sh --check <extracted AppImage dir> [--sources <file.tar>]
+#       fails unless every shared library in the AppImage has its package's copyright file, at the listed
+#       version, every license text those files refer to is there, and (with --sources) the archive holds
+#       the source package of every GPL/LGPL library at the shipped version, its files matching the .dsc
 #
 # Runs on the Debian/Ubuntu system that builds the AppImage (the release workflow's ubuntu-22.04 runner),
 # before `tauri build`: the AppImage bundler (linuxdeploy) copies the shared libraries of GTK and WebKitGTK
@@ -44,20 +46,57 @@ source_owner() {
 }
 
 if [ "${1:-}" = "--check" ]; then
-  app=${2:?usage: appimage-licenses.sh --check <extracted AppImage dir>}
+  app=${2:?usage: appimage-licenses.sh --check <extracted AppImage dir> [--sources <file.tar>]}
+  srctar=""
+  if [ "${3:-}" = "--sources" ]; then srctar=${4:?--sources needs the source archive}; fi
   [ -f "$app/$DOC/README.txt" ] && [ -f "$app/$DOC/PACKAGES.tsv" ] || { echo "error: $app has no $DOC/README.txt and PACKAGES.tsv" >&2; exit 1; }
   missing=0
   n=0
+  # 1. every bundled library: its package's copyright file, and the package at the installed version
   while IFS= read -r so; do
     n=$((n + 1))
     pkg=$(source_owner "${so#"$app"/usr/lib/}")
     if [ -z "$pkg" ]; then echo "error: no package installed $(basename "$so") (bundled as ${so#"$app"/})" >&2; missing=1; continue; fi
     echo "$pkg" | grep -q -E "$EXCLUDED" && continue
     if [ ! -s "$app/$DOC/copyright/$pkg" ]; then echo "error: ${so#"$app"/} comes from $pkg, whose copyright file is not in $DOC/copyright" >&2; missing=1; fi
+    v=$(dpkg-query -W -f '${Version}' "$pkg")
+    if ! awk -F'\t' -v p="$pkg" -v v="$v" '$1 == p && $2 == v { found = 1 } END { exit !found }' "$app/$DOC/PACKAGES.tsv"; then
+      echo "error: ${so#"$app"/} comes from $pkg $v, which PACKAGES.tsv does not list at that version" >&2; missing=1
+    fi
   done < <(find "$app/usr/lib" -type f \( -name '*.so' -o -name '*.so.*' \) | sort)
   [ "$n" -gt 0 ] || { echo "error: no shared libraries under $app/usr/lib" >&2; exit 1; }
+  # 2. every license text a copyright file refers to (/usr/share/common-licenses/<name>) is in the AppImage;
+  #    a reference with a ".0" the Debian file name lacks (GPL-2.0 for GPL-2, a typo in Pango's file) is
+  #    satisfied by that file
+  refs=0
+  while IFS= read -r name; do
+    refs=$((refs + 1))
+    [ -s "$app/$DOC/common-licenses/$name" ] || [ -s "$app/$DOC/common-licenses/${name%.0}" ] || {
+      echo "error: a copyright file refers to /usr/share/common-licenses/$name, which is not in $DOC/common-licenses" >&2; missing=1; }
+  done < <({ grep -h -o '/usr/share/common-licenses/[A-Za-z0-9.+_-]*' "$app/$DOC/copyright/"* || true; } | sed 's#.*/##; s/[.]*$//' | sort -u)
+  # 3. the source archive: the source package of every GPL/LGPL library, at the version its binary came
+  #    from, with every file the .dsc lists present and matching its SHA-256
+  if [ -n "$srctar" ]; then
+    work=$(mktemp -d)
+    tar -xf "$srctar" -C "$work"
+    srcs=0
+    while IFS=$'\t' read -r src sver; do
+      srcs=$((srcs + 1))
+      dsc="$work/${src}_${sver#*:}.dsc"
+      if [ ! -f "$dsc" ]; then echo "error: the source archive has no ${src}_${sver#*:}.dsc (source of a GPL/LGPL library)" >&2; missing=1; continue; fi
+      got=$(sed -n 's/^Version: *//p' "$dsc" | head -1)
+      [ "$got" = "$sver" ] || { echo "error: $(basename "$dsc") is version $got, the shipped binary's source is $sver" >&2; missing=1; }
+      while read -r sum _ file; do
+        [ -f "$work/$file" ] || { echo "error: $file, listed in $(basename "$dsc"), is not in the source archive" >&2; missing=1; continue; }
+        [ "$(sha256sum "$work/$file" | cut -d' ' -f1)" = "$sum" ] || { echo "error: $file does not match the SHA-256 in $(basename "$dsc")" >&2; missing=1; }
+      done < <(awk '/^Checksums-Sha256:/ { f = 1; next } /^[^ ]/ { f = 0 } f && NF == 3 { print }' "$dsc")
+    done < <(awk -F'\t' 'NR > 1 && $5 ~ /GPL/ { print $3 "\t" $4 }' "$app/$DOC/PACKAGES.tsv" | sort -u)
+    rm -rf "$work"
+  fi
   [ "$missing" = 0 ] || exit 1
-  echo "all $n shared libraries in the AppImage have their package's copyright file in $DOC/copyright"
+  echo "all $n shared libraries in the AppImage have their package's copyright file in $DOC/copyright, at the listed versions"
+  echo "all $refs license texts the copyright files refer to are in $DOC/common-licenses"
+  if [ -n "$srctar" ]; then echo "all $srcs GPL/LGPL source packages are in $(basename "$srctar") at the shipped versions, their files matching the .dsc checksums"; fi
   exit 0
 fi
 
