@@ -3451,7 +3451,7 @@ Everything was written from scratch: no React Bits or Ink Orbit code was copied 
   * app `release/v0.1.0`: `475fba1`, `5d1cca4`, `e55524b`, `1ee1a48`, `11c9aa7`, `1e6e72e`, and this record;
   * website `main`: `af7dced`, `90baa0f`, `278e0e1`;
   * tag `v0.1.0-rc.3` on `11c9aa7`.
-* **CI:** app CI green at `e55524b` (43465940464), `1ee1a48` (43466889022), `11c9aa7` (43467158483) and `1e6e72e`, with all six jobs and the DCO job skipped on pushes as designed; release run 43468333936 green; website CI green at `278e0e1` (43470514130), and its production Worker build succeeded.
+* **CI:** app CI green at `e55524b` (43465940464), `1ee1a48` (43466889022), `11c9aa7` (43467158483), `1e6e72e` and `113fbcd` (43484400682), with all six jobs and the DCO job skipped on pushes as designed; release run 43468333936 green; website CI green at `278e0e1` (43470514130), and its production Worker build succeeded.
 
 ### B. Apache-2.0
 
@@ -3615,13 +3615,13 @@ Everything was written from scratch: no React Bits or Ink Orbit code was copied 
 | Check | Mission 14 | Mission 15 |
 |---|---|---|
 | Rust, Windows (local) | 652 | **653** passed, 29 ignored (+1: the DCO pinning test) |
-| Rust, CI | Windows 652, Ubuntu 24.04 653, Debian 12 653 | Windows 652 + Ubuntu 24.04 653 + Debian 12 653 at `e55524b`, the DCO pinning test added since (local: 653) |
+| Rust, CI | Windows 652, Ubuntu 24.04 653, Debian 12 653 | **Windows 653, Ubuntu 24.04 654, Debian 12 654** passed, 29 ignored each (run 43484400682 on `113fbcd`); 351 frontend tests on each |
 | Frontend | 340 | **351** (62 files: +2 license lines, +2 package license files, +7 DCO) |
 | Website tests | 28 | **35** (+7 DCO) |
 | clippy, tsc, production builds | clean | clean |
 | cargo audit | 0 vulnerabilities, 8 allowed warnings | 0 vulnerabilities, 8 allowed warnings (CI) |
 | npm audit (runtime) | 0 | 0 (app and website); the website's development lint tools have 10 moderate advisories (minimatch) |
-| gitleaks | 236 commits, no leak | no leak (CI, every push of the mission) |
+| gitleaks | 236 commits, no leak | **244 commits, no leak** (run 43484400682) |
 | License check | 649 crates, 226 npm, 14 assets | the same, plus the license lines of 476 source files and LICENSE; website: 231 packages and 33 files |
 | DCO | n/a | 7 tests; 4 real pull requests as expected |
 | Links, actionlint | clean | clean (both repositories) |
