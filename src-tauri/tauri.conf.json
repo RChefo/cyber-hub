@@ -39,6 +39,9 @@
     "shortDescription": "Cybersecurity intelligence and security research platform",
     "longDescription": "ExploitX is a local-first cybersecurity workspace for security research, assessment, investigation and workflow management: projects and findings, OSINT investigations, threat and vulnerability intelligence, detection engineering, reports and MCP integration.",
     "createUpdaterArtifacts": true,
+    "resources": {
+      "resources/THIRD_PARTY_LICENSES.txt": "THIRD_PARTY_LICENSES.txt"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -48,10 +51,16 @@
     ],
     "linux": {
       "deb": {
-        "desktopTemplate": "linux/exploitx.desktop.hbs"
+        "desktopTemplate": "linux/exploitx.desktop.hbs",
+        "files": {
+          "/usr/share/doc/cyber-hub/THIRD_PARTY_LICENSES.txt": "resources/THIRD_PARTY_LICENSES.txt"
+        }
       },
       "rpm": {
-        "desktopTemplate": "linux/exploitx.desktop.hbs"
+        "desktopTemplate": "linux/exploitx.desktop.hbs",
+        "files": {
+          "/usr/share/licenses/cyber-hub/THIRD_PARTY_LICENSES.txt": "resources/THIRD_PARTY_LICENSES.txt"
+        }
       }
     },
     "windows": {

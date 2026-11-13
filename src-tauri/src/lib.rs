@@ -483,6 +483,7 @@ pub fn run() {
             update_commands::update_settings_set,
             // system
             system::system_info,
+            system::third_party_notices_path,
             system::open_terminal,
         ])
         .build(tauri::generate_context!())

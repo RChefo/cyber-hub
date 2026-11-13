@@ -516,5 +516,6 @@ export const api = {
 
   // system
   systemInfo: () => call<T.SystemInfo>("system_info"),
+  thirdPartyNoticesPath: () => call<string | null>("third_party_notices_path"),
   openTerminal: () => call<string>("open_terminal"),
 };

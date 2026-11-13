@@ -176,7 +176,11 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
 
-      - name: Dependency licenses (every crate and npm package against scripts/license-policy.json)
+      # the notices check reads the license files of the installed packages; no install script runs
+      - name: npm packages (license files only)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Dependency licenses and the bundled notices (scripts/license-policy.json, THIRD_PARTY_LICENSES.txt)
         run: node scripts/licenses.mjs check
 
       - name: Relative links in the Markdown documentation

@@ -1,25 +1,48 @@
 {
-  "_comment": "Dependency license policy (Mission 12), used by scripts/licenses.mjs check. 'allowed' lists SPDX identifiers that a dependency's license expression may be satisfied with: permissive licenses, file-level copyleft (MPL-2.0), the font license (OFL-1.1) and permissive data licenses. Strong copyleft (GPL, AGPL, LGPL as the only option), source-available (Commons Clause, BUSL, SSPL) and proprietary licenses are not allowed without a reviewed exception. Changing this list or adding an exception needs a maintainer's review; see docs/governance/THIRD_PARTY_LICENSE_AUDIT.md.",
-  "allowed": [
-    "0BSD",
-    "Apache-2.0",
-    "Apache-2.0 WITH LLVM-exception",
-    "BlueOak-1.0.0",
-    "BSD-2-Clause",
-    "BSD-3-Clause",
-    "BSL-1.0",
-    "CC-BY-4.0",
-    "CC0-1.0",
-    "CDLA-Permissive-2.0",
-    "ISC",
-    "MIT",
-    "MIT-0",
-    "MPL-2.0",
-    "OFL-1.1",
-    "Unicode-3.0",
-    "Unicode-DFS-2016",
-    "Unlicense",
-    "Zlib"
-  ],
+  "$comment": "Dependency and asset license policy (Mission 12, categories since Mission 14). scripts/licenses.mjs check evaluates every Cargo crate and npm package (its SPDX expression from the package's own metadata, at the locked version) and every file in license-assets.json against it. Unknown and unlisted licenses fail. docs/governance/DEPENDENCY_LICENSE_POLICY.md explains each category.",
+  "reviewed": "2026-11-13",
+  "categories": {
+    "permissive": [
+      "0BSD",
+      "Apache-2.0",
+      "Apache-2.0 WITH LLVM-exception",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "BSL-1.0",
+      "BlueOak-1.0.0",
+      "CC0-1.0",
+      "ISC",
+      "MIT",
+      "MIT-0",
+      "Unlicense",
+      "Zlib"
+    ],
+    "attribution": ["CC-BY-4.0", "CDLA-Permissive-2.0", "OFL-1.1", "Unicode-3.0", "Unicode-DFS-2016"],
+    "sourceObligations": ["MPL-2.0"],
+    "dataOnly": ["CC-BY-SA-4.0", "LicenseRef-MITRE-ATTACK-Terms"],
+    "review": [
+      "CC-BY-SA-4.0",
+      "CDDL-1.0",
+      "EPL-2.0",
+      "LGPL-2.1-only",
+      "LGPL-2.1-or-later",
+      "LGPL-3.0-only",
+      "LGPL-3.0-or-later"
+    ],
+    "prohibited": [
+      "AGPL-3.0-only",
+      "AGPL-3.0-or-later",
+      "BUSL-1.1",
+      "CC-BY-NC-4.0",
+      "CC-BY-NC-SA-4.0",
+      "GPL-2.0-only",
+      "GPL-2.0-or-later",
+      "GPL-3.0-only",
+      "GPL-3.0-or-later",
+      "LicenseRef-Commons-Clause",
+      "SSPL-1.0",
+      "UNLICENSED"
+    ]
+  },
   "exceptions": []
 }

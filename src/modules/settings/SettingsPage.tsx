@@ -5,7 +5,7 @@ import { CopyButton, Kbd } from "@/components/ui/Code";
 import { useConfirm } from "@/components/ui/Dialogs";
 import { SwitchInput } from "@/components/ui/Fields";
 import { PageHeader, Panel } from "@/components/ui/Panel";
-import { notify } from "@/lib/actions";
+import { notify, openExternal } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/ipc";
 import { invalidate, useQuery } from "@/lib/query";
 import { describeRunsCleared, formatBytes, modKey } from "@/lib/utils";
@@ -213,7 +213,9 @@ const SHORTCUTS: [string[], string][] = [
 ];
 
 export default function SettingsPage() {
-  const { system, catalog } = useApp();
+  const { system, catalog, runtime } = useApp();
+  // the bundled THIRD_PARTY_LICENSES.txt (Mission 14); null in a build without bundled resources
+  const noticesPath = useQuery(["system"], api.thirdPartyNoticesPath, [], runtime).data ?? null;
   return (
     <div>
       <PageHeader title="Settings" description="Preferences, updates, service status and local data. ExploitX has no account and no telemetry; the only background request is the optional update check." />
@@ -262,6 +264,23 @@ export default function SettingsPage() {
               <dd>{catalog ? `v${catalog.version} · ${catalog.tools.length} tools` : "—"}</dd>
               <dt className="text-muted">Memory in use</dt>
               <dd>{system ? `${formatBytes(system.usedMemory)} of ${formatBytes(system.totalMemory)}` : "—"}</dd>
+              <dt className="text-muted">Third-party licenses</dt>
+              <dd className="min-w-0">
+                <span className="block text-muted">The licenses of the software and data ExploitX includes.</span>
+                {noticesPath ? (
+                  <span className="mt-1 flex min-w-0 items-center gap-1.5">
+                    <code className="truncate font-mono text-[12px]" title={noticesPath} data-selectable>
+                      {noticesPath}
+                    </code>
+                    <CopyButton text={noticesPath} label="Copy path" />
+                  </span>
+                ) : (
+                  <span className="mt-1 block text-[12.5px] text-muted">Bundled with installed copies as THIRD_PARTY_LICENSES.txt.</span>
+                )}
+                <Button variant="ghost" size="sm" className="mt-1 -ml-2 h-7 px-2 text-[12.5px]" onPress={() => openExternal("https://github.com/RChefo/ExploitX/blob/HEAD/THIRD_PARTY_NOTICES.md")}>
+                  View the notices online
+                </Button>
+              </dd>
             </dl>
           </Panel>
         </div>
