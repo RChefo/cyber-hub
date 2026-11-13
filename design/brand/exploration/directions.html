@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>ExploitX symbol directions</title>
+<style>
+  body { margin: 0; font: 13px/1.4 "Segoe UI", system-ui, sans-serif; background: #0a0c10; color: #cfd4dc; }
+  .row { display: grid; grid-template-columns: 210px repeat(2, 1fr); gap: 0; border-bottom: 1px solid #1c2028; }
+  .label { padding: 18px; }
+  .label b { display: block; color: #fff; font-size: 15px; margin-bottom: 4px; }
+  .cell { display: flex; align-items: center; gap: 22px; padding: 18px 22px; }
+  .dark { background: #0a0c10; }
+  .light { background: #f3f4f6; }
+  svg { display: block; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- A. Convergence: two chevrons that meet at one point (operator input meeting the target). -->
+    <symbol id="A" viewBox="0 0 64 64">
+      <polygon class="p1" points="6,8 20,8 31,32 20,56 6,56 17,32" />
+      <polygon class="p2" points="58,8 44,8 33,32 44,56 58,56 47,32" />
+    </symbol>
+    <!-- B. Escape: an X knocked out of a tile; one arm leaves the tile (a sandbox escape). -->
+    <mask id="Bm" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff" />
+      <path d="M15 15 L39 39 M39 15 L15 39" stroke="#000" stroke-width="7.5" />
+    </mask>
+    <mask id="Bout" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff" />
+      <rect x="4" y="4" width="46" height="46" rx="11" fill="#000" />
+    </mask>
+    <symbol id="B" viewBox="0 0 64 64">
+      <rect class="p1" x="4" y="4" width="46" height="46" rx="11" mask="url(#Bm)" />
+      <path class="s2" d="M39 39 L60 60" stroke-width="7.5" mask="url(#Bout)" />
+    </symbol>
+    <!-- C. Fault: the rising stroke crosses the falling one and comes out displaced. -->
+    <mask id="Cm" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff" />
+      <path d="M10 6 L54 58" stroke="#000" stroke-width="17" />
+    </mask>
+    <symbol id="C" viewBox="0 0 64 64">
+      <path class="s1" d="M10 6 L54 58" stroke-width="10" />
+      <g mask="url(#Cm)">
+        <path class="s2" d="M12 58 L32 32" stroke-width="10" />
+        <path class="s2" d="M35 31 L55 5" stroke-width="10" transform="translate(3 3.5)" />
+      </g>
+    </symbol>
+    <!-- D. Graph: four observations joined through one node. -->
+    <symbol id="D" viewBox="0 0 64 64">
+      <path class="s2" d="M13 13 L32 32 L51 13 M13 51 L32 32 L51 51" stroke-width="4.5" />
+      <rect class="p2" x="5" y="5" width="13" height="13" rx="2" />
+      <rect class="p2" x="46" y="5" width="13" height="13" rx="2" />
+      <rect class="p2" x="5" y="46" width="13" height="13" rx="2" />
+      <rect class="p2" x="46" y="46" width="13" height="13" rx="2" />
+      <rect class="p1" x="24" y="24" width="16" height="16" rx="2" transform="rotate(45 32 32)" />
+    </symbol>
+  </defs>
+</svg>
+<div id="rows"></div>
+<script>
+  const dirs = [
+    ["A", "A. Convergence", "Two chevrons meet at one point: input reaching the target."],
+    ["B", "B. Escape", "An X cut from a tile; one arm leaves it (sandbox escape)."],
+    ["C", "C. Fault", "A stroke crosses a boundary and comes out displaced."],
+    ["D", "D. Graph", "Four observations joined through one node."],
+  ];
+  const themes = {
+    dark: { p1: "#c8f03c", p2: "#f2f4f7" },
+    light: { p1: "#0b0d12", p2: "#0b0d12" },
+  };
+  const sizes = [256, 64, 32, 16];
+  const rows = document.getElementById("rows");
+  for (const [id, name, note] of dirs) {
+    let html = `<div class="row"><div class="label"><b>${name}</b>${note}</div>`;
+    for (const t of ["dark", "light"]) {
+      const c = themes[t];
+      html += `<div class="cell ${t}">` + sizes.map((s) =>
+        `<svg width="${s}" height="${s}" style="--p1:${c.p1};--p2:${c.p2}"><use href="#${id}" /></svg>`).join("") + `</div>`;
+    }
+    rows.insertAdjacentHTML("beforeend", html + "</div>");
+  }
+</script>
+<style>
+  .p1 { fill: var(--p1); } .p2 { fill: var(--p2); }
+  .s1 { fill: none; stroke: var(--p1); } .s2 { fill: none; stroke: var(--p2); }
+</style>
+</body>
+</html>

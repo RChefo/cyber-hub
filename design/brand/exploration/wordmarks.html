@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>ExploitX wordmark candidates</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Sora:wght@500;600;700&family=Archivo:wdth,wght@112,600;112,700&family=IBM+Plex+Sans:wght@600;700&family=Manrope:wght@600;700;800&family=Geist:wght@500;600;700&family=Instrument+Sans:wght@600;700&display=block" rel="stylesheet" />
+<style>
+  body { margin: 0; font: 13px/1.4 "Segoe UI", system-ui, sans-serif; background: #0a0c10; color: #9aa3b2; }
+  .row { display: grid; grid-template-columns: 210px 1fr 1fr; align-items: center; border-bottom: 1px solid #1a1e26; }
+  .label { padding: 14px 20px; } .label b { color: #fff; display: block; font-size: 14px; }
+  .cell { padding: 18px 22px; display: flex; align-items: center; gap: 30px; }
+  .light { background: #f3f4f6; }
+  .wm { display: inline-flex; align-items: center; gap: .32em; }
+  .wm .t { letter-spacing: -0.02em; line-height: 1; }
+  .wm svg { height: .78em; width: auto; position: relative; top: .0em; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="A" viewBox="5 8 54 48">
+    <polygon fill="var(--a)" points="6,8 20,8 31,32 20,56 6,56 17,32" />
+    <polygon fill="var(--b)" points="58,8 44,8 33,32 44,56 58,56 47,32" />
+  </symbol>
+</defs></svg>
+<div id="rows"></div>
+<script>
+  const fonts = [
+    ["Space Grotesk 600", "'Space Grotesk'", 600, ""],
+    ["Sora 600", "Sora", 600, ""],
+    ["Archivo SemiExpanded 600", "Archivo", 600, "font-stretch:112%"],
+    ["IBM Plex Sans 600", "'IBM Plex Sans'", 600, ""],
+    ["Manrope 700", "Manrope", 700, ""],
+    ["Geist 600", "Geist", 600, ""],
+    ["Instrument Sans 600", "'Instrument Sans'", 600, ""],
+  ];
+  const rows = document.getElementById("rows");
+  for (const [name, fam, w, extra] of fonts) {
+    const mark = (a, b, fg, size) => `<span class="wm" style="font-size:${size}px;color:${fg}">
+      <svg viewBox="5 8 54 48" style="--a:${a};--b:${b};height:.92em"><use href="#A"/></svg>
+      <span class="t" style="font-family:${fam};font-weight:${w};${extra}">Exploit<span style="display:inline-block;vertical-align:-0.02em;margin-left:.03em"><svg viewBox="5 8 54 48" style="--a:${fg};--b:${fg};height:.70em;width:auto"><use href="#A"/></svg></span></span></span>`;
+    rows.insertAdjacentHTML("beforeend", `<div class="row">
+      <div class="label"><b>${name}</b>symbol + "Exploit" + symbol-X</div>
+      <div class="cell">${mark("#7c6aff", "#f2f4f7", "#f2f4f7", 54)} ${mark("#7c6aff", "#f2f4f7", "#f2f4f7", 20)}</div>
+      <div class="cell light">${mark("#5a45e8", "#0b0d12", "#0b0d12", 54)} ${mark("#5a45e8", "#0b0d12", "#0b0d12", 20)}</div>
+    </div>`);
+  }
+</script>
+</body>
+</html>

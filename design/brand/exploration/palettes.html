@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>ExploitX accent candidates</title>
+<style>
+  body { margin: 0; font: 13px/1.4 "Segoe UI", system-ui, sans-serif; background: #0a0c10; color: #cfd4dc; }
+  .row { display: grid; grid-template-columns: 200px 120px 1fr 330px; align-items: center; gap: 24px; padding: 16px 22px; border-bottom: 1px solid #1a1e26; }
+  .label b { display: block; color: #fff; font-size: 15px; }
+  .ui { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .btn { border-radius: 8px; padding: 8px 14px; font-weight: 600; }
+  .ghost { border-radius: 8px; padding: 8px 14px; background: #171a21; color: #e8ebf0; outline: 2px solid var(--a); outline-offset: 2px; }
+  .nav { width: 150px; border-radius: 6px; background: #161920; padding: 7px 10px; position: relative; color: #e8ebf0; }
+  .nav::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--a); }
+  .link { color: var(--a); }
+  .sev { display: flex; gap: 6px; }
+  .chip { border-radius: 999px; padding: 3px 9px; font-size: 12px; font-weight: 600; }
+  .light { background: #f3f4f6; border-radius: 10px; padding: 10px; display: flex; gap: 10px; align-items: center; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="A" viewBox="0 0 64 64">
+    <polygon fill="var(--a)" points="6,8 20,8 31,32 20,56 6,56 17,32" />
+    <polygon fill="var(--b)" points="58,8 44,8 33,32 44,56 58,56 47,32" />
+  </symbol>
+</defs></svg>
+<div id="rows"></div>
+<script>
+  const cands = [
+    ["Signal (lime)", "#c8f03c", "#0b0d12"],
+    ["Signal (toned)", "#b7e34a", "#0b0d12"],
+    ["Ultraviolet", "#7d6bff", "#ffffff"],
+    ["Ember", "#ff6b3d", "#0b0d12"],
+    ["Ion (aqua)", "#2fe3cf", "#0b0d12"],
+  ];
+  const sev = [["Critical", "#e5484d"], ["High", "#f07a32"], ["Medium", "#f2cc60"], ["Low", "#4c8dff"], ["Info", "#8a93a3"]];
+  const rows = document.getElementById("rows");
+  for (const [name, a, on] of cands) {
+    rows.insertAdjacentHTML("beforeend", `
+      <div class="row" style="--a:${a};--b:#f2f4f7">
+        <div class="label"><b>${name}</b>${a}</div>
+        <svg width="96" height="96"><use href="#A" /></svg>
+        <div class="ui">
+          <span class="btn" style="background:${a};color:${on}">Run scan</span>
+          <span class="ghost">Focused</span>
+          <span class="nav">Findings</span>
+          <span class="link">View 12 findings</span>
+          <span class="sev">${sev.map(([n, c]) => `<span class="chip" style="background:${c}22;color:${c}">${n}</span>`).join("")}</span>
+        </div>
+        <div class="light" style="--b:#0b0d12"><svg width="56" height="56" style="--a:${a}"><use href="#A" /></svg>
+          <span class="btn" style="background:${a};color:${on}">Run scan</span>
+          <span class="link" style="filter:brightness(.62)">View findings</span></div>
+      </div>`);
+  }
+</script>
+</body>
+</html>
