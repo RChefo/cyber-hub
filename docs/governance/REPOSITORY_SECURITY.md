@@ -91,6 +91,31 @@ The owner's account has eight third-party GitHub Apps installed with access to a
 
 **Dependency updates.** Each Dependabot pull request was reviewed on its own (the mission report lists the outcome). The RustCrypto hashes (`sha1`, `sha2`, `md-5`, `hmac`, `digest`) now form one Dependabot group, because they only compile when they move together.
 
+## Mission 15 review (2026-11-13)
+
+**Visibility, the owner's decision:** RChefo/ExploitX stays **public**, RChefo/ExploitX-Web stays **private**. Neither was changed.
+
+**Main repository settings, verified again:**
+* secret scanning, push protection and Dependabot security updates are on;
+* Actions are limited to six selected actions, each SHA-pinned (enforced);
+* the default workflow token is read-only and cannot approve pull requests;
+* no webhook and no deploy key.
+
+**New required check.** The ruleset "Default branch protection" also requires *Developer Certificate of Origin* (added 2026-11-13, after the check passed a signed-off pull request and failed an unsigned one). The rest of the ruleset is unchanged: no deletion, no force push, pull requests with resolved conversations, the six CI jobs, administrator bypass.
+
+**Release path.** The `release` environment still requires the owner's approval for every deployment. The approval of a release run's build jobs is the owner's to give in the GitHub interface; this session's automation was not allowed to give it. `RELEASE_PUBLISHING` is set only for an authorized private candidate run and unset afterwards (MISSION_REPORT.md, "Mission 15").
+
+**GitHub Apps.** Unchanged. The CLI token cannot list or change GitHub App installations (GitHub answers that this needs a GitHub App user token), so every scope change is the owner's (*Settings → Applications → Installed GitHub Apps → Configure → Repository access*). The table in "Mission 14 review" still applies. Recommended scopes:
+
+| App | Keep on | Remove from |
+|---|---|---|
+| Cloudflare Workers and Pages | RChefo/ExploitX-Web (it builds and deploys the website) | RChefo/ExploitX (it does nothing there, and holds administration write access) |
+| Vercel, Render, Wasmer | Only the repositories they deploy | Both ExploitX repositories (unused here; administration, workflow or environment write access) |
+| Cursor, Claude | The repositories the owner works on with them | Either ExploitX repository the owner does not use them on (they hold workflow write access) |
+| Mintlify, Netlify | Only where used | Both ExploitX repositories (unused here) |
+
+**The website repository (private).** Its Actions allow only the two actions its workflow uses, SHA-pinned, and Dependabot alerts and security updates are on. CI now also runs actionlint. Rulesets and required checks need GitHub Pro for a private repository, so its DCO check reports without blocking. The built site is public; the build emits no source maps, and preview builds go to Cloudflare, not to a public artifact.
+
 ## Keeping it this way
 
 * Never commit credentials, signing keys or `.env` files. Push protection and gitleaks catch the common formats, not all of them.

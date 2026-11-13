@@ -2,7 +2,15 @@
 
 **Audit date:** 2026-11-13 (Mission 12), on the default branch after commit `8e309ca`, ExploitX 0.1.0. **This is an engineering audit, not legal advice.** It records what each component declares and what was verified by hand, and it lists what remains open.
 
-**ExploitX's own license:** none selected yet ([LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)). Compatibility below is assessed against the candidates there; it is not final until the owner selects one.
+**ExploitX's own license:** **Apache-2.0**, approved by the owner and applied in Mission 15 ([LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)). It covers the project's own files only; everything below keeps its own license.
+
+> **Mission 15 (2026-11-13): re-verified under Apache-2.0.**
+> * **Unchanged inventory:** 649 Rust crates (436 compiled into the Windows or Linux app) and 226 npm packages (103 bundled into the interface). The website has 231 packages (8 bundled).
+> * **No restricted or unlicensed component remains in project-owned source:** no Commons Clause component, no unlicensed one. The only copied code is the four MIT components under `src/components/vendor/`, which declare `SPDX-License-Identifier: MIT`. The FIRST CVSS table declares BSD-2-Clause, and the data catalogs keep their licenses (`scripts/license-assets.json`).
+> * **Apache-2.0 is not applied to third-party code:** `scripts/licenses.mjs check` requires each source file to declare the license of its entry, and fails otherwise.
+> * **Fonts and icons are unchanged:** IBM Plex Sans, JetBrains Mono and Archivo (OFL-1.1), Lucide (ISC). Project assets (application icons, the brand folder, the favicon, screenshots) are the project's own, under Apache-2.0; the ExploitX name and logos are not licensed for other uses (NOTICE).
+> * **Exceptions:** none in the app. The website keeps two, GSAP and `@gsap/react`, reviewed 2026-11-13 and due 2027-05-13.
+> * **The AppImage's native libraries** are re-verified per release ([DISTRIBUTION_LICENSE_COMPLIANCE.md](DISTRIBUTION_LICENSE_COMPLIANCE.md)).
 
 > **Mission 14 (2026-11-13): remediation.** The findings below are the Mission 12 audit; Mission 14 resolved most of them. The "Unresolved issues" table at the end has the current status of each.
 > * The React Bits components (app) were replaced by original code (`src/components/ui/NavTree.tsx`, `AnimatedNumber.tsx`); `motion` was removed. The website's React Bits and Ink Orbit components were replaced in RChefo/ExploitX-Web.
@@ -213,10 +221,10 @@ Settings > About shows where it is. CI fails when it is out of date, and the rel
 
 | # | Issue | Severity | Owner of the decision | Status after Mission 14 |
 |---|---|---|---|---|
-| 1 | No project license is selected; the repository's code is not open-source licensed | High | Owner ([LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)) | **Open:** Apache-2.0 recommended; awaiting the owner's approval of one exact license |
+| 1 | No project license is selected; the repository's code is not open-source licensed | High | Owner ([LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)) | **Resolved (Mission 15):** Apache-2.0 approved and applied to both repositories, contributions under the DCO |
 | 2 | React Bits components (5 files) are under MIT + Commons Clause: not open source; they block a repository-wide OSI license unless replaced or excluded | High | Owner (replace recommended) | **Resolved:** replaced by original components in both repositories |
 | 3 | The website's Ink Orbit component has no license | High (website) | Owner: replace or obtain permission | **Resolved:** replaced (`EvidenceFlow`, RChefo/ExploitX-Web) |
-| 4 | The AppImage bundles LGPL libraries and GPL-2.0-or-later `libjbig` without a source offer | High before public AppImage distribution | Owner; possibly legal advice | **Implemented, unproven in a real release:** copyright files in the AppImage, source packages published with each release, release fails on a gap. Whether this fully meets each license, and the `libjbig` question, remain for legal review ([DISTRIBUTION_LICENSE_COMPLIANCE.md](DISTRIBUTION_LICENSE_COMPLIANCE.md)) |
+| 4 | The AppImage bundles LGPL libraries and GPL-2.0-or-later `libjbig` without a source offer | High before public AppImage distribution | Owner; possibly legal advice | **Owner's decision (Mission 15): keep `libjbig` and the TIFF loader, ship notices and source; the release verifies source versions and checksums.** Earlier status: copyright files in the AppImage, source packages published with each release, release fails on a gap. Whether this fully meets each license, and the `libjbig` question, remain for legal review ([DISTRIBUTION_LICENSE_COMPLIANCE.md](DISTRIBUTION_LICENSE_COMPLIANCE.md)) |
 | 5 | Installers do not ship third-party license texts and NOTICE contents | Medium before a public release | Engineering, in the next candidate | **Resolved in the tree:** every package carries `THIRD_PARTY_LICENSES.txt`, verified in locally built debug packages of all five formats. The next candidate is the first release build with it |
 | 6 | Lightswind's MIT is declared only in npm metadata, without a license file or copyright line | Low | Engineering: ask the author, or replace | Open (unchanged) |
 | 7 | The app icons' authorship is not recorded | Low | Owner: confirm | Open: owner to confirm (the ExploitX icons of Mission 13 are original work of the project) |

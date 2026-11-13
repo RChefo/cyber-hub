@@ -13,6 +13,8 @@
 | Local Git configuration (`user.email`) | The personal address; **left unchanged**, because the replacement could not be verified |
 | Dependabot's commits | Use Dependabot's own `noreply` address |
 
+**Re-checked in Mission 15 (2026-11-13):** unchanged. The token still has no `user` scope (the email API answers 404), so the noreply address is still unverified and the local configuration was not changed.
+
 ## What cannot be changed
 
 Removing the address from existing commits would mean rewriting the public history: new commit IDs for every commit, broken links to commits, release tags and pull requests, and every clone diverging. That is not done (and is not allowed without the owner's explicit decision). The addresses in published commits stay visible; the steps below stop new ones.
