@@ -6,6 +6,7 @@ import { useQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
 import { sidebarCollapsed, useNarrowWindow } from "@/lib/viewport";
 import BranchedMenu from "@/components/vendor/reactbits/BranchedMenu";
+import { BrandSymbol, Logo } from "@/components/brand/Logo";
 import { NAV_GROUPS, SETTINGS_ITEM, type NavItem, type PageId } from "./routes";
 import { useApp } from "./store";
 
@@ -66,11 +67,12 @@ export function Sidebar() {
       aria-label="Primary navigation"
     >
       <div {...dragRegion()} className={cn("flex h-14 items-center gap-2.5 px-4", collapsed && "justify-center px-0")}>
-        <img src="/logo.svg" alt="" className="size-7 rounded-[7px]" />
-        {!collapsed && (
-          <div className="leading-tight">
-            <div className="text-[14.5px] font-semibold tracking-tight">Cyber Hub</div>
-            <div className="text-[11.5px] text-muted">Security workstation</div>
+        {collapsed ? (
+          <BrandSymbol height={22} label="ExploitX" className="text-bone" />
+        ) : (
+          <div className="flex flex-col gap-[5px]">
+            <Logo capHeight={12.5} className="text-bone" />
+            <div className="text-[11px] tracking-[0.01em] text-muted">Security research platform</div>
           </div>
         )}
       </div>
@@ -114,9 +116,9 @@ export function Sidebar() {
             defaultOpen={NAV_GROUPS.map((_, i) => i)}
             value={route.page}
             onSelect={(id) => navigate(id as PageId)}
-            color="#e8ebf0"
-            accentColor="#6aa1ff"
-            lineColor="#2a303b"
+            color="#eceef4"
+            accentColor="#9a8cff"
+            lineColor="#2a2d3b"
             width={228}
             rowHeight={32}
             indent={34}

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Minimal privileges for the Cyber Hub main window. App commands are validated in Rust; the web view gets no core plugin defaults, no shell, no filesystem and no dialog access (file pickers and confirmations are opened by the backend). Only: opening http(s) links, and moving/minimizing/maximizing/closing the frameless window (plus listening to its resize events to keep the maximize/restore control in sync).",
+  "description": "Minimal privileges for the ExploitX main window. App commands are validated in Rust; the web view gets no core plugin defaults, no shell, no filesystem and no dialog access (file pickers and confirmations are opened by the backend). Only: opening http(s) links, and moving/minimizing/maximizing/closing the frameless window (plus listening to its resize events to keep the maximize/restore control in sync).",
   "windows": ["main"],
   "permissions": [
     "core:window:allow-start-dragging",

@@ -4,7 +4,7 @@
 //! like `assessment.rs`.
 //!
 //! A client never marks an ASVS requirement compliant: that is the analyst's call, made in
-//! Cyber Hub. Values from logs and files (event fields, matched bytes) pass through the
+//! ExploitX. Values from logs and files (event fields, matched bytes) pass through the
 //! credential redaction before they leave the app.
 
 use rusqlite::{params, Connection, OptionalExtension};
@@ -112,7 +112,7 @@ pub fn risk_view(c: &Connection, project_id: i64) -> AppResult<Value> {
         "acceptances": crate::workspace::risk::list(c, project_id)?,
         "summary": crate::workspace::risk::summary(c, project_id)?,
         "acceptedWithoutRecord": crate::workspace::risk::uncovered_findings(c, project_id)?.into_iter().map(|(id, title)| json!({ "findingId": id, "title": title })).collect::<Vec<_>>(),
-        "note": "An accepted risk is not remediated: it stays a risk, accepted by its owner until the expiry. An exception does not make an ASVS requirement compliant or a WSTG test passed. Only the analyst records, renews or revokes an acceptance, in Cyber Hub.",
+        "note": "An accepted risk is not remediated: it stays a risk, accepted by its owner until the expiry. An exception does not make an ASVS requirement compliant or a WSTG test passed. Only the analyst records, renews or revokes an acceptance, in ExploitX.",
     });
     redact_value(&mut v);
     Ok(v)
@@ -216,7 +216,7 @@ pub fn asvs_view(c: &Connection, q: &AsvsQuery) -> AppResult<Value> {
         "projectId": q.project_id,
         "assessment": v.summary,
         "returned": items.len(),
-        "note": "A requirement is compliant only when the analyst marked it so in Cyber Hub; a requirement without a status is not assessed, whatever the findings. Mappings are the analyst's own: ASVS 5.0.0 publishes none.",
+        "note": "A requirement is compliant only when the analyst marked it so in ExploitX; a requirement without a status is not assessed, whatever the findings. Mappings are the analyst's own: ASVS 5.0.0 publishes none.",
         "requirements": items,
         "recentChanges": v.history.iter().take(20).collect::<Vec<_>>(),
         "attribution": attribution,
@@ -240,7 +240,7 @@ pub fn describe_asvs_set(c: &Connection, a: &AsvsSet) -> AppResult<(String, Vec<
     crate::commands::projects::refuse_archived_for_clients(c, a.project_id)?;
     assessment_of(c, a.project_id, a.assessment_id)?;
     if a.status == "compliant" {
-        return Err(validation("Only the analyst marks a requirement compliant, in Cyber Hub; a client can set not_assessed, non_compliant, needs_review or not_applicable"));
+        return Err(validation("Only the analyst marks a requirement compliant, in ExploitX; a client can set not_assessed, non_compliant, needs_review or not_applicable"));
     }
     if !asvs::STATUSES.contains(&a.status.as_str()) {
         return Err(validation("status must be not_assessed, non_compliant, needs_review or not_applicable"));

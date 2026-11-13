@@ -1,4 +1,4 @@
-//! YAML documents read into JSON values, for the files Cyber Hub analyzes (API definitions,
+//! YAML documents read into JSON values, for the files ExploitX analyzes (API definitions,
 //! Kubernetes manifests, Compose files).
 //!
 //! The input is untrusted:

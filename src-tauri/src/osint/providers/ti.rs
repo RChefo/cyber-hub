@@ -1,5 +1,5 @@
 //! Threat intelligence (VirusTotal, AbuseIPDB, OTX, URLhaus, MalwareBazaar, ThreatFox, Shodan)
-//! through Cyber Hub's existing integration, and NVD records for vulnerabilities. Keys, caching,
+//! through ExploitX's existing integration, and NVD records for vulnerabilities. Keys, caching,
 //! provider enablement and rate limits are those of the existing integration; this module only
 //! maps its normalized reports to entities and relationships.
 

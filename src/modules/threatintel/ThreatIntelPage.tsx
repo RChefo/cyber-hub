@@ -132,7 +132,7 @@ function SummaryStrip({ summary }: { summary: TiSummary }) {
       </div>
       <p className="flex items-start gap-1.5 text-[12px] text-muted">
         <Info className="mt-0.5 size-3.5 shrink-0" />
-        Each provider's verdict is shown in its own terms. Cyber Hub only groups providers by what they reported; it does not compute a combined score. AbuseIPDB, OTX and VirusTotal buckets are explained on each card.
+        Each provider's verdict is shown in its own terms. ExploitX only groups providers by what they reported; it does not compute a combined score. AbuseIPDB, OTX and VirusTotal buckets are explained on each card.
       </p>
     </div>
   );

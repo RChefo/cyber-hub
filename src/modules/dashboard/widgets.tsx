@@ -615,7 +615,7 @@ export function SystemWidget() {
   if (!runtime || !system) {
     return (
       <Panel title="System" className="h-full">
-        <EmptyBlock compact icon={Cpu} title="Desktop runtime not connected" description="System information is read locally by the Cyber Hub backend." />
+        <EmptyBlock compact icon={Cpu} title="Desktop runtime not connected" description="System information is read locally by the ExploitX backend." />
       </Panel>
     );
   }
@@ -627,7 +627,7 @@ export function SystemWidget() {
     ["Architecture", system.arch],
     ["CPU", `${system.cpuBrand} · ${system.cpuCores} threads`],
     ["Uptime", formatDuration(system.uptimeSecs)],
-    ["Cyber Hub", `v${system.appVersion} · schema ${system.dbSchemaVersion}`],
+    ["ExploitX", `v${system.appVersion} · schema ${system.dbSchemaVersion}`],
   ];
   return (
     <Panel title="System" description="Read locally, never sent anywhere" className="h-full">

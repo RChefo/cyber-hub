@@ -21,7 +21,7 @@ async function call<R>(cmd: string, args?: Record<string, unknown>): Promise<R> 
   if (!runtimeAvailable()) {
     throw new IpcError({
       kind: "runtime",
-      message: "The desktop runtime is not available. Start Cyber Hub with `npm run tauri dev`.",
+      message: "The desktop runtime is not available. Start ExploitX with `npm run tauri dev`.",
     });
   }
   try {

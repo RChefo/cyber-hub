@@ -52,7 +52,7 @@ export function InstallDialog({ tool, recipe, isOpen, onOpenChange }: { tool: To
       size="lg"
       isDismissable={!running}
       title={`Install ${tool.name} with ${recipe.manager}`}
-      description={execId === null ? "Cyber Hub will run exactly this command with your user account. Review it before continuing." : undefined}
+      description={execId === null ? "ExploitX will run exactly this command with your user account. Review it before continuing." : undefined}
       footer={
         execId === null ? (
           <>

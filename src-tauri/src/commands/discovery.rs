@@ -294,7 +294,7 @@ pub async fn discovery_http_start(app: AppHandle, db: State<'_, Db>, state: Stat
         return Err(AppError::Conflict("A discovery is already running for this project".into()));
     }
     let project_name: String = db.with(|c| Ok(c.query_row("SELECT name FROM projects WHERE id = ?1", params![project_id], |r| r.get(0))?))?;
-    let text = format!("Project: {project_name}\n\nCyber Hub will send {}", http_description(&hosts));
+    let text = format!("Project: {project_name}\n\nExploitX will send {}", http_description(&hosts));
     if !crate::confirm::native(&app, "Confirm attack surface check", text, "Check hosts").await {
         return Err(AppError::Cancelled("The check was cancelled in the confirmation dialog".into()));
     }

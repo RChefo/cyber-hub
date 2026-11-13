@@ -144,7 +144,7 @@ async fn probe(cred: Cred, key: &str) -> Result<Option<String>, String> {
 }
 
 fn usage() -> &'static str {
-    "cyberhub-keys — developer-only credential provisioning for Cyber Hub
+    "cyberhub-keys — developer-only credential provisioning for ExploitX
 
 USAGE
   cyberhub-keys status                  Show which credentials are configured (never their values)
@@ -345,7 +345,7 @@ mod tests {
 
     #[test]
     fn parses_the_secrets_file_format() {
-        let text = "# Cyber Hub credentials\nvirustotal = \"aaaa\"\n\nshodan=bbbb\nabuseipdb =\n";
+        let text = "# ExploitX credentials\nvirustotal = \"aaaa\"\n\nshodan=bbbb\nabuseipdb =\n";
         let v = parse_secrets(text).unwrap();
         assert_eq!(v, vec![(Cred::Ti(KeyId::Virustotal), "aaaa".to_string()), (Cred::Ti(KeyId::Shodan), "bbbb".to_string())]);
         assert!(parse_secrets("nope = x").unwrap_err().contains("unknown credential id"));

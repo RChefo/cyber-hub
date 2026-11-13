@@ -5,7 +5,7 @@ import { invalidate } from "@/lib/query";
 import { restoreNotice } from "@/modules/settings/restore";
 import { useApp } from "./store";
 
-/** One notice with the result of a restore applied when Cyber Hub started (restore.rs). */
+/** One notice with the result of a restore applied when ExploitX started (restore.rs). */
 export function RestoreNotice() {
   const { runtime } = useApp();
   useEffect(() => {

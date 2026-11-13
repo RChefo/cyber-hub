@@ -1,6 +1,6 @@
 name: Release
 
-# Builds, signs and publishes a Cyber Hub release together with its update manifest (latest.json).
+# Builds, signs and publishes an ExploitX release together with its update manifest (latest.json).
 #
 # - Runs only for a pushed version tag (vMAJOR.MINOR.PATCH) or a manual run naming an existing tag;
 #   never for pull requests, so untrusted code never sees the signing secrets.
@@ -339,10 +339,10 @@ jobs:
           if [ -n "$CANDIDATE" ]; then
             # a release candidate is a pre-release: never the "latest" release the update feed names
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --prerelease --verify-tag \
-              --title "Cyber Hub $VERSION, release candidate $CANDIDATE" --notes-file notes.md assets/*
+              --title "ExploitX $VERSION, release candidate $CANDIDATE" --notes-file notes.md assets/*
           else
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
-              --title "Cyber Hub $VERSION" --notes-file notes.md assets/*
+              --title "ExploitX $VERSION" --notes-file notes.md assets/*
           fi
           expected=$(find assets -maxdepth 1 -type f -printf '%f\n' | sort)
           actual=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)

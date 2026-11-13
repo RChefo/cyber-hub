@@ -206,7 +206,7 @@ function WorkflowEditor({ draft, onClose, projectId, nodes }: { draft: Draft | n
       </Dropdown>
       <div className="panel-inset flex flex-col gap-2 px-3 py-3">
         <SwitchInput
-          label="Run on a schedule while Cyber Hub is open"
+          label="Run on a schedule while ExploitX is open"
           isSelected={d.scheduled}
           onChange={(v) => setD({ ...d, scheduled: v })}
           description={active ? "Only workflows without steps that contact targets can be scheduled." : "Scheduled runs need no confirmation because they only use passive steps."}

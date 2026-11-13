@@ -113,7 +113,7 @@ pub async fn taxii_auth_prompt(app: AppHandle, id: i64) -> AppResult<bool> {
     }
     let host = url::Url::parse(&s.discovery_url).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_default();
     let (what, user_label) = if s.auth == "basic" { ("the password", Some("User name")) } else { ("the API key", None) };
-    let message = format!("Type {what} for the TAXII server “{}” ({host}). Cyber Hub stores it in this computer's credential store and sends it only to this server.{}", s.name, if s.auth == "header" { format!(" It goes in the {} header.", s.header_name) } else { String::new() });
+    let message = format!("Type {what} for the TAXII server “{}” ({host}). ExploitX stores it in this computer's credential store and sends it only to this server.{}", s.name, if s.auth == "header" { format!(" It goes in the {} header.", s.header_name) } else { String::new() });
     let handle = app.clone();
     // Windows' dialog always has a user name field: for an API key it shows the header's name
     let user = if s.auth == "basic" { s.username.clone() } else { s.header_name.clone() };
@@ -190,7 +190,7 @@ fn client_for(s: &Server) -> AppResult<taxii::Client> {
 
 async fn confirm(app: &AppHandle, s: &Server, what: &str) -> AppResult<()> {
     let host = url::Url::parse(&s.discovery_url).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_default();
-    let ok = crate::confirm::native(app, "Connect to a TAXII server", format!("Cyber Hub will connect to {host} ({}) to {what}.\n\nOnly this server is contacted, over HTTPS{}. Continue?", s.discovery_url, if s.auth == "none" { "" } else { ", with its stored credential" }), "Connect").await;
+    let ok = crate::confirm::native(app, "Connect to a TAXII server", format!("ExploitX will connect to {host} ({}) to {what}.\n\nOnly this server is contacted, over HTTPS{}. Continue?", s.discovery_url, if s.auth == "none" { "" } else { ", with its stored credential" }), "Connect").await;
     if ok {
         Ok(())
     } else {

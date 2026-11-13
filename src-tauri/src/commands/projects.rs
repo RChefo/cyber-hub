@@ -930,7 +930,7 @@ pub fn refuse_archived_for_clients(c: &Connection, project_id: i64) -> AppResult
     let status: Option<String> = c.query_row("SELECT status FROM projects WHERE id = ?1", params![project_id], |r| r.get(0)).optional()?;
     match status.as_deref() {
         None => Err(AppError::NotFound(format!("project {project_id}"))),
-        Some("archived") => Err(validation(format!("Project #{project_id} is archived (kept for reference), so MCP clients cannot change it. Set another status in Cyber Hub first"))),
+        Some("archived") => Err(validation(format!("Project #{project_id} is archived (kept for reference), so MCP clients cannot change it. Set another status in ExploitX first"))),
         Some(_) => Ok(()),
     }
 }

@@ -57,7 +57,7 @@ export const SEVERITY_META: Record<Severity, { label: string; className: string 
   critical: { label: "Critical", className: "bg-sev-critical/15 text-[#f2878a]" },
   high: { label: "High", className: "bg-sev-high/15 text-[#f6a473]" },
   medium: { label: "Medium", className: "bg-sev-medium/15 text-[#f5d987]" },
-  low: { label: "Low", className: "bg-sev-low/15 text-[#8fb6ff]" },
+  low: { label: "Low", className: "bg-sev-low/15 text-[#93c1ff]" },
   info: { label: "Info", className: "bg-white/5 text-muted" },
 };
 

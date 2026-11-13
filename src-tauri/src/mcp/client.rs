@@ -1,5 +1,5 @@
 //! Bridge client used by the `cyberhub-mcp` process. Connects lazily, verifies that the peer
-//! is the real Cyber Hub app (mutual HMAC), multiplexes concurrent requests and reconnects
+//! is the real ExploitX app (mutual HMAC), multiplexes concurrent requests and reconnects
 //! after the app restarts.
 
 use std::collections::HashMap;
@@ -34,7 +34,7 @@ pub struct BridgeClient {
 pub fn not_running() -> ErrorBody {
     ErrorBody {
         kind: "unavailable".into(),
-        message: "Cyber Hub is not running or MCP is turned off. Start Cyber Hub and turn on MCP on its MCP page.".into(),
+        message: "ExploitX is not running or MCP is turned off. Start ExploitX and turn on MCP on its MCP page.".into(),
     }
 }
 
@@ -60,13 +60,13 @@ impl BridgeClient {
         let key = std::fs::read_to_string(dir.join(proto::KEY_FILE)).map_err(|_| not_running())?;
         let key = key.trim().as_bytes().to_vec();
         if info.protocol != PROTOCOL {
-            return Err(ErrorBody { kind: "unavailable".into(), message: "Cyber Hub uses a different bridge protocol; update cyberhub-mcp to match the app.".into() });
+            return Err(ErrorBody { kind: "unavailable".into(), message: "ExploitX uses a different bridge protocol; update cyberhub-mcp to match the app.".into() });
         }
         let stream = tokio::time::timeout(Duration::from_secs(3), TcpStream::connect(("127.0.0.1", info.port))).await.map_err(|_| not_running())?.map_err(|_| not_running())?;
         let _ = stream.set_nodelay(true);
         let (rd, mut wr) = stream.into_split();
         let mut rd = BufReader::new(rd);
-        let auth_failed = || ErrorBody { kind: "unavailable".into(), message: "could not authenticate the Cyber Hub app; restart Cyber Hub and try again".into() };
+        let auth_failed = || ErrorBody { kind: "unavailable".into(), message: "could not authenticate the ExploitX app; restart ExploitX and try again".into() };
 
         let hello: Hello = match tokio::time::timeout(Duration::from_secs(5), proto::read_frame(&mut rd, 4096)).await {
             Ok(Ok(Some(l))) => serde_json::from_str(&l).map_err(|_| auth_failed())?,
@@ -154,14 +154,14 @@ impl BridgeClient {
                 (Some(v), None) => Ok(v),
                 (None, None) => Ok(Value::Null),
             },
-            Ok(Err(_)) => Err(ErrorBody { kind: "unavailable".into(), message: "Cyber Hub closed the connection.".into() }),
+            Ok(Err(_)) => Err(ErrorBody { kind: "unavailable".into(), message: "ExploitX closed the connection.".into() }),
             Err(_) => {
                 if let Some(c) = self.conn.lock().await.as_ref() {
                     if let Ok(mut m) = c.pending.lock() {
                         m.remove(&id);
                     }
                 }
-                Err(ErrorBody { kind: "timeout".into(), message: format!("Cyber Hub did not answer within {} s.", timeout.as_secs()) })
+                Err(ErrorBody { kind: "timeout".into(), message: format!("ExploitX did not answer within {} s.", timeout.as_secs()) })
             }
         }
     }

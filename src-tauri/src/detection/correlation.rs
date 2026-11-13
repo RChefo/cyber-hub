@@ -6,7 +6,7 @@
 //!   `lte`, `eq`, `neq`, two of them for a range), `generate`, and chains (a correlation that
 //!   refers to another correlation).
 //! * Refused with the reason: `value_percentile` (the specification does not say how the
-//!   percentile is computed, so Cyber Hub does not guess), and anything malformed.
+//!   percentile is computed, so ExploitX does not guess), and anything malformed.
 //! * Windows slide: they are not cut at clock boundaries, as the specification recommends. In each
 //!   group a window starts at each matching event and covers the timespan after it; a match is a
 //!   window whose count, distinct count, sum or average satisfies the condition, and the next
@@ -163,7 +163,7 @@ pub fn timespan(s: &str) -> Result<i64, String> {
     };
     let secs = n.checked_mul(mult).filter(|v| *v > 0).ok_or_else(|| format!("The timespan '{s}' must be greater than zero"))?;
     if secs > MAX_TIMESPAN {
-        return Err(format!("The timespan '{s}' is longer than Cyber Hub's limit of 31 days"));
+        return Err(format!("The timespan '{s}' is longer than ExploitX's limit of 31 days"));
     }
     Ok(secs)
 }
@@ -185,7 +185,7 @@ pub fn parse(doc: &serde_json::Map<String, Value>) -> (Option<Correlation>, Vec<
     }
     let kind = match o.get("type").and_then(Value::as_str).map(str::trim) {
         Some("value_percentile") => {
-            issues.push(("unsupported", "value_percentile correlations: the specification does not define how the percentile is computed, so Cyber Hub does not evaluate them".into()));
+            issues.push(("unsupported", "value_percentile correlations: the specification does not define how the percentile is computed, so ExploitX does not evaluate them".into()));
             None
         }
         Some(t) => match Kind::parse(t) {
@@ -287,7 +287,7 @@ pub fn parse(doc: &serde_json::Map<String, Value>) -> (Option<Correlation>, Vec<
             fields.clear();
         }
         if k == Kind::TemporalOrdered && !condition.is_empty() {
-            issues.push(("warning", "Cyber Hub requires every rule of a temporal_ordered correlation, in order; its condition is not used".into()));
+            issues.push(("warning", "ExploitX requires every rule of a temporal_ordered correlation, in order; its condition is not used".into()));
             condition.clear();
         }
     }

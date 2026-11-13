@@ -166,7 +166,7 @@ rule Demo_Dropper : dropper
 {
     meta:
         description = "Dropper strings of the demo sample"
-        author = "Cyber Hub tests"
+        author = "ExploitX tests"
         severity = "high"
         mitre_attack = "T1105"
     strings:

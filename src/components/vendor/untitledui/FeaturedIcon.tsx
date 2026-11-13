@@ -1,7 +1,7 @@
 // Adapted from Untitled UI React (https://www.untitledui.com/react/components, MIT; see THIRD_PARTY_NOTICES.md) —
 // components/foundations/featured-icon/featured-icon.tsx, "modern" and "light" themes.
 // Changes: Untitled UI color tokens are mapped onto HeroUI theme tokens so the icon
-// follows the Cyber Hub design system; unused themes (gradient, dark, outline, modern-neue) removed.
+// follows the ExploitX design system; unused themes (gradient, dark, outline, modern-neue) removed.
 import { isValidElement, type FC, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 

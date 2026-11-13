@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { exportSvg, xmlEscape } from "./exporters";
+import { THEME } from "./style";
 import type { GraphEdge, GraphGroup, GraphNode, Positions, Verification } from "./types";
 
 const node = (id: string, label: string, extra: Partial<GraphNode> = {}): GraphNode => ({
@@ -88,7 +89,7 @@ describe("exportSvg", () => {
     expect(count(svg, "marker-end=")).toBe(2);
     expect(count(svg, "<marker ")).toBe(2); // observed grey + disputed warning colour
     expect(svg).toContain('stroke-dasharray="6 4"'); // inferred
-    expect(svg).toContain('stroke="#e0a43a"'); // disputed uses the warning colour
+    expect(svg).toContain(`stroke="${THEME.warning}"`); // disputed uses the warning colour
     expect(svg).toContain('stroke-linecap="round"'); // dotted
     // Parallel A→B / B→A edges are drawn as curves.
     expect(count(svg, " Q")).toBeGreaterThanOrEqual(2);
@@ -151,7 +152,7 @@ describe("exportSvg", () => {
     const pos: Positions = new Map(states.map((_, i) => [`s${i}`, { x: i * 100, y: 0 }]));
     const svg = exportSvg(ns, [], pos);
     expect(count(svg, 'class="node-body"')).toBe(5);
-    expect(svg).toContain('stroke="#3fb68b"'); // verified ring
+    expect(svg).toContain(`stroke="${THEME.success}"`); // verified ring
     expect(svg).toContain('fill-opacity="0.4"'); // rejected body
   });
 });

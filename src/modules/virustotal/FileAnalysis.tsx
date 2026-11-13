@@ -216,7 +216,7 @@ export function FileAnalysis({ hasKey }: { hasKey: boolean }) {
             compact
             icon={FileUp}
             title="No file selected"
-            description="Pick a file with the system file picker. Cyber Hub never modifies or deletes it."
+            description="Pick a file with the system file picker. ExploitX never modifies or deletes it."
             action={
               <Button size="sm" variant="primary" onPress={pick} isPending={picking}>
                 <FolderOpen className="size-3.5" />

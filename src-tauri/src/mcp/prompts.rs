@@ -1,4 +1,4 @@
-//! Built-in MCP prompts. They guide an AI client through Cyber Hub's tools and always require
+//! Built-in MCP prompts. They guide an AI client through ExploitX's tools and always require
 //! working inside an authorized project scope. None of them encourages testing anything the
 //! user is not authorized to test.
 
@@ -12,9 +12,9 @@ pub struct PromptSpec {
 }
 
 const RULES: &str = "Rules you must follow:\n\
-- Only act inside the authorized scope stored in Cyber Hub. Read it with cyberhub_get_project_scope and check targets with cyberhub_validate_target before planning anything.\n\
+- Only act inside the authorized scope stored in ExploitX. Read it with cyberhub_get_project_scope and check targets with cyberhub_validate_target before planning anything.\n\
 - If a target is out of scope, excluded, or the project is not active, stop and tell the user. Never try to work around scope checks.\n\
-- Preview every run with cyberhub_preview_run and explain it before calling cyberhub_run_tool. The user approves runs in Cyber Hub; never claim an approval you did not receive.\n\
+- Preview every run with cyberhub_preview_run and explain it before calling cyberhub_run_tool. The user approves runs in ExploitX; never claim an approval you did not receive.\n\
 - Prefer the least intrusive option and conservative rates. Do not run denial-of-service, brute-force or exploitation tooling unless the rules of engagement explicitly allow it.\n\
 - Report provider verdicts in each provider's own terms; never invent a combined score.";
 
@@ -22,9 +22,9 @@ pub static PROMPTS: &[PromptSpec] = &[
     PromptSpec {
         name: "network_reconnaissance",
         title: "Network reconnaissance",
-        description: "Plan and run authorized network discovery for a Cyber Hub project.",
-        arguments: &[("project_id", "Cyber Hub project ID", true), ("focus", "Optional focus, e.g. 'web ports' or a subnet inside scope", false)],
-        template: "Perform authorized network reconnaissance for Cyber Hub project {project_id}. Focus: {focus}.\n\n\
+        description: "Plan and run authorized network discovery for an ExploitX project.",
+        arguments: &[("project_id", "ExploitX project ID", true), ("focus", "Optional focus, e.g. 'web ports' or a subnet inside scope", false)],
+        template: "Perform authorized network reconnaissance for ExploitX project {project_id}. Focus: {focus}.\n\n\
 Steps: 1) cyberhub_get_project_scope and summarize what is in scope and excluded. 2) cyberhub_list_tools with installed_only=true to see what is available. \
 3) Propose a minimal plan (e.g. host discovery, then a limited service scan) and validate every target with cyberhub_validate_target. \
 4) For each step, call cyberhub_preview_run, show the plan to the user, then cyberhub_run_tool. 5) Follow with cyberhub_get_run_status / cyberhub_get_run_output and summarize results. \
@@ -33,9 +33,9 @@ Steps: 1) cyberhub_get_project_scope and summarize what is in scope and excluded
     PromptSpec {
         name: "web_application_assessment",
         title: "Web application assessment",
-        description: "Assess an in-scope web application with Cyber Hub's catalog tools.",
-        arguments: &[("project_id", "Cyber Hub project ID", true), ("url", "Base URL of the application (must be in scope)", true)],
-        template: "Assess the web application {url} for Cyber Hub project {project_id}.\n\n\
+        description: "Assess an in-scope web application with ExploitX's catalog tools.",
+        arguments: &[("project_id", "ExploitX project ID", true), ("url", "Base URL of the application (must be in scope)", true)],
+        template: "Assess the web application {url} for ExploitX project {project_id}.\n\n\
 First confirm {url} is in scope with cyberhub_validate_target. Check which web tools are installed (cyberhub_list_tools, category web). \
 Start with passive and low-impact checks (headers, technology fingerprinting, content discovery with small wordlists and low rates). \
 Preview each run, explain it, and only then request it. Record confirmed issues as findings with evidence references: \
@@ -47,11 +47,11 @@ project's OWASP WSTG checklist current (cyberhub_get_checklist, cyberhub_set_che
         title: "Threat intelligence investigation",
         description: "Investigate an indicator across the configured intelligence providers.",
         arguments: &[("indicator", "IP address, domain, URL or hash", true)],
-        template: "Investigate the indicator {indicator} with Cyber Hub.\n\n\
+        template: "Investigate the indicator {indicator} with ExploitX.\n\n\
 1) cyberhub_list_supported_providers to see which providers are configured. 2) cyberhub_threat_intel_lookup for {indicator}. \
 3) Summarize which providers have records, their verdicts in their own words, scores with their scales, malware families, categories and first/last seen dates, with the source link for each. \
 4) Look at related indicators and ask the user before pivoting to any of them. 5) Offer to save the indicator (cyberhub_save_indicator) or export a report (cyberhub_export_report). \
-Do not combine provider scores into one number. Lookups send the indicator to external services; the user may need to approve them in Cyber Hub.",
+Do not combine provider scores into one number. Lookups send the indicator to external services; the user may need to approve them in ExploitX.",
     },
     PromptSpec {
         name: "malware_hash_investigation",
@@ -61,14 +61,14 @@ Do not combine provider scores into one number. Lookups send the indicator to ex
         template: "Investigate the file hash {hash}.\n\n\
 Use cyberhub_vt_get_report for a cached result, then cyberhub_vt_lookup_hash and cyberhub_threat_intel_lookup (MalwareBazaar, ThreatFox, URLhaus, OTX). \
 Summarize detections, malware family names per provider, first/last seen, and related URLs or hosts. \
-Never upload a file unless the user explicitly asks for it; uploads are public submissions and require the user to pick the file and confirm in Cyber Hub.",
+Never upload a file unless the user explicitly asks for it; uploads are public submissions and require the user to pick the file and confirm in ExploitX.",
     },
     PromptSpec {
         name: "vulnerability_assessment",
         title: "Vulnerability assessment",
         description: "Relate discovered services to known vulnerabilities for a project.",
-        arguments: &[("project_id", "Cyber Hub project ID", true), ("product", "Optional product or CPE keyword to research", false)],
-        template: "Assess known vulnerabilities for Cyber Hub project {project_id} (product focus: {product}).\n\n\
+        arguments: &[("project_id", "ExploitX project ID", true), ("product", "Optional product or CPE keyword to research", false)],
+        template: "Assess known vulnerabilities for ExploitX project {project_id} (product focus: {product}).\n\n\
 Review recent runs (cyberhub_list_runs, cyberhub_get_run_output) for identified services and versions. Search vulnerabilities with cyberhub_search_vulnerabilities \
 (local cache first; live NVD searches may need approval) and read details with cyberhub_get_vulnerability_details. \
 Prioritize by CVSS and the CISA KEV flag, and state clearly when a version match is uncertain. Only verify vulnerabilities actively if the rules of engagement allow it.\n\n{rules}",
@@ -77,11 +77,11 @@ Prioritize by CVSS and the CISA KEV flag, and state clearly when a version match
         name: "security_report_generation",
         title: "Security report generation",
         description: "Draft an assessment report from a project's scope, findings and runs.",
-        arguments: &[("project_id", "Cyber Hub project ID", true)],
-        template: "Prepare a security assessment report for Cyber Hub project {project_id}.\n\n\
+        arguments: &[("project_id", "ExploitX project ID", true)],
+        template: "Prepare a security assessment report for ExploitX project {project_id}.\n\n\
 Use cyberhub_generate_report for the base report, cyberhub_list_findings for details, cyberhub_list_runs / cyberhub_get_run_details for evidence \
 and cyberhub_get_checklist for the testing coverage. \
-Write an executive summary, a findings table sorted by severity, and remediation guidance. Only state facts supported by Cyber Hub data. \
+Write an executive summary, a findings table sorted by severity, and remediation guidance. Only state facts supported by ExploitX data. \
 Saving the report to a file (cyberhub_export_report) asks the user to approve and choose a location.
 
 {rules}",

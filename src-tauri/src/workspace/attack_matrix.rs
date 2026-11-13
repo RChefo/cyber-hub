@@ -380,7 +380,7 @@ pub fn parse_layer(bytes: &[u8]) -> Result<ParsedLayer, String> {
         out.warnings.push("The layer names no domain; it was read as ATT&CK Enterprise".into());
         attack::ENTERPRISE
     } else {
-        attack::parse_domain(&named).ok_or_else(|| format!("Unknown layer domain '{}' (Cyber Hub reads enterprise-attack, mobile-attack and ics-attack)", cut(&named, 40)))?
+        attack::parse_domain(&named).ok_or_else(|| format!("Unknown layer domain '{}' (ExploitX reads enterprise-attack, mobile-attack and ics-attack)", cut(&named, 40)))?
     };
     out.domain = domain.into();
     let catalog = attack::catalog_for(domain).unwrap_or_else(attack::catalog);
@@ -396,7 +396,7 @@ pub fn parse_layer(bytes: &[u8]) -> Result<ParsedLayer, String> {
     }
     let catalog_major = attack_major_of(domain);
     if !out.attack_version.is_empty() && out.attack_version.split('.').next() != Some(catalog_major.as_str()) {
-        out.warnings.push(format!("The layer was made for ATT&CK v{}; Cyber Hub's {} catalog is v{}", out.attack_version, attack::domain_label(domain), catalog.version));
+        out.warnings.push(format!("The layer was made for ATT&CK v{}; ExploitX's {} catalog is v{}", out.attack_version, attack::domain_label(domain), catalog.version));
     }
     out.name = cut(&text(obj.get("name").unwrap_or(&Value::Null)), 200);
     out.description = cut(&text(obj.get("description").unwrap_or(&Value::Null)), 2000);
@@ -559,17 +559,17 @@ pub fn export_coverage_layer(generated: &str, m: &Matrix) -> Result<String, Stri
         return Err("No enabled detection rule maps to an ATT&CK technique".into());
     }
     let doc = json!({
-        "name": "Cyber Hub detection coverage",
+        "name": "ExploitX detection coverage",
         "versions": { "attack": attack_major_of(&m.domain), "layer": "4.5", "navigator": NAVIGATOR },
         "domain": m.domain,
-        "description": format!("Techniques with enabled Sigma rules in Cyber Hub's detection library, exported on {generated} with ATT&CK {} v{}. Score: number of rules; dark green: every rule passed its tests. Coverage says what could be detected, not what was observed.", attack::domain_label(&m.domain), m.attack_version),
+        "description": format!("Techniques with enabled Sigma rules in ExploitX's detection library, exported on {generated} with ATT&CK {} v{}. Score: number of rules; dark green: every rule passed its tests. Coverage says what could be detected, not what was observed.", attack::domain_label(&m.domain), m.attack_version),
         "sorting": 3,
         "layout": { "layout": "side", "showID": true, "showName": true, "expandedSubtechniques": "annotated" },
         "hideDisabled": false,
         "techniques": techniques,
         "gradient": { "colors": ["#ffffff", "#31a354"], "minValue": 0, "maxValue": most },
         "legendItems": [{ "label": "All rules tested", "color": "#31a354" }, { "label": "Not all rules tested", "color": "#c7e9c0" }],
-        "metadata": [{ "name": "Source", "value": "Cyber Hub detection library" }, { "name": "Exported", "value": generated }],
+        "metadata": [{ "name": "Source", "value": "ExploitX detection library" }, { "name": "Exported", "value": generated }],
         "showTacticRowBackground": false,
         "selectTechniquesAcrossTactics": true,
         "selectSubtechniquesWithParent": false,
@@ -618,7 +618,7 @@ pub fn export_layer(project: &str, generated: &str, m: &Matrix) -> Result<String
         "versions": { "attack": attack_major_of(&m.domain), "layer": "4.5", "navigator": NAVIGATOR },
         "domain": m.domain,
         "description": format!(
-            "Techniques of {project}, exported by Cyber Hub on {generated} with ATT&CK {} v{}. Color: the analyst's assessment (confirmed, hypothesis, ruled out); techniques only named by findings are leads, not confirmed activity. Score: how many findings name a technique. Ruled-out techniques are disabled.",
+            "Techniques of {project}, exported by ExploitX on {generated} with ATT&CK {} v{}. Color: the analyst's assessment (confirmed, hypothesis, ruled out); techniques only named by findings are leads, not confirmed activity. Score: how many findings name a technique. Ruled-out techniques are disabled.",
             attack::domain_label(&m.domain),
             m.attack_version
         ),
@@ -628,7 +628,7 @@ pub fn export_layer(project: &str, generated: &str, m: &Matrix) -> Result<String
         "techniques": techniques,
         "gradient": { "colors": ["#ffffff", "#66b1ff"], "minValue": 0, "maxValue": most },
         "legendItems": legend,
-        "metadata": [{ "name": "Project", "value": project }, { "name": "Exported", "value": generated }, { "name": "Source", "value": "Cyber Hub" }, { "name": "ATT&CK catalog", "value": format!("{} v{} ({})", attack::domain_label(&m.domain), m.attack_version, m.attack_modified) }],
+        "metadata": [{ "name": "Project", "value": project }, { "name": "Exported", "value": generated }, { "name": "Source", "value": "ExploitX" }, { "name": "ATT&CK catalog", "value": format!("{} v{} ({})", attack::domain_label(&m.domain), m.attack_version, m.attack_modified) }],
         "showTacticRowBackground": false,
         "selectTechniquesAcrossTactics": true,
         "selectSubtechniquesWithParent": false,

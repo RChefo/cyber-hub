@@ -3,7 +3,7 @@
 // src-tauri/binaries/cyberhub-mcp-<target triple>[.exe] for manual use.
 //
 // The installers do not take the staged copy: `cyberhub-mcp` is a `[[bin]]` of the app crate, and
-// the Tauri bundler ships every binary of the crate next to the Cyber Hub executable (declaring it
+// the Tauri bundler ships every binary of the crate next to the ExploitX executable (declaring it
 // again in bundle.externalBin put the same file into the MSI twice, which WiX refuses):
 //   Windows  <install dir>\cyberhub-mcp.exe
 //   Linux    /usr/bin/cyberhub-mcp (deb, rpm), usr/bin inside the AppImage
@@ -43,7 +43,7 @@ const hostTriple = (() => {
 })();
 const triple = argTarget || process.env.TAURI_ENV_TARGET_TRIPLE || hostTriple;
 if (!/^[a-z0-9_]+(-[a-z0-9_.]+){2,3}$/.test(triple)) throw new Error(`build-sidecar: unexpected target triple ${triple}`);
-if (triple.includes("apple-darwin")) throw new Error("build-sidecar: macOS is not a supported platform for Cyber Hub");
+if (triple.includes("apple-darwin")) throw new Error("build-sidecar: macOS is not a supported platform for ExploitX");
 
 const ext = triple.includes("windows") ? ".exe" : "";
 const profile = debug ? "debug" : "release";

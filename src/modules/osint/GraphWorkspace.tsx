@@ -586,9 +586,9 @@ export function GraphWorkspace({
                 else void exportData(key as ExportFormat);
               }}
             >
-              <Dropdown.Item id="json" textValue="Cyber Hub graph (JSON)">
+              <Dropdown.Item id="json" textValue="ExploitX graph (JSON)">
                 <div className="flex flex-col">
-                  <span>Cyber Hub graph (JSON)</span>
+                  <span>ExploitX graph (JSON)</span>
                   <span className="text-[12px] text-muted">Complete: entities, relationships, evidence, layout. Re-importable.</span>
                 </div>
               </Dropdown.Item>
@@ -812,7 +812,7 @@ export function GraphWorkspace({
       {state.warning && <p className="rounded-lg bg-warning-soft px-3 py-2 text-[12.5px] text-warning-soft-foreground">{state.warning}</p>}
 
       {/* canvas */}
-      <div ref={wrapRef} className={cn("relative overflow-hidden rounded-[14px] bg-[#0b0d10]", focusMode ? "min-h-0 flex-1" : "h-[calc(100vh-250px)] min-h-[520px]")}>
+      <div ref={wrapRef} className={cn("relative overflow-hidden rounded-[14px] bg-background", focusMode ? "min-h-0 flex-1" : "h-[calc(100vh-250px)] min-h-[520px]")}>
         {visible.nodes.length === 0 ? (
           <div className="flex h-full items-center justify-center p-6">
             <EmptyBlock
@@ -867,7 +867,7 @@ export function GraphWorkspace({
                 .sort((a, b) => b[1] - a[1])
                 .map(([t, n]) => (
                   <li key={t} className="flex items-center gap-2">
-                    <span className="inline-flex size-4 items-center justify-center rounded-full text-[8px] font-semibold text-[#0b0d10]" style={{ backgroundColor: typeStyle(t).color }}>
+                    <span className="inline-flex size-4 items-center justify-center rounded-full text-[8px] font-semibold text-[#0a0b10]" style={{ backgroundColor: typeStyle(t).color }}>
                       {typeStyle(t).glyph}
                     </span>
                     <span className="flex-1 truncate">{registry.entityTypeLabel(t)}</span>
@@ -879,19 +879,19 @@ export function GraphWorkspace({
             <ul className="flex flex-col gap-1 text-muted">
               <li className="flex items-center gap-2">
                 <svg width="28" height="6" aria-hidden>
-                  <line x1="0" y1="3" x2="28" y2="3" stroke="#e8ebf0" strokeWidth="2" />
+                  <line x1="0" y1="3" x2="28" y2="3" stroke="#eceef4" strokeWidth="2" />
                 </svg>
                 Verified
               </li>
               <li className="flex items-center gap-2">
                 <svg width="28" height="6" aria-hidden>
-                  <line x1="0" y1="3" x2="28" y2="3" stroke="#e8ebf0" strokeOpacity="0.62" strokeWidth="1.5" />
+                  <line x1="0" y1="3" x2="28" y2="3" stroke="#eceef4" strokeOpacity="0.62" strokeWidth="1.5" />
                 </svg>
                 Observed
               </li>
               <li className="flex items-center gap-2">
                 <svg width="28" height="6" aria-hidden>
-                  <line x1="0" y1="3" x2="28" y2="3" stroke="#e8ebf0" strokeOpacity="0.62" strokeWidth="1.5" strokeDasharray="6 4" />
+                  <line x1="0" y1="3" x2="28" y2="3" stroke="#eceef4" strokeOpacity="0.62" strokeWidth="1.5" strokeDasharray="6 4" />
                 </svg>
                 Inferred (needs review)
               </li>

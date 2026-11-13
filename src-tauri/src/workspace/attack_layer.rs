@@ -98,7 +98,7 @@ pub fn layer(project: &str, generated: &str, findings: &[Finding]) -> Result<Str
     used.sort_unstable();
     let legend: Vec<Value> = used.iter().map(|i| json!({ "label": format!("Highest severity: {}", SEVERITIES[*i].1), "color": SEVERITIES[*i].2 })).collect();
     let description = format!(
-        "ATT&CK techniques named by {named} {} of {project}, exported by Cyber Hub on {generated}. Color: the highest severity of a technique's findings; score: how many findings name it.{}",
+        "ATT&CK techniques named by {named} {} of {project}, exported by ExploitX on {generated}. Color: the highest severity of a technique's findings; score: how many findings name it.{}",
         if named == 1 { "finding" } else { "findings" },
         match skipped {
             0 => String::new(),
@@ -120,7 +120,7 @@ pub fn layer(project: &str, generated: &str, findings: &[Finding]) -> Result<Str
         "techniques": techniques,
         "gradient": { "colors": ["#ffffff", "#66b1ff"], "minValue": 0, "maxValue": most },
         "legendItems": legend,
-        "metadata": [{ "name": "Project", "value": project }, { "name": "Exported", "value": generated }, { "name": "Source", "value": "Cyber Hub" }],
+        "metadata": [{ "name": "Project", "value": project }, { "name": "Exported", "value": generated }, { "name": "Source", "value": "ExploitX" }],
         "showTacticRowBackground": false,
         "selectTechniquesAcrossTactics": true,
         "selectSubtechniquesWithParent": false,

@@ -1,5 +1,5 @@
 //! Workflow definitions: an ordered list of predefined steps with validated parameters. There is
-//! no scripting: every step type is implemented in Cyber Hub and goes through the same scope
+//! no scripting: every step type is implemented in ExploitX and goes through the same scope
 //! gate, confirmations and limits as the matching manual action. The executor lives in
 //! `commands::workflows`.
 
@@ -143,7 +143,7 @@ pub const NODES: &[NodeSpec] = &[
     NodeSpec {
         kind: "await_result",
         label: "Wait for a recorded result",
-        description: "Waits until you record a result in the project with the chosen capability, then continues. Cyber Hub never runs that capability itself: you choose the file, and confirm anything that contacts a service.",
+        description: "Waits until you record a result in the project with the chosen capability, then continues. ExploitX never runs that capability itself: you choose the file, and confirm anything that contacts a service.",
         active: false,
         retryable: false,
         default_timeout: 3600,
@@ -375,7 +375,7 @@ pub fn templates() -> Vec<Template> {
             description: "A quick service scan of the given targets, then a saved report.",
             definition: Definition { steps: vec![step("service_scan", json!({ "targets": [], "profile": "quick" })), step("save_report", json!({}))] },
         },
-        // investigation playbooks: the analyst does what needs a file or a confirmation, Cyber Hub
+        // investigation playbooks: the analyst does what needs a file or a confirmation, ExploitX
         // waits for the result, then correlates, verifies and reports
         Template {
             id: "playbook-suspicious-file",

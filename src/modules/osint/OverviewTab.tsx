@@ -252,7 +252,7 @@ function OperationsPanel() {
             compact
             icon={Lightbulb}
             title="No collection yet"
-            description="Query a public source about the target, or import data Cyber Hub already holds."
+            description="Query a public source about the target, or import data ExploitX already holds."
             action={
               <Button size="sm" variant="primary" onPress={() => goTab("sources")}>
                 Collect data

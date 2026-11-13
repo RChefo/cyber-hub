@@ -82,7 +82,7 @@ export function ReportView({ result, onRefresh, refreshing }: { result: VtLookup
           title="VirusTotal has no record of this indicator"
           description={
             result.kind === "url"
-              ? "It has never been analysed. Cyber Hub does not submit URLs for scanning, so no analysis is started."
+              ? "It has never been analysed. ExploitX does not submit URLs for scanning, so no analysis is started."
               : result.kind === "file"
                 ? "It has never been analysed. A hash lookup never uploads anything; a file is submitted only from File analysis after you confirm it."
                 : "VirusTotal has no information about it yet."

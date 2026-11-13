@@ -82,7 +82,7 @@ function Overview({ s, clients, onTab, toggle, toggling }: { s: McpStatus; clien
         <EmptyBlock
           icon={PlugZap}
           title="MCP is off"
-          description="Turn it on to let AI clients such as Claude Code use Cyber Hub. Cyber Hub then listens on this computer only. Clients never see your API keys, and you approve every sensitive request."
+          description="Turn it on to let AI clients such as Claude Code use ExploitX. ExploitX then listens on this computer only. Clients never see your API keys, and you approve every sensitive request."
           action={
             <Button variant="primary" onPress={() => toggle(true)} isDisabled={toggling}>
               Turn on MCP
@@ -456,11 +456,11 @@ function ActivityView({ clients, policy, projects }: { clients: McpClientRow[]; 
 /* ───────────────────────── connect ───────────────────────── */
 
 const TROUBLESHOOTING: [string, string][] = [
-  ["Tools return “Cyber Hub is not running or MCP is turned off”", "Start Cyber Hub and turn on MCP at the top of this page."],
-  ["“could not authenticate the Cyber Hub app”", "Restart Cyber Hub (it writes a new key) and make sure cyberhub-mcp comes from the same build as the app."],
+  ["Tools return “ExploitX is not running or MCP is turned off”", "Start ExploitX and turn on MCP at the top of this page."],
+  ["“could not authenticate the ExploitX app”", "Restart ExploitX (it writes a new key) and make sure cyberhub-mcp comes from the same build as the app."],
   ["A tool returns awaiting_approval", "Decide in the Approval Center; the client can poll cyberhub_get_approval_status."],
   ["“… is turned off for MCP clients”", "That category is set to Block under Permissions."],
-  ["“Arguments that refer to local files … are not accepted”", "Pass targets directly, or start file-based runs in Cyber Hub."],
+  ["“Arguments that refer to local files … are not accepted”", "Pass targets directly, or start file-based runs in ExploitX."],
   ["Nothing appears under Activity", "The client did not reach the app: check the first row, then the client's own MCP log."],
 ];
 
@@ -474,7 +474,7 @@ function ConnectView({ s }: { s: McpStatus }) {
 
   return (
     <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
-      <Panel title="Server executable" description="MCP clients start this program; it talks to Cyber Hub over the local bridge and holds no credentials." className="2xl:col-span-2">
+      <Panel title="Server executable" description="MCP clients start this program; it talks to ExploitX over the local bridge and holds no credentials." className="2xl:col-span-2">
         {s.serverPath ? (
           <div className="flex min-w-0 items-center gap-2 rounded-lg bg-white/[0.025] px-3 py-2">
             <code className="min-w-0 flex-1 truncate font-mono text-[12.5px]" data-selectable title={s.serverPath}>
@@ -483,7 +483,7 @@ function ConnectView({ s }: { s: McpStatus }) {
             <CopyButton text={s.serverPath} label="Copy path" />
           </div>
         ) : (
-          <p className="text-[12.5px] text-warning-soft-foreground">{s.serverPathNote ?? "cyberhub-mcp was not found next to the Cyber Hub executable."} The setup commands appear here once it exists.</p>
+          <p className="text-[12.5px] text-warning-soft-foreground">{s.serverPathNote ?? "cyberhub-mcp was not found next to the ExploitX executable."} The setup commands appear here once it exists.</p>
         )}
         {s.serverPath && s.serverPathNote && <p className="mt-2 text-[12.5px] text-warning-soft-foreground">{s.serverPathNote}</p>}
         {!s.enabled && <p className="mt-2 text-[12.5px] text-muted">MCP is off. Clients can be configured now, but their calls are refused until you turn it on.</p>}
@@ -493,7 +493,7 @@ function ConnectView({ s }: { s: McpStatus }) {
       {s.serverPath && !cfg && !error && <LoadingRows rows={3} />}
       {cfg && (
         <>
-          <Panel title="Claude Code" description="Run this once in a terminal. It adds Cyber Hub for your user, in every project.">
+          <Panel title="Claude Code" description="Run this once in a terminal. It adds ExploitX for your user, in every project.">
             <CodeBlock code={cfg.claudeCodeCommand} actions={<CopyButton text={cfg.claudeCodeCommand} label="Copy command" />} />
             <p className="mt-3 mb-1.5 text-[12.5px] text-muted">
               Or add it to a project's <code>.mcp.json</code>:
@@ -591,7 +591,7 @@ export default function McpPage() {
     <div>
       <PageHeader
         title="MCP"
-        description="Let AI clients such as Claude Code and Claude Desktop use Cyber Hub through the Model Context Protocol. They work inside your projects' scope, never see your API keys, and every sensitive request waits for you."
+        description="Let AI clients such as Claude Code and Claude Desktop use ExploitX through the Model Context Protocol. They work inside your projects' scope, never see your API keys, and every sensitive request waits for you."
         actions={
           s && (
             <Switch size="sm" isSelected={s.enabled} isDisabled={!runtime || toggling} onChange={toggle} aria-label="Allow MCP clients">
@@ -610,7 +610,7 @@ export default function McpPage() {
         }
       />
 
-      {!runtime && <EmptyBlock icon={Bot} title="MCP is managed by the Cyber Hub desktop app" description="Open Cyber Hub itself to manage AI client access." />}
+      {!runtime && <EmptyBlock icon={Bot} title="MCP is managed by the ExploitX desktop app" description="Open ExploitX itself to manage AI client access." />}
       {runtime && status.error && <ErrorBlock message={status.error} onRetry={status.reload} />}
       {runtime && !s && !status.error && <LoadingRows rows={6} />}
 

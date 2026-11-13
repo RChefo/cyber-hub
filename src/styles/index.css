@@ -5,14 +5,17 @@
 @import "@fontsource/ibm-plex-sans/500.css";
 @import "@fontsource/ibm-plex-sans/600.css";
 @import "@fontsource-variable/jetbrains-mono/index.css";
+@import "@fontsource-variable/archivo/wdth.css";
+@import "../../design/brand/tokens.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Cyber Hub design tokens.
- * HeroUI establishes the design system; we only override its dark-theme variables
- * so every HeroUI component (and the vendored components that read the same
- * tokens) inherits the Cyber Hub palette.
+ * ExploitX theme. The brand's values live in design/brand/tokens.css (--ex-*), generated from
+ * design/brand/build/tokens.mjs and shared with the website. HeroUI establishes the design
+ * system; we only map its dark-theme variables onto those tokens, so every HeroUI component
+ * (and the vendored components that read the same variables) inherits the ExploitX palette.
+ * docs/brand/DESIGN_SYSTEM.md explains every token and where it is used.
  */
 @layer theme {
   .dark,
@@ -21,74 +24,76 @@
 
     /*
      * Border-free layering: separation comes from background tiers + soft shadows.
-     *   page #0b0d10 < sidebar/inset #101318 < card #15181f < raised #1b1f27 < #222732
+     *   page < sidebar/inset < card (surface) < raised < tertiary
      */
-    --background: #0b0d10;
-    --foreground: #e8ebf0;
+    --background: var(--ex-background);
+    --foreground: var(--ex-text);
 
-    --surface: #15181f;
+    --surface: var(--ex-surface);
     --surface-foreground: var(--foreground);
-    --surface-secondary: #1b1f27;
+    --surface-secondary: var(--ex-surface-raised);
     --surface-secondary-foreground: var(--foreground);
-    --surface-tertiary: #222732;
+    --surface-tertiary: var(--ex-surface-tertiary);
     --surface-tertiary-foreground: var(--foreground);
 
-    --overlay: #1a1e26;
+    --overlay: var(--ex-overlay);
     --overlay-foreground: var(--foreground);
 
-    --muted: #8a93a3;
+    --muted: var(--ex-text-muted);
 
-    --default: #1f242e;
-    --default-foreground: #dfe3ea;
+    --default: var(--ex-control);
+    --default-foreground: #e2e5ee;
 
-    --accent: #4c8dff;
+    /* Solid fills use Ultraviolet 600 (white text 4.9:1); the brand's 500 marks focus. */
+    --accent: var(--ex-uv-600);
     --accent-foreground: #ffffff;
-    --success: #3fb68b;
+    --success: var(--ex-success);
     --success-foreground: #06140f;
-    --warning: #e0a43a;
+    --warning: var(--ex-warning);
     --warning-foreground: #1a1203;
-    --danger: #e5484d;
+    --danger: var(--ex-error);
     --danger-foreground: #ffffff;
 
     /* Fields are told apart by a lighter fill, not a stroke. Focus and invalid states
        still draw a border (field-border-focus / field-border-invalid) for accessibility. */
-    --field-background: #1e222b;
+    --field-background: var(--ex-field);
     --field-foreground: var(--foreground);
-    --field-placeholder: #6b7383;
+    --field-placeholder: var(--ex-text-faint);
     --field-border: transparent;
     --field-border-width: 1px;
 
-    --segment: #2a303c;
+    --segment: #2a2e3e;
     --segment-foreground: var(--foreground);
 
     /* No decorative container strokes anywhere: the border tokens are transparent so every
-       `border-border` (HeroUI, vendored and Cyber Hub components) disappears while layout
+       `border-border` (HeroUI, vendored and ExploitX components) disappears while layout
        metrics stay identical. Row dividers inside lists use --separator. */
-    --border: transparent;
-    --separator: rgba(255, 255, 255, 0.05);
-    --focus: var(--accent);
-    --link: #8fb6ff;
-    --backdrop: rgba(4, 6, 10, 0.72);
+    --border: var(--ex-border);
+    --separator: var(--ex-separator);
+    --focus: var(--ex-uv-500);
+    --link: var(--ex-uv-400);
+    --backdrop: rgba(4, 5, 10, 0.74);
 
-    --surface-hover: #1c2028;
-    --background-secondary: #101318;
-    --background-tertiary: #13161c;
+    --surface-hover: var(--ex-surface-hover);
+    --background-secondary: var(--ex-background-secondary);
+    --background-tertiary: var(--ex-background-tertiary);
 
-    --default-hover: #262c38;
-    --accent-hover: #6aa1ff;
-    --success-hover: #4cc79a;
-    --warning-hover: #ebb14d;
+    --default-hover: var(--ex-control-hover);
+    /* deeper on hover keeps white text above 4.5:1 */
+    --accent-hover: #5e4bea;
+    --success-hover: #4fd39d;
+    --warning-hover: #efb54f;
     --danger-hover: #ee5c61;
 
-    --accent-soft: rgba(76, 141, 255, 0.13);
-    --accent-soft-foreground: #8fb6ff;
-    --accent-soft-hover: rgba(76, 141, 255, 0.2);
-    --success-soft: rgba(63, 182, 139, 0.13);
-    --success-soft-foreground: #6fd1ad;
-    --success-soft-hover: rgba(63, 182, 139, 0.2);
-    --warning-soft: rgba(224, 164, 58, 0.13);
-    --warning-soft-foreground: #f0c06d;
-    --warning-soft-hover: rgba(224, 164, 58, 0.2);
+    --accent-soft: rgba(124, 106, 255, 0.14);
+    --accent-soft-foreground: var(--ex-uv-300);
+    --accent-soft-hover: rgba(124, 106, 255, 0.22);
+    --success-soft: rgba(60, 200, 143, 0.13);
+    --success-soft-foreground: #74dbb0;
+    --success-soft-hover: rgba(60, 200, 143, 0.2);
+    --warning-soft: rgba(232, 169, 58, 0.13);
+    --warning-soft-foreground: #f2c46f;
+    --warning-soft-hover: rgba(232, 169, 58, 0.2);
     --danger-soft: rgba(229, 72, 77, 0.13);
     --danger-soft-foreground: #f2878a;
     --danger-soft-hover: rgba(229, 72, 77, 0.2);
@@ -100,8 +105,8 @@
     --separator-secondary: rgba(255, 255, 255, 0.07);
     --separator-tertiary: rgba(255, 255, 255, 0.09);
 
-    --surface-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.35), 0 10px 28px -14px rgba(0, 0, 0, 0.6);
-    --overlay-shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.45), 0 22px 56px -12px rgba(0, 0, 0, 0.8);
+    --surface-shadow: var(--ex-shadow-surface);
+    --overlay-shadow: var(--ex-shadow-overlay);
     --field-shadow: none;
 
     --radius: 0.5rem;
@@ -114,13 +119,23 @@
 @theme {
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", Consolas, monospace;
+  /* Archivo: page titles, key numbers and brand moments (docs/brand/VISUAL_IDENTITY.md) */
+  --font-display: "Archivo Variable", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
 
-  /* Severity scale used by findings and CVSS. Muted, not neon. */
-  --color-sev-critical: #d93d4a;
-  --color-sev-high: #f07a32;
-  --color-sev-medium: #f2cc60;
-  --color-sev-low: #4c8dff;
-  --color-sev-info: #8a93a3;
+  /* Severity scale used by findings and CVSS. Always shown with its name, never by colour alone. */
+  --color-sev-critical: #e5484d;
+  --color-sev-high: #f2803a;
+  --color-sev-medium: #f2c94c;
+  --color-sev-low: #4c9bff;
+  --color-sev-info: #9aa3b5;
+
+  /* Brand colours for utilities (text-uv-300, bg-signal, ...) */
+  --color-uv-300: #b4a9ff;
+  --color-uv-400: #9a8cff;
+  --color-uv-500: #7c6aff;
+  --color-uv-600: #6a57f5;
+  --color-bone: #f2f4f7;
+  --color-signal: #c8f03c;
 }
 
 /* Bridge for vendored shadcn / EvilCharts components that expect the shadcn token name. */
@@ -153,10 +168,16 @@
     user-select: text;
   }
   ::selection {
-    background: rgba(76, 141, 255, 0.35);
+    background: rgba(124, 106, 255, 0.38);
   }
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+  /* Display type (Archivo, slightly wide): page titles and key figures. */
+  .font-display {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 106;
+    letter-spacing: -0.01em;
   }
 }
 

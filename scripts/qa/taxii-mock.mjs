@@ -2,7 +2,7 @@
 //
 //   node scripts/qa/taxii-mock.mjs [--port 18556] [--log taxii-mock.log]
 //
-// Listens on 127.0.0.1 only. Debug builds of Cyber Hub accept plain HTTP to 127.0.0.1 for TAXII
+// Listens on 127.0.0.1 only. Debug builds of ExploitX accept plain HTTP to 127.0.0.1 for TAXII
 // (release builds require HTTPS), so this is for a development build started with an isolated data
 // folder. It accepts only the throwaway credentials below, never a real one:
 //   HTTP Basic   user qa-analyst, password QA-only-not-a-real-secret-7f3a

@@ -4,7 +4,7 @@
 
 `src-tauri/src/cvss/v4_lookup.rs` contains the macrovector lookup table of FIRST's CVSS v4.0 calculator. It was generated from `cvss_lookup.js` of <https://github.com/FIRSTdotorg/cvss-v4-calculator>, which is identical to the table in Red Hat's `cvss40.js`. The scoring code in `src-tauri/src/cvss/mod.rs` follows the reference calculator's algorithm and the maximal-vector tables `MAX_COMPOSED` and `MAX_SEVERITY`.
 
-CVSS is owned by FIRST and used by permission. Cyber Hub always shows a CVSS score together with its vector.
+CVSS is owned by FIRST and used by permission. ExploitX always shows a CVSS score together with its vector.
 
 ```
 Copyright (c) 2023 FIRST.ORG, Inc., Red Hat, and contributors
@@ -87,7 +87,7 @@ AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION 
 OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-**React Bits.** The React Bits files may be used and distributed only as part of an application, website or product. Their license forbids selling, sublicensing or redistributing the components themselves. They are therefore **not covered by any license Cyber Hub adopts for its own code**; see `docs/governance/THIRD_PARTY_LICENSE_AUDIT.md`. The license, as published in the React Bits repository (retrieved 2026-11-13):
+**React Bits.** The React Bits files may be used and distributed only as part of an application, website or product. Their license forbids selling, sublicensing or redistributing the components themselves. They are therefore **not covered by any license ExploitX adopts for its own code**; see `docs/governance/THIRD_PARTY_LICENSE_AUDIT.md`. The license, as published in the React Bits repository (retrieved 2026-11-13):
 
 ```
 MIT + Commons Clause License Condition v1.0
@@ -125,6 +125,7 @@ SOFTWARE.
 
 * **IBM Plex Sans** (`@fontsource/ibm-plex-sans`): Copyright 2019 IBM Corp. All rights reserved. SIL Open Font License 1.1.
 * **JetBrains Mono** (`@fontsource-variable/jetbrains-mono`): Copyright 2020 The JetBrains Mono Project Authors (<https://github.com/JetBrains/JetBrainsMono>). SIL Open Font License 1.1.
+* **Archivo** (`@fontsource-variable/archivo`, Mission 13): Copyright 2020 The Archivo Project Authors (<https://github.com/Omnibus-Type/Archivo>). SIL Open Font License 1.1. The letters "Exploit" of the ExploitX wordmark are Archivo SemiBold outlines converted to paths (`design/brand/build/wordmark.json`); the OFL allows using the font's glyphs in a logo. The wordmark's X and the symbol are original drawings.
 * **Lucide icons** (`lucide-react`): ISC License, below.
 * **Apache ECharts** (`echarts`): Apache License 2.0. Its NOTICE file reads: "Apache ECharts. Copyright 2017-2026 The Apache Software Foundation. This product includes software developed at The Apache Software Foundation (https://www.apache.org/)."
 
@@ -178,7 +179,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-**SIL Open Font License 1.1** (IBM Plex Sans, JetBrains Mono):
+**SIL Open Font License 1.1** (IBM Plex Sans, JetBrains Mono, Archivo):
 
 ```
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007

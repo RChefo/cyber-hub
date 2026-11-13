@@ -2,7 +2,7 @@
 //! observations; nothing is written to the investigation until the analyst imports them (or
 //! chose automatic import when starting the operation).
 //!
-//! Every provider here uses a real, documented public interface or an existing Cyber Hub
+//! Every provider here uses a real, documented public interface or an existing ExploitX
 //! integration. Providers that need credentials use the owner-provisioned keys through the
 //! existing threat-intelligence pipeline; keys never reach this module's results, the web view
 //! or MCP clients.
@@ -129,7 +129,7 @@ pub const PROVIDERS: &[ProviderInfo] = &[
         id: "threat_intel",
         name: "Threat intelligence providers",
         category: "Threat intelligence",
-        description: "VirusTotal, AbuseIPDB, AlienVault OTX, URLhaus, MalwareBazaar, ThreatFox and Shodan through Cyber Hub's existing integration (owner-provisioned keys, caching, rate limits).",
+        description: "VirusTotal, AbuseIPDB, AlienVault OTX, URLhaus, MalwareBazaar, ThreatFox and Shodan through ExploitX's existing integration (owner-provisioned keys, caching, rate limits).",
         inputs: &[EntityType::Domain, EntityType::Ip, EntityType::Url, EntityType::FileHash],
         uses_threat_intel: true,
         contacts_target: false,

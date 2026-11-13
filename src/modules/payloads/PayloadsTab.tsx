@@ -91,7 +91,7 @@ function PayloadModal({ draft, onClose }: { draft: Draft | null; onClose: () => 
       isOpen={!!draft}
       onOpenChange={(o) => !o && onClose()}
       title={form.id ? "Edit payload" : "Add custom payload"}
-      description="Custom payloads are stored locally in your Cyber Hub database."
+      description="Custom payloads are stored locally in your ExploitX database."
       size="lg"
       footer={
         <>

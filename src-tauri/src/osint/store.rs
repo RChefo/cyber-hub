@@ -1384,7 +1384,7 @@ fn version_snapshot(c: &Connection, version: i64) -> AppResult<(i64, i64, Snapsh
         .ok_or_else(|| AppError::NotFound(format!("version {version}")))?;
     let snap: Snapshot = serde_json::from_str(&text).map_err(|_| AppError::Internal("This version is stored in an unreadable format".into()))?;
     if snap.format != 1 {
-        return Err(validation("This version was saved by an incompatible Cyber Hub version"));
+        return Err(validation("This version was saved by an incompatible ExploitX version"));
     }
     Ok((graph, number, snap))
 }

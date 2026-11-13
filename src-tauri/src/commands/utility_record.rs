@@ -27,12 +27,12 @@ use crate::workspace::{relations, timeline};
 
 /// The utilities whose results can be recorded: (module, what it is called, the tool).
 pub const MODULES: &[(&str, &str, &str)] = &[
-    ("file_triage", "File triage", "Cyber Hub file triage"),
-    ("pcap_triage", "Packet capture triage", "Cyber Hub packet capture triage"),
-    ("log_triage", "Log triage", "Cyber Hub log triage"),
-    ("evtx_triage", "Windows event log triage", "Cyber Hub Windows event log triage"),
-    ("linux_persistence", "Linux persistence triage", "Cyber Hub Linux persistence triage"),
-    ("oauth_review", "OAuth and OpenID Connect review", "Cyber Hub OAuth and OpenID Connect review"),
+    ("file_triage", "File triage", "ExploitX file triage"),
+    ("pcap_triage", "Packet capture triage", "ExploitX packet capture triage"),
+    ("log_triage", "Log triage", "ExploitX log triage"),
+    ("evtx_triage", "Windows event log triage", "ExploitX Windows event log triage"),
+    ("linux_persistence", "Linux persistence triage", "ExploitX Linux persistence triage"),
+    ("oauth_review", "OAuth and OpenID Connect review", "ExploitX OAuth and OpenID Connect review"),
 ];
 /// Files remembered for recording (the oldest is forgotten first).
 const MAX_PICKED: usize = 32;
@@ -283,12 +283,12 @@ mod tests {
             let p = c.last_insert_rowid();
             c.execute("INSERT INTO evidence (project_id, kind, title, source, sha256, size, file_name, created_at) VALUES (?1, 'file', 'File triage: drop.exe', 'utility', ?2, 10, 'drop.exe', 't')", params![p, "a".repeat(64)])?;
             let file = c.last_insert_rowid();
-            let r = write(c, &input(p, vec![finding(p, "Injects code (drop.exe)"), finding(p, "Injects code (drop.exe)")], Some(r#"{"sha256":"aa"}"#)), ("File triage", "Cyber Hub file triage"), Some(((file, true), "drop.exe")))?;
+            let r = write(c, &input(p, vec![finding(p, "Injects code (drop.exe)"), finding(p, "Injects code (drop.exe)")], Some(r#"{"sha256":"aa"}"#)), ("File triage", "ExploitX file triage"), Some(((file, true), "drop.exe")))?;
             assert_eq!((r.created, r.existing, r.evidence_id), (1, 1, Some(file)), "the same title twice is one finding");
             let report = evidence::get(c, r.report_id.unwrap())?;
             assert_eq!((report.kind.as_str(), report.derived_from, report.source_module.as_str()), ("text", Some(file), "file_triage"));
             let f = evidence::get(c, file)?;
-            assert_eq!((f.source_module.as_str(), f.tool.as_str(), f.tool_version.as_str()), ("file_triage", "Cyber Hub file triage", env!("CARGO_PKG_VERSION")));
+            assert_eq!((f.source_module.as_str(), f.tool.as_str(), f.tool_version.as_str()), ("file_triage", "ExploitX file triage", env!("CARGO_PKG_VERSION")));
             let fid: i64 = c.query_row("SELECT id FROM findings WHERE project_id = ?1", params![p], |r| r.get(0))?;
             assert_eq!(crate::workspace::findings::links(c, fid)?.iter().map(|l| (l.kind.as_str(), l.ref_id)).collect::<Vec<_>>(), vec![("evidence", file)]);
             let source: String = c.query_row("SELECT source FROM findings WHERE id = ?1", params![fid], |r| r.get(0))?;
@@ -297,25 +297,25 @@ mod tests {
             assert!(events.iter().any(|e| e.title == "File triage recorded: drop.exe" && e.detail.contains("1 new finding")), "{events:?}");
 
             // recording again adds nothing new, and a pasted result without a file is linked to its report
-            let again = write(c, &input(p, vec![finding(p, "Injects code (drop.exe)")], Some(r#"{"sha256":"aa"}"#)), ("File triage", "Cyber Hub file triage"), Some(((file, false), "drop.exe")))?;
+            let again = write(c, &input(p, vec![finding(p, "Injects code (drop.exe)")], Some(r#"{"sha256":"aa"}"#)), ("File triage", "ExploitX file triage"), Some(((file, false), "drop.exe")))?;
             assert_eq!((again.created, again.existing, again.report_id), (0, 1, r.report_id), "the same analysis is kept once");
             let mut pasted = input(p, vec![finding(p, "Password spraying")], Some("{}"));
             pasted.module = "log_triage".into();
             pasted.subject = "pasted log".into();
-            let r = write(c, &pasted, ("Log triage", "Cyber Hub log triage"), None)?;
+            let r = write(c, &pasted, ("Log triage", "ExploitX log triage"), None)?;
             let fid: i64 = c.query_row("SELECT id FROM findings WHERE title = 'Password spraying'", [], |r| r.get(0))?;
             assert_eq!(crate::workspace::findings::links(c, fid)?.iter().map(|l| l.ref_id).collect::<Vec<_>>(), vec![r.report_id.unwrap()]);
             assert_eq!(evidence::get(c, r.report_id.unwrap())?.derived_from, None);
 
             // a report too large for text evidence is left out and said so
             let big = "x".repeat(evidence::MAX_TEXT + 1);
-            let r = write(c, &input(p, vec![], Some(&big)), ("File triage", "Cyber Hub file triage"), None)?;
+            let r = write(c, &input(p, vec![], Some(&big)), ("File triage", "ExploitX file triage"), None)?;
             assert!(r.report_too_large && r.report_id.is_none());
 
             // archived projects take nothing, and nothing is half-written
             c.execute("UPDATE projects SET status = 'archived' WHERE id = ?1", params![p])?;
             let n: i64 = c.query_row("SELECT COUNT(*) FROM findings", [], |r| r.get(0))?;
-            assert!(write(c, &input(p, vec![finding(p, "New one")], None), ("File triage", "Cyber Hub file triage"), None).is_err());
+            assert!(write(c, &input(p, vec![finding(p, "New one")], None), ("File triage", "ExploitX file triage"), None).is_err());
             assert_eq!(c.query_row("SELECT COUNT(*) FROM findings", [], |r| r.get::<_, i64>(0))?, n);
             Ok(())
         })
@@ -330,7 +330,7 @@ mod tests {
             let p = c.last_insert_rowid();
             let mut bad = finding(p, "Bad severity");
             bad.severity = "apocalyptic".into();
-            assert!(write(c, &input(p, vec![finding(p, "Fine"), bad], Some("{}")), ("File triage", "Cyber Hub file triage"), None).is_err());
+            assert!(write(c, &input(p, vec![finding(p, "Fine"), bad], Some("{}")), ("File triage", "ExploitX file triage"), None).is_err());
             for table in ["findings", "evidence", "timeline_events"] {
                 assert_eq!(c.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get::<_, i64>(0))?, 0, "{table}");
             }

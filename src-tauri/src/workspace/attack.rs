@@ -55,7 +55,7 @@ pub struct Catalog {
 pub const ENTERPRISE: &str = "enterprise-attack";
 pub const MOBILE: &str = "mobile-attack";
 pub const ICS: &str = "ics-attack";
-/// The ATT&CK domains Cyber Hub bundles, in the order they are offered.
+/// The ATT&CK domains ExploitX bundles, in the order they are offered.
 pub const DOMAINS: &[&str] = &[ENTERPRISE, MOBILE, ICS];
 
 static CATALOG: Lazy<Catalog> = Lazy::new(|| serde_json::from_str(include_str!("../../catalog/attack-enterprise.json")).expect("catalog/attack-enterprise.json is invalid"));

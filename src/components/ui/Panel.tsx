@@ -36,7 +36,7 @@ export function PageHeader({ title, description, actions }: { title: string; des
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        <h1 className="text-[22px] font-semibold tracking-tight text-foreground">{title}</h1>
+        <h1 className="font-display text-[23px] font-semibold text-foreground">{title}</h1>
         {description && <p className="mt-1 max-w-[72ch] text-[13.5px] text-muted">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -55,7 +55,7 @@ export function Stat({ label, value, hint, tone = "default" }: { label: string; 
   return (
     <div className="min-w-0">
       <div className="text-[12.5px] text-muted">{label}</div>
-      <div className="tabular mt-1 text-[22px] font-semibold tracking-tight text-foreground">{value}</div>
+      <div className="tabular font-display mt-1 text-[22px] font-semibold text-foreground">{value}</div>
       {hint && <div className={cn("mt-0.5 text-[12px]", toneClass)}>{hint}</div>}
     </div>
   );

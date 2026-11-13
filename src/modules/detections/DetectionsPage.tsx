@@ -138,7 +138,7 @@ export default function DetectionsPage() {
             )}
           </Panel>
           <Collections />
-          <Panel title={`Samples${samples.data ? ` (${samples.data.length})` : ""}`} description="Kept by content hash in Cyber Hub's data folder, to test rules again after every change. Files are only read, never opened or run.">
+          <Panel title={`Samples${samples.data ? ` (${samples.data.length})` : ""}`} description="Kept by content hash in ExploitX's data folder, to test rules again after every change. Files are only read, never opened or run.">
             {(samples.data ?? []).length === 0 ? (
               <span className="text-[12.5px] text-muted">No sample yet: add an EVTX file, a JSON or JSON Lines export or a text log for Sigma rules, or any file for YARA rules.</span>
             ) : (

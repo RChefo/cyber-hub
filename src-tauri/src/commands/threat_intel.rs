@@ -310,7 +310,7 @@ async fn run_provider(db: &Db, vtst: &VtState, tist: &TiState, p: ProviderId, in
         Err(m) => return base_result(p, Status::Error, Some(m)),
     };
     if let Err(wait) = tist.limiters[&p].try_acquire(Instant::now()) {
-        return base_result(p, Status::RateLimited, Some(format!("Cyber Hub limits {} to {}. Try again in {wait} s.", p.name(), tist.limiters[&p].describe())));
+        return base_result(p, Status::RateLimited, Some(format!("ExploitX limits {} to {}. Try again in {wait} s.", p.name(), tist.limiters[&p].describe())));
     }
     let outcome = call(p, &client, &key, ind).await;
     drop(key);
@@ -611,9 +611,9 @@ pub fn markdown(ind: &Indicator, results: &[ProviderResult], generated: &str) ->
     let summary = summarize(results);
     let mut m = String::new();
     m.push_str(&format!("# Threat intelligence report: `{}`\n\n", ind.value.replace('`', "'")));
-    m.push_str(&format!("- Type: {}{}\n- Generated: {generated} by Cyber Hub\n", ind.kind.label(), ind.hash_label().map(|h| format!(" ({h})")).unwrap_or_default()));
+    m.push_str(&format!("- Type: {}{}\n- Generated: {generated} by ExploitX\n", ind.kind.label(), ind.hash_label().map(|h| format!(" ({h})")).unwrap_or_default()));
     m.push_str(&format!("- Summary: {}\n\n", summary_line(&summary)));
-    m.push_str("> Each provider's verdict is reported in its own terms. Cyber Hub does not combine scores from different providers.\n\n");
+    m.push_str("> Each provider's verdict is reported in its own terms. ExploitX does not combine scores from different providers.\n\n");
     for r in results {
         m.push_str(&format!("## {}\n\n", r.provider_name));
         let status = match r.status {

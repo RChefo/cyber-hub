@@ -13,11 +13,11 @@ import { cn, formatRelative } from "@/lib/utils";
 import { approvalLabel, CATEGORY_SHORT, CATEGORY_TONE, formatCountdown, requestTarget, resultMeta, secondsLeft, shortTool } from "./mcpMeta";
 
 const AFTER_APPROVAL: Record<string, string> = {
-  run_tools: "After you approve, Cyber Hub shows its usual system confirmation for this run. Only approve if you are authorized to test these targets.",
-  file_upload: "After you approve, you choose the file in the system file picker, and Cyber Hub asks again before anything is uploaded.",
+  run_tools: "After you approve, ExploitX shows its usual system confirmation for this run. Only approve if you are authorized to test these targets.",
+  file_upload: "After you approve, you choose the file in the system file picker, and ExploitX asks again before anything is uploaded.",
   export: "After you approve, you choose where to save the file in the system save dialog.",
   external_lookup: "Approving sends the values above to the external service.",
-  local_write: "Approving writes this to your local Cyber Hub data.",
+  local_write: "Approving writes this to your local ExploitX data.",
 };
 
 function RequestItem({
@@ -85,7 +85,7 @@ function RequestItem({
 
           {p.checks.length > 0 && (
             <div className="mt-3">
-              <div className="mb-1 text-[12px] font-medium text-muted">Validated by Cyber Hub before reaching you</div>
+              <div className="mb-1 text-[12px] font-medium text-muted">Validated by ExploitX before reaching you</div>
               <ul className="flex flex-col gap-1 text-[12.5px]">
                 {p.checks.map((c) => (
                   <li key={c} className="flex items-start gap-2">
@@ -193,7 +193,7 @@ export function ApprovalCenter({ running, projects }: { running: boolean; projec
     <div className="flex flex-col gap-4">
       <Panel
         title={`Waiting for you${list.length ? ` (${list.length})` : ""}`}
-        description="Requests are validated first; out-of-scope or invalid requests are refused without reaching you. Only you can decide, here in Cyber Hub. Requests expire after 3 minutes and are cancelled if the client disconnects."
+        description="Requests are validated first; out-of-scope or invalid requests are refused without reaching you. Only you can decide, here in ExploitX. Requests expire after 3 minutes and are cancelled if the client disconnects."
       >
         {pending.error && <ErrorBlock message={pending.error} onRetry={pending.reload} />}
         {!pending.data && !pending.error && <LoadingRows rows={2} />}

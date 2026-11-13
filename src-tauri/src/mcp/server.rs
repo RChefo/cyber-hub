@@ -1,7 +1,7 @@
 //! `cyberhub-mcp`: the MCP server (stdio transport, official `rmcp` SDK).
 //!
 //! It holds no credentials and implements no business logic: tool calls and resource reads are
-//! forwarded over the authenticated local bridge to the running Cyber Hub app, which validates
+//! forwarded over the authenticated local bridge to the running ExploitX app, which validates
 //! and executes them with its own services and asks the user for approval where required.
 //! Prompts are static. stdout carries only MCP protocol messages; diagnostics go to stderr.
 
@@ -82,7 +82,7 @@ impl CyberHubServer {
 impl ServerHandler for CyberHubServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_resources().enable_prompts().build())
-            .with_server_info(Implementation::new("cyberhub", env!("CARGO_PKG_VERSION")).with_title("Cyber Hub"))
+            .with_server_info(Implementation::new("cyberhub", env!("CARGO_PKG_VERSION")).with_title("ExploitX"))
             .with_instructions(catalog::SERVER_INSTRUCTIONS)
     }
 
@@ -158,7 +158,7 @@ pub fn main() -> i32 {
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!(
-            "cyberhub-mcp {} — MCP server (stdio) for Cyber Hub\n\nRun by an MCP client such as Claude Code or Claude Desktop. Requires the Cyber Hub app to be running with\nMCP turned on (MCP page in the sidebar). See docs/MCP.md.",
+            "cyberhub-mcp {} — MCP server (stdio) for ExploitX\n\nRun by an MCP client such as Claude Code or Claude Desktop. Requires the ExploitX app to be running with\nMCP turned on (MCP page in the sidebar). See docs/MCP.md.",
             env!("CARGO_PKG_VERSION")
         );
         return 0;

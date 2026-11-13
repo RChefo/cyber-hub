@@ -5,7 +5,7 @@
 //! * A run with steps that contact targets starts only after a native confirmation listing those
 //!   steps and their targets; every step checks the scope again when it runs. Service scans also
 //!   show the execution engine's own confirmation of the exact command.
-//! * Scheduled runs (passive steps only) are started by a background loop while Cyber Hub runs.
+//! * Scheduled runs (passive steps only) are started by a background loop while ExploitX runs.
 //! * State and logs are stored per step; runs interrupted by an exit are marked failed at start.
 
 use std::collections::HashMap;
@@ -398,7 +398,7 @@ pub async fn workflow_run_detail(db: State<'_, Db>, run_id: i64) -> AppResult<wf
     db.with(|c| wf::run_detail(c, run_id))
 }
 
-/// Starts due scheduled workflows every minute while Cyber Hub runs. Only passive workflows can
+/// Starts due scheduled workflows every minute while ExploitX runs. Only passive workflows can
 /// be scheduled; a definition that is no longer valid for a schedule is not run.
 pub fn start_scheduler(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
@@ -409,11 +409,11 @@ pub fn start_scheduler(app: AppHandle) {
                 let hours = w.schedule_hours.unwrap_or(24);
                 let _ = app.state::<Db>().with(|c| wf::set_next_run(c, w.id, hours));
                 if wf::validate(&w.definition, true).is_err() {
-                    eprintln!("Cyber Hub: scheduled workflow {} skipped: it contains steps that contact targets", w.id);
+                    eprintln!("ExploitX: scheduled workflow {} skipped: it contains steps that contact targets", w.id);
                     continue;
                 }
                 if let Err(e) = spawn_run(&app, w, "schedule") {
-                    eprintln!("Cyber Hub: scheduled workflow not started: {e}");
+                    eprintln!("ExploitX: scheduled workflow not started: {e}");
                 }
             }
         }

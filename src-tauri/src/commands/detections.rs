@@ -233,7 +233,7 @@ pub async fn detection_rule_save(db: State<'_, Db>, content: String, note: Optio
         if content.len() > yara::MAX_RULE_BYTES {
             return Err(validation("The rule file is too large"));
         }
-        let note = note.unwrap_or_else(|| "Edited in Cyber Hub".into());
+        let note = note.unwrap_or_else(|| "Edited in ExploitX".into());
         return db.with(|c| {
             let (key, name) = match id {
                 Some(id) => {
@@ -256,7 +256,7 @@ pub async fn detection_rule_save(db: State<'_, Db>, content: String, note: Optio
             };
             let checked = yara::check(&content);
             let mut report = ImportReport::default();
-            match lib::upsert_yara(c, &key, &name, &content, &checked, "written in Cyber Hub", &note) {
+            match lib::upsert_yara(c, &key, &name, &content, &checked, "written in ExploitX", &note) {
                 Ok(r) => report.imported.push(r),
                 Err(e) => report.failed.push((name, e.to_string())),
             }
@@ -268,7 +268,7 @@ pub async fn detection_rule_save(db: State<'_, Db>, content: String, note: Optio
     }
     db.with(|c| {
         let mut report = ImportReport::default();
-        import_sigma(c, "written in Cyber Hub", &content, note.as_deref().unwrap_or("Edited in Cyber Hub"), &mut report);
+        import_sigma(c, "written in ExploitX", &content, note.as_deref().unwrap_or("Edited in ExploitX"), &mut report);
         Ok(report)
     })
 }

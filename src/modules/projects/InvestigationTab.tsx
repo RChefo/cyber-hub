@@ -700,7 +700,7 @@ function GraphView({ project, focus, onFocus, onOpen }: { project: Project; focu
       ) : model.nodes.length === 0 ? (
         <EmptyBlock compact icon={Network} title="No relationships to draw" description="Accept suggestions, link records by hand or turn on suggestions above." />
       ) : (
-        <div ref={boxRef} className="relative h-[560px] w-full overflow-hidden rounded-[10px] bg-[#0b0d10]">
+        <div ref={boxRef} className="relative h-[560px] w-full overflow-hidden rounded-[10px] bg-background">
           <GraphCanvas
             nodes={model.nodes}
             edges={model.edges}

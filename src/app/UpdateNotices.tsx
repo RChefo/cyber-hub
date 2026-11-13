@@ -16,7 +16,7 @@ export function UpdateNotices() {
     let disposed = false;
     listen<{ version: string }>("update-notice", (e) => {
       invalidate("activity");
-      toast.info(`Cyber Hub ${e.payload.version} is available`, {
+      toast.info(`ExploitX ${e.payload.version} is available`, {
         description: "Review the release notes and install it from Settings → Updates.",
         timeout: 10000,
         actionProps: { children: "View", variant: "tertiary", size: "sm", onPress: () => navigate("settings") },

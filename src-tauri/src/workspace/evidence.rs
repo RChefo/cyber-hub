@@ -4,7 +4,7 @@
 //! Files live in `<app data>/evidence/<first two hex digits>/<sha256>`, named only by their hash:
 //! the original name is kept for display and never used as a path, so a malicious file name cannot
 //! escape the folder. The same file added twice (to the same or another project) is stored once.
-//! Directories are created by Cyber Hub and refused if they are symbolic links.
+//! Directories are created by ExploitX and refused if they are symbolic links.
 
 use std::fs::{self, File};
 use std::io::{Read, Write};

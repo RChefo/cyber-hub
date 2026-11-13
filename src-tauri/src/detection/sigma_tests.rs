@@ -26,7 +26,7 @@ title: Encoded PowerShell command line
 id: 2b6a0f4e-8d4e-4c0e-9a3b-0c6c1f0e7d11
 status: test
 description: A PowerShell command line with an encoded command
-author: Cyber Hub tests
+author: ExploitX tests
 date: 2026-11-09
 tags:
     - attack.execution

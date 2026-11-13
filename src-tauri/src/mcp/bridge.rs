@@ -1,6 +1,6 @@
-//! The bridge listener inside the running Cyber Hub app (see `proto.rs` for the protocol).
+//! The bridge listener inside the running ExploitX app (see `proto.rs` for the protocol).
 //! It authenticates `cyberhub-mcp` processes and hands each request to a `Dispatcher`
-//! (`ops::AppDispatcher` in the app), which runs it through Cyber Hub's existing commands.
+//! (`ops::AppDispatcher` in the app), which runs it through ExploitX's existing commands.
 
 use std::collections::HashMap;
 use std::future::Future;

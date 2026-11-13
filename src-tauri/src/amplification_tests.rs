@@ -101,7 +101,7 @@ pub fn ocsf_attacks(attacks: usize) -> String {
     format!(r#"[{{"class_uid":2004,"status_code":"FAIL","severity_id":3,"metadata":{{"product":{{"name":"Prowler"}},"event_code":"c"}},"finding_info":{{"title":"t","attacks":[{list}]}},"resources":[{{"uid":"r"}}],"cloud":{{"account":{{"uid":"1"}}}}}}]"#)
 }
 
-/// A Cyber Hub graph file with one entity that lists `known` evidence records and `unknown` ids
+/// An ExploitX graph file with one entity that lists `known` evidence records and `unknown` ids
 /// that name no record.
 pub fn osint_ids(known: usize, unknown: usize) -> Vec<u8> {
     let ids: Vec<String> = (0..known).map(|i| format!("ev{i}")).chain((0..unknown).map(|i| format!("missing{i}"))).collect();

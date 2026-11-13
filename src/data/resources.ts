@@ -70,7 +70,7 @@ export const RESOURCES: Resource[] = [
   r("cyberchef", "CyberChef", "https://gchq.github.io/CyberChef/", "tools-online", "GCHQ's web app for encoding, decoding, encryption and data analysis.", ["encoding", "data"]),
   r("explainshell", "ExplainShell", "https://explainshell.com/", "tools-online", "Breaks down shell commands and shows the help text for each argument.", ["shell", "learning"]),
   r("regex101", "regex101", "https://regex101.com/", "tools-online", "Online regular expression tester and debugger with explanations.", ["regex"]),
-  r("jwt-io", "JWT.io", "https://jwt.io/", "tools-online", "Decode and inspect JSON Web Tokens (Cyber Hub includes a local decoder).", ["jwt", "auth"]),
+  r("jwt-io", "JWT.io", "https://jwt.io/", "tools-online", "Decode and inspect JSON Web Tokens (ExploitX includes a local decoder).", ["jwt", "auth"]),
 
   // Community
   r("hackerone-hacktivity", "HackerOne Hacktivity", "https://hackerone.com/hacktivity", "community", "Disclosed bug bounty reports — learn from real findings.", ["bug-bounty", "reports"]),

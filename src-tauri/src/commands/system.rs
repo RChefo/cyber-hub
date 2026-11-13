@@ -70,7 +70,7 @@ pub async fn system_info(app: AppHandle, db: State<'_, Db>, pm: State<'_, Proces
 /// native dialog first (Mission 8): a page cannot open terminals by itself.
 #[tauri::command]
 pub async fn open_terminal(app: AppHandle) -> AppResult<String> {
-    if !crate::confirm::native(&app, "Open a terminal", "Open a terminal window in your home folder?\n\nCyber Hub types nothing into it: a command you copied runs only if you paste it there and press Enter.".to_string(), "Open terminal").await {
+    if !crate::confirm::native(&app, "Open a terminal", "Open a terminal window in your home folder?\n\nExploitX types nothing into it: a command you copied runs only if you paste it there and press Enter.".to_string(), "Open terminal").await {
         return Err(AppError::Cancelled("No terminal was opened".into()));
     }
     let dir = dirs_home().filter(|d| !crate::util::is_network_or_device_path(&d.to_string_lossy())).unwrap_or_else(|| PathBuf::from("."));
@@ -137,7 +137,7 @@ fn dirs_home() -> Option<PathBuf> {
 
 pub const SERVICE: &str = "dev.cyberhub.workstation";
 pub const NVD_KEY: &str = "nvd_api_key";
-/// Every credential Cyber Hub may use.
+/// Every credential ExploitX may use.
 pub const KNOWN_SECRETS: &[&str] = &[NVD_KEY, "virustotal_api_key", "abuseipdb_api_key", "otx_api_key", "abusech_auth_key", "shodan_api_key", crate::commands::assistant::ANTHROPIC_KEY];
 
 /// A TAXII server's credential: `taxii_<server number>_<16 hex digits>`, bound to the server's

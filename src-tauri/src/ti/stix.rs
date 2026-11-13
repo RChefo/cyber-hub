@@ -17,7 +17,7 @@
 use serde_json::{json, Value};
 use sha1::{Digest, Sha1};
 
-/// UUID namespace of Cyber Hub's indicator IDs (fixed; changing it would change every exported ID).
+/// UUID namespace of ExploitX's indicator IDs (fixed; changing it would change every exported ID).
 const NAMESPACE: [u8; 16] = [184, 17, 82, 60, 127, 142, 69, 80, 172, 151, 8, 101, 133, 225, 175, 112];
 
 fn uuid_text(b: &[u8; 16]) -> String {
@@ -128,7 +128,7 @@ pub fn bundle(items: &[Saved]) -> (Value, Vec<String>) {
         });
         let note = it.note.trim();
         let fp = if it.status == "false_positive" { " Marked a false positive." } else { "" };
-        o["description"] = json!(if note.is_empty() { format!("Saved in Cyber Hub.{fp}") } else { format!("{note} (saved in Cyber Hub).{fp}") });
+        o["description"] = json!(if note.is_empty() { format!("Saved in ExploitX.{fp}") } else { format!("{note} (saved in ExploitX).{fp}") });
         if let Some(c) = it.confidence {
             o["confidence"] = json!(c.clamp(0, 100));
         }
@@ -191,7 +191,7 @@ mod tests {
             assert!(o.get(key).is_some(), "{key} is required");
         }
         assert_eq!(o["created"], "2026-11-08T22:37:41.000Z");
-        assert_eq!(o["description"], "Phishing kit (saved in Cyber Hub).");
+        assert_eq!(o["description"], "Phishing kit (saved in ExploitX).");
         assert!(o["id"].as_str().unwrap().starts_with("indicator--"));
         assert!(o.get("indicator_types").is_none(), "no verdict is claimed");
         for key in ["confidence", "valid_until", "revoked", "external_references"] {
@@ -219,7 +219,7 @@ mod tests {
         assert_eq!(o[0]["external_references"][0]["source_name"], "Vendor report 41");
         assert_eq!(o[0]["external_references"][0]["description"], "source reliability B (Usually reliable)");
         assert!(o[0].get("revoked").is_none());
-        assert_eq!((o[1]["revoked"].as_bool(), o[1]["description"].as_str()), (Some(true), Some("Saved in Cyber Hub. Marked a false positive.")));
+        assert_eq!((o[1]["revoked"].as_bool(), o[1]["description"].as_str()), (Some(true), Some("Saved in ExploitX. Marked a false positive.")));
         assert_eq!(o[2]["revoked"], true);
         assert_eq!(o[2]["external_references"][0]["description"], "where the indicator came from");
     }

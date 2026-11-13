@@ -1,4 +1,4 @@
-// Generates E:/Cyber Hub/src-tauri/catalog/tools.json
+// Generates src-tauri/catalog/tools.json
 import { writeFileSync } from "node:fs";
 
 const ALL = ["windows", "macos", "linux"];
@@ -1097,7 +1097,7 @@ tool({
 });
 tool({
   id: "cyberchef", name: "CyberChef", category: "crypto", kind: "web",
-  description: "GCHQ's web app for encoding, decoding, encryption, compression and data analysis. Cyber Hub also includes a local transformation workspace.",
+  description: "GCHQ's web app for encoding, decoding, encryption, compression and data analysis. ExploitX also includes a local transformation workspace.",
   website: "https://gchq.github.io/CyberChef/", docs: "https://github.com/gchq/CyberChef/wiki",
   os: ALL, tags: ["encoding", "data", "web"],
   install: { windows: ["Web application, no installation required"], macos: ["Web application, no installation required"], linux: ["Web application, no installation required"] },

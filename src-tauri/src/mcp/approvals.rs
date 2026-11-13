@@ -1,7 +1,7 @@
 //! Pending approvals for sensitive MCP requests.
 //!
 //! An approval is created by the bridge when an MCP client asks for a sensitive operation. It
-//! can only be decided by the human user through Cyber Hub's own window (a Tauri command
+//! can only be decided by the human user through ExploitX's own window (a Tauri command
 //! that the bridge does not expose), expires after `TTL`, and is cancelled when the client's
 //! bridge connection closes. The MCP client can only *read* the status of an approval.
 
@@ -49,7 +49,7 @@ pub struct PendingView {
     pub category: Category,
     pub summary: String,
     pub details: Vec<Detail>,
-    /// validation Cyber Hub performed before showing the request
+    /// validation ExploitX performed before showing the request
     pub checks: Vec<String>,
     pub project_id: Option<i64>,
     pub created_at: String,
@@ -110,7 +110,7 @@ impl Approvals {
         let mut map = self.pending.lock().map_err(|_| "approval registry poisoned".to_string())?;
         self.expire_locked(&mut map);
         if map.len() >= MAX_PENDING || map.values().filter(|p| p.view.connection == r.connection).count() >= MAX_PENDING_PER_CONNECTION {
-            return Err("Too many requests are waiting for approval in Cyber Hub. Ask the user to review them first.".into());
+            return Err("Too many requests are waiting for approval in ExploitX. Ask the user to review them first.".into());
         }
         let id = format!("apr_{}", super::proto::random_hex(12));
         let (tx, rx) = oneshot::channel();
@@ -151,7 +151,7 @@ impl Approvals {
         }
     }
 
-    /// The user's decision (called only from Cyber Hub's own UI).
+    /// The user's decision (called only from ExploitX's own UI).
     pub fn decide(&self, id: &str, approve: bool) -> bool {
         // an overdue request can no longer be approved, even if the expiry sweep has not run
         let overdue = self.pending.lock().ok().and_then(|m| m.get(id).map(|p| Instant::now() >= p.deadline)).unwrap_or(false);

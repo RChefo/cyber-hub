@@ -193,7 +193,7 @@ impl ProviderId {
         match self {
             ProviderId::Virustotal => "Public API: 4 requests per minute plus daily caps. Indicators looked up and files uploaded can become part of the VirusTotal dataset.",
             ProviderId::Abuseipdb => "Up to 1,000 IP checks per day; the remaining quota is shown after a lookup.",
-            ProviderId::Otx => "No published request limit; Cyber Hub stays under 30 requests per minute.",
+            ProviderId::Otx => "No published request limit; ExploitX stays under 30 requests per minute.",
             ProviderId::Urlhaus | ProviderId::Malwarebazaar | ProviderId::Threatfox => "abuse.ch community API under fair use.",
             ProviderId::Shodan => "1 request per second; host lookups do not use query credits.",
         }

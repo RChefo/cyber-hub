@@ -14,7 +14,7 @@ interface AppModalProps {
   isDismissable?: boolean;
 }
 
-/** HeroUI Modal composed with Cyber Hub's header/body/footer conventions. */
+/** HeroUI Modal composed with ExploitX's header/body/footer conventions. */
 export function AppModal({ isOpen, onOpenChange, title, description, children, footer, size = "md", className, isDismissable = true }: AppModalProps) {
   return (
     // Controlled overlay without a trigger: drive Modal.Backdrop (React Aria ModalOverlay) directly,

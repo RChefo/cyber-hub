@@ -108,7 +108,7 @@ pub async fn activity_clear(app: tauri::AppHandle, db: State<'_, Db>) -> AppResu
     if !crate::confirm::native(
         &app,
         "Clear the activity log",
-        format!("Delete all {n} entries of the activity log permanently?\n\nIt is the record of what was done in Cyber Hub: runs, imports and changes. This cannot be undone."),
+        format!("Delete all {n} entries of the activity log permanently?\n\nIt is the record of what was done in ExploitX: runs, imports and changes. This cannot be undone."),
         "Clear log",
     )
     .await

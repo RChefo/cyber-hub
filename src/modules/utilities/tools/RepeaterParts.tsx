@@ -42,12 +42,12 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-di
 /** The session's requests: load one into the editor, or pick two to compare. */
 export function HistoryPanel({ entries, selected, onToggle, onLoad }: { entries: HistoryEntry[]; selected: number[]; onToggle: (id: number) => void; onLoad: (e: HistoryEntry) => void }) {
   if (entries.length === 0) {
-    return <EmptyBlock compact icon={History} title="No requests sent yet" description="Every request you send is listed here until Cyber Hub closes. It is not saved, because requests can carry credentials." />;
+    return <EmptyBlock compact icon={History} title="No requests sent yet" description="Every request you send is listed here until ExploitX closes. It is not saved, because requests can carry credentials." />;
   }
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2 text-[12.5px] text-muted">
-        <span className="flex-1">Kept in memory until Cyber Hub closes; never saved. Pick two to compare.</span>
+        <span className="flex-1">Kept in memory until ExploitX closes; never saved. Pick two to compare.</span>
         <Button size="sm" variant="ghost" onPress={() => repeaterHistory.clear()}>
           <Trash2 className="size-3.5" />
           Clear

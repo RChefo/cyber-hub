@@ -112,7 +112,7 @@ pub type AppResult<T> = Result<T, AppError>;
 fn db_message(e: &rusqlite::Error) -> String {
     match e.sqlite_error_code() {
         Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => {
-            "The Cyber Hub database is busy because another program is using it (for example a database browser). Nothing was saved. Close the other program and try again.".into()
+            "The ExploitX database is busy because another program is using it (for example a database browser). Nothing was saved. Close the other program and try again.".into()
         }
         _ => format!("Database error: {e}"),
     }
@@ -137,7 +137,7 @@ mod tests {
         b.busy_timeout(std::time::Duration::from_millis(50)).unwrap();
         let err = AppError::from(b.execute("INSERT INTO t VALUES (2)", []).unwrap_err());
         assert_eq!(err.kind(), "database");
-        assert!(err.to_string().starts_with("The Cyber Hub database is busy"), "{err}");
+        assert!(err.to_string().starts_with("The ExploitX database is busy"), "{err}");
         let other = AppError::from(rusqlite::Error::QueryReturnedNoRows);
         assert!(other.to_string().starts_with("Database error: "));
         drop((a, b));

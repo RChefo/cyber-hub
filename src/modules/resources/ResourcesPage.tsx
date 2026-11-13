@@ -282,7 +282,7 @@ export default function ResourcesPage() {
         </div>
 
         <div className="min-w-0 xl:col-span-3">
-          <Panel title="Recently visited" description="Opened from Cyber Hub">
+          <Panel title="Recently visited" description="Opened from ExploitX">
             <QueryView
               query={recent}
               rows={4}

@@ -194,7 +194,7 @@ pub async fn tool_install(
                 Some(d) if d.status == "installed" || d.status == "dependency_missing" => save_detection(c, &d)?,
                 _ => {
                     let msg = if ok {
-                        "Package manager reported success but the executable was not found on PATH. Restart Cyber Hub or add the install directory to PATH."
+                        "Package manager reported success but the executable was not found on PATH. Restart ExploitX or add the install directory to PATH."
                     } else {
                         "Package manager exited with an error. See the installation log."
                     };
@@ -242,7 +242,7 @@ pub async fn tool_launch(app: AppHandle, db: State<'_, Db>, tool_id: String) -> 
     }
     let detect = tool.detect.as_ref().ok_or_else(|| validation("Tool has no detection rules"))?;
     let path = detect::locate(detect).ok_or_else(|| validation(format!("{} is not installed", tool.name)))?;
-    let message = format!("Start {}?\n\nProgram: {}\n\nCyber Hub passes it no arguments. Once started, it works as it does when you start it yourself.", tool.name, path.display());
+    let message = format!("Start {}?\n\nProgram: {}\n\nExploitX passes it no arguments. Once started, it works as it does when you start it yourself.", tool.name, path.display());
     if !confirm::native(&app, "Start a program", message, "Start").await {
         return Err(AppError::Cancelled(format!("{} was not started", tool.name)));
     }
@@ -296,7 +296,7 @@ fn ensure_native_executable(program: &std::path::Path) -> AppResult<()> {
         let ext = program.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
         if !matches!(ext.as_str(), "exe" | "com") {
             return Err(validation(format!(
-                "{} is a script wrapper (.{ext}); Cyber Hub only runs native executables because scripts re-interpret arguments through cmd.exe",
+                "{} is a script wrapper (.{ext}); ExploitX only runs native executables because scripts re-interpret arguments through cmd.exe",
                 program.display()
             )));
         }
@@ -400,16 +400,16 @@ pub async fn exec_validate(db: State<'_, Db>, request: ExecRequest) -> AppResult
 
 /// Refuses a run that would follow redirects when one of its URLs is authorized only by path or sits
 /// on a host with an excluded path: a redirect can leave the authorized paths, or reach the excluded
-/// one, and Cyber Hub cannot check where an external tool's redirects go. A run that loads a file of
+/// one, and ExploitX cannot check where an external tool's redirects go. A run that loads a file of
 /// options is refused too, because the file can turn redirects on. Returns a warning naming the
-/// files of options the tool reads on its own, which Cyber Hub does not read. The options are not
+/// files of options the tool reads on its own, which ExploitX does not read. The options are not
 /// changed.
 pub(crate) fn check_redirects(name: &str, tool_id: &str, args: &[String], res: &targets::Resolution) -> Result<Option<String>, String> {
     if res.path_only.is_empty() && res.near_exclusions.is_empty() {
         return Ok(None);
     }
     if let Some(arg) = crate::redirects::option_file(tool_id, args) {
-        let why = format!("{arg} loads a file of options, and Cyber Hub cannot check whether that file turns on redirects");
+        let why = format!("{arg} loads a file of options, and ExploitX cannot check whether that file turns on redirects");
         return Err(redirect_refusal(name, tool_id, &why, true, &res.path_only, &res.near_exclusions));
     }
     if let Some(why) = crate::redirects::follows(tool_id, args) {
@@ -417,7 +417,7 @@ pub(crate) fn check_redirects(name: &str, tool_id: &str, args: &[String], res: &
     }
     let own = crate::redirects::own_option_files(tool_id);
     Ok((!own.is_empty()).then(|| {
-        format!("{name} also reads options from {own}. Cyber Hub does not read these files: make sure they do not turn on redirects, because this run's URLs need host-level authorization for redirects.")
+        format!("{name} also reads options from {own}. ExploitX does not read these files: make sure they do not turn on redirects, because this run's URLs need host-level authorization for redirects.")
     }))
 }
 
@@ -449,7 +449,7 @@ fn redirect_refusal(name: &str, tool_id: &str, why: &str, option_file: bool, pat
         format!("Run it without following redirects ({stop}), or authorize the host itself (a domain, wildcard or address entry) without excluded paths")
     };
     format!(
-        "{name} was not started: {why}. {}. Cyber Hub cannot check where an external tool's redirects lead, so redirects need explicit host-level authorization. {fix}. The options you set were not changed.",
+        "{name} was not started: {why}. {}. ExploitX cannot check where an external tool's redirects lead, so redirects need explicit host-level authorization. {fix}. The options you set were not changed.",
         reasons.join("; ")
     )
 }
@@ -514,7 +514,7 @@ fn confirmation_text(tool: &str, args: &[String], v: &Validated) -> String {
         s.push_str(&format!("\n\nNote: {w}"));
     }
     if !v.info.requires_scope {
-        s.push_str(&format!("\n\nCyber Hub does not check targets or scope for {tool}; review the arguments yourself."));
+        s.push_str(&format!("\n\nExploitX does not check targets or scope for {tool}; review the arguments yourself."));
     }
     s.push_str("\n\nOnly continue if you are authorized to test these targets.");
     s

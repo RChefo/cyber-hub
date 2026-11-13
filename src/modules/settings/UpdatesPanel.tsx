@@ -56,7 +56,7 @@ export function UpdatesPanel() {
 
   const check = () =>
     run("check for updates", api.updateCheck, (next) => {
-      if (next.phase === "upToDate") notify.success("Cyber Hub is up to date", `Version ${next.currentVersion} is the latest stable release.`);
+      if (next.phase === "upToDate") notify.success("ExploitX is up to date", `Version ${next.currentVersion} is the latest stable release.`);
       else if (next.phase === "failed" && next.error) notify.error("Update check failed", next.error.message);
     });
 
@@ -79,12 +79,12 @@ export function UpdatesPanel() {
   return (
     <Panel
       title="Updates"
-      description="Signed releases from the Cyber Hub update feed. Updates are downloaded and installed only when you choose to."
+      description="Signed releases from the ExploitX update feed. Updates are downloaded and installed only when you choose to."
       actions={<ToneChip tone={meta.tone}>{meta.label}</ToneChip>}
     >
       <dl className="grid grid-cols-[150px_1fr] gap-y-1.5 text-[13px]">
         <dt className="text-muted">Installed version</dt>
-        <dd>Cyber Hub {s.currentVersion}</dd>
+        <dd>ExploitX {s.currentVersion}</dd>
         <dt className="text-muted">Platform</dt>
         <dd>
           {platformLabel(s)} · {INSTALL_KIND_LABEL[s.installKind]}
@@ -122,7 +122,7 @@ export function UpdatesPanel() {
       {rel && (
         <div className="tile mt-4 px-3 py-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <div className="text-[14px] font-medium">Cyber Hub {rel.version}</div>
+            <div className="text-[14px] font-medium">ExploitX {rel.version}</div>
             <div className="text-[12px] text-muted">
               {[rel.date && `Released ${formatDate(rel.date)}`, rel.size && formatBytes(rel.size)].filter(Boolean).join(" · ")}
             </div>
@@ -160,7 +160,7 @@ export function UpdatesPanel() {
         <div className="mt-4 flex flex-col gap-2">
           <p className="flex items-center gap-2 text-[13px]">
             <ShieldCheck className="size-4 shrink-0 text-success-soft-foreground" />
-            The download matches the Cyber Hub signing key. It is ready to install.
+            The download matches the ExploitX signing key. It is ready to install.
           </p>
           {s.blockers.length > 0 && (
             <Notice tone="warning">
@@ -179,7 +179,7 @@ export function UpdatesPanel() {
           <InlineSpinner label={s.os === "windows" ? "Starting the installer…" : "Installing the update…"} />
         </div>
       )}
-      {s.phase === "restartRequired" && <p className="mt-4 text-[13px]">The update is installed. Restart Cyber Hub to start the new version.</p>}
+      {s.phase === "restartRequired" && <p className="mt-4 text-[13px]">The update is installed. Restart ExploitX to start the new version.</p>}
       {s.phase === "cancelled" && <p className="mt-4 text-[13px] text-muted">The download was cancelled. Nothing was installed.</p>}
       {s.error && (s.phase === "failed" || s.phase === "ready") && <ErrorBlock className="mt-4" message={s.error.message} />}
 
@@ -212,7 +212,7 @@ export function UpdatesPanel() {
           <RefreshCw className="size-3.5" />
           Check for updates
         </Button>
-        {actions.install && <span className="text-[12px] text-muted">A system dialog asks you to confirm before Cyber Hub closes.</span>}
+        {actions.install && <span className="text-[12px] text-muted">A system dialog asks you to confirm before ExploitX closes.</span>}
       </div>
 
       <div className="mt-5 flex flex-col gap-3">

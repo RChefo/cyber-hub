@@ -63,7 +63,7 @@ function DataPanel() {
       });
       if (!ok) return;
       await api.databaseRestoreApply(chosen.token);
-      notify.info("Restarting Cyber Hub", "The backup takes the database's place when Cyber Hub starts again.");
+      notify.info("Restarting ExploitX", "The backup takes the database's place when ExploitX starts again.");
     } catch (e) {
       notify.error("Could not restore the backup", e);
     }
@@ -82,7 +82,7 @@ function DataPanel() {
     },
   ];
   return (
-    <Panel title="Local data" description="Everything Cyber Hub stores lives in one folder on this computer.">
+    <Panel title="Local data" description="Everything ExploitX stores lives in one folder on this computer.">
       <div className="panel-inset mb-4 flex items-center gap-2 py-1.5 pr-1.5 pl-3">
         <FolderOpen className="size-4 shrink-0 text-muted" />
         <code data-selectable className="min-w-0 flex-1 truncate font-mono text-[12px]">{system?.dataDir ?? "Desktop runtime not connected"}</code>
@@ -103,8 +103,8 @@ function DataPanel() {
           <div className="text-[13.5px]">Restore a backup</div>
           <div className="text-[12px] text-muted">
             {pendingRestore.data
-              ? "A backup waits to be restored at the next start of Cyber Hub. Restart Cyber Hub to restore it, or cancel it."
-              : "Checks a backup, then restarts Cyber Hub with it. The current database is kept in the backups folder with the evidence files only it refers to, so restoring that copy undoes the restore."}
+              ? "A backup waits to be restored at the next start of ExploitX. Restart ExploitX to restore it, or cancel it."
+              : "Checks a backup, then restarts ExploitX with it. The current database is kept in the backups folder with the evidence files only it refers to, so restoring that copy undoes the restore."}
           </div>
         </div>
         {pendingRestore.data ? (
@@ -141,7 +141,7 @@ function PreferencesPanel() {
   const { prefs, setPref, runtime } = useApp();
   const dir = typeof prefs["wordlists.directory"] === "string" ? (prefs["wordlists.directory"] as string) : "";
   return (
-    <Panel title="Preferences" description="Saved locally in the Cyber Hub database.">
+    <Panel title="Preferences" description="Saved locally in the ExploitX database.">
       <div className="flex flex-col gap-4">
         <SwitchInput label="Collapse the sidebar" isSelected={prefs["ui.sidebarCollapsed"] === true} onChange={(v) => setPref("ui.sidebarCollapsed", v)} />
         <SwitchInput
@@ -216,7 +216,7 @@ export default function SettingsPage() {
   const { system, catalog } = useApp();
   return (
     <div>
-      <PageHeader title="Settings" description="Preferences, updates, service status and local data. Cyber Hub has no account and no telemetry; the only background request is the optional update check." />
+      <PageHeader title="Settings" description="Preferences, updates, service status and local data. ExploitX has no account and no telemetry; the only background request is the optional update check." />
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <div className="flex flex-col gap-3">
           <UpdatesPanel />
@@ -229,7 +229,7 @@ export default function SettingsPage() {
               {[
                 "Local-first: all data stays in the local SQLite database. Service credentials are provisioned by the application owner, kept in the OS credential store and never shown in the app.",
                 "No telemetry and no automatic uploads. Network requests happen only when you press a button that says it sends one (live CVE search, threat-intelligence lookup, DNS lookup, header fetch, opening links), plus the automatic update check, which you can turn off under Updates; it fetches only the release manifest.",
-                "Updates are verified against the Cyber Hub signing key before they can be installed, and are installed only after you confirm in a system dialog.",
+                "Updates are verified against the ExploitX signing key before they can be installed, and are installed only after you confirm in a system dialog.",
                 "Threat-intelligence lookups only read provider data. A file is uploaded to VirusTotal only from File analysis, after a warning and a system confirmation for that file; URLs are never submitted for scanning.",
                 "Tools never run automatically. Every run shows the exact program and arguments and needs confirmation.",
                 "Tools that touch targets run only inside an active project and only against in-scope targets.",
@@ -255,7 +255,7 @@ export default function SettingsPage() {
           <Panel title="About">
             <dl className="grid grid-cols-[150px_1fr] gap-y-1.5 text-[13px]">
               <dt className="text-muted">Version</dt>
-              <dd>{system ? `Cyber Hub ${system.appVersion}` : "—"}</dd>
+              <dd>{system ? `ExploitX ${system.appVersion}` : "—"}</dd>
               <dt className="text-muted">Database schema</dt>
               <dd>{system ? `v${system.dbSchemaVersion}` : "—"}</dd>
               <dt className="text-muted">Tool catalog</dt>

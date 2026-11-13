@@ -193,7 +193,7 @@ export function InvestigationsView({ onOpen }: { onOpen: (id: number, graphId?: 
             <EmptyBlock
               icon={Network}
               title="Start your first investigation"
-              description="An investigation has one primary target (a domain, IP address, organization, email or username). Cyber Hub collects public data about it, extracts entities, links them with evidence and lets you map and save the result."
+              description="An investigation has one primary target (a domain, IP address, organization, email or username). ExploitX collects public data about it, extracts entities, links them with evidence and lets you map and save the result."
               action={
                 <Button variant="primary" onPress={() => setCreating(true)}>
                   <Plus className="size-4" />

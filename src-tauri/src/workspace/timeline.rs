@@ -22,7 +22,7 @@ pub struct TimelineEvent {
     pub ref_id: Option<i64>,
     pub at: String,
     /// when the source observed or collected what the event is about, when that is known and
-    /// differs from when Cyber Hub recorded it (evidence collected earlier)
+    /// differs from when ExploitX recorded it (evidence collected earlier)
     pub observed_at: Option<String>,
     /// where the next page starts (`before`): unique, so events of the same second are not skipped
     pub cursor: String,

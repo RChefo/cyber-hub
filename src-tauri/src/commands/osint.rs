@@ -572,7 +572,7 @@ pub async fn osint_export(app: AppHandle, db: State<'_, Db>, graph_id: i64, form
     let doc = db.with(|c| io::export_document(c, graph_id))?;
     let base = safe_name(&format!("{}-{}", doc.investigation.name, doc.graph.name));
     let (content, ext, filter, suffix) = match format.as_str() {
-        "json" => (serde_json::to_string_pretty(&doc)?, "json", "Cyber Hub graph", ""),
+        "json" => (serde_json::to_string_pretty(&doc)?, "json", "ExploitX graph", ""),
         "graphml" => (io::export_graphml(&doc), "graphml", "GraphML", ""),
         "csv-entities" => (io::export_csv_entities(&doc), "csv", "CSV", "-entities"),
         "csv-relationships" => (io::export_csv_relationships(&doc), "csv", "CSV", "-relationships"),
@@ -714,7 +714,7 @@ pub async fn osint_import_pick(app: AppHandle, db: State<'_, Db>, imports: State
     let format = match ext.as_str() {
         "json" => "json",
         "graphml" | "xml" => "graphml",
-        _ => return Err(validation("Choose a .json (Cyber Hub graph) or .graphml file")),
+        _ => return Err(validation("Choose a .json (ExploitX graph) or .graphml file")),
     };
     let mut bytes = Vec::new();
     std::io::Read::read_to_end(&mut std::io::Read::take(crate::util::open_regular(&path)?, io::MAX_IMPORT_BYTES as u64 + 1), &mut bytes)?;

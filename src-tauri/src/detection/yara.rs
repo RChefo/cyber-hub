@@ -398,7 +398,7 @@ pub fn check(text: &str) -> Checked {
     }
     let depth = nesting(text);
     if depth > MAX_NESTING {
-        issues.push(issue("error", format!("A condition nests about {depth} levels deep (brackets, operators and `not`); Cyber Hub reads at most {MAX_NESTING}")));
+        issues.push(issue("error", format!("A condition nests about {depth} levels deep (brackets, operators and `not`); ExploitX reads at most {MAX_NESTING}")));
         return refuse(issues);
     }
     let owned = text.to_string();
@@ -418,7 +418,7 @@ pub fn check(text: &str) -> Checked {
         }
         Err(mut message) => {
             if let Some(m) = imports(text).iter().find(|m| !MODULES.contains(&m.as_str())) {
-                message = format!("{message} (Cyber Hub has the modules {}, not {m})", MODULES.join(", "));
+                message = format!("{message} (ExploitX has the modules {}, not {m})", MODULES.join(", "));
             }
             issues.push(issue("error", message));
             return refuse(issues);

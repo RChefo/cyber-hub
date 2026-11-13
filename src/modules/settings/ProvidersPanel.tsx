@@ -93,7 +93,7 @@ export function ProvidersPanel() {
   return (
     <Panel
       title="Threat intelligence providers"
-      description="Services are configured by the application owner. Turn a provider off to stop sending it indicators. Availability reflects the last request made since Cyber Hub started."
+      description="Services are configured by the application owner. Turn a provider off to stop sending it indicators. Availability reflects the last request made since ExploitX started."
       className="xl:col-span-2"
     >
       {overview.error && <ErrorBlock message={overview.error} onRetry={overview.reload} />}

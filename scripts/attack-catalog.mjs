@@ -1,4 +1,4 @@
-// Builds the compact MITRE ATT&CK catalogs bundled with Cyber Hub (src-tauri/catalog/attack-*.json)
+// Builds the compact MITRE ATT&CK catalogs bundled with ExploitX (src-tauri/catalog/attack-*.json)
 // from the official ATT&CK STIX 2.1 bundles (docs/DATA_MODEL.md#attck):
 //
 //   node scripts/attack-catalog.mjs <bundle.json> <version> <retrieved YYYY-MM-DD> [out.json] [domain]
@@ -83,7 +83,7 @@ const catalog = {
   domain,
   notice: "© 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.",
   license:
-    "MITRE hereby grants you a non-exclusive, royalty-free license to use ATT&CK® for research, development, and commercial purposes. Any copy you make for such purposes is authorized provided that you reproduce MITRE's copyright designation and this license in any such copy. Adapted by Cyber Hub: only tactic and technique IDs, names, tactics, platforms and parents are kept.",
+    "MITRE hereby grants you a non-exclusive, royalty-free license to use ATT&CK® for research, development, and commercial purposes. Any copy you make for such purposes is authorized provided that you reproduce MITRE's copyright designation and this license in any such copy. Adapted by ExploitX: only tactic and technique IDs, names, tactics, platforms and parents are kept.",
   tactics,
   techniques,
   revoked,

@@ -102,7 +102,7 @@ export function mitreUrl(id: string): string {
   return `https://attack.mitre.org/techniques/${id.replace(".", "/")}/`;
 }
 
-/** The ATT&CK matrices Cyber Hub bundles (Mission 6), in the order they are offered. */
+/** The ATT&CK matrices ExploitX bundles (Mission 6), in the order they are offered. */
 export const ATTACK_DOMAINS: { id: AttackDomain; label: string }[] = [
   { id: "enterprise-attack", label: "Enterprise" },
   { id: "mobile-attack", label: "Mobile" },

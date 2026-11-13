@@ -5,10 +5,10 @@
 //!
 //! Process trees:
 //! * Windows — each run is assigned to a Job Object with KILL_ON_JOB_CLOSE. Cancelling
-//!   terminates the job; when the run ends (or Cyber Hub exits) the job handle is closed
+//!   terminates the job; when the run ends (or ExploitX exits) the job handle is closed
 //!   and any leftover descendants are killed by the OS.
 //! * Unix — each run starts in its own process group; cancelling sends SIGTERM and then
-//!   SIGKILL to the group. On exit Cyber Hub kills every running group.
+//!   SIGKILL to the group. On exit ExploitX kills every running group.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -193,7 +193,7 @@ impl ProcessManager {
         self.running.lock().map(|m| m.keys().copied().collect()).unwrap_or_default()
     }
 
-    /// Called when Cyber Hub exits: synchronously kill every running process tree.
+    /// Called when ExploitX exits: synchronously kill every running process tree.
     /// (On Windows the OS also kills job members when the job handles close.)
     pub fn kill_all_now(&self) {
         if let Ok(mut m) = self.running.lock() {
@@ -322,7 +322,7 @@ pub fn start(app: &AppHandle, spec: SpawnSpec, channel: Channel<ExecEvent>, on_f
     if tree.is_none() {
         // e.g. the tool already runs inside a job that does not allow nesting
         let _ = channel.send(ExecEvent::Stderr {
-            line: "[Cyber Hub] Could not attach the process tree: cancelling stops the main process only, not processes it started.".into(),
+            line: "[ExploitX] Could not attach the process tree: cancelling stops the main process only, not processes it started.".into(),
         });
     }
 
@@ -376,7 +376,7 @@ pub fn start(app: &AppHandle, spec: SpawnSpec, channel: Channel<ExecEvent>, on_f
         let recorded = db.with(|c| record_end(c, &RunEnd { id, kind, tool_id: &tool_id, status, code, output: &text, truncated, started_for: project_id }));
         if let Err(e) = recorded {
             // nothing was written: the row stays 'running' and is marked as interrupted at the next start
-            eprintln!("Cyber Hub: could not record the end of run {id}: {e}");
+            eprintln!("ExploitX: could not record the end of run {id}: {e}");
         }
         let _ = channel.send(ExecEvent::Exit { status: status.to_string(), code });
         if let Some(hook) = on_finish {

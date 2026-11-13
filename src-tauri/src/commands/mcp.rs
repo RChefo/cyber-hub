@@ -2,7 +2,7 @@
 //! policy, pending approvals (decided only here, by the user), audit log and client
 //! configuration snippets.
 //!
-//! These are Tauri commands for Cyber Hub's own window. None of them is reachable through the
+//! These are Tauri commands for ExploitX's own window. None of them is reachable through the
 //! MCP bridge, so an MCP client cannot approve its own requests or change its permissions.
 
 use std::sync::Arc;
@@ -25,7 +25,7 @@ use crate::mcp::prompts;
 /// Path of the `cyberhub-mcp` executable shipped next to the app binary, if present.
 ///
 /// Installers place it (the bundler ships every `[[bin]]` of this crate) in the same
-/// directory as the Cyber Hub executable: the installation folder on Windows and `/usr/bin` for
+/// directory as the ExploitX executable: the installation folder on Windows and `/usr/bin` for
 /// the Linux packages. In development
 /// cargo builds it into the same `target/<profile>` directory. The lookup never uses the working
 /// directory or PATH.
@@ -45,13 +45,13 @@ pub fn server_path_note(path: Option<&std::path::Path>) -> Option<String> {
 fn path_note(path: Option<&std::path::Path>, appimage_dir: Option<&std::path::Path>, dev_build: bool) -> Option<String> {
     let Some(path) = path else {
         return Some(if dev_build {
-            "cyberhub-mcp was not found next to the Cyber Hub executable. Build it with `cargo build --bin cyberhub-mcp` (see docs/MCP.md).".into()
+            "cyberhub-mcp was not found next to the ExploitX executable. Build it with `cargo build --bin cyberhub-mcp` (see docs/MCP.md).".into()
         } else {
-            "cyberhub-mcp is missing from the Cyber Hub installation folder. Reinstall Cyber Hub to restore it.".into()
+            "cyberhub-mcp is missing from the ExploitX installation folder. Reinstall ExploitX to restore it.".into()
         });
     };
     if appimage_dir.is_some_and(|d| path.starts_with(d)) {
-        return Some("Cyber Hub is running from an AppImage, so this path is inside a temporary mount that changes every time Cyber Hub starts. MCP clients configured with it stop working after a restart. Install the .deb or .rpm package for a fixed path.".into());
+        return Some("ExploitX is running from an AppImage, so this path is inside a temporary mount that changes every time ExploitX starts. MCP clients configured with it stop working after a restart. Install the .deb or .rpm package for a fixed path.".into());
     }
     None
 }
@@ -139,7 +139,7 @@ pub async fn mcp_status(db: State<'_, Db>, bridge: State<'_, Arc<Bridge>>) -> Ap
         running: info.is_some(),
         address: info.as_ref().map(|(p, _)| format!("127.0.0.1:{p}")),
         started_at: info.map(|(_, s)| s),
-        transport: "stdio (MCP client ↔ cyberhub-mcp) · authenticated loopback bridge (cyberhub-mcp ↔ Cyber Hub)",
+        transport: "stdio (MCP client ↔ cyberhub-mcp) · authenticated loopback bridge (cyberhub-mcp ↔ ExploitX)",
         server_path: server.as_ref().map(|p| p.to_string_lossy().to_string()),
         server_path_note: server_path_note(server.as_deref()),
         tool_count: catalog::TOOLS.len(),
@@ -184,7 +184,7 @@ pub async fn mcp_pending(bridge: State<'_, Arc<Bridge>>) -> AppResult<Vec<Pendin
     Ok(bridge.approvals.list())
 }
 
-/// The user's decision on a pending MCP request. Only Cyber Hub's own window can call this.
+/// The user's decision on a pending MCP request. Only ExploitX's own window can call this.
 #[tauri::command]
 pub async fn mcp_decide(app: AppHandle, bridge: State<'_, Arc<Bridge>>, id: String, approve: bool) -> AppResult<bool> {
     let ok = bridge.approvals.decide(&id, approve);
@@ -430,7 +430,7 @@ pub fn build_catalog(policy: &std::collections::HashMap<Category, Policy>, runni
         mime_type: "application/json",
         template: true,
         served_by: "cyberhub_get_project_scope",
-        parameters: vec![Param { name: "project_id".into(), kind: "integer".into(), required: true, description: "Cyber Hub project ID".into(), values: vec![] }],
+        parameters: vec![Param { name: "project_id".into(), kind: "integer".into(), required: true, description: "ExploitX project ID".into(), values: vec![] }],
     });
     let prompts = prompts::PROMPTS
         .iter()
@@ -605,7 +605,7 @@ pub fn client_configs(server: &str) -> ClientConfigs {
 }
 
 /// Configuration snippets that use the actual `cyberhub-mcp` path, or an error if the
-/// executable is not installed next to Cyber Hub.
+/// executable is not installed next to ExploitX.
 #[tauri::command]
 pub async fn mcp_client_configs() -> AppResult<ClientConfigs> {
     let p = server_path().ok_or_else(|| AppError::NotFound(server_path_note(None).unwrap_or_default()))?;

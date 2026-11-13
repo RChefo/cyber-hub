@@ -1,9 +1,9 @@
 //! Restoring the database from a backup (docs/UPGRADE.md#restoring-a-backup).
 //!
-//! The open database cannot be replaced while Cyber Hub runs, so a restore has two steps:
+//! The open database cannot be replaced while ExploitX runs, so a restore has two steps:
 //!
-//! 1. **Stage**, while Cyber Hub runs ([`stage`]). The chosen file is checked ([`inspect`]: SQLite
-//!    integrity, a schema version this version knows, and exactly the schema Cyber Hub's migrations
+//! 1. **Stage**, while ExploitX runs ([`stage`]). The chosen file is checked ([`inspect`]: SQLite
+//!    integrity, a schema version this version knows, and exactly the schema ExploitX's migrations
 //!    create for that version, compared as SQL). SQLite then copies it into the data folder as
 //!    `restore-pending.db`, and the copy is checked again. The chosen file is not changed.
 //! 2. **Swap**, at the next start, before the database is opened ([`swap_pending`]). The current
@@ -93,7 +93,7 @@ pub struct Outcome {
 
 /// Paths that a restored database names but the analyst never chose on this computer (Mission 7):
 /// wordlists indexed by reference, and the extra wordlist folder. They are dropped, because
-/// Cyber Hub would read those files (a wordlist preview shows its lines) or, on Windows, touch a
+/// ExploitX would read those files (a wordlist preview shows its lines) or, on Windows, touch a
 /// network path with the user's credentials. Copies in the managed folder stay; they are checked
 /// to be inside it whenever they are read. Returns the number of wordlists dropped.
 pub fn untrust_paths(c: &rusqlite::Connection) -> rusqlite::Result<usize> {
@@ -168,7 +168,7 @@ fn schema_of(c: &Connection) -> AppResult<BTreeSet<String>> {
     Ok(out)
 }
 
-/// The database must have exactly the schema Cyber Hub's migrations create up to `version`: the
+/// The database must have exactly the schema ExploitX's migrations create up to `version`: the
 /// SQL of every table, index, trigger and view is compared, so a foreign database, an added
 /// trigger or view, or a changed constraint, default or foreign-key action is refused.
 fn check_schema(c: &Connection, version: i64) -> AppResult<()> {
@@ -180,10 +180,10 @@ fn check_schema(c: &Connection, version: i64) -> AppResult<()> {
     let (expected, found) = (schema_of(&reference)?, schema_of(c)?);
     let short = |s: &String| s.chars().take(120).collect::<String>();
     if let Some(extra) = found.difference(&expected).next() {
-        return Err(validation(format!("This file is not a Cyber Hub database, or its schema was changed (unexpected: {}).", short(extra))));
+        return Err(validation(format!("This file is not an ExploitX database, or its schema was changed (unexpected: {}).", short(extra))));
     }
     if let Some(missing) = expected.difference(&found).next() {
-        return Err(validation(format!("This file is not a Cyber Hub database, or its schema was changed (missing: {}).", short(missing))));
+        return Err(validation(format!("This file is not an ExploitX database, or its schema was changed (missing: {}).", short(missing))));
     }
     Ok(())
 }
@@ -196,7 +196,7 @@ fn open_checked(path: &Path) -> AppResult<(Connection, i64)> {
     }
     let mut magic = [0u8; 16];
     if fs::File::open(path)?.read_exact(&mut magic).is_err() || &magic != b"SQLite format 3\0" {
-        return Err(validation("This file is not a Cyber Hub database (it is not an SQLite database)"));
+        return Err(validation("This file is not an ExploitX database (it is not an SQLite database)"));
     }
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
     // the schema of a file from elsewhere is not trusted
@@ -208,11 +208,11 @@ fn open_checked(path: &Path) -> AppResult<(Connection, i64)> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     let latest = crate::db::MIGRATIONS.len() as i64;
     if version < 1 {
-        return Err(validation("This file is not a Cyber Hub database (it has no schema version)"));
+        return Err(validation("This file is not an ExploitX database (it has no schema version)"));
     }
     if version > latest {
         return Err(validation(format!(
-            "This backup was made by a newer version of Cyber Hub (schema {version}; this version supports up to {latest}). Restore it with that version."
+            "This backup was made by a newer version of ExploitX (schema {version}; this version supports up to {latest}). Restore it with that version."
         )));
     }
     check_schema(&conn, version)?;
@@ -264,12 +264,12 @@ pub fn inspect(source: &Path, data_dir: &Path) -> AppResult<BackupInfo> {
     })
 }
 
-/// Refuses Cyber Hub's own database files (and a staged copy) as the file to restore.
+/// Refuses ExploitX's own database files (and a staged copy) as the file to restore.
 fn refuse_own_files(data_dir: &Path, source: &Path) -> AppResult<()> {
     let chosen = norm(source);
     for name in DB_FILES.iter().chain([PENDING].iter()) {
         if chosen.is_some() && chosen == norm(&data_dir.join(name)) {
-            return Err(validation("Choose a backup: this is Cyber Hub's own database"));
+            return Err(validation("Choose a backup: this is ExploitX's own database"));
         }
     }
     Ok(())
@@ -280,9 +280,9 @@ fn refuse_own_files(data_dir: &Path, source: &Path) -> AppResult<()> {
 pub fn stage(data_dir: &Path, source: &Path, confirmed: Option<&BackupInfo>) -> AppResult<BackupInfo> {
     if data_dir.join(JOURNAL).exists() {
         return Err(validation(if pending(data_dir) {
-            "A restore already waits for the next start of Cyber Hub. Restart Cyber Hub, or cancel that restore first."
+            "A restore already waits for the next start of ExploitX. Restart ExploitX, or cancel that restore first."
         } else {
-            "The previous restore is not complete yet. Restart Cyber Hub to complete it, then restore again."
+            "The previous restore is not complete yet. Restart ExploitX to complete it, then restore again."
         }));
     }
     refuse_own_files(data_dir, source)?;
@@ -320,7 +320,7 @@ pub fn stage(data_dir: &Path, source: &Path, confirmed: Option<&BackupInfo>) -> 
 /// Removes what a stage leaves when the process ends during it (Mission 9): the copy being made
 /// (`.restore-<nonce>.partial`, a full copy of the chosen backup, which must not stay hidden in the
 /// data folder), SQLite's `-journal` next to it, and a journal being written. Called at start-up,
-/// before anything is staged: only one Cyber Hub runs, so no stage can be in progress.
+/// before anything is staged: only one ExploitX runs, so no stage can be in progress.
 fn remove_interrupted_stages(data_dir: &Path) {
     let Ok(entries) = fs::read_dir(data_dir) else { return };
     let journal_tmp = format!("{JOURNAL}.partial");
@@ -471,7 +471,7 @@ pub fn swap_pending(data_dir: &Path) -> Option<Swap> {
             if in_use(&e) {
                 // most likely the previous process still had the database open: the staged copy
                 // waits for the next start
-                return ended(outcome, true, format!("The database was still in use ({e}), so the backup was not restored yet. Cyber Hub restores it at the next start; you can cancel that in Settings → Local data."));
+                return ended(outcome, true, format!("The database was still in use ({e}), so the backup was not restored yet. ExploitX restores it at the next start; you can cancel that in Settings → Local data."));
             }
             let _ = fs::remove_file(&pending_path);
             let _ = fs::remove_file(&journal_path);
@@ -543,7 +543,7 @@ pub fn undo(data_dir: &Path, swap: &mut Swap, error: &AppError) -> AppResult<()>
     swap.outcome.ok = false;
     if !problems.is_empty() {
         return Err(AppError::Internal(format!(
-            "The restored database could not be opened ({error}), and Cyber Hub could not put the previous database back ({}). The previous database is in {kept_in} in the data folder.",
+            "The restored database could not be opened ({error}), and ExploitX could not put the previous database back ({}). The previous database is in {kept_in} in the data folder.",
             problems.join("; ")
         )));
     }
@@ -660,7 +660,7 @@ pub fn finish(data_dir: &Path, swap: &mut Swap) -> Outcome {
         }
         // the journal stays: the sweep waits, and the next start sorts the rest
         Err(e) => {
-            swap.outcome.error = Some(format!("The database was restored, but not every evidence file was sorted yet ({e}). Cyber Hub tries again at the next start and deletes no evidence files until then."));
+            swap.outcome.error = Some(format!("The database was restored, but not every evidence file was sorted yet ({e}). ExploitX tries again at the next start and deletes no evidence files until then."));
         }
     }
     swap.outcome.clone()

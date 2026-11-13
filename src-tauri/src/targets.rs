@@ -301,7 +301,7 @@ pub fn resolve(args: &[String], explicit: &[String], entries: &[ScopeEntry], sna
         // user's credentials: such values are refused before any file-system call (Mission 7)
         if cfg!(windows) && crate::util::is_network_or_device_path(value) {
             return Err(format!(
-                "Argument {} is a network or device path ({}). Cyber Hub does not open those, because Windows would connect to that host with your credentials; copy the file to this computer",
+                "Argument {} is a network or device path ({}). ExploitX does not open those, because Windows would connect to that host with your credentials; copy the file to this computer",
                 idx + 1,
                 truncate(value, 80)
             ));
@@ -356,7 +356,7 @@ pub fn resolve(args: &[String], explicit: &[String], entries: &[ScopeEntry], sna
     res.near_exclusions = found.iter().filter(|t| scope::near_excluded_path(entries, t)).map(scope::target_label).collect();
     if !path_only.is_empty() {
         res.warnings.push(format!(
-            "Only URL entries authorize {}: Cyber Hub checks the URLs on the command line, but the tool decides which further paths it requests (wordlists, templates, crawling). Runs that would follow redirects are refused for the tools whose options Cyber Hub knows; for other tools, make sure they do not follow redirects. The HTTP request tool checks every redirect before following it.",
+            "Only URL entries authorize {}: ExploitX checks the URLs on the command line, but the tool decides which further paths it requests (wordlists, templates, crawling). Runs that would follow redirects are refused for the tools whose options ExploitX knows; for other tools, make sure they do not follow redirects. The HTTP request tool checks every redirect before following it.",
             path_only.join(", ")
         ));
     }

@@ -1,8 +1,8 @@
 [package]
 name = "cyber-hub"
 version = "0.1.0"
-description = "Cyber Hub — local-first cybersecurity workstation"
-authors = ["Cyber Hub contributors"]
+description = "ExploitX — cybersecurity intelligence and security research platform"
+authors = ["ExploitX contributors"]
 edition = "2021"
 rust-version = "1.90"
 default-run = "cyber-hub"

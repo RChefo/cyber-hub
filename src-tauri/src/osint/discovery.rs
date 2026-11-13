@@ -401,7 +401,7 @@ pub fn cancel(app: &AppHandle, op: i64) -> bool {
 /// Mark operations left running by a previous session (the app exited) as failed.
 pub fn recover_interrupted(db: &Db) {
     let _ = db.with(|c| {
-        c.execute("UPDATE osint_operations SET status = 'failed', finished_at = ?1, message = 'Interrupted: Cyber Hub closed while the collection was running' WHERE status = 'running'", params![now()])?;
+        c.execute("UPDATE osint_operations SET status = 'failed', finished_at = ?1, message = 'Interrupted: ExploitX closed while the collection was running' WHERE status = 'running'", params![now()])?;
         Ok(())
     });
 }

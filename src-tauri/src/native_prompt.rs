@@ -171,6 +171,6 @@ mod imp {
     use super::Typed;
 
     pub fn ask(_app: &AppHandle, _title: &str, _message: &str, _user_label: Option<&str>, _user: &str) -> Result<Option<Typed>, String> {
-        Err("Credentials can be typed into Cyber Hub on Windows and Linux only; use cyberhub-keys taxii-set on this computer".into())
+        Err("Credentials can be typed into ExploitX on Windows and Linux only; use cyberhub-keys taxii-set on this computer".into())
     }
 }

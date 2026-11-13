@@ -500,7 +500,7 @@ export function SubdomainMonitorTool() {
         enabled: true,
       });
       invalidate("workflows");
-      notify.success("Monitoring scheduled", `Passive discovery every ${hours} hours while Cyber Hub is open`);
+      notify.success("Monitoring scheduled", `Passive discovery every ${hours} hours while ExploitX is open`);
     } catch (e) {
       notify.error("Could not schedule monitoring", e);
     } finally {

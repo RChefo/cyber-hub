@@ -440,7 +440,7 @@ fn cyber_hub_sarif_exports_import_back() {
         .unwrap();
     let text = crate::workspace::findings_export::sarif("Shop", "2026-11-09T00:00:00Z", &findings).unwrap();
     let p = parse(&text).unwrap();
-    assert_eq!(p.tool, "Cyber Hub");
+    assert_eq!(p.tool, "ExploitX");
     let got: Vec<(&str, &str, &str)> = p.findings.iter().map(|f| (f.title.as_str(), f.severity, f.target.as_str())).collect();
     for want in [
         ("Container runs as root", "high", "deploy/Dockerfile"),

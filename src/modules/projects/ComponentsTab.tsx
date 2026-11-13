@@ -153,7 +153,7 @@ function Vulnerabilities({ view, onOpenFindings }: { view: SbomView; onOpenFindi
   const check = async () => {
     const ok = await confirm.ask({
       title: `Check ${n} components on OSV.dev?`,
-      body: `Cyber Hub sends the package URL (ecosystem, name and version) of each of these components to api.osv.dev, the open vulnerability database, and nothing else: no file, project, supplier or hash. ${comps.length - n} components without a package URL or version are not checked.`,
+      body: `ExploitX sends the package URL (ecosystem, name and version) of each of these components to api.osv.dev, the open vulnerability database, and nothing else: no file, project, supplier or hash. ${comps.length - n} components without a package URL or version are not checked.`,
       confirmLabel: "Check",
       tone: "accent",
     });

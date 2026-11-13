@@ -5,7 +5,7 @@
 //! patterns or regular expressions run by the `regex` crate, whose matching time is linear in the
 //! input, with a size limit on every compiled expression.
 //!
-//! What a rule uses but Cyber Hub cannot evaluate is reported, never ignored: a rule with an
+//! What a rule uses but ExploitX cannot evaluate is reported, never ignored: a rule with an
 //! unsupported feature (placeholders, time modifiers, the obsolete `| count()` aggregations,
 //! value_percentile correlations) is refused for evaluation with the reason. Correlation rules
 //! are validated here and evaluated by [`super::correlation`].
@@ -30,7 +30,7 @@ const LEVELS: &[&str] = &["informational", "low", "medium", "high", "critical"];
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Issue {
-    /// error (the rule is invalid), unsupported (valid, but Cyber Hub cannot evaluate it), warning
+    /// error (the rule is invalid), unsupported (valid, but ExploitX cannot evaluate it), warning
     pub level: String,
     pub message: String,
 }
@@ -1059,7 +1059,7 @@ fn field_test(field: &str, modifiers: &[String], v: &Value, values: &mut usize) 
     for m in modifiers {
         let known = TRANSFORMS.contains(&m.as_str()) || WRAPS.contains(&m.as_str()) || NUMERIC.contains(&m.as_str()) || ["all", "exists", "cased", "re", "i", "m", "s", "cidr", "neq", "fieldref"].contains(&m.as_str());
         if m == "expand" {
-            return Err(("unsupported", "placeholders (|expand) need values defined by a processing pipeline; Cyber Hub has none, so the rule is refused as the specification requires".into()));
+            return Err(("unsupported", "placeholders (|expand) need values defined by a processing pipeline; ExploitX has none, so the rule is refused as the specification requires".into()));
         }
         if TIME.contains(&m.as_str()) {
             return Err(("unsupported", format!("the time modifier '{m}' is not supported")));

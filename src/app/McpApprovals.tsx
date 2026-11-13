@@ -21,7 +21,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 /**
- * Approval prompt for sensitive MCP requests. It is shown by Cyber Hub itself; MCP clients
+ * Approval prompt for sensitive MCP requests. It is shown by ExploitX itself; MCP clients
  * cannot see or answer it. Runs and uploads are followed by the usual native confirmation.
  * It stays out of the way while the MCP page's Approval Center (which lists the same requests)
  * is on screen, and keeps listening for new requests either way.
@@ -147,9 +147,9 @@ export function McpApprovals() {
       )}
       <p className="text-[12.5px] text-muted">
         {current.category === "run_tools"
-          ? "Approving lets Cyber Hub continue to its usual system confirmation for this run. Only approve if you are authorized to test these targets."
+          ? "Approving lets ExploitX continue to its usual system confirmation for this run. Only approve if you are authorized to test these targets."
           : current.category === "file_upload"
-            ? "Approving opens the file picker. You choose the file, and Cyber Hub asks again before anything is uploaded."
+            ? "Approving opens the file picker. You choose the file, and ExploitX asks again before anything is uploaded."
             : current.category === "external_lookup"
               ? "Approving sends the values above to the external service."
               : "Only approve requests you expect from your AI client."}{" "}

@@ -4022,7 +4022,7 @@
       "id": "cyberchef",
       "name": "CyberChef",
       "category": "crypto",
-      "description": "GCHQ's web app for encoding, decoding, encryption, compression and data analysis. Cyber Hub also includes a local transformation workspace.",
+      "description": "GCHQ's web app for encoding, decoding, encryption, compression and data analysis. ExploitX also includes a local transformation workspace.",
       "website": "https://gchq.github.io/CyberChef/",
       "docs": "https://github.com/gchq/CyberChef/wiki",
       "os": [

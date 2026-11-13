@@ -5,7 +5,7 @@
 //!   deterministic mutation fuzzer), random bytes, text that breaks naive string handling (NUL,
 //!   invalid UTF-8, byte-order marks, bidirectional overrides, combining marks, lone CR), deep
 //!   nesting in each structured syntax, and oversized lines.
-//! * **A runner** that gives each case to the parser on a thread with the stack Cyber Hub's
+//! * **A runner** that gives each case to the parser on a thread with the stack ExploitX's
 //!   blocking work gets (2 MiB, tokio's default), under a time budget. A panic or a hang fails
 //!   the test with the parser and case named. A stack overflow aborts the test process, and Rust
 //!   names the thread that overflowed, which is the case (`hostile:<parser>:<case>`).
@@ -16,7 +16,7 @@
 
 use std::time::Duration;
 
-/// The stack of a tokio blocking thread, where Cyber Hub parses files.
+/// The stack of a tokio blocking thread, where ExploitX parses files.
 pub const STACK: usize = 2 * 1024 * 1024;
 
 pub struct Case {
@@ -153,7 +153,7 @@ pub fn oversized() -> Vec<Case> {
     vec![Case::new("one 4 MB line", "a".repeat(4 * 1024 * 1024)), Case::new("200,000 short lines", "x\n".repeat(200_000))]
 }
 
-/// Deep nesting in the syntaxes Cyber Hub reads.
+/// Deep nesting in the syntaxes ExploitX reads.
 pub fn deep_structures(depth: usize) -> Vec<Case> {
     vec![
         Case::new(format!("JSON arrays × {depth}"), nested("[", "1", "]", depth)),

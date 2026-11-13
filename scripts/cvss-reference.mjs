@@ -19,7 +19,7 @@
 // * <out>/fixture.tsv: the subset committed as src-tauri/src/cvss/testdata/first_reference.tsv
 //   (one v4.0 vector per macrovector, and v3.0 vectors whose 3.0 and 3.1 scores differ).
 //
-// "score" is what Cyber Hub reports: v4.0 the score of the whole vector; v3 the environmental
+// "score" is what ExploitX reports: v4.0 the score of the whole vector; v3 the environmental
 // score when an environmental metric is set, else the temporal score when a temporal metric is
 // set, else the base score.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";

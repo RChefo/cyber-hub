@@ -1,4 +1,4 @@
-//! Importers for data Cyber Hub already holds: tool runs (Nmap output is parsed; other tools'
+//! Importers for data ExploitX already holds: tool runs (Nmap output is parsed; other tools'
 //! output is scanned for indicators), stored threat-intelligence lookups, cached CVE records,
 //! project findings and authorized scope entries. No request leaves the computer.
 
@@ -254,7 +254,7 @@ pub fn import(db: &Db, kind: &str, id: &str, project_id: Option<i64>) -> Result<
             let args: Vec<String> = serde_json::from_str(&args).unwrap_or_default();
             let summary = format!("{tool} run #{rid} ({at}): {} {}\n{}", tool, args.join(" ").chars().take(300).collect::<String>(), if parsed > 0 { "Parsed Nmap hosts, resolutions and open services." } else { "Indicators extracted from the stored (redacted) output." });
             let strength = if parsed > 0 { Strength::Direct } else { Strength::Corroborating };
-            let mut o = obs("tool_run", &tool, Some(format!("Cyber Hub run #{rid}")), summary, b, Some(rid), strength);
+            let mut o = obs("tool_run", &tool, Some(format!("ExploitX run #{rid}")), summary, b, Some(rid), strength);
             o.evidence.observed_at = Some(at);
             Ok(Output { observations: if n > 0 { vec![o] } else { vec![] }, summary: format!("{n} entit{} from {tool} run #{rid}", if n == 1 { "y" } else { "ies" }), rate_note: None, from_cache: true })
         }
@@ -283,7 +283,7 @@ pub fn import(db: &Db, kind: &str, id: &str, project_id: Option<i64>) -> Result<
                 b.add(ent(t, v));
             }
             let n = b.entities.len();
-            let o = obs("finding", "findings", Some(format!("Cyber Hub finding #{fid}")), format!("Finding \"{title}\" ({sev}) on {target}: {}", desc.chars().take(400).collect::<String>()), b, None, Strength::Corroborating);
+            let o = obs("finding", "findings", Some(format!("ExploitX finding #{fid}")), format!("Finding \"{title}\" ({sev}) on {target}: {}", desc.chars().take(400).collect::<String>()), b, None, Strength::Corroborating);
             Ok(Output { observations: if n > 0 { vec![o] } else { vec![] }, summary: format!("{n} entit{} from finding #{fid}", if n == 1 { "y" } else { "ies" }), rate_note: None, from_cache: true })
         }
         "scope" => {
@@ -310,7 +310,7 @@ pub fn import(db: &Db, kind: &str, id: &str, project_id: Option<i64>) -> Result<
                 b.add(ent(et, v.clone()));
             }
             let n = b.entities.len();
-            let o = obs("scope", "project_scope", Some(format!("Cyber Hub project #{p} scope")), format!("Authorized in-scope targets of project #{p}"), b, None, Strength::Direct);
+            let o = obs("scope", "project_scope", Some(format!("ExploitX project #{p} scope")), format!("Authorized in-scope targets of project #{p}"), b, None, Strength::Direct);
             Ok(Output { observations: if n > 0 { vec![o] } else { vec![] }, summary: format!("{n} scope entr{}", if n == 1 { "y" } else { "ies" }), rate_note: None, from_cache: true })
         }
         _ => Err(Error::Unsupported("Unknown import source".into())),

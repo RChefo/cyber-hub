@@ -1630,7 +1630,7 @@ export interface McpPending {
   category: string;
   summary: string;
   details: { label: string; value: string }[];
-  /** checks Cyber Hub performed before showing the request */
+  /** checks ExploitX performed before showing the request */
   checks: string[];
   projectId: number | null;
   createdAt: string;

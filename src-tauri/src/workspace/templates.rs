@@ -281,7 +281,7 @@ pub fn import_json(c: &Connection, text: &str) -> AppResult<LibraryImport> {
     }
     let v: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| validation(format!("The file is not valid JSON: {e}")))?;
     if v.get("format").and_then(Value::as_str) != Some(FILE_FORMAT) {
-        return Err(validation("This is not a Cyber Hub finding library file"));
+        return Err(validation("This is not an ExploitX finding library file"));
     }
     let entries = v.get("templates").and_then(Value::as_array).ok_or_else(|| validation("The file has no templates"))?;
     if entries.len() > MAX_TEMPLATES {
@@ -563,7 +563,7 @@ mod tests {
         let db = Db::open_in_memory().unwrap();
         db.with(|c| {
             assert!(import_json(c, "not json").is_err());
-            assert!(import_json(c, r#"{"templates":[]}"#).unwrap_err().to_string().contains("not a Cyber Hub"));
+            assert!(import_json(c, r#"{"templates":[]}"#).unwrap_err().to_string().contains("not an ExploitX"));
             let r = import_json(c, r#"{"format":"cyberhub-finding-templates","version":1,"templates":[{"title":"A","severity":"high"},{"title":"B","severity":"nope"},{"severity":"low"},{"title":"C","severity":"low","rules":["zap:1","bogus"]}]}"#)?;
             assert_eq!(r.created, 1);
             assert_eq!(r.invalid.len(), 3, "{:?}", r.invalid);

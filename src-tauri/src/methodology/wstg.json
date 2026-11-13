@@ -3,7 +3,7 @@
  "url": "https://github.com/OWASP/wstg/blob/8f7da50ddfda9bc6929ca312eff9c9cb9a68ccc7/checklists/checklist.json",
  "commit": "8f7da50ddfda9bc6929ca312eff9c9cb9a68ccc7",
  "retrieved": "2026-11-08",
- "license": "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/); adapted by Cyber Hub: only test IDs, names, objectives and reference links are kept",
+ "license": "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/); adapted by ExploitX: only test IDs, names, objectives and reference links are kept",
  "categories": [
   {
    "id": "WSTG-INFO",

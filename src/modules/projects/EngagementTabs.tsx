@@ -119,7 +119,7 @@ export function EvidenceVault({ project, findings, onOpenFindings }: { project: 
     <div className="flex flex-col gap-3">
       <Panel
         title="Evidence vault"
-        description="Files are copied into Cyber Hub's private evidence folder and identified by SHA-256; tool runs and OSINT evidence are referenced, not copied."
+        description="Files are copied into ExploitX's private evidence folder and identified by SHA-256; tool runs and OSINT evidence are referenced, not copied."
         actions={
           <>
             <Button
@@ -406,7 +406,7 @@ export function TimelineTab({ project, record, onClearRecord, onOpenRecord }: { 
   return (
     <Panel
       title="Timeline"
-      description="Everything recorded in this project, newest first: runs, findings, vulnerabilities, scope, evidence, OSINT, discovery, imports, utilities, correlation decisions, workflows and reports. Times are when Cyber Hub recorded the event; evidence collected earlier also shows when it was collected."
+      description="Everything recorded in this project, newest first: runs, findings, vulnerabilities, scope, evidence, OSINT, discovery, imports, utilities, correlation decisions, workflows and reports. Times are when ExploitX recorded the event; evidence collected earlier also shows when it was collected."
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="ghost" onPress={() => void exportAs("csv")}>

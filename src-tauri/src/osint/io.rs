@@ -571,12 +571,12 @@ pub fn parse(bytes: &[u8], format: &str) -> Result<Document, String> {
     let text = std::str::from_utf8(bytes).map_err(|_| "The file is not UTF-8 text".to_string())?;
     let doc = match format {
         "json" => {
-            let doc: Document = serde_json::from_str(text).map_err(|e| format!("Not a Cyber Hub graph file: {e}"))?;
+            let doc: Document = serde_json::from_str(text).map_err(|e| format!("Not an ExploitX graph file: {e}"))?;
             if doc.format != FORMAT {
-                return Err("Not a Cyber Hub graph file".into());
+                return Err("Not an ExploitX graph file".into());
             }
             if doc.version > FORMAT_VERSION {
-                return Err(format!("The file was written by a newer Cyber Hub (format {}); this version reads format {FORMAT_VERSION}", doc.version));
+                return Err(format!("The file was written by a newer ExploitX (format {}); this version reads format {FORMAT_VERSION}", doc.version));
             }
             doc
         }

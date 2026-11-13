@@ -348,6 +348,28 @@ fn the_windows_install_identity_stays_the_same() {
     assert!(conf.get("mainBinaryName").is_none(), "the binary stays cyber-hub.exe");
 }
 
+/// Mission 13: the product is called ExploitX, while the package identity above stays "Cyber Hub"
+/// (install folders, registry keys, MSI upgrade code, package and binary names, the MCP server's
+/// path). What people see says ExploitX where the identity allows it: the window title, the Linux
+/// desktop entry's name (its file, Exec, Icon and StartupWMClass stay, so docks still match the
+/// window) and the package descriptions. docs/brand/NAME_MIGRATION.md lists what keeps the old name.
+#[test]
+fn the_product_shows_the_exploitx_name_without_changing_the_package_identity() {
+    let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+    assert_eq!(conf["app"]["windows"][0]["title"], "ExploitX");
+    assert!(conf["bundle"]["shortDescription"].as_str().is_some_and(|d| !d.contains("Cyber Hub")));
+    assert!(conf["bundle"]["longDescription"].as_str().is_some_and(|d| d.starts_with("ExploitX ")));
+    for format in ["deb", "rpm"] {
+        assert_eq!(conf["bundle"]["linux"][format]["desktopTemplate"], "linux/exploitx.desktop.hbs", "{format}");
+    }
+    let desktop = include_str!("../linux/exploitx.desktop.hbs");
+    for line in ["Name=ExploitX", "Exec={{exec}}", "StartupWMClass={{exec}}", "Icon={{icon}}", "Categories={{categories}}", "Type=Application"] {
+        assert!(desktop.lines().any(|l| l == line), "the desktop entry has {line}");
+    }
+    assert_eq!(conf["bundle"]["windows"]["nsis"]["installerIcon"], "icons/icon.ico", "the installer shows the ExploitX icon");
+    assert!(include_str!("../../index.html").contains("<title>ExploitX</title>"));
+}
+
 /// Mission 12: the repository is public. A release run's build artifacts could be downloaded by any
 /// signed-in GitHub user, which would make a private draft's binaries public, so they live one day
 /// and the publish job deletes them once the draft holds the files. CI also checks dependency

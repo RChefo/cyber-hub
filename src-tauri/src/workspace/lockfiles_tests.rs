@@ -211,7 +211,7 @@ fn damaged_lockfiles_are_refused_with_a_reason() {
     assert!(parse_file("yarn.lock", "# yarn lockfile v1\n").is_err());
 }
 
-/// Cyber Hub's own lockfiles: real files with hundreds of packages.
+/// ExploitX's own lockfiles: real files with hundreds of packages.
 #[test]
 fn the_repository_lockfiles_parse() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));

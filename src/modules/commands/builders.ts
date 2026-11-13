@@ -123,7 +123,7 @@ const nmap: BuilderDef = {
       type: "text",
       placeholder: "scan.txt",
       mono: true,
-      description: "When run in Cyber Hub, a name without a folder is saved in the work folder inside Cyber Hub's app data. The run output is also kept in Runs.",
+      description: "When run in ExploitX, a name without a folder is saved in the work folder inside ExploitX's app data. The run output is also kept in Runs.",
     },
   ],
   build(v) {

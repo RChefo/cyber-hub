@@ -39,7 +39,7 @@ pub fn managed_dir(app: &AppHandle) -> AppResult<PathBuf> {
     Ok(dir)
 }
 
-/// Whether Cyber Hub may touch an indexed path (Mission 7). On Windows, never a network or device
+/// Whether ExploitX may touch an indexed path (Mission 7). On Windows, never a network or device
 /// path: even checking that it exists makes Windows connect to the host with the user's
 /// credentials, and a restored database could name one.
 fn touchable(path: &str) -> bool {

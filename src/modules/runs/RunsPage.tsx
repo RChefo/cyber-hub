@@ -86,7 +86,7 @@ export default function RunsPage() {
     <div>
       <PageHeader
         title="Runs"
-        description="Every tool execution and managed installation started from Cyber Hub, with its exit status and captured output."
+        description="Every tool execution and managed installation started from ExploitX, with its exit status and captured output."
         actions={
           <Button
             size="sm"

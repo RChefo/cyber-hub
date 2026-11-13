@@ -1,6 +1,6 @@
 //! Upgrades from every earlier schema version, with a row in every table.
 //!
-//! * Every version from 1 to the latest − 1 is built as a file, the way Cyber Hub's own
+//! * Every version from 1 to the latest − 1 is built as a file, the way ExploitX's own
 //!   migrations left it, and every table gets a row. The values come from the schema itself:
 //!   foreign keys point at the parent's row, enumerated CHECKs take their first value, ranges
 //!   their lower bound, and columns with a default keep it.
@@ -234,7 +234,7 @@ fn seed(c: &Connection) -> Result<BTreeMap<String, i64>, Vec<String>> {
     }
 }
 
-/// A database file at `version`, built with Cyber Hub's own migrations (as the app left it: WAL,
+/// A database file at `version`, built with ExploitX's own migrations (as the app left it: WAL,
 /// foreign keys on), with a row in every table.
 fn file_at(dir: &Path, version: i64) -> (PathBuf, BTreeMap<String, i64>) {
     let path = dir.join("cyberhub.db");

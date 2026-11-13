@@ -7,10 +7,10 @@
 //!   bundle, or only `SSL_CERT_FILE` / `SSL_CERT_DIR` when they are set) while a client is *built*,
 //!   and refuses to build one when there are none.
 //!
-//! Mission 10 found that this stopped Cyber Hub from starting on a Linux system without CA
-//! certificates ("Cyber Hub could not start: builder error"): the VirusTotal and threat-intelligence
+//! Mission 10 found that this stopped ExploitX from starting on a Linux system without CA
+//! certificates ("ExploitX could not start: builder error"): the VirusTotal and threat-intelligence
 //! states built their clients during start-up. Now:
-//! * nothing network-related is built while Cyber Hub starts: those two clients are [`LazyClient`]s;
+//! * nothing network-related is built while ExploitX starts: those two clients are [`LazyClient`]s;
 //! * every client is built through [`build`], which names the missing CA certificates and what to do;
 //! * verification is never weakened: without CA certificates no client exists, so no HTTPS request
 //!   is made at all, and nothing falls back to plain HTTP or to accepting any certificate.
@@ -18,7 +18,7 @@
 use std::sync::Mutex;
 
 /// What a network feature reports when the system has no CA certificates.
-pub const NO_TRUST_ROOTS: &str = "Secure connections are not available: no trusted CA certificates were found on this computer, so Cyber Hub cannot verify any server's certificate and sends no request. Install the system's CA certificates (the ca-certificates package on Debian, Ubuntu and Fedora), then try again. Offline features keep working.";
+pub const NO_TRUST_ROOTS: &str = "Secure connections are not available: no trusted CA certificates were found on this computer, so ExploitX cannot verify any server's certificate and sends no request. Install the system's CA certificates (the ca-certificates package on Debian, Ubuntu and Fedora), then try again. Offline features keep working.";
 
 /// Whether the system offers at least one CA certificate where the TLS verifier looks for them
 /// (always true on Windows, where Windows' own store is asked during each connection).
@@ -49,12 +49,12 @@ pub fn describe_build_error(e: &reqwest::Error) -> String {
     while let Some(next) = cause.source() {
         cause = next;
     }
-    format!("Cyber Hub could not prepare a network connection: {cause}")
+    format!("ExploitX could not prepare a network connection: {cause}")
 }
 
 type Make = Box<dyn Fn() -> Result<reqwest::Client, String> + Send + Sync>;
 
-/// A client built when it is first needed, so that starting Cyber Hub never depends on the
+/// A client built when it is first needed, so that starting ExploitX never depends on the
 /// network stack. A failure is not remembered: once CA certificates are installed, the next request
 /// builds the client. A built client is kept and shared (a reqwest client is a handle to a pool).
 pub struct LazyClient {
@@ -212,7 +212,7 @@ mod tests {
         let (port, server) = tls_server(cert.clone(), key, 2);
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
         let url = format!("https://localhost:{port}/");
-        // the clients Cyber Hub builds verify the certificate: a self-signed one is refused
+        // the clients ExploitX builds verify the certificate: a self-signed one is refused
         let client = build(reqwest::Client::builder().no_proxy().resolve("localhost", addr)).unwrap();
         let err = client.get(&url).send().await.expect_err("an untrusted certificate must be refused");
         assert!(chain(&err).to_lowercase().contains("certificate"), "refused for its certificate: {}", chain(&err));

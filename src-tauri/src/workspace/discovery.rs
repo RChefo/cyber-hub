@@ -470,7 +470,7 @@ fn http_client_builder(insecure: bool) -> reqwest::ClientBuilder {
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(10))
         .connect_timeout(Duration::from_secs(6))
-        .user_agent("Cyber Hub attack surface check")
+        .user_agent("ExploitX attack surface check")
         .danger_accept_invalid_certs(insecure)
 }
 

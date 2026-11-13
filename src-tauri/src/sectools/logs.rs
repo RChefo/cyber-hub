@@ -384,7 +384,7 @@ impl Acc {
             r.warnings.push(format!("More than {MAX_CLIENTS} clients: the rest were counted in the totals only"));
         }
         if r.recognised == 0 && r.lines > 0 {
-            r.warnings.push("No line was recognised: Cyber Hub reads Apache/Nginx access logs (combined or common format) and OpenSSH authentication logs".into());
+            r.warnings.push("No line was recognised: ExploitX reads Apache/Nginx access logs (combined or common format) and OpenSSH authentication logs".into());
         }
         r
     }

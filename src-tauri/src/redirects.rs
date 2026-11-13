@@ -2,16 +2,16 @@
 //!
 //! A run whose URLs are authorized only by path (URL scope entries), or that sit on a host with an
 //! excluded path, is refused when the tool would follow redirects: a redirect can lead outside the
-//! authorized paths or into the excluded one, and Cyber Hub cannot check where an external tool's
-//! redirects go. Cyber Hub's own HTTP client checks every redirect itself (`sectools::http`).
+//! authorized paths or into the excluded one, and ExploitX cannot check where an external tool's
+//! redirects go. ExploitX's own HTTP client checks every redirect itself (`sectools::http`).
 //!
 //! The options and defaults come from each tool's own help text or source (checked in November
 //! 2026). A tool without an entry is not known to follow redirects: its runs keep the warning that
 //! the tool decides which further paths it requests.
 //!
-//! A file of options can turn redirects on where Cyber Hub cannot see it. Such runs are refused when
+//! A file of options can turn redirects on where ExploitX cannot see it. Such runs are refused when
 //! an option loads one ([`option_file`]); the files a tool reads on its own are named in a warning
-//! ([`own_option_files`]), because Cyber Hub does not read them.
+//! ([`own_option_files`]), because ExploitX does not read them.
 
 /// How a tool treats redirects when no option says otherwise.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -177,7 +177,7 @@ pub fn how_to_stop(tool_id: &str) -> &'static str {
     POLICIES.iter().find(|p| p.tool == tool_id).map_or("", |p| p.off)
 }
 
-/// Files of options: a tool can turn on redirects in one, where Cyber Hub cannot see it. The options
+/// Files of options: a tool can turn on redirects in one, where ExploitX cannot see it. The options
 /// that load a file named on the command line, and the files the tool reads on its own (from each
 /// tool's source, November 2026). Command-line options take precedence over these files in every
 /// tool listed, but a file can still turn on an option the command line leaves out.
@@ -223,7 +223,7 @@ const OPTION_FILES: &[OptionFiles] = &[
     OptionFiles { tool: "sqlmap", options: &["c"], prefixes: false, own: "" },
 ];
 
-/// The argument that loads a file of options Cyber Hub cannot read, if any.
+/// The argument that loads a file of options ExploitX cannot read, if any.
 pub fn option_file(tool_id: &str, args: &[String]) -> Option<String> {
     let f = OPTION_FILES.iter().find(|f| f.tool == tool_id)?;
     args.iter()

@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Cyber Hub",
+        "title": "ExploitX",
         "width": 1440,
         "height": 900,
         "minWidth": 800,
@@ -23,7 +23,7 @@
         "visible": false,
         "decorations": false,
         "shadow": false,
-        "backgroundColor": "#0B0D11",
+        "backgroundColor": "#0A0B10",
         "theme": "Dark"
       }
     ],
@@ -36,7 +36,8 @@
     "active": true,
     "targets": "all",
     "category": "DeveloperTool",
-    "shortDescription": "Local-first cybersecurity workstation",
+    "shortDescription": "Cybersecurity intelligence and security research platform",
+    "longDescription": "ExploitX is a local-first cybersecurity workspace for security research, assessment, investigation and workflow management: projects and findings, OSINT investigations, threat and vulnerability intelligence, detection engineering, reports and MCP integration.",
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
@@ -45,8 +46,17 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "linux": {
+      "deb": {
+        "desktopTemplate": "linux/exploitx.desktop.hbs"
+      },
+      "rpm": {
+        "desktopTemplate": "linux/exploitx.desktop.hbs"
+      }
+    },
     "windows": {
       "nsis": {
+        "installerIcon": "icons/icon.ico",
         "installerHooks": "windows/installer-hooks.nsh"
       }
     }

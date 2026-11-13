@@ -237,7 +237,7 @@ pub fn sarif(project: &str, generated: &str, findings: &[Finding]) -> serde_json
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
         "runs": [{
-            "tool": { "driver": { "name": "Cyber Hub", "version": env!("CARGO_PKG_VERSION"), "rules": rules } },
+            "tool": { "driver": { "name": "ExploitX", "version": env!("CARGO_PKG_VERSION"), "rules": rules } },
             "automationDetails": { "id": format!("cyberhub/{}/", category_slug(project)) },
             "properties": { "project": project, "exportedAt": generated },
             "results": results,
@@ -288,7 +288,7 @@ mod tests {
         let out: serde_json::Value = serde_json::from_str(&sarif("Shop", "2026-11-09T00:00:00Z", &findings).unwrap()).unwrap();
         assert_eq!(out["version"], "2.1.0");
         let run = &out["runs"][0];
-        assert_eq!(run["tool"]["driver"]["name"], "Cyber Hub");
+        assert_eq!(run["tool"]["driver"]["name"], "ExploitX");
         let results = run["results"].as_array().unwrap();
         let rules = run["tool"]["driver"]["rules"].as_array().unwrap();
         assert_eq!((results.len(), rules.len()), (5, 5));

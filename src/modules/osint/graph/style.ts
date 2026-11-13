@@ -4,17 +4,17 @@
  */
 import type { Verification } from "./types";
 
-/** Cyber Hub dark-theme tokens (mirrors src/styles/index.css). */
+/** ExploitX dark-theme tokens (mirrors design/brand/tokens.css; the canvas and the SVG export cannot read CSS variables). */
 export const THEME = {
-  background: "#0b0d10",
-  surface: "#15181f",
-  foreground: "#e8ebf0",
-  muted: "#8a93a3",
-  accent: "#4c8dff",
-  success: "#3fb68b",
-  warning: "#e0a43a",
+  background: "#0a0b10",
+  surface: "#14161e",
+  foreground: "#eceef4",
+  muted: "#8b92a5",
+  accent: "#7c6aff",
+  success: "#3cc88f",
+  warning: "#e8a93a",
   danger: "#e5484d",
-  halo: "rgba(11, 13, 16, 0.88)",
+  halo: "rgba(10, 11, 16, 0.88)",
 } as const;
 
 export const FONT_FAMILY = '"IBM Plex Sans", "Segoe UI", system-ui, sans-serif';
@@ -102,7 +102,7 @@ export function inkFor(fill: string): string {
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   });
   const luminance = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
-  return luminance > 0.42 ? "#0b0d10" : "#ffffff";
+  return luminance > 0.42 ? "#0a0b10" : "#ffffff";
 }
 
 /** First 1–2 visible characters of a glyph (by code point). */

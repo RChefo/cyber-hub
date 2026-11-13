@@ -1,4 +1,4 @@
-//! MCP operations, executed inside the running Cyber Hub app.
+//! MCP operations, executed inside the running ExploitX app.
 //!
 //! Every tool is implemented by calling the same functions the GUI uses (scope engine,
 //! `start_execution`, native file picker and upload, provider lookups, CVE search, report
@@ -642,7 +642,7 @@ async fn handle(app: AppHandle, conn: ConnCtx, tool: String, args: Value) -> Res
 
     // requests that arrive while MCP is being turned off are refused
     if app.state::<Arc<Bridge>>().info().is_none() {
-        return refuse(err("unavailable", "MCP is turned off in Cyber Hub."), &audit);
+        return refuse(err("unavailable", "MCP is turned off in ExploitX."), &audit);
     }
     let Some(spec) = catalog::tool(&tool) else {
         return refuse(err("not_found", format!("Unknown tool `{name}`")), &audit);
@@ -660,7 +660,7 @@ async fn handle(app: AppHandle, conn: ConnCtx, tool: String, args: Value) -> Res
     let result = match policy {
         Policy::Deny => {
             audit.approval = "denied_by_policy";
-            Err(err("denied", format!("{} is turned off for MCP clients in Cyber Hub (MCP page → Permissions).", category.label())))
+            Err(err("denied", format!("{} is turned off for MCP clients in ExploitX (MCP page → Permissions).", category.label())))
         }
         Policy::Allow => run_op(&app, &conn, spec.name, &args).await,
         Policy::Ask => match describe(&app, spec.name, &args) {
@@ -684,7 +684,7 @@ async fn handle(app: AppHandle, conn: ConnCtx, tool: String, args: Value) -> Res
                             }
                             audit.approval_id = Some(id.clone());
                             let _ = app.emit(EVENT_APPROVALS, bridge.approvals.pending_count());
-                            // draw the user's attention to Cyber Hub (taskbar flash / dock bounce)
+                            // draw the user's attention to ExploitX (taskbar flash / dock bounce)
                             if let Some(w) = app.get_webview_window("main") {
                                 let _ = w.request_user_attention(Some(tauri::UserAttentionType::Informational));
                             }
@@ -705,7 +705,7 @@ async fn handle(app: AppHandle, conn: ConnCtx, tool: String, args: Value) -> Res
                                         });
                                         r
                                     }
-                                    Decision::Denied => Err(err("denied", "The user declined this request in Cyber Hub.")),
+                                    Decision::Denied => Err(err("denied", "The user declined this request in ExploitX.")),
                                     Decision::Expired => Err(err("expired", "The request expired before the user approved it.")),
                                     Decision::Cancelled => Err(err("cancelled", "The request was cancelled.")),
                                 };
@@ -810,7 +810,7 @@ pub fn refuse_local_paths(args: &[String]) -> Result<(), ErrorBody> {
         if attached || looks_like_path(value) {
             return Err(err(
                 "invalid_params",
-                "Arguments that refer to local files (target lists, wordlists, request or configuration files) are not accepted from MCP clients. Pass targets directly, or start file-based runs in Cyber Hub.",
+                "Arguments that refer to local files (target lists, wordlists, request or configuration files) are not accepted from MCP clients. Pass targets directly, or start file-based runs in ExploitX.",
             ));
         }
     }
@@ -937,7 +937,7 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
             let v = tools::preview_execution(&db, &a.request(false)).map_err(app_err)?;
             let name = crate::catalog::tool(&a.tool_id).map(|t| t.name.clone()).unwrap_or(a.tool_id.clone());
             // the user approves exactly what the client sent, unredacted: approval details are shown
-            // only in Cyber Hub's window and are never stored or returned to clients
+            // only in ExploitX's window and are never stored or returned to clients
             let mut details = vec![d("Program", v.program.clone()), d("Arguments", tools::display_args(&a.args))];
             if let Some(p) = a.project_id {
                 details.push(d("Project", project_name(&db, p)));
@@ -954,7 +954,7 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
             } else {
                 details.push(d(
                     "Warning",
-                    format!("Cyber Hub does not check targets or scope for {name}. Read the arguments and approve only if you are authorized for everything they reach."),
+                    format!("ExploitX does not check targets or scope for {name}. Read the arguments and approve only if you are authorized for everything they reach."),
                 ));
                 checks.push(format!("Arguments are not scope-checked: {name} is not a target-based tool in the catalog"));
             }
@@ -963,7 +963,7 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
         "cyberhub_vt_upload_file" => {
             let a: UploadArg = opt_obj(args)?;
             let mut details = vec![
-                d("What happens", "You choose a file in the system file picker. Cyber Hub hashes it, then asks again in a system dialog before uploading."),
+                d("What happens", "You choose a file in the system file picker. ExploitX hashes it, then asks again in a system dialog before uploading."),
                 d("Privacy", "Uploaded files are shared with VirusTotal, its partners and the security community. Never upload sensitive, confidential, proprietary or personal files."),
             ];
             let mut checks = vec!["No file has been chosen yet; the client cannot name one".to_string()];
@@ -997,7 +997,7 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
             if let Some(v) = a.cvss_vector.as_deref().filter(|v| !v.trim().is_empty()) {
                 let c = crate::cvss::parse(v).map_err(|e| err("validation", format!("cvss_vector: {e}")))?;
                 details.push(d("CVSS", format!("{} ({} {})", c.vector, c.score, c.rating)));
-                checks.push("CVSS vector valid; the score is computed by Cyber Hub".into());
+                checks.push("CVSS vector valid; the score is computed by ExploitX".into());
             }
             details.push(d("Description", long(a.description.unwrap_or_default())));
             if let Some(r) = a.remediation {
@@ -1095,7 +1095,7 @@ fn describe(app: &AppHandle, tool: &str, args: &Value) -> Result<Described, Erro
             db.with(|c| projects::refuse_archived_for_clients(c, a.project_id)).map_err(app_err)?;
             Ok((
                 format!("Correlate the records of {}", project_name(&db, a.project_id)),
-                vec![d("What happens", "Cyber Hub's correlation rules compare exact values (URLs, hosts, CVEs, package URLs, file hashes, API paths) and store matches as suggestions in your review queue. Nothing is confirmed, linked or merged until you accept it.")],
+                vec![d("What happens", "ExploitX's correlation rules compare exact values (URLs, hosts, CVEs, package URLs, file hashes, API paths) and store matches as suggestions in your review queue. Nothing is confirmed, linked or merged until you accept it.")],
                 Some(a.project_id),
                 vec![format!("Project #{} exists and is not archived", a.project_id), "Only suggestions are stored".into()],
             ))
@@ -1193,7 +1193,7 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
             let bridge = app.state::<Arc<Bridge>>();
             let policy: HashMap<&str, Policy> = load_policy(&db).into_iter().map(|(c, p)| (c.as_str(), p)).collect();
             Ok(json!({
-                "app": "Cyber Hub",
+                "app": "ExploitX",
                 "version": env!("CARGO_PKG_VERSION"),
                 "os": crate::util::current_os(),
                 "catalogTools": CATALOG.tools.len(),
@@ -1366,7 +1366,7 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
             let a: RunIdArg = parse(args)?;
             // MCP clients may only stop runs they started; GUI runs and installations are the user's
             if !app.state::<LiveRuns>().contains(a.run_id) {
-                return Err(err("denied", "Only runs started through MCP can be cancelled by an MCP client. Cancel other runs in Cyber Hub."));
+                return Err(err("denied", "Only runs started through MCP can be cancelled by an MCP client. Cancel other runs in ExploitX."));
             }
             Ok(json!({ "runId": a.run_id, "cancelled": app.state::<ProcessManager>().cancel(a.run_id) }))
         }
@@ -1573,7 +1573,7 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
             let a: OsintDiscoverArg = parse(args)?;
             let id = osint::discovery::start(app, a.request(), &format!("mcp:{}", conn.client.label())).map_err(app_err)?;
             let _ = app.emit(osint::discovery::EVENT_CHANGED, json!({ "investigationId": a.investigation_id, "operationId": id, "scope": "operations" }));
-            Ok(json!({ "operationId": id, "status": "running", "message": "Collection started. Results are kept for the user's review in Cyber Hub; poll cyberhub_osint_get_operation." }))
+            Ok(json!({ "operationId": id, "status": "running", "message": "Collection started. Results are kept for the user's review in ExploitX; poll cyberhub_osint_get_operation." }))
         }
         "cyberhub_osint_get_operation" => {
             let a: OsintOperationArg = parse(args)?;
@@ -1587,7 +1587,7 @@ async fn run_op(app: &AppHandle, conn: &ConnCtx, tool: &str, args: &Value) -> Re
                 "evidenceCount": d.results.len(),
                 "truncated": d.truncated,
                 "reviewed": d.operation.imported_at.is_some(),
-                "note": "Proposed results are added to the investigation only when the user imports them in Cyber Hub."
+                "note": "Proposed results are added to the investigation only when the user imports them in ExploitX."
             }))
         }
         "cyberhub_osint_propose_relationship" => {

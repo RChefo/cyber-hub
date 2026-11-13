@@ -26,7 +26,7 @@ export function TypeGlyph({ type, className }: { type: string; className?: strin
   return (
     <span
       aria-hidden
-      className={cn("inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[10.5px] font-semibold text-[#0b0d10]", className)}
+      className={cn("inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[10.5px] font-semibold text-[#0a0b10]", className)}
       style={{ backgroundColor: s.color }}
     >
       {s.glyph}

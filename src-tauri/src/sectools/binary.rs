@@ -319,7 +319,7 @@ fn pe(data: &[u8], p: &goblin::pe::PE, r: &mut Report) {
         Hardening { name: "DEP".into(), present: flag(0x0100), detail: "NX_COMPAT: data pages are not executable".into() },
         Hardening { name: "Control Flow Guard".into(), present: flag(0x4000), detail: "GUARD_CF: indirect calls are checked".into() },
         Hardening { name: "High-entropy ASLR".into(), present: !p.is_64 || flag(0x0020), detail: "HIGH_ENTROPY_VA (64-bit)".into() },
-        Hardening { name: "Embedded signature".into(), present: signed, detail: "An Authenticode signature is embedded (Cyber Hub does not verify it); Windows system files are usually signed through catalogs instead".into() },
+        Hardening { name: "Embedded signature".into(), present: signed, detail: "An Authenticode signature is embedded (ExploitX does not verify it); Windows system files are usually signed through catalogs instead".into() },
     ];
     // overlay: data after the last section, other than the signature
     let cert = dirs.as_ref().and_then(|d| d.get_certificate_table()).map(|c| u64::from(c.size)).unwrap_or(0);

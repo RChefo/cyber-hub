@@ -208,7 +208,7 @@ pub fn markdown(c: &Connection, inv: i64, generated: &str) -> AppResult<String> 
     let one_line = |v: &str| v.chars().map(|c| if c.is_control() { ' ' } else { c }).collect::<String>();
     l.push(format!("# OSINT investigation: {}", one_line(i.name.trim()).replace('<', "&lt;").replace('[', "\\[")));
     l.push(String::new());
-    l.push(format!("Generated {generated} by Cyber Hub from locally stored data. Status: {}.", i.status));
+    l.push(format!("Generated {generated} by ExploitX from locally stored data. Status: {}.", i.status));
     l.push(String::new());
 
     // overview

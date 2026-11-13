@@ -13,11 +13,11 @@ import type { Severity } from "@/lib/types";
 echarts.use([BarChart, GridComponent, TooltipComponent]);
 
 const COLORS: Record<Severity, string> = {
-  critical: "#d93d4a",
-  high: "#f07a32",
-  medium: "#f2cc60",
-  low: "#4c8dff",
-  info: "#8a93a3",
+  critical: "#e5484d",
+  high: "#f2803a",
+  medium: "#f2c94c",
+  low: "#4c9bff",
+  info: "#9aa3b5",
 };
 const LABELS: Record<Severity, string> = { critical: "Critical", high: "High", medium: "Medium", low: "Low", info: "Info" };
 const ORDER: Severity[] = ["critical", "high", "medium", "low", "info"];
@@ -36,7 +36,7 @@ export function SeverityBarChart({ counts, height = 180, include = ORDER }: { co
         trigger: "item",
         backgroundColor: "#171b22",
         borderColor: "rgba(255,255,255,0.08)",
-        textStyle: { color: "#e8ebf0", fontSize: 12, fontFamily: "IBM Plex Sans" },
+        textStyle: { color: "#eceef4", fontSize: 12, fontFamily: "IBM Plex Sans" },
         formatter: (p: { name: string; value: number }) => `${p.name}: <b>${p.value}</b>`,
       },
       xAxis: { type: "value", show: false, minInterval: 1 },
@@ -46,7 +46,7 @@ export function SeverityBarChart({ counts, height = 180, include = ORDER }: { co
         data: sev.map((s) => LABELS[s]),
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { color: "#8a93a3", fontSize: 12, fontFamily: "IBM Plex Sans" },
+        axisLabel: { color: "#8b92a5", fontSize: 12, fontFamily: "IBM Plex Sans" },
       },
       series: [
         {
@@ -55,7 +55,7 @@ export function SeverityBarChart({ counts, height = 180, include = ORDER }: { co
           showBackground: true,
           backgroundStyle: { color: "rgba(255,255,255,0.035)", borderRadius: 4 },
           itemStyle: { borderRadius: [0, 4, 4, 0] },
-          label: { show: true, position: "right", color: "#e8ebf0", fontSize: 12, fontFamily: "IBM Plex Sans" },
+          label: { show: true, position: "right", color: "#eceef4", fontSize: 12, fontFamily: "IBM Plex Sans" },
           data: sev.map((s) => ({ value: counts[s] ?? 0, name: LABELS[s], itemStyle: { color: COLORS[s] } })),
         },
       ],

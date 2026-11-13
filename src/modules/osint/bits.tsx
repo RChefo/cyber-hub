@@ -11,7 +11,7 @@ export function TypeBadge({ type, label, className }: { type: string; label?: st
     <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-[12.5px] text-muted", className)}>
       <span
         aria-hidden
-        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[9.5px] font-semibold text-[#0b0d10]"
+        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[9.5px] font-semibold text-[#0a0b10]"
         style={{ backgroundColor: s.color }}
       >
         {s.glyph}

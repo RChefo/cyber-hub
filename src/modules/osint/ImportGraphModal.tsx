@@ -111,7 +111,7 @@ export function ImportGraphModal({
       onOpenChange={close}
       size="lg"
       title="Import graph"
-      description="Cyber Hub graph files (.json) and GraphML (.graphml). The import always creates a new graph; nothing existing is overwritten."
+      description="ExploitX graph files (.json) and GraphML (.graphml). The import always creates a new graph; nothing existing is overwritten."
       footer={
         <>
           <Button variant="tertiary" onPress={() => close(false)}>
@@ -154,7 +154,7 @@ export function ImportGraphModal({
           )}
           <TextInput label="Name of the new graph" value={graphName} onChange={setGraphName} placeholder={preview.graphName} />
           <div className="panel-inset grid gap-3 px-4 py-3 sm:grid-cols-4">
-            <PreviewStat label="Format" value={preview.format === "json" ? "Cyber Hub" : "GraphML"} />
+            <PreviewStat label="Format" value={preview.format === "json" ? "ExploitX" : "GraphML"} />
             <PreviewStat label="Entities" value={preview.entities.toLocaleString()} />
             <PreviewStat label="Relationships" value={preview.relationships.toLocaleString()} />
             <PreviewStat label="Evidence" value={preview.evidence.toLocaleString()} />

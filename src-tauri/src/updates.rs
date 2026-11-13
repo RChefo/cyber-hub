@@ -195,7 +195,7 @@ pub fn support(kind: InstallKind, appimage_path: Option<&str>) -> (bool, Option<
         InstallKind::Rpm => (true, Some("Installed from the .rpm package: installing an update asks for an administrator password (rpm).".into())),
         InstallKind::Unknown => (
             false,
-            Some("This copy was not installed by a Cyber Hub installer (a development build or a copied executable), so it cannot update itself. Install Cyber Hub from the release installer to receive updates.".into()),
+            Some("This copy was not installed by an ExploitX installer (a development build or a copied executable), so it cannot update itself. Install ExploitX from the release installer to receive updates.".into()),
         ),
     }
 }
@@ -222,7 +222,7 @@ pub fn should_notify(notified: Option<&str>, version: &str) -> bool {
 
 /// Whether a folder in the temporary directory is one the updater plugin left behind: on Windows it
 /// writes the installer to `<product name>-<version>-updater-<random>` and keeps it, because the
-/// installer still runs from there after Cyber Hub exits.
+/// installer still runs from there after ExploitX exits.
 pub fn is_installer_leftover(dir_name: &str, product_name: &str) -> bool {
     dir_name
         .strip_prefix(product_name)
@@ -565,7 +565,7 @@ pub async fn check(app: &AppHandle, manual: bool) -> AppResult<Status> {
     }
     if let Some(version) = notice {
         // one notification per version: a toast in the app and an entry in the activity list
-        let _ = db.with(|c| crate::commands::activity::log(c, "update", &format!("Cyber Hub {version} is available"), "Open Settings → Updates to review and install it.", None, None, None));
+        let _ = db.with(|c| crate::commands::activity::log(c, "update", &format!("ExploitX {version} is available"), "Open Settings → Updates to review and install it.", None, None, None));
         let _ = app.emit(EVENT_NOTICE, serde_json::json!({ "version": version }));
     }
     svc.emit(app);
@@ -587,7 +587,7 @@ async fn run_check(app: &AppHandle) -> Result<Option<(Update, Release)>, Failure
         .version_comparator(|current, release| offered(&current, &release.version))
         .timeout(REQUEST_TIMEOUT)
         .configure_client(move |b| b.https_only(https_only))
-        // Windows: runs right before the installer starts and Cyber Hub exits
+        // Windows: runs right before the installer starts and ExploitX exits
         .on_before_exit(move || {
             crate::shutdown(&handle);
             handle.cleanup_before_exit();
@@ -754,7 +754,7 @@ pub fn blockers(app: &AppHandle) -> Vec<String> {
         if n > 0 {
             out.push(format!(
                 "{} running for an MCP client: close the MCP client (for example Claude Code or Claude Desktop) so the installer can replace it",
-                plural(n, "Cyber Hub MCP server (cyberhub-mcp) is", "Cyber Hub MCP servers (cyberhub-mcp) are")
+                plural(n, "ExploitX MCP server (cyberhub-mcp) is", "ExploitX MCP servers (cyberhub-mcp) are")
             ));
         }
     }
@@ -790,13 +790,13 @@ pub async fn install(app: &AppHandle) -> AppResult<Status> {
     let kind = install_kind();
     let message = match kind {
         InstallKind::Nsis | InstallKind::Msi => format!(
-            "Cyber Hub closes, the installer updates it to version {version} and starts it again.\n\nProjects, OSINT investigations, settings, stored credentials and the MCP setup are kept. Connected MCP clients are disconnected."
+            "ExploitX closes, the installer updates it to version {version} and starts it again.\n\nProjects, OSINT investigations, settings, stored credentials and the MCP setup are kept. Connected MCP clients are disconnected."
         ),
         InstallKind::Appimage => format!(
-            "The AppImage file is replaced with version {version}. Cyber Hub then asks you to restart.\n\nProjects, OSINT investigations, settings, stored credentials and the MCP setup are kept."
+            "The AppImage file is replaced with version {version}. ExploitX then asks you to restart.\n\nProjects, OSINT investigations, settings, stored credentials and the MCP setup are kept."
         ),
         _ => format!(
-            "The package manager installs version {version} and asks for an administrator password. Cyber Hub then asks you to restart.\n\nProjects, OSINT investigations, settings, stored credentials and the MCP setup are kept."
+            "The package manager installs version {version} and asks for an administrator password. ExploitX then asks you to restart.\n\nProjects, OSINT investigations, settings, stored credentials and the MCP setup are kept."
         ),
     };
     if !crate::confirm::native(app, "Install update", message, "Install update").await {
@@ -817,7 +817,7 @@ pub async fn install(app: &AppHandle) -> AppResult<Status> {
         (i.update.clone().expect("checked"), i.bytes.clone().expect("checked"))
     };
     svc.emit(app);
-    // Windows: on success this does not return (the installer starts and Cyber Hub exits)
+    // Windows: on success this does not return (the installer starts and ExploitX exits)
     let result = tauri::async_runtime::spawn_blocking(move || update.install(bytes.as_slice()))
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -913,7 +913,7 @@ mod tests {
         assert!(support(InstallKind::Appimage, Some("/home/u/Cyber Hub.AppImage")).0);
         assert!(!support(InstallKind::Appimage, None).0);
         let (ok, note) = support(InstallKind::Unknown, None);
-        assert!(!ok && note.unwrap().contains("not installed by a Cyber Hub installer"));
+        assert!(!ok && note.unwrap().contains("not installed by an ExploitX installer"));
         // `cargo test` binaries are not bundled
         assert_eq!(install_kind(), InstallKind::Unknown);
     }

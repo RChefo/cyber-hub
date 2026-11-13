@@ -123,7 +123,7 @@ pub fn parse(b: &Value) -> Result<Parsed, ApiError> {
                     vec![port, product, svc.pointer("/_shodan/module").and_then(Value::as_str).unwrap_or("").to_string(), s(svc, "timestamp").unwrap_or_default()]
                 })
                 .collect(),
-            note: Some("Banners are collected by Shodan's crawlers; Cyber Hub does not contact the host.".into()),
+            note: Some("Banners are collected by Shodan's crawlers; ExploitX does not contact the host.".into()),
         });
     }
     Ok(Parsed::found(r))

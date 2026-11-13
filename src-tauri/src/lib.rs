@@ -1,4 +1,4 @@
-//! Cyber Hub — Tauri backend.
+//! ExploitX — Tauri backend.
 //!
 //! Layers: frontend → Tauri commands (`commands/*`) → domain modules
 //! (`process`, `targets`, `scope`, `detect`, `redact`, `confirm`, `catalog`) → local SQLite (`db`).
@@ -53,10 +53,10 @@ use tauri::{AppHandle, Manager};
 
 use commands::{activity, analysis as analysis_commands, apisec as apisec_commands, sbom as sbom_commands, assistant as assistant_commands, intel, library, mcp as mcp_commands, osint as osint_commands, projects, sectools as sectool_commands, system, discovery as discovery_commands, threat_intel, tools, updates as update_commands, virustotal, vulns as vuln_commands, wordlists, workflows as workflow_commands, workspace as workspace_commands};
 
-/// Leaves no work behind when Cyber Hub exits: normal exit, restart after an update, and right
+/// Leaves no work behind when ExploitX exits: normal exit, restart after an update, and right
 /// before an update installer takes over on Windows. Safe to call more than once.
 pub(crate) fn shutdown(app: &AppHandle) {
-    // never leave tool processes running after Cyber Hub exits
+    // never leave tool processes running after ExploitX exits
     let had_runs = !app.state::<process::ProcessManager>().running_ids().is_empty();
     app.state::<process::ProcessManager>().kill_all_now();
     if had_runs {
@@ -496,7 +496,7 @@ pub fn run() {
         });
 }
 
-/// Everything Cyber Hub does before its window appears: data folder, database (with a restore
+/// Everything ExploitX does before its window appears: data folder, database (with a restore
 /// staged before the restart), MCP bridge and schedulers. An error here ends the start with a
 /// native message box (`startup_error`).
 fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -515,7 +515,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
         }
-        // Tools inherit Cyber Hub's working directory, and relative file names in arguments are
+        // Tools inherit ExploitX's working directory, and relative file names in arguments are
         // validated against it. Use a private folder, so a relative name never resolves to (or
         // writes into) the installation folder or wherever the app happened to be started.
         let work = dir.join("work");
@@ -549,7 +549,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             s.outcome_mut().mcp_turned_off = database
                 .with(|c| Ok(c.execute("UPDATE user_preferences SET value = 'false' WHERE key = ?1 AND value = 'true'", [mcp::ops::ENABLED_PREF])?))
                 .is_ok_and(|n| n > 0);
-            // nor makes Cyber Hub read files the analyst never chose on this computer
+            // nor makes ExploitX read files the analyst never chose on this computer
             s.outcome_mut().wordlists_dropped = database.with(|c| Ok(restore::untrust_paths(c)?)).unwrap_or(0);
             restore::finish(&dir, s)
         });
@@ -591,9 +591,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         // not while a restore is in progress, nor right after one: some files belong to the
         // previous database
         if skip_sweep {
-            eprintln!("Cyber Hub: evidence folder not swept at this start (database restore)");
+            eprintln!("ExploitX: evidence folder not swept at this start (database restore)");
         } else if let Err(e) = evidence.sweep(&app.state::<db::Db>()) {
-            eprintln!("Cyber Hub: evidence folder not checked: {e}");
+            eprintln!("ExploitX: evidence folder not checked: {e}");
         }
         app.manage(evidence);
         app.manage(discovery_commands::DiscoveryState::default());
@@ -610,13 +610,13 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = mcp_commands::start_bridge(&handle).await {
-                    eprintln!("Cyber Hub: MCP bridge not started: {e}");
+                    eprintln!("ExploitX: MCP bridge not started: {e}");
                 }
             });
         }
         // automatic update checks (off the startup path; nothing is installed without approval)
         updates::start_scheduler(app.handle().clone());
-        // scheduled workflows (passive steps only) while Cyber Hub runs
+        // scheduled workflows (passive steps only) while ExploitX runs
         workflow_commands::start_scheduler(app.handle().clone());
         Ok(())
 }

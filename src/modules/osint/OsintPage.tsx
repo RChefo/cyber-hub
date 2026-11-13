@@ -195,7 +195,7 @@ export default function OsintPage() {
     return (
       <>
         <PageHeader title="OSINT Workspace" description="Investigations, evidence-backed relationship mapping and public-source collection." />
-        <EmptyBlock icon={MonitorX} title="Desktop runtime required" description="Start Cyber Hub with `npm run tauri dev` to use the OSINT workspace." />
+        <EmptyBlock icon={MonitorX} title="Desktop runtime required" description="Start ExploitX with `npm run tauri dev` to use the OSINT workspace." />
       </>
     );
   }

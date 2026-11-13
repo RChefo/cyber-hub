@@ -341,7 +341,7 @@ function OperationsPanel() {
         query={q}
         rows={4}
         isEmpty={(d) => d.length === 0}
-        empty={<EmptyBlock compact icon={Radar} title="No operations yet" description="Start a collection on the left, or import data Cyber Hub already holds." />}
+        empty={<EmptyBlock compact icon={Radar} title="No operations yet" description="Start a collection on the left, or import data ExploitX already holds." />}
       >
         {(ops) => (
           <ul className="flex flex-col gap-1">
@@ -415,10 +415,10 @@ function InternalPanel() {
 
   return (
     <Panel
-      title="Cyber Hub data"
+      title="ExploitX data"
       description={
         inv.projectId
-          ? "Reuse what Cyber Hub already holds: tool output, threat-intelligence lookups, cached CVEs and the linked project's findings and scope. Nothing is sent anywhere."
+          ? "Reuse what ExploitX already holds: tool output, threat-intelligence lookups, cached CVEs and the linked project's findings and scope. Nothing is sent anywhere."
           : "Reuse tool output, threat-intelligence lookups and cached CVEs. Link a project to also import its findings and scope. Nothing is sent anywhere."
       }
     >
@@ -471,7 +471,7 @@ function InternalPanel() {
 function SourceReference() {
   const { registry } = useOsint();
   return (
-    <Panel title="About the sources" description="Where each source gets its data and the terms that apply. Respect them; Cyber Hub does not bypass authentication, CAPTCHAs or paywalls.">
+    <Panel title="About the sources" description="Where each source gets its data and the terms that apply. Respect them; ExploitX does not bypass authentication, CAPTCHAs or paywalls.">
       <ul className="flex flex-col gap-1.5">
         {registry.raw.providers.map((p) => (
           <li key={p.id} className="tile px-3 py-2 text-[12.5px]">

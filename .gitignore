@@ -9,7 +9,7 @@ src-tauri/binaries/
 coverage
 .vite
 
-# local data: Cyber Hub stores user data in the OS app-data directory, never in the repo;
+# local data: ExploitX stores user data in the OS app-data directory, never in the repo;
 # these patterns keep accidental copies out of version control
 *.db
 *.db-wal

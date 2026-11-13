@@ -1,4 +1,4 @@
-# Fuzzing Cyber Hub's parsers
+# Fuzzing ExploitX's parsers
 
 Coverage-guided fuzz targets (cargo-fuzz, libFuzzer) for the parsers of untrusted input. They call
 `cyber_hub_lib::fuzzing`, which exists only with the `fuzzing` feature: application builds and

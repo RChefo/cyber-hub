@@ -1,11 +1,11 @@
-//! When Cyber Hub cannot start (its database was written by a newer version, is damaged or is
+//! When ExploitX cannot start (its database was written by a newer version, is damaged or is
 //! locked), it says why in a native message box before it exits (Mission 7). A release build has no
 //! console, so without this the window would simply never appear.
 
 /// The message box's title.
-pub const TITLE: &str = "Cyber Hub could not start";
+pub const TITLE: &str = "ExploitX could not start";
 
-/// Shows why Cyber Hub cannot start, then exits with status 1.
+/// Shows why ExploitX cannot start, then exits with status 1.
 pub fn fail(reason: &str) -> ! {
     let text = message(reason);
     eprintln!("{TITLE}: {text}");
@@ -64,7 +64,7 @@ mod tests {
     /// Mission 7: the message is the reason itself, readable, with nothing that could disguise it.
     #[test]
     fn the_message_is_the_reason_without_the_framework_prefix() {
-        let m = super::message("error encountered during setup hook: This database was written by a newer version of Cyber Hub (schema 40; this version supports up to 32).");
+        let m = super::message("error encountered during setup hook: This database was written by a newer version of ExploitX (schema 40; this version supports up to 32).");
         assert!(m.starts_with("This database was written by a newer version"), "{m}");
         assert_eq!(super::message("x\u{202E}y"), "x<U+202E>y");
     }

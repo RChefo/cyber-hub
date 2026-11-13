@@ -84,8 +84,8 @@ function AddFilesModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => vo
       }
     >
       <div className="flex gap-2">
-        {choice(false, "Reference in place", "Recommended for large lists such as SecLists or rockyou. Cyber Hub indexes the file where it is.")}
-        {choice(true, "Copy into Cyber Hub", "Makes a private copy in the managed directory. Copies can later be deleted from disk.")}
+        {choice(false, "Reference in place", "Recommended for large lists such as SecLists or rockyou. ExploitX indexes the file where it is.")}
+        {choice(true, "Copy into ExploitX", "Makes a private copy in the managed directory. Copies can later be deleted from disk.")}
       </div>
       <SelectInput label="Category" value={category} options={[{ id: "auto", label: "Detect from file name" }, ...CATEGORY_OPTIONS]} onChange={setCategory} />
     </AppModal>
@@ -124,7 +124,7 @@ function RemoveModal({ wordlist, onClose }: { wordlist: Wordlist | null; onClose
       }
     >
       <p className="text-[13.5px] text-muted">
-        “{wordlist?.name}” will be removed from the Cyber Hub index.
+        “{wordlist?.name}” will be removed from the ExploitX index.
         {wordlist && !wordlist.managed && " The file was indexed by reference and stays on disk."}
       </p>
       {wordlist?.managed && <SwitchInput label="Also delete the copy from the managed directory" isSelected={deleteFile} onChange={setDeleteFile} />}
@@ -300,7 +300,7 @@ export function WordlistsTab({ preselect }: { preselect?: string }) {
                 </Tooltip>
               </>
             ) : (
-              "Wordlists are never bundled with Cyber Hub. Add files or point to a folder such as your SecLists checkout."
+              "Wordlists are never bundled with ExploitX. Add files or point to a folder such as your SecLists checkout."
             )}
           </div>
         </div>
@@ -340,7 +340,7 @@ export function WordlistsTab({ preselect }: { preselect?: string }) {
             <EmptyBlock
               icon={FileText}
               title="No wordlists indexed"
-              description="Add files by reference (recommended for SecLists, rockyou and other large lists) or copy small lists into Cyber Hub."
+              description="Add files by reference (recommended for SecLists, rockyou and other large lists) or copy small lists into ExploitX."
               action={
                 <Button size="sm" variant="primary" isDisabled={!runtime} onPress={pickFiles}>
                   <Plus className="size-3.5" />

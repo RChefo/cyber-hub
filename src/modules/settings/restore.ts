@@ -19,7 +19,7 @@ export function restoreSummary(info: BackupInfo): string[] {
         : `${info.evidenceAvailable} of the ${pluralize(info.evidenceReferenced, "evidence file")} it refers to are available. The others were deleted after the backup was made and stay missing.`,
     );
   }
-  lines.push("Your current database is kept in the backups folder, with the evidence files only it refers to. Nothing is deleted. Cyber Hub restarts to finish.");
+  lines.push("Your current database is kept in the backups folder, with the evidence files only it refers to. Nothing is deleted. ExploitX restarts to finish.");
   return lines;
 }
 

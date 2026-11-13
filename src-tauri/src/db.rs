@@ -1425,7 +1425,7 @@ const REBUILD_MIGRATIONS: &[i64] = &[32];
 /// * The migration commits only when `PRAGMA foreign_key_check` finds no broken reference; otherwise
 ///   it is rolled back and the database is unchanged.
 /// * An interruption (crash, power loss) leaves the transaction uncommitted: SQLite rolls it back at
-///   the next open, and every connection Cyber Hub opens turns foreign keys on again.
+///   the next open, and every connection ExploitX opens turns foreign keys on again.
 fn run_rebuild(conn: &Connection, version: i64, sql: &str) -> AppResult<()> {
     conn.execute_batch("PRAGMA foreign_keys = OFF;")?;
     let result = (|| -> AppResult<()> {
@@ -1524,7 +1524,7 @@ pub fn check_supported(version: i64) -> AppResult<()> {
     let latest = MIGRATIONS.len() as i64;
     if version > latest {
         return Err(AppError::Internal(format!(
-            "This database was written by a newer version of Cyber Hub (schema {version}; this version supports up to {latest}). It was not changed. Install that newer version again, or restore a backup made before the upgrade: the backups folder in the data folder keeps a copy taken before every upgrade."
+            "This database was written by a newer version of ExploitX (schema {version}; this version supports up to {latest}). It was not changed. Install that newer version again, or restore a backup made before the upgrade: the backups folder in the data folder keeps a copy taken before every upgrade."
         )));
     }
     Ok(())
@@ -1550,7 +1550,7 @@ pub fn backup_before_upgrade(conn: &Connection, path: &Path, current: i64) -> Ap
     // like a usable backup
     let partial = dir.join(format!("cyberhub-schema{current}-{stamp}.db.partial"));
     let _ = std::fs::remove_file(&partial);
-    let fail = |e: String| AppError::Internal(format!("Cyber Hub needs to upgrade its database and could not make a backup first ({e}). Nothing was changed. Free some disk space and start Cyber Hub again."));
+    let fail = |e: String| AppError::Internal(format!("ExploitX needs to upgrade its database and could not make a backup first ({e}). Nothing was changed. Free some disk space and start ExploitX again."));
     conn.execute("VACUUM INTO ?1", [partial.to_string_lossy().to_string()]).map_err(|e| fail(e.to_string()))?;
     std::fs::rename(&partial, &dest).map_err(|e| fail(e.to_string()))?;
     // leftovers of copies interrupted earlier
@@ -1587,7 +1587,7 @@ pub fn backup_to(conn: &Connection, dest: &Path) -> AppResult<u64> {
         let target = norm(dest);
         for suffix in ["", "-wal", "-shm", "-journal"] {
             if target.is_some() && target == norm(Path::new(&format!("{live}{suffix}"))) {
-                return Err(AppError::Validation("Choose another file: this is Cyber Hub's own database".into()));
+                return Err(AppError::Validation("Choose another file: this is ExploitX's own database".into()));
             }
         }
     }
@@ -1653,13 +1653,13 @@ impl Db {
             c.execute("UPDATE executions SET status = 'error', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'", [crate::util::now()])?;
             // workflow runs interrupted by an exit end as failed; their unfinished steps too
             let ts = crate::util::now();
-            c.execute("UPDATE workflow_run_steps SET status = CASE status WHEN 'running' THEN 'failed' ELSE 'cancelled' END, summary = CASE status WHEN 'running' THEN 'Interrupted: Cyber Hub was closed' ELSE summary END, finished_at = COALESCE(finished_at, ?1) WHERE status IN ('running','pending') AND run_id IN (SELECT id FROM workflow_runs WHERE status = 'running')", [&ts])?;
-            c.execute("UPDATE workflow_runs SET status = 'failed', summary = 'Interrupted: Cyber Hub was closed while it ran', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'", [&ts])?;
+            c.execute("UPDATE workflow_run_steps SET status = CASE status WHEN 'running' THEN 'failed' ELSE 'cancelled' END, summary = CASE status WHEN 'running' THEN 'Interrupted: ExploitX was closed' ELSE summary END, finished_at = COALESCE(finished_at, ?1) WHERE status IN ('running','pending') AND run_id IN (SELECT id FROM workflow_runs WHERE status = 'running')", [&ts])?;
+            c.execute("UPDATE workflow_runs SET status = 'failed', summary = 'Interrupted: ExploitX was closed while it ran', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'", [&ts])?;
             // and feed synchronizations: the cursor only moved for pages already stored
-            c.execute("UPDATE taxii_syncs SET status = 'failed', message = 'Interrupted: Cyber Hub was closed while it ran', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'", [&ts])?;
+            c.execute("UPDATE taxii_syncs SET status = 'failed', message = 'Interrupted: ExploitX was closed while it ran', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'", [&ts])?;
             // likewise discovery runs: nothing found by an interrupted run is treated as removed
             c.execute(
-                "UPDATE discovery_snapshots SET status = 'failed', note = 'Interrupted: Cyber Hub was closed while it ran', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'",
+                "UPDATE discovery_snapshots SET status = 'failed', note = 'Interrupted: ExploitX was closed while it ran', finished_at = COALESCE(finished_at, ?1) WHERE status = 'running'",
                 [crate::util::now()],
             )?;
             Ok(())

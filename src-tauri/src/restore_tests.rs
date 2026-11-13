@@ -88,7 +88,7 @@ fn only_checked_cyber_hub_databases_are_accepted() {
 
     let foreign = dir.join("foreign.db");
     Connection::open(&foreign).unwrap().execute_batch("CREATE TABLE projects (id INTEGER); PRAGMA user_version = 5;").unwrap();
-    refused(&foreign, "not a Cyber Hub database");
+    refused(&foreign, "not an ExploitX database");
 
     // schema-embedded SQL from a file is never accepted: an added trigger, a changed index or an
     // added column is refused
@@ -314,7 +314,7 @@ fn a_database_still_in_use_postpones_the_restore() {
     assert_eq!(project_names(&dir.join(DB_NAME)), ["Old"]);
 }
 
-/// Mission 7: a restored database cannot make Cyber Hub read files the analyst never chose on this
+/// Mission 7: a restored database cannot make ExploitX read files the analyst never chose on this
 /// computer: wordlists indexed by reference and the extra wordlist folder are dropped; managed copies
 /// stay (they are checked to be inside the managed folder whenever they are read).
 #[test]

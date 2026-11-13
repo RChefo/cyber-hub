@@ -11,7 +11,7 @@ rule Demo_Loader : loader windows
 {
     meta:
         description = "Loader strings seen in the demo sample"
-        author = "Cyber Hub tests"
+        author = "ExploitX tests"
         severity = "High"
         mitre_attack = "T1059.001, T1105"
         reference = "https://example.org/demo"
@@ -30,7 +30,7 @@ fn strings_match_with_offsets_and_the_metadata_is_read() {
     let c = compiled(DEMO);
     assert!(c.issues.is_empty(), "{:?}", c.issues);
     let m = &c.meta;
-    assert_eq!((m.description.as_str(), m.author.as_str(), m.level.as_str()), ("Loader strings seen in the demo sample", "Cyber Hub tests", "high"));
+    assert_eq!((m.description.as_str(), m.author.as_str(), m.level.as_str()), ("Loader strings seen in the demo sample", "ExploitX tests", "high"));
     assert_eq!(m.techniques, vec!["T1059.001", "T1105"]);
     assert_eq!(m.references, vec!["https://example.org/demo"]);
     assert_eq!(m.tags, vec!["loader", "windows"]);

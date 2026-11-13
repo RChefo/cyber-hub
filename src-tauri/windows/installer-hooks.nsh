@@ -1,4 +1,4 @@
-; Cyber Hub's additions to Tauri's NSIS installer (bundle.windows.nsis.installerHooks), Mission 11.
+; ExploitX's additions to Tauri's NSIS installer (bundle.windows.nsis.installerHooks), Mission 11.
 ;
 ; Tauri's installer saves the install folder as the default value of
 ; HKCU\Software\<publisher>\<product>, and its uninstaller keeps that key unless "Delete the

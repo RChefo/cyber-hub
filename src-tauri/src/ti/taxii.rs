@@ -376,7 +376,7 @@ pub fn pattern_values(pattern: &str) -> Result<Vec<String>, String> {
     Ok(out)
 }
 
-/// A STIX indicator as Cyber Hub keeps it.
+/// A STIX indicator as ExploitX keeps it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StixIndicator {
     pub id: String,
