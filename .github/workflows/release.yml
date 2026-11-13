@@ -218,6 +218,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libdbus-1-dev patchelf rpm file pkg-config build-essential
 
+      - name: Licenses and corresponding source of the AppImage's libraries
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Mission 14: the AppImage bundles LGPL and GPL libraries of this system (GTK, WebKitGTK and
+          # their dependencies). Their copyright files go into the AppImage, their Debian source
+          # packages next to it on the release (docs/governance/DISTRIBUTION_LICENSE_COMPLIANCE.md).
+          codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+          {
+            echo "deb-src http://archive.ubuntu.com/ubuntu $codename main restricted universe multiverse"
+            echo "deb-src http://archive.ubuntu.com/ubuntu $codename-updates main restricted universe multiverse"
+            echo "deb-src http://security.ubuntu.com/ubuntu $codename-security main restricted universe multiverse"
+          } | sudo tee /etc/apt/sources.list.d/exploitx-deb-src.list
+          sudo apt-get update
+          mkdir -p release-sources
+          bash scripts/appimage-licenses.sh "$RUNNER_TEMP/appimage-licenses" \
+            --sources "release-sources/ExploitX-AppImage-library-sources_${VERSION}.tar" \
+            --tauri-config "$RUNNER_TEMP/appimage-files.json"
+
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -242,7 +264,10 @@ jobs:
           fi
           # the update feed of this repository is compiled into the release build only
           printf '{"plugins":{"updater":{"endpoints":["%s"]}}}' "$FEED" > "$RUNNER_TEMP/feed.json"
-          npx tauri build --ci --bundles "$BUNDLES" --config "$RUNNER_TEMP/feed.json"
+          config=(--config "$RUNNER_TEMP/feed.json")
+          # the AppImage carries its libraries' copyright files (from the step above)
+          if [ "$RUNNER_OS" = Linux ]; then config+=(--config "$RUNNER_TEMP/appimage-files.json"); fi
+          npx tauri build --ci --bundles "$BUNDLES" "${config[@]}"
 
       - name: Collect signed artifacts
         shell: bash
@@ -255,7 +280,14 @@ jobs:
           for f in release-assets/*; do
             case "$f" in *.sig) ;; *) [ -s "$f.sig" ] || { echo "::error::$f was not signed"; exit 1; } ;; esac
           done
+          # the source of the AppImage's libraries: not an update artifact, so not signed;
+          # SHA256SUMS.txt covers it like every other asset
+          if [ -d release-sources ]; then cp release-sources/* release-assets/; fi
           ls -l release-assets
+
+      - name: Every package carries the third-party notices
+        shell: bash
+        run: node scripts/check-package-notices.mjs release-assets
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

@@ -392,6 +392,47 @@ fn third_party_licenses_are_bundled_with_every_package() {
     assert!(notices.len() > 500_000, "the license texts are reproduced in full");
 }
 
+/// Mission 14: the AppImage bundles LGPL and GPL libraries of the build system. The Linux build
+/// collects their copyright files into the AppImage and their Debian source packages into a release
+/// asset before `tauri build`, and every build checks its signed packages for the notices before
+/// they are uploaded. The source archive is not an update artifact: unsigned, covered by SHA256SUMS.
+#[test]
+fn the_release_ships_the_notices_and_the_appimage_library_sources() {
+    let release = include_str!("../../.github/workflows/release.yml");
+    let doc = crate::yaml::parse_one(release).unwrap();
+    let steps = doc["jobs"]["build"]["steps"].as_array().unwrap();
+    let position = |name: &str| steps.iter().position(|s| s["name"].as_str().is_some_and(|n| n.starts_with(name))).unwrap_or_else(|| panic!("build has the step {name}"));
+    let collect = position("Licenses and corresponding source of the AppImage's libraries");
+    let build = position("Build and sign");
+    let artifacts = position("Collect signed artifacts");
+    let check = position("Every package carries the third-party notices");
+    let upload = steps.iter().position(|s| s["uses"].as_str().is_some_and(|u| u.starts_with("actions/upload-artifact@"))).unwrap();
+    assert!(collect < build && build < artifacts && artifacts < check && check < upload, "collected before the build, checked before the upload");
+    assert_eq!(steps[collect]["if"], "runner.os == 'Linux'");
+    let run = steps[collect]["run"].as_str().unwrap();
+    assert!(run.contains("deb-src http://archive.ubuntu.com/ubuntu $codename-updates") && run.contains("deb-src http://security.ubuntu.com/ubuntu $codename-security"), "{run}");
+    assert!(run.contains("bash scripts/appimage-licenses.sh \"$RUNNER_TEMP/appimage-licenses\"") && run.contains("--sources \"release-sources/ExploitX-AppImage-library-sources_${VERSION}.tar\"") && run.contains("--tauri-config \"$RUNNER_TEMP/appimage-files.json\""), "{run}");
+    // `. /etc/os-release` in the step's own shell would overwrite VERSION
+    assert!(run.contains("codename=$(. /etc/os-release && echo \"$VERSION_CODENAME\")"), "{run}");
+    let run = steps[build]["run"].as_str().unwrap();
+    assert!(run.contains("if [ \"$RUNNER_OS\" = Linux ]; then config+=(--config \"$RUNNER_TEMP/appimage-files.json\"); fi") && run.contains("npx tauri build --ci --bundles \"$BUNDLES\" \"${config[@]}\""), "{run}");
+    let run = steps[artifacts]["run"].as_str().unwrap();
+    assert!(run.find("was not signed").unwrap() < run.find("cp release-sources/* release-assets/").unwrap(), "the signature check covers the packages, then the unsigned source archive joins them");
+    assert_eq!(steps[check]["run"], "node scripts/check-package-notices.mjs release-assets");
+    assert!(steps[check].get("if").is_none(), "both platforms check their packages");
+    // the archive is not mistaken for an update artifact (scripts/updater-manifest.mjs patterns)
+    for pattern in ["_x64-setup\\.exe$", "\\.msi$", "_amd64\\.AppImage$", "_amd64\\.deb$", "\\.x86_64\\.rpm$"] {
+        assert!(!regex::Regex::new(pattern).unwrap().is_match("ExploitX-AppImage-library-sources_0.1.0.tar"), "{pattern}");
+    }
+    // CI installs the npm packages, without running their scripts, before the notices check reads them
+    let ci = include_str!("../../.github/workflows/ci.yml");
+    let ci_doc = crate::yaml::parse_one(ci).unwrap();
+    let runs: Vec<&str> = ci_doc["jobs"]["checks"]["steps"].as_array().unwrap().iter().filter_map(|s| s["run"].as_str()).collect();
+    let install = runs.iter().position(|r| r.starts_with("npm ci --ignore-scripts")).expect("the checks job installs the npm packages");
+    let licenses = runs.iter().position(|r| r.contains("node scripts/licenses.mjs check")).unwrap();
+    assert!(install < licenses);
+}
+
 /// Mission 12: the repository is public. A release run's build artifacts could be downloaded by any
 /// signed-in GitHub user, which would make a private draft's binaries public, so they live one day
 /// and the publish job deletes them once the draft holds the files. CI also checks dependency
