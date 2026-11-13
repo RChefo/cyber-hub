@@ -1,6 +1,6 @@
 # Development guide
 
-How Cyber Hub is built, tested and released, for contributors. It complements [CONTRIBUTING.md](../../CONTRIBUTING.md), which covers the workflow and rules. Deeper references: [ARCHITECTURE.md](../ARCHITECTURE.md), [SECURITY.md](../SECURITY.md), [DATA_MODEL.md](../DATA_MODEL.md), [MCP.md](../MCP.md), [UPGRADE.md](../UPGRADE.md), [UPDATER.md](../UPDATER.md).
+How ExploitX is built, tested and released, for contributors. It complements [CONTRIBUTING.md](../../CONTRIBUTING.md), which covers the workflow and rules. Deeper references: [ARCHITECTURE.md](../ARCHITECTURE.md), [SECURITY.md](../SECURITY.md), [DATA_MODEL.md](../DATA_MODEL.md), [MCP.md](../MCP.md), [UPGRADE.md](../UPGRADE.md), [UPDATER.md](../UPDATER.md).
 
 ## Repository layout
 
@@ -61,7 +61,7 @@ The full model is in [SECURITY.md](../SECURITY.md). For development, keep these 
 
 ## Network access
 
-* Cyber Hub has no telemetry and no account.
+* ExploitX has no telemetry and no account.
 * Network requests happen only when the user uses a network feature:
   * threat-intelligence and VirusTotal lookups;
   * NVD and OSV queries;
@@ -86,12 +86,12 @@ The full model is in [SECURITY.md](../SECURITY.md). For development, keep these 
 | `CYBERHUB_EVTX_DIR`, `CYBERHUB_EVTX_OUT`, `CYBERHUB_EVTX_SAMPLES`, `CYBERHUB_SIGMA_RULES`, `CYBERHUB_YARA_RULES`, `CYBERHUB_OCSF_DIR` | Optional, ignored tests | Run the parsers over your own sample folders (event logs, rules, Prowler outputs); the normal test run skips them |
 | `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | The release workflow only | The update-signing key. Contributors never need it |
 
-`SSL_CERT_FILE` and `SSL_CERT_DIR`, when set, replace the system's CA certificates for Cyber Hub's TLS clients on Linux (the rule of `rustls-native-certs`).
+`SSL_CERT_FILE` and `SSL_CERT_DIR`, when set, replace the system's CA certificates for ExploitX's TLS clients on Linux (the rule of `rustls-native-certs`).
 
 ## Database and migrations
 
 * The schema version is `PRAGMA user_version`. Migrations are the append-only list `MIGRATIONS` in `src-tauri/src/db.rs`, applied at start-up, each in its own transaction with its version.
-* Before upgrading, the app copies the database to `backups/cyberhub-schema<N>-<time>.db`. An older Cyber Hub refuses a newer database and explains how to recover.
+* Before upgrading, the app copies the database to `backups/cyberhub-schema<N>-<time>.db`. An older ExploitX refuses a newer database and explains how to recover.
 * Backups made in the app can be restored in the app (`restore.rs`); the replaced database is kept.
 * Tests:
   * `db_upgrade_tests.rs` upgrades every earlier schema, with a row in every table, through the real start-up path. It also covers a failure injected before a commit and a process killed mid-migration;

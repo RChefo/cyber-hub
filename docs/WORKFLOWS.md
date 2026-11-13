@@ -1,10 +1,10 @@
 # Workflow automation
 
-Projects → *Automation* chains built-in steps into workflows. A workflow belongs to one project. It runs by hand or, if it only has passive steps, on a schedule while Cyber Hub is open. The definitions are in `src-tauri/src/workspace/workflows.rs`, the executor in `src-tauri/src/commands/workflows.rs`, and the tables in schema 11.
+Projects → *Automation* chains built-in steps into workflows. A workflow belongs to one project. It runs by hand or, if it only has passive steps, on a schedule while ExploitX is open. The definitions are in `src-tauri/src/workspace/workflows.rs`, the executor in `src-tauri/src/commands/workflows.rs`, and the tables in schema 11.
 
 ## No arbitrary code
 
-A workflow is a list of steps of predefined types with validated settings. There is no script, expression, command or URL step, so a workflow cannot do anything that the matching manual action in Cyber Hub cannot do:
+A workflow is a list of steps of predefined types with validated settings. There is no script, expression, command or URL step, so a workflow cannot do anything that the matching manual action in ExploitX cannot do:
 * Definitions with unknown step types, unknown settings or unknown fields are refused (`deny_unknown_fields`, per-type setting schemas).
 * Target lists are trimmed and deduplicated. Entries that contain spaces or control characters, or that start with `-` (option injection), are refused.
 
@@ -38,9 +38,9 @@ A workflow has 1 to 20 steps.
 * **Failures.** A failed step stops the run unless it is set to *continue on error*. The remaining steps are recorded as skipped.
 * **Cancellation.** It stops the running step (and its discovery) and marks the remaining steps as cancelled.
 * **Result.** The run is *succeeded* (all steps), *partial* (some failed but the run continued), *failed* or *cancelled*.
-* **Records.** Every run stores a copy of the definition it ran, and each step its state, attempts, summary and a log (the last 64 KB). Runs appear on the project timeline. Runs interrupted by closing Cyber Hub are marked failed at the next start, along with their running and pending steps.
+* **Records.** Every run stores a copy of the definition it ran, and each step its state, attempts, summary and a log (the last 64 KB). Runs appear on the project timeline. Runs interrupted by closing ExploitX are marked failed at the next start, along with their running and pending steps.
 
-**Investigation steps** (Mission 3). *Correlate records* runs the correlation rules ([DATA_MODEL.md](DATA_MODEL.md#correlation)); matches are only suggestions. *Verify evidence* checks every stored file and text against its SHA-256 and records the result on each record; it fails when a record does not match, naming the first three. *Wait for a recorded result* waits until the analyst records a result of the chosen kind in the project: a utility result recorded with its evidence (file, log or event log, packet capture triage), an imported scan, an SBOM or lockfile, an API definition or an ATT&CK layer. Results recorded since the run started count, including before the step began. Cyber Hub never runs the capability itself: the analyst chooses the file in its native dialog and confirms anything that contacts a service, so a playbook cannot do anything the analyst did not do. The step ends with the time limit when nothing is recorded, and a cancellation stops it.
+**Investigation steps** (Mission 3). *Correlate records* runs the correlation rules ([DATA_MODEL.md](DATA_MODEL.md#correlation)); matches are only suggestions. *Verify evidence* checks every stored file and text against its SHA-256 and records the result on each record; it fails when a record does not match, naming the first three. *Wait for a recorded result* waits until the analyst records a result of the chosen kind in the project: a utility result recorded with its evidence (file, log or event log, packet capture triage), an imported scan, an SBOM or lockfile, an API definition or an ATT&CK layer. Results recorded since the run started count, including before the step began. ExploitX never runs the capability itself: the analyst chooses the file in its native dialog and confirms anything that contacts a service, so a playbook cannot do anything the analyst did not do. The step ends with the time limit when nothing is recorded, and a cancellation stops it.
 
 ## Templates
 

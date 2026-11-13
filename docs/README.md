@@ -1,12 +1,12 @@
 # Documentation
 
-Cyber Hub's documents fall into three groups. Start with the one that fits what you want to do.
+ExploitX's documents fall into three groups. Start with the one that fits what you want to do.
 
 ## For users
 
 | Document | What it covers |
 |---|---|
-| [../README.md](../README.md) | What Cyber Hub is, its modules, status and how to build it |
+| [../README.md](../README.md) | What ExploitX is, its modules, status and how to build it |
 | [PLATFORMS.md](PLATFORMS.md) | Supported platforms, per-OS dependencies and behaviour, validation status, troubleshooting |
 | [SECURITY.md](SECURITY.md) | The security model: trust boundaries, confirmations, scope, providers, uploads, accepted risks |
 | [UPGRADE.md](UPGRADE.md) | Database upgrades, backups, restoring a backup, rollback |
@@ -34,6 +34,17 @@ Cyber Hub's documents fall into three groups. Start with the one that fits what 
 | [governance/REPOSITORY_SECURITY.md](governance/REPOSITORY_SECURITY.md) | How the public repository is protected: settings, CI, secrets, the audit of its history |
 | [../THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) | Notices for copied code, data, fonts and icons |
 | [../CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | Community standards |
+
+## Brand
+
+| Document | What it covers |
+|---|---|
+| [brand/BRAND_GUIDELINES.md](brand/BRAND_GUIDELINES.md) | The name, positioning, voice and logo rules |
+| [brand/VISUAL_IDENTITY.md](brand/VISUAL_IDENTITY.md) | How the identity was chosen and constructed: symbol, wordmark, colour, type, icons, illustration |
+| [brand/DESIGN_SYSTEM.md](brand/DESIGN_SYSTEM.md) | Design tokens and interface rules for the app and the website |
+| [brand/ASSET_CATALOG.md](brand/ASSET_CATALOG.md) | Every logo, icon, favicon and social image, and how to rebuild them |
+| [brand/NAME_MIGRATION.md](brand/NAME_MIGRATION.md) | Cyber Hub → ExploitX: what changed, what keeps the old name and why |
+| [brand/BRAND_NAME_RESEARCH.md](brand/BRAND_NAME_RESEARCH.md) | Name and domain research (not legal advice) |
 
 ## Internal: release engineering and project history
 

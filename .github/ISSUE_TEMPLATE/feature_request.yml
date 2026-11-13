@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Cyber Hub is a local-first security workstation for Windows and Linux. Requests that fit its scope have the best chance; see the README's module list.
+        ExploitX is a local-first security workstation for Windows and Linux. Requests that fit its scope have the best chance; see the README's module list.
 
         **Security vulnerabilities must not be reported here** (see SECURITY.md).
   - type: textarea
@@ -20,7 +20,7 @@ body:
     id: proposal
     attributes:
       label: The change you propose
-      description: How should Cyber Hub behave? Mention the module (Projects, OSINT, Threat Intel, Tools Library, MCP, …).
+      description: How should ExploitX behave? Mention the module (Projects, OSINT, Threat Intel, Tools Library, MCP, …).
     validations:
       required: true
   - type: textarea
@@ -31,7 +31,7 @@ body:
     id: safety
     attributes:
       label: Safety and scope
-      description: Would the feature start programs, reach the network, upload data or touch credentials? Cyber Hub asks for a native confirmation before running anything and keeps active work inside a project's authorized scope.
+      description: Would the feature start programs, reach the network, upload data or touch credentials? ExploitX asks for a native confirmation before running anything and keeps active work inside a project's authorized scope.
   - type: checkboxes
     id: checks
     attributes:

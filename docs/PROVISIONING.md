@@ -1,10 +1,10 @@
 # Credential provisioning (application owner only)
 
-Cyber Hub's provider integrations (VirusTotal, AbuseIPDB, AlienVault OTX, the abuse.ch services URLhaus / MalwareBazaar / ThreatFox, Shodan) and the optional NVD key use credentials that the **application owner** provisions. End users never see, enter, validate, replace or remove these credentials, and the app has no screen or IPC command for doing so. (TAXII servers are the analyst's own: their credential is typed into a native dialog in the app; see [TAXII servers](#taxii-servers).)
+ExploitX's provider integrations (VirusTotal, AbuseIPDB, AlienVault OTX, the abuse.ch services URLhaus / MalwareBazaar / ThreatFox, Shodan) and the optional NVD key use credentials that the **application owner** provisions. End users never see, enter, validate, replace or remove these credentials, and the app has no screen or IPC command for doing so. (TAXII servers are the analyst's own: their credential is typed into a native dialog in the app; see [TAXII servers](#taxii-servers).)
 
 ## How it works
 
-* Credentials live in the **OS credential store** of the user account that runs Cyber Hub (Windows Credential Manager, Linux Secret Service), under the service name `dev.cyberhub.workstation`:
+* Credentials live in the **OS credential store** of the user account that runs ExploitX (Windows Credential Manager, Linux Secret Service), under the service name `dev.cyberhub.workstation`:
 
   | ID | Credential store entry | Used by |
   |---|---|---|
@@ -32,7 +32,7 @@ During development you can also run it directly: `cargo run --features provision
 
 ## Provision credentials
 
-Run the tool **as the same OS user that runs Cyber Hub**, on that machine.
+Run the tool **as the same OS user that runs ExploitX**, on that machine.
 
 ### From a local secrets file
 
@@ -101,13 +101,13 @@ Inside the app, Settings → Threat intelligence providers shows each provider's
 ## Important limits of this model
 
 * **Per machine and per user account.** The OS credential store is local, so every machine (and user account) that should have working integrations must be provisioned with `cyberhub-keys`. An installer distributed to other people contains no credentials; on their machines every provider shows **Not configured**.
-* **The local user can read their own credential store.** Anyone who can run programs as that OS user can read the entries with OS tools. Provisioning your keys on someone else's machine therefore gives that person access to them. Cyber Hub only guarantees that the keys are not exposed through the app (UI, IPC, logs, history, database, exports or error messages).
+* **The local user can read their own credential store.** Anyone who can run programs as that OS user can read the entries with OS tools. Provisioning your keys on someone else's machine therefore gives that person access to them. ExploitX only guarantees that the keys are not exposed through the app (UI, IPC, logs, history, database, exports or error messages).
 * **Shared keys and quotas.** Every provisioned machine uses your provider accounts and quotas, and is subject to each provider's terms (several free tiers are for non-commercial use only).
-* **Giving end users working integrations without handing them your keys** requires a server you operate: an API gateway that holds the keys, authenticates installations and enforces rate limits. Cyber Hub would then call your gateway instead of the providers. That is not implemented.
+* **Giving end users working integrations without handing them your keys** requires a server you operate: an API gateway that holds the keys, authenticates installations and enforces rate limits. ExploitX would then call your gateway instead of the providers. That is not implemented.
 
 ## MCP clients
 
-MCP clients ([MCP.md](MCP.md)) never receive credentials and cannot provision, test or remove them. `cyberhub-mcp` holds no credentials and does not include the provisioning tool; provider requests made on behalf of an MCP client are performed by the Cyber Hub app with the provisioned credentials, after the user's policy and approvals allow them.
+MCP clients ([MCP.md](MCP.md)) never receive credentials and cannot provision, test or remove them. `cyberhub-mcp` holds no credentials and does not include the provisioning tool; provider requests made on behalf of an MCP client are performed by the ExploitX app with the provisioned credentials, after the user's policy and approvals allow them.
 
 ## Development and tests
 

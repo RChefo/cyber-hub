@@ -1,6 +1,6 @@
 # Windows code signing (Authenticode)
 
-Cyber Hub's Windows installers and executables are **not yet Authenticode-signed**. This is a release blocker: in the staging test Microsoft Defender quarantined an unsigned build (see [UPDATER.md](UPDATER.md)). Authenticode signing is separate from update signing. The update key (`TAURI_SIGNING_PRIVATE_KEY`) proves that an update comes from the Cyber Hub release pipeline. An Authenticode certificate proves the publisher to Windows, SmartScreen and Defender. Both are needed.
+ExploitX's Windows installers and executables are **not yet Authenticode-signed**. This is a release blocker: in the staging test Microsoft Defender quarantined an unsigned build (see [UPDATER.md](UPDATER.md)). Authenticode signing is separate from update signing. The update key (`TAURI_SIGNING_PRIVATE_KEY`) proves that an update comes from the ExploitX release pipeline. An Authenticode certificate proves the publisher to Windows, SmartScreen and Defender. Both are needed.
 
 This document describes the procedure. Nothing here has been bought or configured. No certificate, key or secret exists in the repository, and none may be added to it.
 
@@ -12,7 +12,7 @@ Since June 2023, the CA/Browser Forum code-signing requirements oblige certifica
 
 Since March 1, 2026 (ballot CSC-31), a publicly trusted code-signing certificate is valid for at most **460 days** (OV and EV). Plan a yearly renewal. Timestamping (step 3) keeps already-signed files valid after the certificate expires.
 
-| Route | Who can use it | Key storage | Fit for Cyber Hub |
+| Route | Who can use it | Key storage | Fit for ExploitX |
 |---|---|---|---|
 | **Microsoft Artifact Signing** (formerly Azure Trusted Signing; generally available since January 2026) | Organizations in 12 regions according to the quickstart updated in October 2026: the USA, Canada, the EU, the UK, Australia, New Zealand, Japan, South Korea, Singapore, Switzerland, Norway and Israel. The Windows code-signing overview still lists four. Individual developers: the USA and Canada only. The "individual onboarding paused" reports go back to an April 2025 preview notice; whether new individuals are accepted today was not verified (Mission 9). Check before relying on it. | Microsoft-managed HSM; short-lived certificates renewed automatically | Recommended **if eligible**: no hardware to manage, works from GitHub-hosted runners, and Tauri supports it through `signCommand` |
 | **OV certificate with a cloud HSM** (for example DigiCert KeyLocker, SSL.com eSigner, GlobalSign or Sectigo cloud signing, or Azure Key Vault Premium/Managed HSM with a CA that supports it) | Organizations, and individuals where the CA allows it | Cloud HSM; signing through the vendor's tool | Recommended otherwise. It works from CI. |
@@ -45,7 +45,7 @@ In `src-tauri/tauri.conf.json`, under `bundle.windows`, use **either** a certifi
 **or** a custom command (cloud signing), where `%1` is the file to sign:
 
 ```json
-"signCommand": "artifact-signing-cli -e https://<region>.codesigning.azure.net -a <account> -c <certificate-profile> -d \"Cyber Hub\" %1"
+"signCommand": "artifact-signing-cli -e https://<region>.codesigning.azure.net -a <account> -c <certificate-profile> -d \"ExploitX\" %1"
 ```
 
 The thumbprint is not a secret, but keep the configuration in a release-only override (`tauri build --config src-tauri/tauri.release-signing.json`) so development builds do not try to sign.
@@ -53,7 +53,7 @@ The thumbprint is not a secret, but keep the configuration in a release-only ove
 Always timestamp, with an RFC 3161 server from your certificate authority. A timestamped signature stays valid after the certificate expires. An untimestamped one stops validating on the certificate's expiry date. The equivalent `signtool` options are:
 
 ```powershell
-signtool sign /fd SHA256 /tr <RFC 3161 timestamp URL> /td SHA256 /sha1 <thumbprint> /d "Cyber Hub" <file>
+signtool sign /fd SHA256 /tr <RFC 3161 timestamp URL> /td SHA256 /sha1 <thumbprint> /d "ExploitX" <file>
 ```
 
 ## 4. Secrets and CI
@@ -73,7 +73,7 @@ signtool verify /pa /v /tw <file>          # /pa: Authenticode policy; /tw: warn
 Get-AuthenticodeSignature <file> | Format-List Status, StatusMessage, SignerCertificate, TimeStamperCertificate
 ```
 
-`Status` must be `Valid`, `SignerCertificate` must be Cyber Hub's certificate, and `TimeStamperCertificate` must be present. Also install the signed NSIS build on a clean Windows machine and confirm that:
+`Status` must be `Valid`, `SignerCertificate` must be ExploitX's certificate, and `TimeStamperCertificate` must be present. Also install the signed NSIS build on a clean Windows machine and confirm that:
 
 * the UAC prompt (MSI) and the file properties (Digital Signatures tab) name the publisher;
 * Microsoft Defender does not quarantine the application after the first start or after an update. Repeat the update test from UPDATER.md with signed builds.
@@ -83,7 +83,7 @@ Get-AuthenticodeSignature <file> | Format-List Status, StatusMessage, SignerCert
 * SmartScreen reputation is per file and publisher. **Each new build starts with little or no reputation**, so the first users of a new release may still see "Windows protected your PC" until enough people have downloaded it. A consistent signing identity carries reputation over to later releases faster.
 * Do not change the signing identity between releases without need. With a new certificate, reputation may have to be built again.
 * If Defender flags a signed build, submit the files as a false positive at the Microsoft Security Intelligence submission portal (<https://www.microsoft.com/wdsi/filesubmission>), as a software developer. Attach the signed installer.
-* Distribution through the Microsoft Store avoids SmartScreen warnings entirely, but it is a separate packaging and review process (MSIX) that Cyber Hub does not use.
+* Distribution through the Microsoft Store avoids SmartScreen warnings entirely, but it is a separate packaging and review process (MSIX) that ExploitX does not use.
 
 ## 7. Release checklist (signing part)
 

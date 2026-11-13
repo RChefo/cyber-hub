@@ -1,6 +1,6 @@
-# Contributing to Cyber Hub
+# Contributing to ExploitX
 
-Thank you for your interest in Cyber Hub. This guide covers setting up a development environment, the checks a change must pass, and how changes are reviewed.
+Thank you for your interest in ExploitX. This guide covers setting up a development environment, the checks a change must pass, and how changes are reviewed.
 
 > **Licensing.** The repository is public but **no open-source license has been selected yet**. See the README, section "License". Until the owner selects one, the maintainer may hold pull requests that add substantial code. Issues, bug reports, reproductions, documentation fixes and small fixes are welcome now. The options under consideration are in [docs/governance/LICENSE_COMPARISON.md](docs/governance/LICENSE_COMPARISON.md).
 
@@ -39,7 +39,7 @@ npm ci                 # installs the frontend; also runs scripts/patch-deps.mjs
 npm run tauri dev      # the desktop app with hot reload
 ```
 
-* **Your own data stays separate.** A development build keeps its data in the same folder as an installed Cyber Hub (`%APPDATA%\dev.cyberhub.workstation` on Windows, `~/.local/share/dev.cyberhub.workstation` on Linux). If you also use Cyber Hub for real work, give the development build a disposable folder: development builds honour `CYBERHUB_DATA_DIR`.
+* **Your own data stays separate.** A development build keeps its data in the same folder as an installed ExploitX (`%APPDATA%\dev.cyberhub.workstation` on Windows, `~/.local/share/dev.cyberhub.workstation` on Linux). If you also use ExploitX for real work, give the development build a disposable folder: development builds honour `CYBERHUB_DATA_DIR`.
 
   ```bash
   CYBERHUB_DATA_DIR=/tmp/cyberhub-dev npm run tauri dev      # Linux
@@ -54,7 +54,7 @@ npm run tauri dev      # the desktop app with hot reload
   npx tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
   ```
 
-  Such a build is for your own testing. It is not Authenticode-signed and not update-signed, and it must not be redistributed as Cyber Hub.
+  Such a build is for your own testing. It is not Authenticode-signed and not update-signed, and it must not be redistributed as ExploitX.
 
 The architecture and the development workflow are described in [docs/governance/DEVELOPMENT_GUIDE.md](docs/governance/DEVELOPMENT_GUIDE.md).
 
@@ -112,11 +112,11 @@ Every change follows the five standards the project was built with:
 
 ## Database changes
 
-Cyber Hub's SQLite schema is versioned with `PRAGMA user_version`. The migrations are the list `MIGRATIONS` in `src-tauri/src/db.rs`, applied in order, each in its own transaction together with its new version.
+ExploitX's SQLite schema is versioned with `PRAGMA user_version`. The migrations are the list `MIGRATIONS` in `src-tauri/src/db.rs`, applied in order, each in its own transaction together with its new version.
 
 * **Append, never edit.** Add a new migration at the end of `MIGRATIONS`. Never change, reorder or remove a migration that is already on the default branch: existing databases have already run it.
 * **Keep data.** A migration must keep every existing row that is still meaningful. If data must change shape, migrate it in SQL within the same migration.
-* **Backups and rollback.** Before any migration, Cyber Hub copies the database to `backups/cyberhub-schema<N>-<time>.db`. An older version refuses a newer database and says how to recover ([docs/UPGRADE.md](docs/UPGRADE.md)). Do not break either path.
+* **Backups and rollback.** Before any migration, ExploitX copies the database to `backups/cyberhub-schema<N>-<time>.db`. An older version refuses a newer database and says how to recover ([docs/UPGRADE.md](docs/UPGRADE.md)). Do not break either path.
 * **Tests.** `db_upgrade_tests.rs` builds every earlier version with a row in every table and upgrades it through the real start-up path, including failures injected before a commit and a process killed mid-migration.
   * Make sure your migration passes it.
   * Extend it when your migration transforms data.

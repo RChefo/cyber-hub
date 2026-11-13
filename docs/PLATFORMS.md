@@ -1,6 +1,6 @@
 # Platform notes
 
-Cyber Hub is under active development. It is not released or distributed, and no installers or packages are published.
+ExploitX is under active development. It is not released or distributed, and no installers or packages are published.
 
 ## Supported platforms
 
@@ -112,7 +112,7 @@ cd src-tauri && cargo test
 npm run tauri dev      # run the app
 ```
 
-Installers and packages (`npm run tauri build`) are deferred: Cyber Hub is still in development and nothing is packaged or distributed.
+Installers and packages (`npm run tauri build`) are deferred: ExploitX is still in development and nothing is packaged or distributed.
 
 ### The release build's Linux environment (Mission 8)
 
@@ -169,7 +169,7 @@ sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-
 | MCP (`cyberhub-mcp`, loopback bridge, approvals, MCP page) | verified end to end, including with Claude Code (Mission 6: Claude Code 2.1.319 for discovery, reads, errors, approvals, a cancelled call, a client killed while its request waited, and reconnection after MCP was turned off and on; Claude Desktop not installed, not tested); installed layout simulated with a release build in a folder with spaces | verified in the GUI tests with a scripted MCP client (Claude Code not tested on Linux) |
 | Updates (Settings → Updates) | NSIS (per-user) and MSI packages update themselves. The NSIS path was tested end to end against a local staging feed; MSI updates were not (they need administrator approval). Unsigned builds were quarantined by Microsoft Defender after the update (ML false positive): Authenticode signing is required before distribution. See UPDATER.md | AppImage, deb and rpm are supported by the updater plugin (deb/rpm ask for an administrator password through `pkexec`, zenity/kdialog + sudo or terminal sudo; AppImage needs a writable folder). **No Linux format was tested** |
 | Tool working directory | `%APPDATA%\dev.cyberhub.workstation\work` | `~/.local/share/dev.cyberhub.workstation/work` (mode 0700) |
-| HTTPS trust roots (Mission 11) | Windows' certificate store, asked during each connection | the system's CA certificates (`ca-certificates`; or only `SSL_CERT_FILE` / `SSL_CERT_DIR` when set), read when a network feature first builds its client. **Without them Cyber Hub starts and works offline;** each network feature says "Secure connections are not available: no trusted CA certificates were found…" and sends nothing. Installing the package is enough: the next request builds the client, no restart. Verified on bare Ubuntu 24.04 and Debian 12 images and on Fedora 43 with the certificates hidden |
+| HTTPS trust roots (Mission 11) | Windows' certificate store, asked during each connection | the system's CA certificates (`ca-certificates`; or only `SSL_CERT_FILE` / `SSL_CERT_DIR` when set), read when a network feature first builds its client. **Without them ExploitX starts and works offline;** each network feature says "Secure connections are not available: no trusted CA certificates were found…" and sends nothing. Installing the package is enough: the next request builds the client, no restart. Verified on bare Ubuntu 24.04 and Debian 12 images and on Fedora 43 with the certificates hidden |
 | Install location after the other Windows package (Mission 11) | the NSIS uninstaller forgets its folder, so a later MSI installs into Program Files; an update keeps the folder | n/a |
 
 ### Display scaling and window size (Mission 7)
@@ -184,7 +184,7 @@ sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-
 
 ### Linux desktops and compositors (Mission 7)
 
-* **KWin with XWayland.** In the containers, KWin's virtual output has no GPU, and Xwayland's GPU path (glamor) crashed with a segmentation fault before any client connected, even a plain `xdpyinfo` (`kwin-xw-diag.sh`, Mission 7). This is the environment, not Cyber Hub. With `XWAYLAND_NO_GLAMOR=1` (software rendering), the X11 clients and Cyber Hub ran normally, and the desktop checks passed 7 of 7 through XWayland:
+* **KWin with XWayland.** In the containers, KWin's virtual output has no GPU, and Xwayland's GPU path (glamor) crashed with a segmentation fault before any client connected, even a plain `xdpyinfo` (`kwin-xw-diag.sh`, Mission 7). This is the environment, not ExploitX. With `XWAYLAND_NO_GLAMOR=1` (software rendering), the X11 clients and ExploitX ran normally, and the desktop checks passed 7 of 7 through XWayland:
   * pages;
   * the command palette;
   * maximize and restore;
@@ -201,9 +201,9 @@ sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-
 
 ### Unsupported or limited functionality
 
-* Tools that need elevated privileges or capture drivers (SYN/UDP/OS scans, packet capture, wireless) fail with the tool's own error; Cyber Hub never elevates.
+* Tools that need elevated privileges or capture drivers (SYN/UDP/OS scans, packet capture, wireless) fail with the tool's own error; ExploitX never elevates.
 * `go install` puts binaries in `$GOPATH/bin` — add it to PATH and rescan.
 * Linux `apt` installs requiring `sudo` are shown as instructions, not executed.
 * Interactive tools (shells, REPLs) receive no stdin and are better run in a terminal.
-* **"Secure connections are not available: no trusted CA certificates were found on this computer"** (Linux): the system has no CA certificates. Install them (`sudo apt install ca-certificates`, `sudo dnf install ca-certificates`) and try again; Cyber Hub does not need a restart. Nothing is sent meanwhile, and nothing falls back to plain HTTP or to accepting any certificate. The deb and rpm do not declare the package, so that an offline install of Cyber Hub on a minimal system still works (every desktop installs it).
+* **"Secure connections are not available: no trusted CA certificates were found on this computer"** (Linux): the system has no CA certificates. Install them (`sudo apt install ca-certificates`, `sudo dnf install ca-certificates`) and try again; ExploitX does not need a restart. Nothing is sent meanwhile, and nothing falls back to plain HTTP or to accepting any certificate. The deb and rpm do not declare the package, so that an offline install of ExploitX on a minimal system still works (every desktop installs it).
 * **Install one Windows package at a time.** Tauri's MSI installs into the NSIS copy's folder while that copy is still installed. Uninstall one before installing the other.

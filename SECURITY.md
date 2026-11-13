@@ -1,10 +1,10 @@
 # Security policy
 
-Cyber Hub is a security tool: it starts other programs, reaches network targets, stores findings and evidence, and holds service credentials. We take vulnerabilities in it seriously and ask you to report them privately.
+ExploitX is a security tool: it starts other programs, reaches network targets, stores findings and evidence, and holds service credentials. We take vulnerabilities in it seriously and ask you to report them privately.
 
 ## Supported versions
 
-Cyber Hub has **no stable release yet**. Release candidates exist only as private drafts and are not distributed.
+ExploitX has **no stable release yet**. Release candidates exist only as private drafts and are not distributed.
 
 | Version | Supported for security reports |
 |---|---|
@@ -38,14 +38,14 @@ Test only against your own installation and data, and against systems you are au
 
 ## What happens next
 
-* The maintainer reviews reports as their availability allows. **No response or fix time is guaranteed:** Cyber Hub is maintained by its owner without a support agreement.
+* The maintainer reviews reports as their availability allows. **No response or fix time is guaranteed:** ExploitX is maintained by its owner without a support agreement.
 * A confirmed vulnerability is fixed privately where possible. A GitHub security advisory is published with the fix; a CVE can be requested through it when the impact warrants one.
 * We aim for coordinated disclosure: please give the maintainer reasonable time to fix the issue before you disclose it, and agree on a date together.
 * Reporters are credited in the advisory unless they prefer otherwise.
 
 ## Scope
 
-**In scope:** Cyber Hub's own code and configuration in this repository, its build and release workflows, and the packages built from them. Areas of particular interest:
+**In scope:** ExploitX's own code and configuration in this repository, its build and release workflows, and the packages built from them. Areas of particular interest:
 
 * the native confirmations and the execution engine (a page or an MCP client starting a program without the user's decision);
 * scope enforcement (a tool reaching a target outside the project's authorized scope);
@@ -58,7 +58,7 @@ Test only against your own installation and data, and against systems you are au
 
 **Out of scope:**
 
-* vulnerabilities in the third-party tools Cyber Hub launches, such as Nmap or Nuclei. Report those to their projects;
+* vulnerabilities in the third-party tools ExploitX launches, such as Nmap or Nuclei. Report those to their projects;
 * problems that require an already compromised operating-system account or administrator rights on the user's machine;
 * the absence of Authenticode signatures on Windows installers, which is known and documented;
 * findings from automated scanners without a demonstrated impact;
@@ -66,4 +66,4 @@ Test only against your own installation and data, and against systems you are au
 
 ## Security model
 
-How Cyber Hub protects its users is described in [docs/SECURITY.md](docs/SECURITY.md): trust boundaries, controls, scope semantics, provider and upload safeguards, and accepted risks.
+How ExploitX protects its users is described in [docs/SECURITY.md](docs/SECURITY.md): trust boundaries, controls, scope semantics, provider and upload safeguards, and accepted risks.

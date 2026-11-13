@@ -13,7 +13,7 @@ The application owner provisions an Anthropic API key with `cyberhub-keys set an
 * **The data can be inspected first.** *Preview exactly what is sent* shows the text.
 * **Native confirmation.** Before sending, a system dialog names the destination (api.anthropic.com), the model, the sections and their size. Cancelling sends nothing.
 * **Follow-up questions** in the same conversation reuse the data already sent, and send only the new question.
-* **Conversations are kept in memory only**, never written to disk. Closing Cyber Hub or starting a new conversation forgets them. The activity log records that a question was asked and the token counts, not the content. Anthropic's own data retention applies to what was sent.
+* **Conversations are kept in memory only**, never written to disk. Closing ExploitX or starting a new conversation forgets them. The activity log records that a question was asked and the token counts, not the content. Anthropic's own data retention applies to what was sent.
 
 ## Prompt-injection design
 

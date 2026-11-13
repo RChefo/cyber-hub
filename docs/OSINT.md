@@ -1,8 +1,8 @@
 # OSINT Workspace
 
-The OSINT Workspace (sidebar → Research → OSINT Workspace) is where you investigate a target from public information. You collect data from Cyber Hub's own records and from public sources, connect entities through relationships backed by evidence, review what was inferred, and keep complete graphs of the investigation for later work.
+The OSINT Workspace (sidebar → Research → OSINT Workspace) is where you investigate a target from public information. You collect data from ExploitX's own records and from public sources, connect entities through relationships backed by evidence, review what was inferred, and keep complete graphs of the investigation for later work.
 
-Everything is stored locally in Cyber Hub's SQLite database. No AI service is required or contacted.
+Everything is stored locally in ExploitX's SQLite database. No AI service is required or contacted.
 
 ## Concepts
 
@@ -39,9 +39,9 @@ Repeated evidence from the same source counts once.
 
 ## Collection
 
-### Cyber Hub data (no network)
+### ExploitX data (no network)
 
-From Data Sources → Cyber Hub data:
+From Data Sources → ExploitX data:
 
 - **Tool runs**: entities are extracted from stored output. Nmap output becomes hosts, services and their relationships; other output yields domains, IPs, URLs, emails and CVE IDs found in the text. Each run is labelled with its project. Runs of the linked project are listed first; runs of other projects are hidden behind *Show runs from other projects* and are imported only after a confirmation, so results from an unrelated engagement are never combined by accident. Runs without a project are labelled as such.
 - **Threat-intelligence lookups**: stored results become entities with each provider's verdict kept in its own words. Lookups are not tied to a project.
@@ -62,7 +62,7 @@ Every import creates evidence pointing to the run, lookup, finding or scope entr
 | Threat intelligence providers | domain, IP, URL, file hash | The configured providers' results (VirusTotal, AbuseIPDB, OTX, URLhaus, MalwareBazaar, ThreatFox, Shodan) | Reuses the Threat Intel module, its provisioned keys and quotas. Keys never reach the frontend, MCP clients, logs or stored records. |
 | NVD vulnerability record | CVE | CVE details | Uses the CVE cache when possible. |
 
-Before anything is sent, Cyber Hub checks that the source accepts the entity type and refuses private, loopback, link-local and reserved addresses and internal names. It also applies a per-source rate limit and, for the web fingerprint, the scope check. Every request of a public source resolves host names through a resolver that only returns public addresses, so even a source host taken from a fixed list or the IANA bootstrap cannot be pointed at an internal service. Results are cached per source (see the table in the app for cache times; *Ignore cache* forces a new request).
+Before anything is sent, ExploitX checks that the source accepts the entity type and refuses private, loopback, link-local and reserved addresses and internal names. It also applies a per-source rate limit and, for the web fingerprint, the scope check. Every request of a public source resolves host names through a resolver that only returns public addresses, so even a source host taken from a fixed list or the IANA bootstrap cannot be pointed at an internal service. Results are cached per source (see the table in the app for cache times; *Ignore cache* forces a new request).
 
 A collection runs in the background. Its results wait in the operation for your review: open it, select the entities and relationships to keep, and import them. You can also choose *Import results without review* when starting it. Cancelling stops a running collection. Collections interrupted by closing the app are marked as such the next time it starts.
 
@@ -116,7 +116,7 @@ While a graph is open, data collected in the background is merged into it withou
 
 ### Crash safety
 
-A save (membership, positions, workspace and the version it records) is one SQLite transaction in WAL mode. If Cyber Hub is killed during a save, the database keeps the last committed state and the new state is discarded as a whole; the same applies to a failed write (for example a locked database or a full disk). Collections that were running when Cyber Hub closed are marked *Interrupted* at the next start; their partial results are not kept. Tested by killing the process during repeated saves (Windows and Linux), aborting inside an open save transaction, injecting a failure in the middle of a save, holding the database lock and limiting the database size; every case left `PRAGMA integrity_check` clean and the graph in its last committed state.
+A save (membership, positions, workspace and the version it records) is one SQLite transaction in WAL mode. If ExploitX is killed during a save, the database keeps the last committed state and the new state is discarded as a whole; the same applies to a failed write (for example a locked database or a full disk). Collections that were running when ExploitX closed are marked *Interrupted* at the next start; their partial results are not kept. Tested by killing the process during repeated saves (Windows and Linux), aborting inside an open save transaction, injecting a failure in the middle of a save, holding the database lock and limiting the database size; every case left `PRAGMA integrity_check` clean and the graph in its last committed state.
 
 ### Versions
 
@@ -130,14 +130,14 @@ Graph → Export:
 
 | Format | Content |
 |---|---|
-| Cyber Hub graph (JSON) | Complete and re-importable: investigation summary, graph settings and positions, entities with attributes and review state, relationships with origin and reasons, evidence. Format `cyberhub-osint-graph`, version 1. |
+| ExploitX graph (JSON) | Complete and re-importable: investigation summary, graph settings and positions, entities with attributes and review state, relationships with origin and reasons, evidence. Format `cyberhub-osint-graph`, version 1. |
 | GraphML | Nodes and edges with type, value, label, verification, confidence, flag and positions. |
 | Entities CSV, Relationships CSV | One row per entity or relationship. Cells that a spreadsheet would treat as a formula are prefixed with `'`. |
 | PNG, SVG | The graph as currently shown (filters, groups, labels). SVG text is escaped and colours are validated. |
 
-Exports are written through the system save dialog. Data exports use the saved graph; with unsaved changes Cyber Hub offers to save first.
+Exports are written through the system save dialog. Data exports use the saved graph; with unsaved changes ExploitX offers to save first.
 
-Graph → Import (or *Import graph* on the investigation list) reads Cyber Hub JSON or GraphML through the system open dialog:
+Graph → Import (or *Import graph* on the investigation list) reads ExploitX JSON or GraphML through the system open dialog:
 
 - Files over 25 MB, more than 20,000 entities or 60,000 relationships or evidence records, duplicate IDs, files from a newer format version, non-UTF-8 files and GraphML with a DOCTYPE are refused.
 - A preview shows counts by type, elements that will be skipped (unknown types, invalid values, relationships to missing entities, invalid relationship types) and how many entities already exist in the chosen investigation.
@@ -230,4 +230,4 @@ The JavaScript heap stayed between 70 and 125 MB. Before this pass, loading a 1,
 - Paid or authenticated sources beyond the existing threat-intelligence keys; social-media scraping; people-search services; breach data. None of these are used.
 - Automatic entity merging on similarity, and automatic verification.
 - A built-in AI model. The suggestions are rule-based and deterministic.
-- Live multi-user collaboration. Cyber Hub runs as a single instance; stale saves are detected and refused (see *Conflicts*), but edits are not merged.
+- Live multi-user collaboration. ExploitX runs as a single instance; stale saves are detected and refused (see *Conflicts*), but edits are not merged.

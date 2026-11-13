@@ -1,6 +1,6 @@
 # Getting help
 
-Cyber Hub is maintained by its owner. There is no commercial support and no guaranteed response time, but questions and reports are welcome.
+ExploitX is maintained by its owner. There is no commercial support and no guaranteed response time, but questions and reports are welcome.
 
 | You want to… | Go to |
 |---|---|
@@ -17,4 +17,4 @@ Before you open an issue:
 
 * search the existing issues, including closed ones;
 * check that you run the latest code or release candidate;
-* remove credentials, tokens, personal data and data about third-party targets from logs, screenshots and files you attach. Cyber Hub's own data (projects, findings, evidence) can describe systems you assessed.
+* remove credentials, tokens, personal data and data about third-party targets from logs, screenshots and files you attach. ExploitX's own data (projects, findings, evidence) can describe systems you assessed.

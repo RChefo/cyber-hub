@@ -1,6 +1,6 @@
 # Upgrading the database
 
-Cyber Hub keeps everything in one SQLite database, `cyberhub.db`, in the data folder:
+ExploitX keeps everything in one SQLite database, `cyberhub.db`, in the data folder:
 
 * Windows: `%APPDATA%\dev.cyberhub.workstation`
 * Linux: `~/.local/share/dev.cyberhub.workstation`
@@ -67,7 +67,7 @@ The schema version is SQLite's `user_version`. Migrations 9–25 are listed in [
 Development databases already at schema 18 are treated the same way, because the step cannot tell when an exclusion was added. To exclude only the path, remove the host exclusion afterwards.
 
 **Behaviour changes that come with this version.** They need no migration, but users will notice them. See [SECURITY.md](SECURITY.md#path-level-scope) and [releases/0.1.0.md](releases/0.1.0.md).
-* **Redirects of external tools.** A tool run is refused when the tool would follow HTTP redirects and one of its URLs is authorized only by path, or lies on a host with an excluded path. Browser modes count as following redirects (nuclei `-headless`, katana `-hl`, httpx `-ss`), and so does an option that loads a file of options (such as `-config`), because Cyber Hub does not read that file. The refusal names the option and says how to run the tool without redirects; the options are never changed. Authorize the host explicitly to allow redirects. The files of options a tool reads on its own are named in a warning; their settings are not checked. Cyber Hub's own HTTP request builder keeps checking every redirect hop itself.
+* **Redirects of external tools.** A tool run is refused when the tool would follow HTTP redirects and one of its URLs is authorized only by path, or lies on a host with an excluded path. Browser modes count as following redirects (nuclei `-headless`, katana `-hl`, httpx `-ss`), and so does an option that loads a file of options (such as `-config`), because ExploitX does not read that file. The refusal names the option and says how to run the tool without redirects; the options are never changed. Authorize the host explicitly to allow redirects. The files of options a tool reads on its own are named in a warning; their settings are not checked. ExploitX's own HTTP request builder keeps checking every redirect hop itself.
 * **Report confidentiality.** The HTML and Markdown reports have the same sections. Both list open findings only and count the closed ones, and neither includes the project's internal notes or contacts. The Markdown report used to export the notes.
 * **Project deletion.** A project cannot be deleted while one of its tool runs, workflow runs or discovery operations is still running. Runs and activity entries are kept, unlinked.
 * **Checklist.** Finding links can be removed, and every checklist change is recorded on the project timeline.
@@ -75,9 +75,9 @@ Development databases already at schema 18 are treated the same way, because the
 
 ## What happens at startup
 
-1. Cyber Hub reads the schema version.
-2. **A database written by a newer version is refused.** Cyber Hub stops with a message instead of opening it. It does not change the file and does not try to downgrade it.
-3. **Before any upgrade, Cyber Hub makes a complete copy of the database** with SQLite's `VACUUM INTO`. The copy goes to `backups/cyberhub-schema<old version>-<UTC time>.db` in the data folder (mode 0700 on Linux). It is written as `….db.partial` and renamed only when complete, so a half-written copy is never mistaken for a backup. Leftover `.partial` files are removed at the next start. The three newest backups are kept. If the copy cannot be made (for example the disk is full), **Cyber Hub stops and changes nothing**.
+1. ExploitX reads the schema version.
+2. **A database written by a newer version is refused.** ExploitX stops with a message instead of opening it. It does not change the file and does not try to downgrade it.
+3. **Before any upgrade, ExploitX makes a complete copy of the database** with SQLite's `VACUUM INTO`. The copy goes to `backups/cyberhub-schema<old version>-<UTC time>.db` in the data folder (mode 0700 on Linux). It is written as `….db.partial` and renamed only when complete, so a half-written copy is never mistaken for a backup. Leftover `.partial` files are removed at the next start. The three newest backups are kept. If the copy cannot be made (for example the disk is full), **ExploitX stops and changes nothing**.
 4. Each migration runs in its own transaction, together with the version bump. A crash, power loss or forced exit during a migration rolls that migration back completely. The database stays at the last completed version, and the next start continues from there.
 
    **Rebuilds of referenced tables.** SQLite cannot change a column's constraints in place, so such a change copies the table, drops the old one and renames the copy. With foreign keys on, dropping a table that other tables refer to would first delete the referring rows, for example finding history, links and fingerprints through `ON DELETE CASCADE`. A migration that does this must therefore be listed in `REBUILD_MIGRATIONS` (`src-tauri/src/db.rs`), and it then runs in a rebuild mode:
@@ -106,11 +106,11 @@ The live database file and its `-wal`, `-shm` and `-journal` files are refused a
 **Checking the file.** Nothing changes before you confirm. The file is chosen in a native dialog opened by the backend, and is refused unless:
 * it is an SQLite database that passes `PRAGMA integrity_check`;
 * its schema version is one this version knows (a backup from a newer version is refused);
-* its schema is exactly what Cyber Hub's migrations create for that version. The SQL of every table, index, trigger and view is compared, so a foreign database, an added trigger or view, or a changed constraint is refused.
+* its schema is exactly what ExploitX's migrations create for that version. The SQL of every table, index, trigger and view is compared, so a foreign database, an added trigger or view, or a changed constraint is refused.
 
 The confirmation shows the file's size and date, its projects and findings, whether it will be upgraded, and how many of the evidence files it refers to are available.
 
-**Restoring.** On confirmation, SQLite copies the file into the data folder as `restore-pending.db`, the copy is checked again, and Cyber Hub restarts. A file that changed after the confirmation is refused. At the start, before the database opens:
+**Restoring.** On confirmation, SQLite copies the file into the data folder as `restore-pending.db`, the copy is checked again, and ExploitX restarts. A file that changed after the confirmation is refused. At the start, before the database opens:
 1. The current database and its `-wal`/`-shm` files move to `backups/before-restore-<time>/`. Nothing is copied or rewritten, so changes that were still in the `-wal` file are kept.
 2. The copy becomes `cyberhub.db`. An older schema is then upgraded as usual, with a pre-upgrade backup first.
 3. Evidence files are sorted:
@@ -126,12 +126,12 @@ A notice and the activity log report the result.
 * No database or evidence file is deleted.
 * A journal (`restore-pending.json`) exists until the evidence files are sorted. While it exists, the evidence sweep does not run, and an interrupted restore resumes at the next start once its copy exists. The sweep is also skipped at the start that applies a restore.
 * A restore interrupted while SQLite is still making the copy is not resumed: the next start drops it, and the current database stays in use unchanged. That start also removes the unfinished copy, a hidden `.restore-<id>.partial` file with a `-journal` file next to it, so no partial copy of a backup stays in the data folder. (Until Mission 9 the copy stayed there; a test reproduces that case.)
-* If the database is still in use when Cyber Hub starts again (another process holds it), the copy waits for the next start. *Settings* shows it and can cancel it.
+* If the database is still in use when ExploitX starts again (another process holds it), the copy waits for the next start. *Settings* shows it and can cancel it.
 * If the restored database does not open, it is set aside as `restored-cyberhub.db` in the same folder, and the previous database and its evidence files go back.
 * A restored database never turns the MCP bridge on by itself. If it was on in the backup, it is turned off and the notice says so.
 * Restoring one of the automatic pre-upgrade backups writes a new pre-upgrade copy of it before its upgrade. As always, only the three newest automatic copies are kept, so the oldest one, possibly the file you chose, is replaced by an identical newer copy.
 
-Restore backups you trust. A backup is a complete Cyber Hub database, and its contents (for example wordlist entries or preferences) are used like your own.
+Restore backups you trust. A backup is a complete ExploitX database, and its contents (for example wordlist entries or preferences) are used like your own.
 
 ## What was tested (November 2026)
 
@@ -168,7 +168,7 @@ Tested on disposable copies, never on a real user database:
 
 There is **no automatic downgrade**. Going back to an older version means restoring the backup made before the upgrade. A newer version can restore it in the app, but an older version cannot open a database with a newer schema, so do it by hand:
 
-1. Close Cyber Hub.
+1. Close ExploitX.
 2. In the data folder, move `cyberhub.db` together with `cyberhub.db-wal` and `cyberhub.db-shm` (if they exist) into a new folder. Keep all three together: the `-wal` file can hold the most recent changes, and it holds everything since the upgrade.
 3. Copy `backups/cyberhub-schema8-<time>.db` to `cyberhub.db`.
 4. Install and start the older version.

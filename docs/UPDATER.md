@@ -1,13 +1,13 @@
 # Updates
 
-Cyber Hub updates itself with the official [Tauri updater plugin](https://v2.tauri.app/plugin/updater/) (`tauri-plugin-updater` 2.14). Every update is signed with the Cyber Hub update key and verified by the app before it can be installed. Updates are found automatically (optional) but are downloaded and installed only when you choose to.
+ExploitX updates itself with the official [Tauri updater plugin](https://v2.tauri.app/plugin/updater/) (`tauri-plugin-updater` 2.14). Every update is signed with the ExploitX update key and verified by the app before it can be installed. Updates are found automatically (optional) but are downloaded and installed only when you choose to.
 
 > **Status:** the updater, the signing setup, the release workflow and the manifest tooling are implemented; the Windows NSIS update path was tested end to end against a local staging feed, Linux formats and MSI updates were not (see [Testing](#testing)). No release has been published. In Mission 10 (2026-11-12) the release workflow built the `v0.1.0` candidate as a private draft, and the production key signed its packages. Every signature verifies against the compiled public key; an update end to end needs a published release. Until the owner completes [the setup](#owner-setup), installed copies have nothing to update from.
 
 ## How it works
 
 ```
-GitHub release vX.Y.Z                         Cyber Hub (installed copy)
+GitHub release vX.Y.Z                         ExploitX (installed copy)
   ├─ latest.json  ◀────── HTTPS GET ─────────  update service (Rust, backend only)
   ├─ Cyber.Hub_X.Y.Z_x64-setup.exe (+ .sig)      │ 1. newer stable version for this OS + package type?
   ├─ Cyber.Hub_X.Y.Z_x64_en-US.msi (+ .sig)      │ 2. download into memory (progress, cancellable)
@@ -25,9 +25,9 @@ GitHub release vX.Y.Z                         Cyber Hub (installed copy)
 
 | Format | Updates itself | How the update is installed | Notes |
 |---|---|---|---|
-| Windows NSIS (`…_x64-setup.exe`, per-user) | yes | the installer runs in passive mode (progress bar, no questions) with `/UPDATE` and restarts Cyber Hub | the recommended Windows package |
+| Windows NSIS (`…_x64-setup.exe`, per-user) | yes | the installer runs in passive mode (progress bar, no questions) with `/UPDATE` and restarts ExploitX | the recommended Windows package |
 | Windows MSI (`…_x64_en-US.msi`) | yes | `msiexec /i … /passive /promptrestart`; Windows asks for administrator approval | per-machine install |
-| Linux AppImage | yes | the AppImage file is replaced in place; Cyber Hub then offers **Restart now** | the AppImage's folder must be writable by you (the plugin keeps a backup of the old file in a temporary folder on the same file system — the system temporary folder, the cache folder or the AppImage's own folder — and restores it if writing fails) |
+| Linux AppImage | yes | the AppImage file is replaced in place; ExploitX then offers **Restart now** | the AppImage's folder must be writable by you (the plugin keeps a backup of the old file in a temporary folder on the same file system — the system temporary folder, the cache folder or the AppImage's own folder — and restores it if writing fails) |
 | Linux .deb | yes | `dpkg -i` through `pkexec` (or a graphical/terminal `sudo` prompt); then **Restart now** | asks for an administrator password every time |
 | Linux .rpm | yes | `rpm -U` through `pkexec` (or `sudo`); then **Restart now** | asks for an administrator password every time |
 | Development build (`npm run tauri dev`), a copied executable, a portable copy | **no** | — | Settings → Updates explains that this copy cannot update itself |
@@ -59,7 +59,7 @@ The installers replace program files only. These are kept, because they live out
 | Provider credentials | Windows Credential Manager / Linux Secret Service (never touched by installers) |
 | MCP client configuration | in each client's own configuration file; the server path stays the same for NSIS, MSI, deb and rpm (the AppImage path changes on every start anyway, see MCP.md) |
 
-Database migrations run at the next start, as for any version change. There is **no automatic rollback**: if a new version misbehaves, install the previous release's installer by hand (NSIS and MSI allow installing an older version over a newer one; for deb use `sudo dpkg -i` with the older package, for rpm `sudo rpm -U --oldpackage`; for the AppImage keep the older file). A database that a newer version has migrated may not open in an older version; back up `cyberhub.db` (with Cyber Hub closed) before installing if you need to be able to go back. If the installer fails, the current version stays installed (NSIS/MSI roll back their own transaction; dpkg/rpm leave the old package when installation fails).
+Database migrations run at the next start, as for any version change. There is **no automatic rollback**: if a new version misbehaves, install the previous release's installer by hand (NSIS and MSI allow installing an older version over a newer one; for deb use `sudo dpkg -i` with the older package, for rpm `sudo rpm -U --oldpackage`; for the AppImage keep the older file). A database that a newer version has migrated may not open in an older version; back up `cyberhub.db` (with ExploitX closed) before installing if you need to be able to go back. If the installer fails, the current version stays installed (NSIS/MSI roll back their own transaction; dpkg/rpm leave the old package when installation fails).
 
 ## Using it
 
@@ -67,7 +67,7 @@ Database migrations run at the next start, as for any version change. There is *
 
 * **Check for updates**: one request for `latest.json`. Checks never overlap; a second click while one runs gets the running check's result.
 * **Download**: progress in bytes, **Cancel download**; then *Verifying the signature…* and *Ready to install*.
-* **Install and restart…**: lists any work that must finish first; then a native dialog. Windows: Cyber Hub closes, the installer updates and restarts it. Linux: the package is installed (a password prompt for deb/rpm), then **Restart now**.
+* **Install and restart…**: lists any work that must finish first; then a native dialog. Windows: ExploitX closes, the installer updates and restarts it. Linux: the package is installed (a password prompt for deb/rpm), then **Restart now**.
 * **Check for updates automatically** (on by default) and **How often** (every 6 h, 12 h, daily — the default — or weekly). The first automatic check runs 90 s after startup, never on the startup path; a check is made only when one is due (the last check time is stored), so restarting the app does not cause extra checks. Failed automatic checks (offline, server errors) retry after 15 min, 30 min, 1 h … up to the normal interval, and are shown only in Settings → Updates, never as notifications.
 * **Notifications**: when a check finds a new version, one dismissable toast (with *View*) and one entry in the activity list (bell menu) — once per version, also across restarts. No dialog is opened.
 
@@ -193,7 +193,7 @@ node scripts/updater-manifest.mjs validate --manifest latest.json --assets <fold
 
 ### Windows staging test (2026-11-05, Windows 11, local feed, disposable install)
 
-Disposable builds with their own product name and identifier (`Cyber Hub Updater Test`, `dev.cyberhub.workstation.updatertest`), so the developer's data and any real installation stayed untouched; a separate **test** key pair (the production key never signed a test package); a local feed on `127.0.0.1` (HTTP, which only these test builds accept, plus HTTPS with a self-signed certificate for the TLS cases). The app was driven through its own IPC commands; the native confirmation was answered by clicking it. The test installation and its data were removed afterwards.
+Disposable builds with their own product name and identifier (`ExploitX Updater Test`, `dev.cyberhub.workstation.updatertest`), so the developer's data and any real installation stayed untouched; a separate **test** key pair (the production key never signed a test package); a local feed on `127.0.0.1` (HTTP, which only these test builds accept, plus HTTPS with a self-signed certificate for the TLS cases). The app was driven through its own IPC commands; the native confirmation was answered by clicking it. The test installation and its data were removed afterwards.
 
 | Case | Result |
 |---|---|
@@ -208,7 +208,7 @@ Disposable builds with their own product name and identifier (`Cyber Hub Updater
 | Throttled download, **Cancel download** after 3 s | *Cancelled* at 0.7 of 6.3 MB, connection closed by the client, nothing written to disk, update still offered |
 | **Install** while the installation's `cyberhub-mcp.exe` was running | refused before any dialog; the blocker is listed in the status |
 | **Install** → native dialog → **Cancel** | "Installation cancelled", nothing changed, still *Ready* |
-| **Install** → native dialog → **Install update** | Cyber Hub exited, the NSIS installer ran in passive mode, replaced the program files and started the new version: version 0.2.0, with the project, the OSINT investigation, a changed preference and the update settings (12 h interval, last check) all present |
+| **Install** → native dialog → **Install update** | ExploitX exited, the NSIS installer ran in passive mode, replaced the program files and started the new version: version 0.2.0, with the project, the OSINT investigation, a changed preference and the update settings (12 h interval, last check) all present |
 | Update settings across a restart | auto-check and interval kept |
 
 Found and fixed during the test:

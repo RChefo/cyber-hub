@@ -1,8 +1,8 @@
 # Third-party license audit
 
-**Audit date:** 2026-11-13 (Mission 12), on the default branch after commit `8e309ca`, Cyber Hub 0.1.0. **This is an engineering audit, not legal advice.** It records what each component declares and what was verified by hand, and it lists what remains open.
+**Audit date:** 2026-11-13 (Mission 12), on the default branch after commit `8e309ca`, ExploitX 0.1.0. **This is an engineering audit, not legal advice.** It records what each component declares and what was verified by hand, and it lists what remains open.
 
-**Cyber Hub's own license:** none selected yet ([LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)). Compatibility below is assessed against the candidates there; it is not final until the owner selects one.
+**ExploitX's own license:** none selected yet ([LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)). Compatibility below is assessed against the candidates there; it is not final until the owner selects one.
 
 ## Method
 
@@ -134,11 +134,11 @@
 
 React Bits' license (retrieved 2026-11-13) grants rights to "use, copy, modify, merge, publish, and distribute the Software **as part of an application, website, or product**". Its Commons Clause restriction adds: "You may use this Software, including for any commercial purpose, so long as you do not sell, sublicense, or redistribute the components themselves - whether alone, in a bundle, or as a ported version."
 
-What that means for Cyber Hub:
-* **Today:** Cyber Hub uses and distributes the components as part of its application and website, which the license allows. The copyright and permission notice is now carried in each file and in `THIRD_PARTY_NOTICES.md`.
+What that means for ExploitX:
+* **Today:** ExploitX uses and distributes the components as part of its application and website, which the license allows. The copyright and permission notice is now carried in each file and in `THIRD_PARTY_NOTICES.md`.
 * **For any open-source license on the whole repository:** the Commons Clause makes these files **not open source**. The Open Source Definition does not allow restrictions on selling or field of use.
-  * Cyber Hub cannot pass them on under MIT, Apache-2.0 or the GPL. A permissive license would grant the rights to sublicense and redistribute them alone, which React Bits forbids. The GPL forbids added restrictions.
-  * A repository-wide license would therefore have to **exclude these files explicitly**, and Cyber Hub would then not be entirely open source.
+  * ExploitX cannot pass them on under MIT, Apache-2.0 or the GPL. A permissive license would grant the rights to sublicense and redistribute them alone, which React Bits forbids. The GPL forbids added restrictions.
+  * A repository-wide license would therefore have to **exclude these files explicitly**, and ExploitX would then not be entirely open source.
 * **Recommendation:** replace the three app files and the website's orbit component with original implementations before the license is applied. They are small:
   * `CountUp` is a number animation;
   * `BranchedMenu` is the sidebar's menu presentation;
@@ -153,8 +153,8 @@ What that means for Cyber Hub:
 | IBM Plex Sans, JetBrains Mono (through `@fontsource`) | OFL-1.1 | Bundled into the interface. OFL allows bundling with software; the font license and copyright must accompany them (now in `THIRD_PARTY_NOTICES.md`). The fonts may not be sold by themselves |
 | Lucide icons (`lucide-react`) | ISC | Bundled into the interface; notice in `THIRD_PARTY_NOTICES.md` |
 | App icons (`src-tauri/icons/`, `public/logo.svg`) | Not recorded | Added in the project's first commit with no third-party source recorded. **The owner should confirm they are original work** |
-| Website screenshots (`website/src/assets/screens/`) | The project's own | Real screenshots of Cyber Hub with demo data (docs/WEBSITE.md) |
-| OWASP WSTG checklist (`src-tauri/src/methodology/wstg.json`), OWASP ASVS 5.0.0 (`src-tauri/catalog/asvs-5.0.0.json`) | CC BY-SA 4.0 | Attribution and share-alike apply to these data files; in-app attribution exists. They keep CC BY-SA under any Cyber Hub license |
+| Website screenshots (`website/src/assets/screens/`) | The project's own | Real screenshots of ExploitX with demo data (docs/WEBSITE.md) |
+| OWASP WSTG checklist (`src-tauri/src/methodology/wstg.json`), OWASP ASVS 5.0.0 (`src-tauri/catalog/asvs-5.0.0.json`) | CC BY-SA 4.0 | Attribution and share-alike apply to these data files; in-app attribution exists. They keep CC BY-SA under any ExploitX license |
 | MITRE ATT&CK catalogs (`src-tauri/catalog/attack-*.json`) | MITRE ATT&CK terms of use | Reproduce MITRE's copyright and license; done in `THIRD_PARTY_NOTICES.md` and the app |
 | FIRST CVSS v4.0 lookup data (`src-tauri/src/cvss/v4_lookup.rs`) | BSD-2-Clause (FIRST, Red Hat) | Notice in `THIRD_PARTY_NOTICES.md`; "CVSS is owned by FIRST and used by permission" |
 | Tools catalog (`src-tauri/catalog/tools.json`), resources, payload examples | The project's own text | They describe and link third-party tools and sites; no third-party text was found copied |
@@ -162,12 +162,12 @@ What that means for Cyber Hub:
 ## Native libraries
 
 * **Windows (NSIS, MSI):**
-  * no third-party native library is bundled. The installers download and run Microsoft's **WebView2** bootstrapper when WebView2 is missing (Tauri's default), so Cyber Hub does not redistribute WebView2;
+  * no third-party native library is bundled. The installers download and run Microsoft's **WebView2** bootstrapper when WebView2 is missing (Tauri's default), so ExploitX does not redistribute WebView2;
   * the Rust crates above are linked statically into the binaries.
 * **deb and rpm:** they depend on the system's `libwebkit2gtk-4.1-0` and `libgtk-3-0` and bundle no system library.
 * **AppImage:** it bundles **171 shared libraries** from the build machine (Ubuntu 22.04) with **98 Debian copyright files**, so the license texts are present. Among them:
   * **LGPL-2.0/2.1/3.0-or-later:** WebKitGTK, JavaScriptCore, GTK 3, GLib, GStreamer, libsoup, GnuTLS, Nettle, Pango, cairo, libsecret, systemd's libraries, and others. Distributing them requires making their **source code** available (LGPL §6: the source with the binaries, or a written offer valid for three years), and allowing them to be replaced. Being separate shared libraries, they can be replaced.
-  * **`libjbig.so.0`** (jbigkit, **GPL-2.0-or-later**), loaded through libtiff by GTK's TIFF image loader. Distributing it requires its source (GPL §3). Whether Cyber Hub, which reaches it only through that chain of plug-ins, forms a combined work with it is a legal question this audit does not answer.
+  * **`libjbig.so.0`** (jbigkit, **GPL-2.0-or-later**), loaded through libtiff by GTK's TIFF image loader. Distributing it requires its source (GPL §3). Whether ExploitX, which reaches it only through that chain of plug-ins, forms a combined work with it is a legal question this audit does not answer.
   * The remaining libraries are permissive, as their copyright files list them: ICU, libxml2, libpng, libjpeg, libwebp, SQLite, HarfBuzz, libffi and others.
 
   **Before the AppImage is distributed publicly:** publish the corresponding source for the bundled LGPL and GPL libraries (or a written offer), or remove `libjbig` and the TIFF loader from the AppImage, or ship only the deb and rpm for Linux. **Owner decision.**
@@ -203,4 +203,4 @@ Generating it can extend `scripts/licenses.mjs`. **Not done in Mission 12:** it 
 | 7 | The app icons' authorship is not recorded | Low | Owner: confirm |
 | 8 | The dependency licenses come from metadata; a crate whose metadata is wrong would not be caught | Low | Re-audit on major dependency changes |
 
-**Compatibility conclusion.** Once issues 2 and 3 are resolved, the dependency set allows each of the four candidate licenses as Cyber Hub's own license. Issues 4 and 5 are distribution obligations that apply whatever license is chosen. No compatibility is claimed until the owner selects the license and these items are closed.
+**Compatibility conclusion.** Once issues 2 and 3 are resolved, the dependency set allows each of the four candidate licenses as ExploitX's own license. Issues 4 and 5 are distribution obligations that apply whatever license is chosen. No compatibility is claimed until the owner selects the license and these items are closed.

@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Cyber Hub does not work as documented.
+description: Something in ExploitX does not work as documented.
 title: "bug: "
 labels: [bug, needs triage]
 body:
@@ -10,11 +10,11 @@ body:
 
         **Security vulnerabilities must not be reported here.** Use the private form instead (see SECURITY.md).
 
-        Before you attach anything, remove credentials, API keys, tokens, personal data and data about the systems you assessed. Cyber Hub's projects, findings and logs can contain them.
+        Before you attach anything, remove credentials, API keys, tokens, personal data and data about the systems you assessed. ExploitX's projects, findings and logs can contain them.
   - type: input
     id: version
     attributes:
-      label: Cyber Hub version
+      label: ExploitX version
       description: Settings shows the version. For a build from source, give the commit (`git rev-parse --short HEAD`).
       placeholder: 0.1.0 (commit abc1234)
     validations:

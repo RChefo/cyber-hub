@@ -17,7 +17,7 @@ The public website (landing page and download page) lives in `website/`. It is a
 
 ### Landing page
 
-Hero (headline, CTAs, the real dashboard and OSINT graph; the graph is uncovered by a single scan-line reveal), verified numbers (counters), two feature spreads (OSINT graph close-up cropped from the real screenshot, Command Center with a real generated command), an index of the other modules, "How it fits together" (`InkOrbitFeatures`, adapted: data sources instead of drawn people, a fixed report label instead of a counter that keeps increasing, the dashboard chart labelled as sample values, Cyber Hub colours), a tabbed screenshot showcase (arrow-key navigation), the security model, platforms (Windows 10/11 x64, Linux x64; macOS not supported), a closing call to action with the real screens orbiting it (React Bits `OrbitImages`, unmodified), and the footer.
+Hero (headline, CTAs, the real dashboard and OSINT graph; the graph is uncovered by a single scan-line reveal), verified numbers (counters), two feature spreads (OSINT graph close-up cropped from the real screenshot, Command Center with a real generated command), an index of the other modules, "How it fits together" (`InkOrbitFeatures`, adapted: data sources instead of drawn people, a fixed report label instead of a counter that keeps increasing, the dashboard chart labelled as sample values, ExploitX colours), a tabbed screenshot showcase (arrow-key navigation), the security model, platforms (Windows 10/11 x64, Linux x64; macOS not supported), a closing call to action with the real screens orbiting it (React Bits `OrbitImages`, unmodified), and the footer.
 
 ### Changelog (`/changelog/`)
 
@@ -65,7 +65,7 @@ States everywhere: not configured (no repository), loading (skeletons), no relea
 
 ### OS detection
 
-`platform.ts` reads the user agent and, where the browser offers them, User-Agent Client Hints (`platform`, and `architecture`/`bitness` through `getHighEntropyValues`). Limitations: browsers can hide or freeze these values; the architecture is reported only when the browser says it (unknown is treated as unknown, ARM gets an "x64 only" note); Linux distributions are rarely named in user agents (Firefox on Ubuntu or Fedora does), so the Linux suggestion is the AppImage unless a distribution is named; macOS and mobile visitors are told Cyber Hub runs on Windows and Linux and can still download for another computer. Detection only preselects: the platform switch and every package remain available, and nothing downloads without a click.
+`platform.ts` reads the user agent and, where the browser offers them, User-Agent Client Hints (`platform`, and `architecture`/`bitness` through `getHighEntropyValues`). Limitations: browsers can hide or freeze these values; the architecture is reported only when the browser says it (unknown is treated as unknown, ARM gets an "x64 only" note); Linux distributions are rarely named in user agents (Firefox on Ubuntu or Fedora does), so the Linux suggestion is the AppImage unless a distribution is named; macOS and mobile visitors are told ExploitX runs on Windows and Linux and can still download for another computer. Detection only preselects: the platform switch and every package remain available, and nothing downloads without a click.
 
 ## Environment variables
 
@@ -73,7 +73,7 @@ Build-time, all optional and public (they end up in the bundle; never put secret
 
 | Variable | Purpose | Unset |
 |---|---|---|
-| `VITE_GITHUB_REPOSITORY` | `owner/repo` that publishes Cyber Hub releases. Enables the release data (changelog, archive, downloads) and the Documentation, GitHub and *Releases on GitHub* links (`/tree/HEAD/docs`, the repository, `/releases`). | No release data (the pages show their "no release" states); those external links are hidden (no broken links). |
+| `VITE_GITHUB_REPOSITORY` | `owner/repo` that publishes ExploitX releases. Enables the release data (changelog, archive, downloads) and the Documentation, GitHub and *Releases on GitHub* links (`/tree/HEAD/docs`, the repository, `/releases`). | No release data (the pages show their "no release" states); those external links are hidden (no broken links). |
 | `VITE_SITE_URL` | The production origin, e.g. `https://cyberhub.example` (https only). Enables canonical URLs, `og:url`, `og:image`/`twitter:image` (`/og.png`, see below) and `sitemap.xml`; `robots.txt` then references the sitemap. | None of these are emitted; `robots.txt` allows everything. |
 | `VITE_RELEASES_API_BASE` | Overrides the GitHub API origin, for local testing against a mock (only `https://…`, `http://127.0.0.1` or `http://localhost` are accepted). | `https://api.github.com` |
 
