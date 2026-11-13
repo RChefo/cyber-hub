@@ -1714,3 +1714,64 @@ The owner authorized autonomous engineering, regression testing, private reposit
 * NSIS silently, the MSI with basic UI and UAC answered from the host (7 prompts); the first candidate's files for the upgrades.
 * 1 fresh NSIS 10/10 and 1/1; 6 NSIS uninstall keeps the data and forgets the folder; 2 the MSI then goes to Program Files; 7 that MSI opens the same data without a migration; 4 MSI uninstall, then NSIS back in `%LOCALAPPDATA%`; 8 the second NSIS over the first, in place; 5 the second MSI over the first (major upgrade, one entry); 3 fresh MSI 10/10 and 1/1, then upgrade from schema 31 and rollback 4/4. Details: RELEASE_READINESS.md, "Windows installers".
 * Both VMs were shut down from inside. The owner's database kept its modification time `2026-11-05T15:58:24.8534883Z` throughout.
+
+## Mission 12 (2026-11-13T10:14Z): open-source readiness
+
+The owner decided that Cyber Hub stays public and becomes an open-source project. Authorized: securing the public repository, contributor documentation and governance, automated checks, a license and dependency review, commits and pushes. Not authorized: selecting or applying a license, a release, purchases, deleting repository content, rewriting history.
+
+## 10:14–10:45Z: the public repository (Mission A)
+
+* **History.** gitleaks 8.30.1 (pinned tarball, SHA-256 checked) over a mirror clone: 210 commits on 10 refs, **no leak**. Without `.gitleaksignore`, nine findings, each opened and confirmed as a test fixture. Never committed: the update-signing private key, `.env`, `.pem`, `.key`, `.p12`, `.pfx` files; only `src-tauri/secrets.example.env` (empty values). Two deleted files in all history, both source files. Commits carry the owner's personal e-mail in their metadata (public; not rewritten).
+* **Settings turned on** (free for public repositories): secret scanning, push protection, Dependabot security updates, private vulnerability reporting. Not available to this account: non-provider patterns and validity checks.
+* **Rulesets** (10:37Z): "Default branch protection" (no deletion or force push, pull requests with resolved conversations, the five CI jobs required, administrators may bypass) and "Release tag protection" (`v*` tags cannot be deleted, moved or force-updated; administrators may bypass).
+* **Actions:** approval required for every outside contributor's workflow run. The `release` environment now requires the owner's approval for each deployment (a required reviewer became available with public visibility); administrators cannot bypass it, and deployments stay limited to `main` and `release/*`. Webhooks were not inspected (the CLI token lacks `admin:repo_hook`).
+* **Artifacts.** The six build artifacts of the release runs 43231095560, 43242424304 and 43288379505 are downloadable by any signed-in GitHub user until 2026-11-19. Not deleted (deleting repository content was not authorized); item 108.
+* **Apps.** The eight third-party GitHub Apps of the owner's account still have access to this repository, several with administration or workflow write access; their check suites stay queued. Recommendation only (item 109).
+
+## 10:37–11:00Z: licenses (Missions B and C)
+
+* **Dependencies.** `scripts/licenses.mjs` reads `cargo metadata --filter-platform` for Windows and Linux and classifies each crate by the resolve graph (ships, build-only, test-only; proc-macros are build-only). It reads the npm lockfiles' `license` fields and evaluates SPDX expressions (`OR`, `AND`, `WITH`) against `scripts/license-policy.json`. Result: 649 crates and 457 npm packages pass. The two exceptions are the website's `gsap` and `@gsap/react` (GSAP's own no-charge license), each with a reason. Inventories: `docs/governance/third-party/`.
+* **Copied code.** Ten files under `src/components/vendor/` and `website/src/components/ui/`. React Bits (`CountUp`, `BranchedMenu`, `OrbitImages`) is MIT + Commons Clause: not open source. The website's Ink Orbit section comes from a repository without a license. Lightswind declares MIT only in npm metadata. Headers and THIRD_PARTY_NOTICES.md now say so.
+* **Native libraries.** The AppImage bundles LGPL libraries and GPL-2.0-or-later `libjbig` (read from the second candidate's AppImage), so it needs a source offer before public distribution.
+* **The license comparison** (`docs/governance/LICENSE_COMPARISON.md`): MIT, Apache-2.0, GPL-3.0 and AGPL-3.0, with Apache-2.0 recommended and GPL-3.0-or-later as the alternative. The proposed Apache-2.0 text is kept outside the repository (`E:\CyberHubQA\m12\proposed\`). **No LICENSE file was added.**
+
+## 10:45–11:05Z: contributors, CI and documentation (Missions D–I, K)
+
+* Added README (rewritten), CONTRIBUTING, CODE_OF_CONDUCT (Contributor Covenant 2.1 from its official repository, with the contact placeholder replaced by the maintainer and GitHub's reporting), SECURITY, SUPPORT, `docs/README.md`, the development guide and REPOSITORY_SECURITY.md.
+* **`.github/`:** issue forms (bug, feature, question; blank issues off, vulnerabilities routed to private reporting), the pull request template, CODEOWNERS, `dependabot.yml`. Eight labels were added: security, needs triage, needs reproduction, the two platforms, database, performance, dependencies.
+* **CI.** A new "Repository checks" job runs the license policy, the Markdown link check (`scripts/check-links.mjs`: 209 relative links in 45 files) and, on pull requests, a Conventional Commits title check, with the title passed through `env`. In the release workflow, build artifacts are kept for one day and deleted by the publish job after the draft upload (`actions: write` for that job). `ci_tests.rs` pins all of it. actionlint 1.7.7 with shellcheck, run locally in a container: no issue.
+* **Presentation:** the repository description is set, there are 14 topics, and `delete_branch_on_merge` is on. Visibility and name are unchanged; no homepage.
+
+## 11:05–11:13Z: regression (Mission J)
+
+* **Windows:** clippy `-D warnings` clean; 648 passed, 29 ignored (Mission 11: 647; the new `ci_tests` test).
+* **Debian 12** (Rust 1.99.1, container): 649 passed, 29 ignored (Mission 11: 648). The extra Linux test is `run_scripts_are_valid_bash` (`#[cfg(unix)]`).
+* **Frontend and scripts:** tsc clean; vitest 58 files, 319 tests (Mission 11: 56 files, 310; the 9 new tests are the license and link checks' own); vite build passes.
+* **Audits:**
+  * npm audit (app): 0;
+  * cargo audit: 0 vulnerabilities, the same 8 allowed warnings;
+  * the website's npm audit: 10 moderate, all minimatch (dev-only, item 94).
+* **Dependabot.** Both alerts are unchanged (glib, minimatch). The first security-update runs (43410367830, 43410368044) ended in `security_update_not_possible`: glib's fix needs 0.20, while GTK 0.18 under Tauri allows 0.18.5 at most; minimatch's fix would downgrade other dependencies. GitHub marks these runs as failed.
+* Secret scanning: 0 open alerts. The owner's database was not touched; all tests used disposable data.
+
+## 11:13Z: commits and push
+
+* `b26b8e7` docs(governance), `8df7f78` ci, `a69843d` docs, `25c7401` chore(github). Each commit's staged diff was reviewed, and its message checked for attribution metadata (none).
+* Pushed to `release/v0.1.0` directly, through the owner's administrator bypass of the new branch ruleset (GitHub's push response listed the required checks as expected). CI run 43415411675 started, and Dependabot's first version-update runs began.
+
+## 11:14–11:40Z: CI, the required check, Dependabot's first pull requests
+
+* **CI run 43415411675 on `25c7401`: green, six of six jobs.**
+  * windows-2022: 648 passed, 29 ignored.
+  * ubuntu-24.04 and Debian 12: 649 passed, 29 ignored each.
+  * 58 files and 319 frontend tests on each platform.
+  * MSRV 1.90, cargo audit over 652 crates, npm audit 0, gitleaks 214 commits.
+  * Repository checks: every dependency has an accepted license, no broken relative link.
+* **"Repository checks" added to ruleset 27194018's required checks** after it passed on the default branch. The other rules and the administrator bypass are unchanged.
+* **Dependabot** opened pull requests #1–#8:
+  * grouped minor and patch updates for Cargo, npm and the website;
+  * majors for `getrandom`, `hmac`, `sha1`, `sha2` and the website's TypeScript 7.
+
+  None was merged. The security-update runs for glib and minimatch ended in `security_update_not_possible` again.
+* **Each Dependabot pull request ran CI twice:** once for the branch push, once for the pull request. Fixed in `07b5912`: pushes trigger CI only on `main`, `release/**` and `v*` tags, and every pull request still runs it. The fix is pinned by `ci_tests.rs` (7/7 pass), and actionlint 1.7.7 with shellcheck 0.9.0 reports no issue. Cancelling the duplicate runs already queued was not permitted in this session; they were left to finish.
+* **Records:** MISSION_STATE, this log, MISSION_REPORT "Mission 12", FEATURE_BACKLOG, RELEASE_READINESS, and the CI triggers and app pointer in the development guide and REPOSITORY_SECURITY.md.

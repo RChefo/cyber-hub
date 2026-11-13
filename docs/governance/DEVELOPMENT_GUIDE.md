@@ -126,7 +126,7 @@ The full model is in [SECURITY.md](../SECURITY.md). For development, keep these 
 
 Releases are maintainer-only. The details are in [UPDATER.md](../UPDATER.md) and [docs/release/](../release/).
 
-* **CI** (`.github/workflows/ci.yml`) verifies every push and pull request:
+* **CI** (`.github/workflows/ci.yml`) verifies every pull request, and every push to `main`, `release/**` and `v*` tags:
   * builds, tests and Clippy on Windows, Ubuntu 24.04 and Debian 12;
   * the minimum Rust version;
   * `cargo audit`, `npm audit`, gitleaks and actionlint;

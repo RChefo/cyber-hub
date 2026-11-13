@@ -40,7 +40,7 @@ The repository is public, so its **entire history** is public, not only the late
 ## CI/CD in a public repository
 
 * **CI** (`ci.yml`):
-  * runs for pushes and pull requests, including from forks;
+  * runs for every pull request, including from forks and Dependabot, and for pushes to `main`, `release/**` and `v*` tags (a branch is checked once, through its pull request);
   * has `contents: read` only and reads no secret;
   * checks out without keeping credentials;
   * never runs `pull_request_target`, `workflow_run` or comment triggers;
@@ -58,7 +58,7 @@ The repository is public, so its **entire history** is public, not only the late
 
 The owner's account has eight third-party GitHub Apps installed with access to all repositories, this one included. Some have write access to administration or workflows. None is used by this repository: their check suites stay queued and do nothing.
 
-**Recommendation:** under *Settings → Applications → Installed GitHub Apps*, give each app access only to the repositories it serves, or remove it. An app with administration or workflow write access could change the release protections or the workflows. The list and permissions are in the maintainer's records (MISSION_REPORT.md, "Mission 12").
+**Recommendation:** under *Settings → Applications → Installed GitHub Apps*, give each app access only to the repositories it serves, or remove it. An app with administration or workflow write access could change the release protections or the workflows. The list and permissions, read from the apps' check suites, are in [GITHUB_FIRST_RUN.md](../release/GITHUB_FIRST_RUN.md#mission-9-the-private-repository-and-the-first-ci-runs-2026-11-11) (Mission 10's table). The same eight apps still attached check suites to the commits of 2026-11-13.
 
 ## Keeping it this way
 

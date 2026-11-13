@@ -2,6 +2,20 @@
 
 This is the checklist for the first release. It separates what was verified from what still needs a person, hardware, a GitHub run or a signing key.
 
+**Mission 12 (2026-11-13): open-source readiness.** The candidates are unchanged. Cyber Hub stays public as an open-source project, the owner's decision.
+
+What changed for releases:
+* **Repository protections.** Secret scanning and push protection are on, rulesets protect the default branch and the `v*` tags, and the `release` environment needs the owner's approval for every deployment.
+* **Release artifacts.** A release run's build artifacts no longer stay downloadable: one day at most, deleted after the draft upload.
+
+What a public release now also needs (`docs/governance/THIRD_PARTY_LICENSE_AUDIT.md`):
+* a **project license** selected by the owner (`docs/governance/LICENSE_COMPARISON.md`);
+* the **React Bits** components replaced, or excluded from that license;
+* **third-party license texts and NOTICE contents shipped with the installers**;
+* for the **AppImage**, a source offer for its bundled LGPL libraries and its GPL-2.0-or-later `libjbig`, or that library removed.
+
+The six artifacts of the first and second candidates' runs remain downloadable by signed-in GitHub users until 2026-11-19, unless the owner deletes them (FEATURE_BACKLOG.md, item 108).
+
 **Mission 11 (2026-11-12): the second release candidate.**
 * **The fixes it carries:**
   * Cyber Hub starts without CA certificates, and every network feature says what to install (`1c98af4`, item 95);
@@ -70,7 +84,10 @@ Evidence is a test name in the repository, a GitHub Actions run, a log or screen
 | Updates end to end | **NOT TESTED** | Possible only after publication: the feed is `releases/latest`. Before it, every package reports that no update manifest is published, as expected (item 98); the second candidate's deb again on Ubuntu 24.04 |
 | Release candidates | **PASS** (Mission 11) | `vX.Y.Z-rc.N` tags build like the release, as draft pre-releases the workflow never publishes (`00939e1`, tests in `ci_tests.rs`); run 43288379505 skipped *Publish the release* by design. CI's actionlint caught a shellcheck style rule in the first push (`44a0384`) |
 | Publisher identity | **Decided, unchanged** (Mission 11) | "cyberhub" everywhere Windows shows it; see "Publisher identity" below. A test pins the install identity |
-| Repository visibility | **Owner decision** | Public since 2026-11-12, between 00:06Z (private) and 18:13Z (public); not changed by any session. Drafts stay hidden from anonymous readers (item 99) |
+| Repository visibility | **Decided: public** (Mission 12) | The owner chose to keep the repository public as an open-source project. Drafts stay hidden from anonymous readers |
+| Public repository protections | **PASS** (Mission 12) | `docs/governance/REPOSITORY_SECURITY.md`: history audit (no leak in 210 commits of 10 refs), secret scanning and push protection, Dependabot security updates, private vulnerability reporting, branch and tag rulesets, approval of outside contributors' runs, the owner as required reviewer of `release` |
+| Project license | **NOT SELECTED** | Owner decision (`docs/governance/LICENSE_COMPARISON.md`; Apache-2.0 recommended). Until then the repository is public but not open-source licensed |
+| Third-party licenses | **PARTIAL** | Every dependency's license passes the policy in CI. Open: React Bits (Commons Clause), the website's unlicensed Ink Orbit component, license texts and NOTICE contents not shipped with the installers, the AppImage's LGPL and GPL libraries (`THIRD_PARTY_LICENSE_AUDIT.md`) |
 
 ## Publisher identity (Mission 11)
 

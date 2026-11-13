@@ -2746,3 +2746,206 @@ The application's architecture, visual identity, updater key and signing archite
   * physical HiDPI is untested.
 * Passing tests do not make it production-ready.
 * **Nothing was published.** No visibility was changed, nothing was bought, and `RELEASE_PUBLISHING` is unset.
+
+## Mission 12: open-source readiness and community foundation (2026-11-13)
+
+**The decision and the authorization.** The owner decided that Cyber Hub stays public and becomes an open-source project. Authorized: securing the public repository, contributor documentation and governance, automated checks, a dependency and license review, commits and pushes. Not authorized, and not done:
+* selecting or applying a license;
+* a release, new binaries, purchases;
+* deleting repository content;
+* rewriting history or tags;
+* product features or architecture changes.
+
+**Classification: OPEN SOURCE PARTIALLY READY.**
+
+**Times:** 2026-11-13T10:14Z to the commit that adds this section.
+
+### A. Executive summary
+
+* **The public repository is secured with GitHub's free features.**
+  * Its whole history was audited: no leak in 210 commits of 10 refs.
+  * Turned on: secret scanning, push protection, Dependabot security updates, private vulnerability reporting.
+  * Two rulesets protect the default branch and the `v*` tags.
+  * Every outside contributor's workflow run needs approval, and each `release` deployment needs the owner's approval.
+  * Release build artifacts are no longer left downloadable.
+* **Licenses.** MIT, Apache-2.0, GPL-3.0 and AGPL-3.0 are compared, with a recommendation (Apache-2.0). **No license was applied:** the owner selects it.
+* **Third-party licenses.** Every one of 649 crates and 457 npm packages passes a written policy, now enforced in CI. The audit found four problems the owner must resolve:
+  * the React Bits components (MIT + Commons Clause, not open source);
+  * the website's Ink Orbit component (no license);
+  * the AppImage's LGPL and GPL-2.0-or-later libraries without a source offer;
+  * installers that do not ship third-party license texts.
+* **Contributors** now have:
+  * a README for the public;
+  * CONTRIBUTING, CODE_OF_CONDUCT (Contributor Covenant 2.1), SECURITY and SUPPORT;
+  * a development guide and a documentation index;
+  * issue forms and a pull request template;
+  * CODEOWNERS, Dependabot version updates and labels.
+* **CI** gained a required "Repository checks" job: license policy, link check, pull request titles. It now runs once per pull request. CI run 43415411675 on `25c7401` is green on all six jobs.
+* **The product is unchanged.** The only Rust change is in `ci_tests.rs`. Windows 648 passed, Ubuntu 24.04 and Debian 12 649 passed, 319 frontend and script tests.
+* **Why not "license selection pending":** besides the license, two high-severity third-party issues sit in the source tree itself (React Bits, Ink Orbit). Selecting a license would not close them.
+
+### B. Repository security
+
+* **History** (gitleaks 8.30.1, pinned and hash-checked, over a mirror clone of every ref):
+  * **no leak;**
+  * nine suppressed findings, each confirmed as a test fixture;
+  * never committed: the update-signing key, `.env`, `.pem`, `.key`, `.p12` or `.pfx` files.
+  * Commit metadata carries the owner's personal e-mail. It is already public and was not rewritten; the recommendation is GitHub's e-mail privacy for future commits.
+  * CI's gitleaks scanned 214 commits on `25c7401`: no leak.
+* **Settings now** (details: `docs/governance/REPOSITORY_SECURITY.md`):
+  * secret scanning, push protection, Dependabot alerts and security updates, private vulnerability reporting: on;
+  * non-provider patterns and validity checks: not available to this account (paid);
+  * ruleset 27194018 "Default branch protection":
+    * no deletion or force push;
+    * pull requests with resolved conversations;
+    * six required checks: the five CI jobs and "Repository checks", added after the job passed on the default branch;
+    * administrator bypass;
+  * ruleset 27194022 "Release tag protection": `v*` tags cannot be deleted, moved or updated (administrator bypass);
+  * Actions: selected actions pinned by SHA, read-only default token, approval for every outside contributor's run;
+  * `release` environment: the owner as required reviewer (added in this mission), no administrator bypass, `main` and `release/*` only;
+  * `RELEASE_PUBLISHING` unset; Discussions and wiki off.
+* **Alerts:** 0 open secret-scanning alerts. Dependabot: the same two medium alerts (glib in `Cargo.lock`, minimatch in the website's lockfile; item 94). Their automatic security updates ended in `security_update_not_possible`, and GitHub shows those runs as failed:
+  * glib's fix is 0.20, but GTK 0.18 under Tauri allows 0.18.5 at most;
+  * minimatch's fix would downgrade other dependencies.
+* **Artifacts:** six build artifacts of the release runs 43231095560, 43242424304 and 43288379505 hold the candidates' unsigned binaries. Any signed-in GitHub user can download them until 2026-11-19. They were not deleted: deleting repository content was not authorized (item 108). The release workflow now keeps build artifacts for one day and deletes them after the draft upload.
+* **GitHub Apps:** the same eight third-party apps attach queued check suites to every commit. Their permissions are in GITHUB_FIRST_RUN.md (Mission 10's table); Vercel, Wasmer and Cloudflare Workers and Pages hold administration write. This is the owner's account setting (item 109).
+* **Not inspected:** webhooks; the CLI token lacks `admin:repo_hook`.
+* **Unresolved critical security issues: none.**
+
+### C. License research
+
+`docs/governance/LICENSE_COMPARISON.md` compares MIT, Apache-2.0, GPL-3.0 and AGPL-3.0 on:
+* permissions and conditions;
+* the patent grant;
+* copyleft scope;
+* compatibility with the dependency set;
+* commercial forks;
+* contributions (DCO or CLA).
+
+* **Recommended:** Apache-2.0, with a NOTICE file, a Developer Certificate of Origin and the React Bits and Ink Orbit components replaced. It serves adoption, contributions with clear terms (§5), commercial reuse and patent clarity best. Its explicit patent grant matters for a security tool that companies will evaluate.
+* **Alternative:** GPL-3.0-or-later, if preventing closed derivatives matters more to the owner than adoption. It is compatible with the current dependencies.
+* **Not recommended:** AGPL-3.0. Its network clause does not fit a desktop app, and it reduces adoption. "MIT OR Apache-2.0" is noted as a reasonable variant.
+* The official Apache-2.0 text (SHA-256 `cfc7749b…3d30`) is staged outside the repository. The steps to apply a license, once selected, are in the document.
+* **No LICENSE file, no `license` field, no SPDX header was added.** The README states that no license is selected and what that means.
+
+### D. Third-party license audit
+
+`docs/governance/THIRD_PARTY_LICENSE_AUDIT.md`, with generated inventories in `docs/governance/third-party/`.
+
+* **Rust:** 649 crates for Windows and Linux, classified by the resolve graph as shipped, build-only or test-only. All are under permissive licenses, MPL-2.0 (file-level copyleft), or Unicode and CDLA data licenses. There is no GPL, AGPL, source-available or unknown license; `r-efi` offers LGPL only as one alternative and is not used by these builds.
+* **npm:** 457 packages for the app and the website. Two reviewed exceptions: the website's `gsap` and `@gsap/react` (GSAP's own no-charge license; website only).
+* **Copied code:** 10 files.
+  * Comments and THIRD_PARTY_NOTICES.md now name each file's license.
+  * **React Bits** (`CountUp`, `BranchedMenu` in the app, `OrbitImages` on the website) is MIT + Commons Clause. It may be distributed as part of an application, but the components may not be sold or redistributed on their own. This is **not an open-source license**, and it blocks a repository-wide OSI license unless the files are replaced or excluded.
+  * **Ink Orbit** (website) comes from a repository without a license.
+* **Assets and data:**
+  * fonts (OFL-1.1) and icons (Lucide, ISC) have their full texts in THIRD_PARTY_NOTICES.md;
+  * the bundled data keeps its own licenses under any Cyber Hub license: OWASP WSTG and ASVS (CC BY-SA 4.0), MITRE ATT&CK (MITRE's terms), FIRST's CVSS v4.0 data (BSD-2-Clause);
+  * the app icons' authorship is not recorded.
+* **Native libraries:** the AppImage bundles LGPL libraries and GPL-2.0-or-later `libjbig`, read from the second candidate's AppImage. This needs a source offer before public AppImage distribution.
+* **Binaries:** the installers do not ship the third-party license texts and NOTICE contents.
+* **Enforced:** `scripts/licenses.mjs check` evaluates SPDX expressions against `scripts/license-policy.json` in CI. A new dependency under an unlisted license fails the build.
+* No compatibility or compliance is claimed until the owner selects the license and closes the audit's issues 2–5.
+
+### E. Contributor infrastructure
+
+| Added | Content |
+|---|---|
+| `README.md` (rewritten) | What Cyber Hub is and for whom, screenshots, status (pre-release, no public downloads, unsigned, no license), capabilities, building from source, testing, modules, security, documentation, reporting, contributing, license |
+| `CONTRIBUTING.md` | Prerequisites, setup with a disposable `CYBERHUB_DATA_DIR`, an unsigned local build, the checks (no `cargo fmt`), standards, database and security-sensitive areas, dependencies, commits and pull requests, review, releases |
+| `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1, official text; reports go to the maintainer through GitHub until a private address is published (item 111) |
+| `SECURITY.md` | Supported versions (the default branch; no stable release), private vulnerability reporting, what to include, no guaranteed response time, scope |
+| `SUPPORT.md` | Where to ask what; Discussions are off |
+| `docs/README.md` | Every document, grouped for users, contributors and internal release engineering; the mission reports are kept and marked as internal records |
+| `docs/governance/DEVELOPMENT_GUIDE.md` | Layout, architecture, security boundaries, network access, environment variables, database, tests, building, the release workflow, known limitations |
+| `.github/ISSUE_TEMPLATE/` | Bug, feature and question forms; blank issues off; vulnerabilities routed to private reporting; reporters asked to remove credentials and target data |
+| `.github/pull_request_template.md`, `CODEOWNERS`, `dependabot.yml` | The checks to run; the maintainer as owner of everything, with CI, release and security configuration listed; grouped weekly updates (website monthly) |
+| Labels | security, needs triage, needs reproduction, platform: windows, platform: linux, database, performance, dependencies |
+
+**Presentation:**
+* The description is set, with 14 topics, and merged branches are deleted.
+* Not changed: visibility, name, homepage (no deployed website).
+* A social preview needs the web interface (item 112).
+
+**Dependabot's first version updates** opened pull requests #1–#8 at about 11:15Z:
+* the grouped minor and patch updates;
+* majors for `getrandom`, `hmac`, `sha1`, `sha2` and the website's TypeScript 7.
+
+None was merged; they wait for review like any contribution. Before the trigger change, each ran CI twice. The duplicate push runs were left to finish (cancelling them was not permitted in this session).
+
+### F. CI/CD
+
+| Commit | Change |
+|---|---|
+| `8df7f78` | New job "Repository checks": `node scripts/licenses.mjs check`, `node scripts/check-links.mjs` (209 relative links in 45 files), and on pull requests a Conventional Commits title check whose title reaches the script only through `env`. In the release workflow, build artifacts are kept for one day and deleted by the publish job after the draft and its digests are checked (`actions: write` for that job only). `ci_tests.rs` pins all of it |
+| `07b5912` | CI runs for every pull request and for pushes to `main`, `release/**` and `v*` tags only, so a same-repository or Dependabot branch is checked once; pinned by `ci_tests.rs` |
+
+* **Unchanged:**
+  * CI reads no secret and has `contents: read`;
+  * no `pull_request_target`, `workflow_run` or comment triggers;
+  * checkouts keep no credentials;
+  * every action and tool is pinned by SHA or hash.
+* **Verified:**
+  * actionlint 1.7.7 with shellcheck 0.9.0, run locally in a container: no issue;
+  * CI run 43415411675 on `25c7401`, green: Windows 648 passed, Ubuntu 24.04 649, Debian 12 649 (29 ignored each), 319 frontend tests, MSRV 1.90, cargo audit over 652 crates, npm audit 0, gitleaks 214 commits, Repository checks.
+
+### G. Product readiness
+
+* **Unchanged by this mission:**
+  * the application's code, schema 32, the update key and the signing architecture;
+  * the two private draft candidates (`v0.1.0` on `add894e`, `v0.1.0-rc.2` on `f049e08`).
+* **Regression, compared with Mission 11:**
+
+  | Check | Mission 11 | Mission 12 |
+  |---|---|---|
+  | Windows Rust tests | 647 passed, 29 ignored | 648 passed, 29 ignored |
+  | Debian 12 Rust tests | 648 passed, 29 ignored | 649 passed, 29 ignored |
+  | Frontend and script tests | 56 files, 310 tests | 58 files, 319 tests |
+  | Audits | npm 0; cargo 0 (8 allowed warnings) | npm 0; cargo 0 (8 allowed warnings) |
+
+  * The Rust difference is the new `ci_tests` test. Debian runs one more test than Windows (`run_scripts_are_valid_bash`, Unix only).
+  * The 9 new frontend and script tests belong to the license and link checks.
+  * Clippy `-D warnings` and tsc are clean, and the vite build passes.
+  * The website's npm audit shows 10 moderate findings, all minimatch (dev-only, item 94).
+* The owner's database kept its modification time. All tests used disposable data.
+* **Still open for a public release** (Mission 11, section I):
+  * Authenticode;
+  * the publisher name;
+  * the stable tag;
+  * an update end to end;
+  * physical HiDPI.
+* **New, for any public binary:** the third-party notices in the installers, and the AppImage's LGPL and GPL obligations.
+
+### H. Remaining owner decisions
+
+| # | Decision | Item |
+|---|---|---|
+| 1 | **Select the project license** (Apache-2.0 recommended; GPL-3.0-or-later the alternative) and DCO or CLA | 103 |
+| 2 | **React Bits:** replace `CountUp`, `BranchedMenu` and `OrbitImages` (recommended), or exclude them from the license | 104 |
+| 3 | **Ink Orbit** (website): replace, or obtain the author's permission | 105 |
+| 4 | **The AppImage:** a source offer for its LGPL libraries and `libjbig`, removing `libjbig` and the TIFF loader, or no AppImage; possibly legal advice | 106 |
+| 5 | **Ship third-party notices with the installers** (engineering, in the next candidate) | 107 |
+| 6 | **Delete the six release-run artifacts** before they expire on 2026-11-19 | 108 |
+| 7 | **Limit the eight third-party GitHub Apps** to the repositories they serve | 109 |
+| 8 | **E-mail privacy** for future commits | 110 |
+| 9 | A private contact for Code of Conduct reports | 111 |
+| 10 | Discussions, a social preview image, a website URL | 112 |
+| 11 | A user-facing way to enter provider credentials (a product change) | 113 |
+| 12 | Lightswind's license file; the app icons' authorship | 114 |
+| 13 | Review the eight Dependabot pull requests (the majors may need code changes) | 115 |
+| 14 | Release path, unchanged: Authenticode, the publisher name, the stable `v0.1.0`, a public release, physical HiDPI | 97, 98, 101 |
+
+### I. Final classification
+
+**OPEN SOURCE PARTIALLY READY.**
+* **Ready:**
+  * the repository's security (no unresolved critical issue, every free protection on);
+  * contributor documentation and governance;
+  * issue and pull request templates;
+  * CI with license, link and title checks;
+  * a green regression.
+* **Not ready:**
+  * no owner-approved license;
+  * two high-severity third-party license issues in the source tree (React Bits' Commons Clause, the unlicensed Ink Orbit component) that a license selection alone does not resolve.
+* Cyber Hub is therefore **publicly visible but not open-source licensed**, and nothing in the repository claims otherwise.
+* **Nothing was published or deleted.** No visibility, name or history changed, nothing was bought, and `RELEASE_PUBLISHING` is unset.

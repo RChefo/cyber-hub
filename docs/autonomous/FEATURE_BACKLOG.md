@@ -456,3 +456,49 @@ The CA-certificate start-up and the MSI folder are fixed, the publisher name is 
 | 100 | **Run actionlint before pushing a workflow change** | CI's pinned actionlint 1.7.7 with shellcheck runs locally in an `ubuntu:24.04` container (download, check the SHA-256, run). Mission 11's first push failed on a shellcheck style rule that the Rust workflow tests cannot see |
 | 101 | **The final 0.1.0 release path** | The second candidate is the draft pre-release of `v0.1.0-rc.2`; the first is still the draft of `v0.1.0` (tag on `add894e`). To release 0.1.0, the owner deletes the first draft, moves `v0.1.0` to the validated commit (`git tag -f` and a forced tag push, a rewrite of a public tag to be done knowingly) or chooses a later version, builds the stable draft, checks it like the candidate, and publishes it. The stable build is a new build of the same commit, so its checksums differ from the candidate's |
 | 102 | **"Installer Language" stays in `HKCU\Software\cyberhub\Cyber Hub`** | Tauri's NSIS installer writes it, and its uninstaller removes it only with *Delete the application data*. Harmless: the MSI reads only the folder value and `InstallDir`. Left as Tauri does it |
+
+## Mission 12 (2026-11-13): open-source readiness
+
+The owner decided that Cyber Hub stays public and becomes an open-source project. Mission 12 audited and secured the public repository, researched licenses (none applied: the owner selects one), audited third-party licenses, and added contributor documentation, community templates and repository checks. Details: MISSION_REPORT.md, "Mission 12".
+
+### Status of earlier items
+
+| # | Item | Status |
+|---|---|---|
+| 99 | The repository is public | **Decided by the owner: public, permanently.** Secret scanning, push protection, Dependabot security updates, private vulnerability reporting, branch and tag rulesets, approval of every outside contributor's workflow run, and the owner as required reviewer of the `release` environment are on (`docs/governance/REPOSITORY_SECURITY.md`). The third-party GitHub Apps remain the owner's account setting (item 109) |
+| 100 | Run actionlint before pushing a workflow change | **Done** for Mission 12's changes (CI's pinned actionlint 1.7.7 with shellcheck, locally, no issue); documented in CONTRIBUTING.md |
+| 101 | The final 0.1.0 release path | Unchanged; the tag ruleset now also blocks moving `v*` tags except for administrators, deliberately |
+
+### Done
+
+| What | Where |
+|---|---|
+| Public-repository security audit: gitleaks over every commit of every ref, the suppressed findings confirmed as fixtures, no signing key or env file ever committed, deleted files and identities checked | `docs/governance/REPOSITORY_SECURITY.md` |
+| Free GitHub security features turned on, rulesets, `release` reviewer, outside-contributor approval | GitHub settings, 2026-11-13 |
+| License comparison (MIT, Apache-2.0, GPL-3.0, AGPL-3.0) with a recommendation (Apache-2.0) | `docs/governance/LICENSE_COMPARISON.md`; no LICENSE committed |
+| Third-party license audit: 649 crates, 457 npm packages, copied components, assets, data, the AppImage's native libraries | `docs/governance/THIRD_PARTY_LICENSE_AUDIT.md`, `docs/governance/third-party/` |
+| A dependency license policy enforced in CI; Markdown link check; pull request title check | `scripts/licenses.mjs`, `scripts/license-policy.json`, `scripts/check-links.mjs`, CI job "Repository checks" |
+| Release build artifacts were downloadable by any signed-in user for 7 days; now one day, and deleted after the draft upload | `.github/workflows/release.yml` |
+| Notices for copied components, fonts and icons; license notes in the copied files' headers | `THIRD_PARTY_NOTICES.md`, `src/components/vendor/`, `website/src/components/ui/` |
+| README, CONTRIBUTING, CODE_OF_CONDUCT (Contributor Covenant 2.1), SECURITY, SUPPORT, development guide, documentation index | Repository root, `docs/README.md`, `docs/governance/DEVELOPMENT_GUIDE.md` |
+| Issue forms (bug, feature, question), pull request template, CODEOWNERS, Dependabot version updates, 8 labels | `.github/` |
+| "Repository checks" required by the default-branch ruleset; CI runs once per pull request instead of twice (`07b5912`) | Ruleset 27194018, `.github/workflows/ci.yml` |
+
+### New
+
+| # | Item | Why open |
+|---|---|---|
+| 103 | **Select the project license** | Owner decision. Recommended: Apache-2.0 (or GPL-3.0-or-later if preventing closed forks matters more). Then the steps in LICENSE_COMPARISON.md, "Applying the license" |
+| 104 | **Replace the React Bits components** | `CountUp`, `BranchedMenu` (app) and `OrbitImages` (website) are under MIT + Commons Clause, which is not open source and blocks a repository-wide OSI license unless they are excluded. Replacing visible UI is the owner's decision |
+| 105 | **Replace the website's Ink Orbit component or obtain permission** | Its source repository has no license |
+| 106 | **The AppImage's bundled LGPL libraries and GPL-2.0-or-later `libjbig`** | A source offer is needed before public AppImage distribution, or `libjbig` and the TIFF loader removed, or Linux limited to deb and rpm. Owner decision; possibly legal advice |
+| 107 | **Ship third-party license texts and NOTICE contents with the installers** | MIT, BSD, ISC, Apache-2.0 (ECharts, moka, tlsh2), OFL and the data licenses require them with binaries; extend `scripts/licenses.mjs` to generate the file and bundle it; needs a new candidate build |
+| 108 | **The six release-run artifacts of the first and second candidates** | Downloadable by any signed-in GitHub user until 2026-11-19. Deleting them is the owner's call (Mission 12 was not authorized to delete repository content): `gh api -X DELETE repos/RChefo/cyber-hub/actions/artifacts/<id>` for each `bundles-*` artifact of runs 43231095560, 43242424304 and 43288379505 |
+| 109 | **Limit the eight third-party GitHub Apps** to the repositories they serve | Account-wide setting; several have administration or workflow write access; none is used here |
+| 110 | **Commit e-mail privacy** | Commits carry a personal e-mail address; turn on GitHub's e-mail privacy so future commits use the no-reply address. History is not rewritten |
+| 111 | **A contact for Code of Conduct reports** | CODE_OF_CONDUCT.md points to GitHub's content reporting and the owner's profile until the owner publishes a private address |
+| 112 | **Discussions, social preview, website URL** | Discussions are off (the owner decides whether to moderate a forum); the social preview image needs the web interface; there is no deployed website to link |
+| 113 | **Provider credentials for external users** | Keys can be added only with the developer tool `cyberhub-keys` or the OS credential tools; a user-facing path would be a product change |
+| 114 | **Lightswind's license file and the app icons' authorship** | Lightswind declares MIT only in npm metadata; the icons' origin is not recorded. Low |
+| 115 | **Review Dependabot's first pull requests (#1–#8)** | Grouped minor and patch updates, plus majors for `getrandom`, `hmac`, `sha1`, `sha2` and the website's TypeScript 7, which may need code changes. Each needs CI green and a review; none was merged in Mission 12 |
+| 94 (update) | glib and minimatch alerts | Dependabot's automatic security updates end in `security_update_not_possible`: glib's fix (0.20) is out of reach under GTK 0.18 and Tauri; minimatch's would downgrade other dependencies. GitHub shows those runs as failed. Unchanged otherwise |
