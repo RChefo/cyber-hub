@@ -4,7 +4,7 @@ Thank you for your interest in ExploitX. This guide covers setting up a developm
 
 This repository holds the desktop app and the brand sources. The website (exploitx.net) has its own repository, [RChefo/ExploitX-Web](https://github.com/RChefo/ExploitX-Web): contribute to the website there ([docs/WEBSITE.md](docs/WEBSITE.md) explains how the two stay in step).
 
-> **Licensing.** The repository is public but **no open-source license has been selected yet**. See the README, section "License". Until the owner selects one, the maintainer may hold pull requests that add substantial code. Issues, bug reports, reproductions, documentation fixes and small fixes are welcome now. The options under consideration are in [docs/governance/LICENSE_COMPARISON.md](docs/governance/LICENSE_COMPARISON.md).
+> **Licensing.** ExploitX is publicly developed; **its project license is pending the owner's selection**, so it is not yet open-source licensed. See the README, section "License". Until the owner selects one, the maintainer may hold pull requests that add substantial code. Issues, bug reports, reproductions, documentation fixes and small fixes are welcome now. The options are in [docs/governance/LICENSE_COMPARISON.md](docs/governance/LICENSE_COMPARISON.md); how contributions will be accepted (a Developer Certificate of Origin sign-off is proposed) is in [docs/governance/CONTRIBUTOR_TERMS.md](docs/governance/CONTRIBUTOR_TERMS.md).
 
 Please also read the [Code of Conduct](CODE_OF_CONDUCT.md). **Never report a security vulnerability in a public issue or pull request:** follow [SECURITY.md](SECURITY.md).
 
@@ -35,7 +35,7 @@ macOS is not supported. More detail per platform: [docs/PLATFORMS.md](docs/PLATF
 ## Setup and running the app
 
 ```bash
-git clone https://github.com/RChefo/cyber-hub.git
+git clone https://github.com/RChefo/ExploitX.git
 cd cyber-hub
 npm ci                 # installs the frontend; also runs scripts/patch-deps.mjs (a self-tested compatibility patch)
 npm run tauri dev      # the desktop app with hot reload
@@ -144,9 +144,10 @@ Read [docs/SECURITY.md](docs/SECURITY.md) first. If your change could weaken a c
 
 * Add a dependency only when it is clearly needed, and say why in the pull request. Prefer what the project already uses.
 * Commit the lock file changes (`src-tauri/Cargo.lock`, `package-lock.json`). CI builds with `--locked` and `npm ci`.
-* The dependency's license must be accepted by `scripts/license-policy.json`. The check fails otherwise. A license outside the policy needs a maintainer's review and a reasoned exception.
+* The dependency's license must be accepted by `scripts/license-policy.json`. The check fails on an unknown, prohibited or review-only license; such a license needs the maintainer's review and a dated exception ([DEPENDENCY_LICENSE_POLICY.md](docs/governance/DEPENDENCY_LICENSE_POLICY.md)).
+  * When what ships changes, regenerate the bundled notices with `node scripts/licenses.mjs notices` and commit `src-tauri/resources/THIRD_PARTY_LICENSES.txt` (CI checks it is current; `npm ci` first, since it reads the installed packages' license files).
   * Regenerate the inventories with `node scripts/licenses.mjs report` when dependencies change.
-  * Copying code from another project needs its license and a source note at the top of the file, and an entry in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+  * Copying code or data from another project needs its license and a source note at the top of the file, an entry in `scripts/license-assets.json` and in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Code without a license, or under a license that is not open source (for example the Commons Clause), is not copied.
 * `cargo audit` and `npm audit` must stay clean. Dependabot opens update pull requests weekly.
 * GitHub Actions must be pinned to a full commit SHA (a test fails otherwise).
 

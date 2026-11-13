@@ -26,7 +26,7 @@ It is for **penetration testers, security analysts, threat-intelligence and OSIN
 * **Pre-release, under active development** for **Windows 10/11 x64** and **Linux x64**. macOS is not supported.
 * **No public release and no downloads yet.** Release candidates of 0.1.0 exist only as private drafts for testing. Build from source to try ExploitX.
 * **Not code-signed yet.** The Windows installers built so far are not Authenticode-signed, so Windows SmartScreen warns about them.
-* **License: none selected yet** (see [License](#license)).
+* **Publicly developed; the project license is pending the owner's selection** (see [License](#license)). ExploitX is not yet open-source licensed.
 
 ## Main capabilities
 
@@ -42,7 +42,7 @@ The full list is below, under [Modules](#modules).
 
 ## Installation
 
-There are **no public packages yet**. When releases are published, they will appear on the repository's [Releases](https://github.com/RChefo/cyber-hub/releases) page with SHA-256 checksums and update signatures.
+There are **no public packages yet**. When releases are published, they will appear on the repository's [Releases](https://github.com/RChefo/ExploitX/releases) page with SHA-256 checksums and update signatures.
 
 Until then, build and run ExploitX from source.
 
@@ -56,7 +56,7 @@ Prerequisites:
 Details: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
-git clone https://github.com/RChefo/cyber-hub.git
+git clone https://github.com/RChefo/ExploitX.git
 cd cyber-hub
 npm ci                 # also runs scripts/patch-deps.mjs (freezePrototype compatibility, self-tested)
 npm run tauri dev      # run the desktop app with hot reload
@@ -123,7 +123,7 @@ Details and accepted risks: [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Reporting security issues
 
-Please **do not** open a public issue for a vulnerability. Report it privately through [GitHub's vulnerability reporting](https://github.com/RChefo/cyber-hub/security/advisories/new). Details are in [SECURITY.md](SECURITY.md).
+Please **do not** open a public issue for a vulnerability. Report it privately through [GitHub's vulnerability reporting](https://github.com/RChefo/ExploitX/security/advisories/new). Details are in [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
@@ -131,6 +131,8 @@ Bug reports, reproductions and documentation fixes are welcome; see [CONTRIBUTIN
 
 ## License
 
-**No license has been selected yet.** The repository is publicly visible, but until the owner selects a license and adds a LICENSE file, no rights to use, modify or redistribute the code are granted beyond what GitHub's Terms of Service allow for public repositories (viewing and forking on GitHub). The options under consideration are compared in [docs/governance/LICENSE_COMPARISON.md](docs/governance/LICENSE_COMPARISON.md).
+**ExploitX is publicly developed. Its project license is pending the owner's selection.** A public repository is not open source by itself: until the owner selects a license and adds a LICENSE file, no rights to use, modify or redistribute the code are granted beyond what GitHub's Terms of Service allow for public repositories (viewing and forking on GitHub). The options are compared in [docs/governance/LICENSE_COMPARISON.md](docs/governance/LICENSE_COMPARISON.md); Apache-2.0 is recommended and awaits the owner's approval.
 
-Third-party code, data, fonts and icons keep their own licenses: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/governance/THIRD_PARTY_LICENSE_AUDIT.md](docs/governance/THIRD_PARTY_LICENSE_AUDIT.md).
+The groundwork is done (Mission 14): no third-party component with a non-open license remains, every dependency is checked against a [license policy](docs/governance/DEPENDENCY_LICENSE_POLICY.md) in CI, and every package ships the license texts of what it contains (`THIRD_PARTY_LICENSES.txt`, shown in Settings > About).
+
+Third-party code, data, fonts and icons keep their own licenses: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), [docs/governance/THIRD_PARTY_LICENSE_AUDIT.md](docs/governance/THIRD_PARTY_LICENSE_AUDIT.md) and, for the Linux packages' system libraries, [docs/governance/DISTRIBUTION_LICENSE_COMPLIANCE.md](docs/governance/DISTRIBUTION_LICENSE_COMPLIANCE.md).

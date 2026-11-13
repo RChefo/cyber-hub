@@ -4,6 +4,13 @@
 
 **ExploitX's own license:** none selected yet ([LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)). Compatibility below is assessed against the candidates there; it is not final until the owner selects one.
 
+> **Mission 14 (2026-11-13): remediation.** The findings below are the Mission 12 audit; Mission 14 resolved most of them. The "Unresolved issues" table at the end has the current status of each.
+> * The React Bits components (app) were replaced by original code (`src/components/ui/NavTree.tsx`, `AnimatedNumber.tsx`); `motion` was removed. The website's React Bits and Ink Orbit components were replaced in RChefo/ExploitX-Web.
+> * Every package ships `THIRD_PARTY_LICENSES.txt`: the license texts of every shipped crate and runtime npm package, with their NOTICE files ([DEPENDENCY_LICENSE_POLICY.md](DEPENDENCY_LICENSE_POLICY.md)).
+> * The AppImage ships its libraries' copyright files, and the release publishes their source ([DISTRIBUTION_LICENSE_COMPLIANCE.md](DISTRIBUTION_LICENSE_COMPLIANCE.md)).
+> * Licenses are sorted into policy categories; CI fails on unknown and prohibited ones.
+> * Current counts: 649 Rust crates and 226 npm packages are checked.
+
 > **Mission 13 (2026-11-13):** the website moved to its own repository, RChefo/ExploitX-Web, with its lockfile, GSAP, the React Bits `OrbitImages` files and the unlicensed Ink Orbit component. The findings about them below are a record of this audit; they now apply to that repository (its THIRD_PARTY_NOTICES.md), and this repository's license check covers the app only.
 
 ## Method
@@ -35,11 +42,11 @@
 | Rust crates (649) | All permissive, MPL-2.0 (file-level copyleft), Unicode or CDLA data licenses. No GPL, AGPL, LGPL-only, source-available or unknown license. Two crates offer LGPL only as one alternative among MIT and Apache-2.0 (`r-efi`, UEFI code that the Windows and Linux builds do not use) |
 | npm packages of the app (229) | Runtime: MIT, Apache-2.0, ISC, BSD, 0BSD, MPL-2.0 and OFL-1.1 (fonts). Development only: the same, plus CC-BY-4.0 (`caniuse-lite` data) and BlueOak-1.0.0 (`minimatch`) |
 | npm packages of the website (228) | As the app, plus **GSAP's proprietary "no charge" license** (`gsap`, `@gsap/react`): website only, a reviewed exception |
-| Copied UI components (10 files) | MIT (4 sources). **React Bits: MIT + Commons Clause, not open source** (5 files). **Ink Orbit: no license found** (1 website file) |
+| Copied UI components (10 files) | MIT (4 sources). **React Bits: MIT + Commons Clause, not open source** (5 files). **Ink Orbit: no license found** (1 website file). *Mission 14: React Bits and Ink Orbit replaced; 4 MIT files remain in the app* |
 | Fonts and icons in the app | OFL-1.1 (IBM Plex Sans, JetBrains Mono), ISC (Lucide) |
 | Data catalogs | CC BY-SA 4.0 (OWASP WSTG, ASVS), MITRE ATT&CK terms, BSD-2-Clause (FIRST CVSS calculator data): all with notices in `THIRD_PARTY_NOTICES.md` |
-| Native libraries | Windows: none bundled. deb and rpm: none bundled (system packages). **AppImage: 171 bundled libraries, mostly LGPL, one GPL-2.0-or-later (`libjbig`)** |
-| Binary notices | **Not shipped with the installers yet** |
+| Native libraries | Windows: none bundled. deb and rpm: none bundled (system packages). **AppImage: 171 bundled libraries, mostly LGPL, one GPL-2.0-or-later (`libjbig`)**. *Mission 14: copyright files of every bundled library inside the AppImage, source packages on the release* |
+| Binary notices | **Not shipped with the installers yet**. *Mission 14: shipped in every package* |
 
 ## Direct dependencies
 
@@ -99,7 +106,7 @@
 | react, react-dom | 19.3.1 | MIT | runtime |
 | echarts | 6.1.0 | Apache-2.0 (with a NOTICE file) | runtime |
 | recharts | 3.10.1 | MIT | runtime |
-| motion | 14.9.0 | MIT | runtime |
+| motion | 14.9.0 | MIT | runtime (removed in Mission 14 with the React Bits components) |
 | lucide-react | 1.67.0 | ISC | runtime |
 | clsx, tailwind-merge | 2.1.1, 3.7.0 | MIT | runtime |
 | @tauri-apps/cli | 2.12.4 | Apache-2.0 OR MIT | development (builds the installers) |
@@ -148,6 +155,8 @@ What that means for ExploitX:
 
   The audit does not remove them on its own: replacing visible UI is a product decision.
 
+**Resolved in Mission 14:** the mission brief asked for original replacements. `BranchedMenu` became `NavTree` (the sidebar's tree: disclosure buttons, keyboard navigation, `aria-current`) and `CountUp` became `AnimatedNumber` (reduced-motion aware, the final value for screen readers). Both were written from scratch and share no code with React Bits. The website's `OrbitImages` became `ScreenOrbit`. The React Bits files are gone from both repositories' current trees, though they remain in the Git history.
+
 ## Assets and data
 
 | Asset | License | Notes |
@@ -174,6 +183,8 @@ What that means for ExploitX:
 
   **Before the AppImage is distributed publicly:** publish the corresponding source for the bundled LGPL and GPL libraries (or a written offer), or remove `libjbig` and the TIFF loader from the AppImage, or ship only the deb and rpm for Linux. **Owner decision.**
 
+  **Mission 14:** the first option is implemented. Linuxdeploy had left out the copyright files of 10 of the 108 packages; the release workflow now collects all of them (`scripts/appimage-licenses.sh`) into `usr/share/doc/exploitx-appimage/`. It also publishes the Debian source packages of every GPL/LGPL library next to the AppImage, and fails the release if a bundled library lacks its copyright file. Details, evidence and the remaining legal questions are in [DISTRIBUTION_LICENSE_COMPLIANCE.md](DISTRIBUTION_LICENSE_COMPLIANCE.md).
+
 ## Binary distribution: notices
 
 The installers and packages do **not yet include third-party license texts**. MIT, BSD, ISC, Apache-2.0, OFL and the data licenses all require their notices to accompany binary copies, and Apache-2.0 requires NOTICE contents: ECharts, moka, tlsh2, and es-toolkit's Lodash notice. `THIRD_PARTY_NOTICES.md` covers the copied code, fonts, icons and data, but not every crate and npm package.
@@ -185,24 +196,30 @@ The installers and packages do **not yet include third-party license texts**. MI
 
 Generating it can extend `scripts/licenses.mjs`. **Not done in Mission 12:** it changes the installers' contents, which needs a new candidate build.
 
+**Done in Mission 14.** `node scripts/licenses.mjs notices` writes `src-tauri/resources/THIRD_PARTY_LICENSES.txt` (about 1 MB, 333 distinct license texts), and every package installs it:
+* NSIS and MSI next to the app;
+* deb and rpm also in `/usr/share/doc/cyber-hub/` and `/usr/share/licenses/cyber-hub/`.
+
+Settings > About shows where it is. CI fails when it is out of date, and the release workflow checks every built package for it. No candidate has been built with it yet: the next one will be the first.
+
 ## Website
 
 `website/` (not deployed, not part of the app):
 * **GSAP** (`gsap` 3.15.1, `@gsap/react` 2.1.2) uses the GSAP Standard "no charge" license. It is free, commercial use included, but it is proprietary and has a field-of-use restriction on tools that compete with Webflow's visual animation builder. The website uses it to animate its own pages, which the license permits. GSAP is installed from npm and not redistributed in this repository. It is a reviewed exception in the license policy.
 * If the repository adopted the GPL, the website would combine with a proprietary library. In that case, license the website separately or replace GSAP.
-* The React Bits and Ink Orbit components above.
+* The React Bits and Ink Orbit components above: replaced in Mission 14 (RChefo/ExploitX-Web). GSAP remains, as a reviewed exception in that repository's license policy.
 
 ## Unresolved issues
 
-| # | Issue | Severity | Owner of the decision |
-|---|---|---|---|
-| 1 | No project license is selected; the repository's code is not open-source licensed | High | Owner ([LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)) |
-| 2 | React Bits components (5 files) are under MIT + Commons Clause: not open source; they block a repository-wide OSI license unless replaced or excluded | High | Owner (replace recommended) |
-| 3 | The website's Ink Orbit component has no license | High (website) | Owner: replace or obtain permission |
-| 4 | The AppImage bundles LGPL libraries and GPL-2.0-or-later `libjbig` without a source offer | High before public AppImage distribution | Owner; possibly legal advice |
-| 5 | Installers do not ship third-party license texts and NOTICE contents | Medium before a public release | Engineering, in the next candidate |
-| 6 | Lightswind's MIT is declared only in npm metadata, without a license file or copyright line | Low | Engineering: ask the author, or replace |
-| 7 | The app icons' authorship is not recorded | Low | Owner: confirm |
-| 8 | The dependency licenses come from metadata; a crate whose metadata is wrong would not be caught | Low | Re-audit on major dependency changes |
+| # | Issue | Severity | Owner of the decision | Status after Mission 14 |
+|---|---|---|---|---|
+| 1 | No project license is selected; the repository's code is not open-source licensed | High | Owner ([LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)) | **Open:** Apache-2.0 recommended; awaiting the owner's approval of one exact license |
+| 2 | React Bits components (5 files) are under MIT + Commons Clause: not open source; they block a repository-wide OSI license unless replaced or excluded | High | Owner (replace recommended) | **Resolved:** replaced by original components in both repositories |
+| 3 | The website's Ink Orbit component has no license | High (website) | Owner: replace or obtain permission | **Resolved:** replaced (`EvidenceFlow`, RChefo/ExploitX-Web) |
+| 4 | The AppImage bundles LGPL libraries and GPL-2.0-or-later `libjbig` without a source offer | High before public AppImage distribution | Owner; possibly legal advice | **Implemented, unproven in a real release:** copyright files in the AppImage, source packages published with each release, release fails on a gap. Whether this fully meets each license, and the `libjbig` question, remain for legal review ([DISTRIBUTION_LICENSE_COMPLIANCE.md](DISTRIBUTION_LICENSE_COMPLIANCE.md)) |
+| 5 | Installers do not ship third-party license texts and NOTICE contents | Medium before a public release | Engineering, in the next candidate | **Resolved in the tree:** every package carries `THIRD_PARTY_LICENSES.txt`, verified in locally built debug packages of all five formats. The next candidate is the first release build with it |
+| 6 | Lightswind's MIT is declared only in npm metadata, without a license file or copyright line | Low | Engineering: ask the author, or replace | Open (unchanged) |
+| 7 | The app icons' authorship is not recorded | Low | Owner: confirm | Open: owner to confirm (the ExploitX icons of Mission 13 are original work of the project) |
+| 8 | The dependency licenses come from metadata; a crate whose metadata is wrong would not be caught | Low | Re-audit on major dependency changes | Open (by nature); the policy now fails on unknown licenses |
 
-**Compatibility conclusion.** Once issues 2 and 3 are resolved, the dependency set allows each of the four candidate licenses as ExploitX's own license. Issues 4 and 5 are distribution obligations that apply whatever license is chosen. No compatibility is claimed until the owner selects the license and these items are closed.
+**Compatibility conclusion (Mission 14).** With issues 2 and 3 resolved, the app's dependency set allows each of the four candidate licenses as ExploitX's own license. GSAP limits only the website, and only under the GPL. Issues 4 and 5 are distribution obligations that apply whatever license is chosen. No compatibility is claimed as final until the owner selects the license.

@@ -1,8 +1,15 @@
 # License comparison for ExploitX
 
-**Status (2026-11-13): no license has been selected.** The repository is public, but it has no LICENSE file. Until the owner selects and applies a license:
+**Status (2026-11-13, re-evaluated in Mission 14): no license has been selected.** ExploitX is publicly developed; its project license is pending the owner's selection. The repository is public, but it has no LICENSE file. Being public on GitHub does not make it open source. Until the owner selects and applies a license:
 * no one is granted rights to use, modify or redistribute the code beyond what GitHub's Terms of Service allow for public repositories (viewing and forking on GitHub);
 * ExploitX must not be described as open-source licensed.
+
+**Mission 14 changed the inputs to this decision** (details in "What the dependency audit means for the choice"):
+* the React Bits components (MIT + Commons Clause) and the unlicensed Ink Orbit component are **gone**, replaced by original code in both repositories;
+* every package ships the third-party license texts, and the AppImage ships its libraries' copyright files, with their source published next to it on each release;
+* a dependency license policy now fails CI on any unknown or prohibited license ([DEPENDENCY_LICENSE_POLICY.md](DEPENDENCY_LICENSE_POLICY.md)).
+
+Nothing third-party now stands in the way of any of the four candidates for the app repository. **The recommendation is unchanged: Apache-2.0**; the owner's approval of one exact license is the remaining step ("Decision requested", at the end).
 
 This document prepares the owner's decision. **It is not legal advice.** The summaries below describe the licenses' published texts and widely documented positions (the Open Source Initiative, the Free Software Foundation, the Apache Software Foundation, choosealicense.com). Before applying a license, especially if commercial plans depend on it, consider review by a qualified lawyer.
 
@@ -13,7 +20,7 @@ This document prepares the owner's decision. **It is not legal advice.** The sum
 * It **bundles third-party code**:
   * about 330–400 Rust crates linked into the binaries (Windows and Linux respectively);
   * npm packages bundled into the interface;
-  * a few copied UI components;
+  * four small copied UI components, all MIT;
   * fonts;
   * data catalogs (OWASP WSTG and ASVS, MITRE ATT&CK, FIRST CVSS).
   * The Linux AppImage additionally carries system libraries such as WebKitGTK and GTK.
@@ -84,11 +91,11 @@ The details are in [THIRD_PARTY_LICENSE_AUDIT.md](THIRD_PARTY_LICENSE_AUDIT.md).
   * FIRST's CVSS data is BSD-2-Clause.
 
   A NOTICE file or the README must say that these files are excluded from ExploitX's own license.
-* **Blockers for any open-source license on the whole repository:**
-  * **React Bits components** (three files in the app, two on the website) are under "MIT + Commons Clause". They may be distributed only as part of an application, and they may not be sold, sublicensed or redistributed alone. That is not an open-source license. ExploitX cannot pass these files on under MIT, Apache-2.0 or the GPL, because GPL-3.0 §10 also forbids imposing further restrictions. **Either replace them with original code (recommended), or exclude them from the license explicitly**, in which case the repository is not entirely open source.
-  * **The website's Ink Orbit component** comes from a repository without a license. Replace it, or obtain the author's permission.
-  * **The website depends on GSAP** (a proprietary, no-charge license). That is fine for a permissive website. Under the GPL, the website would combine with a proprietary library; license the website separately or replace GSAP in that case.
-* **Independent of the choice:** distributing the **AppImage** means distributing its bundled LGPL libraries and one GPL-2.0-or-later library (`libjbig`), which carries source-availability obligations of its own (the audit, "Native libraries").
+* **Former blockers, resolved in Mission 14:**
+  * the **React Bits components** (three files in the app, two on the website; MIT + Commons Clause, which forbids redistributing the components alone and is therefore not open source) were replaced by original components (`NavTree`, `AnimatedNumber` in the app; `ScreenOrbit` on the website). Before that, no open-source license could have covered them: a permissive license would have granted rights React Bits withholds, and GPL-3.0 §10 forbids further restrictions;
+  * the website's **Ink Orbit** section, from a repository without a license, was replaced by an original component (`EvidenceFlow`).
+* **Remaining exception, website only:** the website depends on **GSAP** (free, proprietary "no charge" license), a reviewed exception in its license policy. It does not affect the app. For the website, it is compatible with a permissive license (GSAP stays under its own terms and is installed from npm, not copied); under the GPL the website's bundle would combine with a proprietary library, so the website would need a separate license or GSAP's replacement (CSS animations could do most of its work).
+* **Independent of the choice:** distributing the **AppImage** means distributing its bundled LGPL libraries and one GPL-2.0-or-later library (`libjbig`), which carries source-availability obligations of its own. Since Mission 14 the release workflow ships their copyright files inside the AppImage and their source packages next to it ([DISTRIBUTION_LICENSE_COMPLIANCE.md](DISTRIBUTION_LICENSE_COMPLIANCE.md)). These obligations are the same under each candidate: the libraries stay under their own licenses, separate and replaceable.
 
 ## Contributions, ownership and commercial plans
 
@@ -103,11 +110,11 @@ The details are in [THIRD_PARTY_LICENSE_AUDIT.md](THIRD_PARTY_LICENSE_AUDIT.md).
 
 ## Recommendation
 
-**Apache License 2.0** for ExploitX's own code, with a NOTICE file. Recommended together with:
-* replacing the React Bits and Ink Orbit components with original code;
-* keeping the data files' licenses explicit;
-* a Developer Certificate of Origin for contributions;
-* a short trademark note.
+**Apache License 2.0** for ExploitX's own code, with a NOTICE file. Re-evaluated after Mission 14: the recommendation stands, and the replacements removed the only third-party reason that could have forced a different choice. Recommended together with:
+* keeping the data files' licenses explicit (they are excluded from ExploitX's own license);
+* a Developer Certificate of Origin for contributions ([CONTRIBUTOR_TERMS.md](CONTRIBUTOR_TERMS.md));
+* a short trademark note;
+* the same license for the website repository, with GSAP documented as a third-party exception.
 
 **Why**, against the project's likely goals:
 
@@ -128,13 +135,27 @@ The details are in [THIRD_PARTY_LICENSE_AUDIT.md](THIRD_PARTY_LICENSE_AUDIT.md).
 ## Applying the license, once selected
 
 1. The owner selects the license and how contributions are accepted (DCO or CLA).
-2. Resolve the blockers above: replace or exclude the React Bits files; replace the Ink Orbit component or obtain permission.
+2. ~~Resolve the blockers above~~: done in Mission 14 (React Bits and Ink Orbit replaced).
 3. Add `LICENSE` at the repository root with the official text. A copy of the official Apache-2.0 text, SHA-256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`, was downloaded from apache.org and is kept outside the repository, uncommitted, for review.
 4. For Apache-2.0, add a `NOTICE` naming ExploitX and pointing to `THIRD_PARTY_NOTICES.md`, and state which files keep their own licenses: the data catalogs and any excluded components.
 5. Declare it in the metadata:
    * `license` in `src-tauri/Cargo.toml` and `package.json` (and in the website repository's `package.json`, RChefo/ExploitX-Web);
    * Tauri's `bundle.license` and `bundle.licenseFile`, so the deb and rpm metadata and the installers show it.
 6. Update the README's "License" section and CONTRIBUTING.md (contributions, DCO), and remove the hold on pull requests.
-7. Ship the third-party notices with the installers (an open item in the audit).
+7. ~~Ship the third-party notices with the installers~~: done in Mission 14 (`THIRD_PARTY_LICENSES.txt` in every package; Settings > About shows it).
+8. Enable the DCO check proposed in [CONTRIBUTOR_TERMS.md](CONTRIBUTOR_TERMS.md), if the owner chose the DCO.
 
 Until then: no LICENSE file is committed, and the README says so.
+
+## Decision requested
+
+The owner approves **one exact license**, for example by replying with one line:
+
+| Reply | Effect |
+|---|---|
+| **"Approve Apache-2.0 for RChefo/ExploitX and RChefo/ExploitX-Web, contributions under the DCO"** (recommended) | The steps above are applied in both repositories: the official Apache License 2.0 text as `LICENSE`, a `NOTICE`, `"license": "Apache-2.0"` in the metadata, README and CONTRIBUTING updated, DCO check enabled |
+| "Approve GPL-3.0-or-later for the app; the website separately" | As above with the GPL text; the website needs its own decision because of GSAP |
+| "Approve MIT" / "Approve MIT OR Apache-2.0" | As above with that text; no NOTICE needed for MIT |
+| No reply | Nothing changes: the repositories stay public without a license, and ExploitX is not described as open source |
+
+Until that approval: no `LICENSE` file, no `license` field in `package.json`, `Cargo.toml` or `tauri.conf.json`, and no claim that ExploitX is open-source licensed.

@@ -29,7 +29,11 @@ ExploitX's documents fall into three groups. Start with the one that fits what y
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Backend and frontend structure, the execution engine, UI libraries |
 | [DATA_MODEL.md](DATA_MODEL.md) | The database schema, migration by migration |
 | [PROVISIONING.md](PROVISIONING.md) | Storing provider credentials for development with the `cyberhub-keys` tool |
-| [governance/LICENSE_COMPARISON.md](governance/LICENSE_COMPARISON.md) | License options under consideration (no license is selected yet) |
+| [governance/LICENSE_COMPARISON.md](governance/LICENSE_COMPARISON.md) | License options and the recommendation (the project license is pending the owner's selection) |
+| [governance/CONTRIBUTOR_TERMS.md](governance/CONTRIBUTOR_TERMS.md) | DCO or CLA: how contributions would be accepted (proposed, not enforced) |
+| [governance/DEPENDENCY_LICENSE_POLICY.md](governance/DEPENDENCY_LICENSE_POLICY.md) | Which dependency licenses are allowed, need a review or are prohibited, and how CI enforces it |
+| [governance/DISTRIBUTION_LICENSE_COMPLIANCE.md](governance/DISTRIBUTION_LICENSE_COMPLIANCE.md) | What each package contains and the license obligations of distributing it, AppImage libraries included |
+| [governance/EMAIL_PRIVACY.md](governance/EMAIL_PRIVACY.md) | Email addresses in commits: findings and the maintainer's steps |
 | [governance/THIRD_PARTY_LICENSE_AUDIT.md](governance/THIRD_PARTY_LICENSE_AUDIT.md), [governance/third-party/](governance/third-party/RUST_CRATES.md) | Dependency and asset licenses, and the full inventories |
 | [governance/REPOSITORY_SECURITY.md](governance/REPOSITORY_SECURITY.md) | How the public repository is protected: settings, CI, secrets, the audit of its history |
 | [../THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) | Notices for copied code, data, fonts and icons |

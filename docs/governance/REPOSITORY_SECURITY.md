@@ -1,6 +1,6 @@
 # Repository security
 
-How the public repository `RChefo/cyber-hub` is protected, what was audited when it became public, and what the maintainer keeps in place. Status of 2026-11-13 (Mission 12).
+How the public repository `RChefo/ExploitX` (formerly `RChefo/cyber-hub`, renamed by the owner; the old name redirects) is protected, what was audited when it became public, and what the maintainer keeps in place. Status of 2026-11-13 (Mission 12), reviewed again in Mission 14 ("Mission 14 review", below).
 
 ## History audit
 
@@ -15,7 +15,7 @@ The repository is public, so its **entire history** is public, not only the late
 | Personal and machine information | No home-directory paths, user names or private addresses in the code. The internal release-engineering documents mention the maintainer's test environment (a drive folder and VM names); this is informational only, with no credential |
 | Commit identities | Every commit carries the owner's GitHub account and a personal e-mail address in its metadata. That is public and cannot be changed without rewriting history (not done) |
 
-**Recommendation to the owner:** turn on *Keep my email addresses private* and *Block command line pushes that expose my email* in GitHub's e-mail settings, so future commits use the GitHub no-reply address.
+**Recommendation to the owner:** turn on *Keep my email addresses private* and *Block command line pushes that expose my email* in GitHub's e-mail settings, so future commits use the GitHub no-reply address. The steps, in the order that avoids refused pushes, are in [EMAIL_PRIVACY.md](EMAIL_PRIVACY.md).
 
 ## Repository settings
 
@@ -35,7 +35,7 @@ The repository is public, so its **entire history** is public, not only the late
 | `release` environment | Deployments only from `main` and `release/*`; **the owner must approve each deployment**; administrators cannot bypass; holds the update-signing key and its password | Reviewer since 2026-11-13 |
 | `RELEASE_PUBLISHING` | Unset. Set only by the owner, for one authorized release run | |
 | Discussions, wiki | Off | |
-| Webhooks | Not inspected: the maintainer's CLI token lacks the `admin:repo_hook` scope. Check *Settings → Webhooks* | |
+| Webhooks, deploy keys | **None** (the API lists no webhook and no deploy key) | Checked 2026-11-13 (Mission 14) |
 
 ## CI/CD in a public repository
 
@@ -59,6 +59,37 @@ The repository is public, so its **entire history** is public, not only the late
 The owner's account has eight third-party GitHub Apps installed with access to all repositories, this one included. Some have write access to administration or workflows. None is used by this repository: their check suites stay queued and do nothing.
 
 **Recommendation:** under *Settings → Applications → Installed GitHub Apps*, give each app access only to the repositories it serves, or remove it. An app with administration or workflow write access could change the release protections or the workflows. The list and permissions, read from the apps' check suites, are in [GITHUB_FIRST_RUN.md](../release/GITHUB_FIRST_RUN.md#mission-9-the-private-repository-and-the-first-ci-runs-2026-11-11) (Mission 10's table). The same eight apps still attached check suites to the commits of 2026-11-13.
+
+## Mission 14 review (2026-11-13)
+
+**Third-party GitHub Apps.** Read again from the check suites of the latest commits of both repositories. The installations list itself still needs a GitHub App token. Nothing was revoked or changed: these are account-level installations, and some may serve the owner's other projects.
+
+| App (owner) | Write permissions (from its check suite) | Used by RChefo/ExploitX | Used by RChefo/ExploitX-Web |
+|---|---|---|---|
+| Cloudflare Workers and Pages (cloudflare) | administration, checks, contents, deployments, pull requests | No (suite stays queued) | **Yes: "Workers Builds: exploitx-web" builds every push** (production for `main`, previews for other branches). The previews of both Dependabot branches failed while every `main` build passed; the build logs are only in the Cloudflare dashboard |
+| Vercel (vercel) | administration, checks, contents, deployments, issues, pull requests, repository hooks, statuses, workflows | No | No |
+| Render (renderinc) | actions, checks, deployments, environments, issues, pull requests, repository hooks, statuses, workflows | No | No |
+| Cursor (cursor) | actions, checks, contents, discussions, issues, merge queues, pull requests, workflows | No | No |
+| Wasmer (wasmerio) | actions, administration, checks, contents, deployments, pull requests, statuses | No | No |
+| Claude (anthropics) | actions, checks, contents, discussions, issues, pull requests, repository creation, repository hooks, workflows | No | No |
+| Mintlify (mintlify) | checks, contents, deployments, pull requests | No | No |
+| Netlify (netlify) | checks, issues, pull requests, statuses | No | No |
+
+"No" means the app attaches a check suite to every commit and leaves it queued: it has access, and does nothing here. **Recommendation (owner):** under *Settings → Applications → Installed GitHub Apps → Configure*, switch each app from "All repositories" to "Only select repositories". Keep Cloudflare Workers and Pages on RChefo/ExploitX-Web while it builds the site, and give the others only the repositories they serve. An app with `administration` or `workflows` write access to RChefo/ExploitX could change the rulesets or the release workflow.
+
+**The website repository (RChefo/ExploitX-Web, private)** was brought in line where GitHub allows it:
+
+| Setting | Before | After (2026-11-13) |
+|---|---|---|
+| Allowed actions | All actions and reusable workflows | **Selected:** `actions/checkout`, `actions/setup-node` only |
+| SHA pinning of actions | Not required | **Required** (the workflow already pins both) |
+| Dependabot alerts (vulnerability alerts) | Not reported by the API | **On** (enabled and confirmed) |
+| Dependabot security updates | Not reported by the API | **On** (enabled and confirmed) |
+| Secret scanning, push protection | Off | Not available: GitHub offers them for private repositories only with GitHub Advanced Security |
+| Webhooks, deploy keys | | None |
+| Default workflow token | Read-only; cannot approve pull requests | Unchanged |
+
+**Dependency updates.** Each Dependabot pull request was reviewed on its own (the mission report lists the outcome). The RustCrypto hashes (`sha1`, `sha2`, `md-5`, `hmac`, `digest`) now form one Dependabot group, because they only compile when they move together.
 
 ## Keeping it this way
 

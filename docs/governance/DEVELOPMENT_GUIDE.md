@@ -105,7 +105,7 @@ The full model is in [SECURITY.md](../SECURITY.md). For development, keep these 
 |---|---|---|
 | Rust unit and integration tests | Next to the code (`#[cfg(test)]`), plus `*_tests.rs` files (`db_upgrade_tests`, `hostile_tests` for the hostile-input sweep, `restore_tests`, `perf_tests`, `ci_tests` for the workflows' rules) | `cargo test --locked` in `src-tauri/` |
 | Frontend tests | `src/**/*.test.ts` (logic: ranking, parsing, report building, …) | `npx vitest run` |
-| Script tests | `scripts/*.test.mjs` (update manifest, license policy, link check) | `npx vitest run` |
+| Script tests | `scripts/*.test.mjs` (update manifest, license policy, package notices, link check) | `npx vitest run` |
 | Fuzzing | `src-tauri/fuzz/` (cargo-fuzz targets; the entry points compile in CI) | `cargo +nightly fuzz` |
 | Desktop and installer validation | Manual procedures in `docs/release/`, run by the maintainer in disposable VMs | Not required from contributors |
 
@@ -145,4 +145,4 @@ Releases are maintainer-only. The details are in [UPDATER.md](../UPDATER.md) and
 * **Desktop behaviours** (native dialogs, file choosers, keyrings, HiDPI) are covered by manual validation in VMs, not by CI.
 * **A development build shares the identifier of installed builds.** Use `CYBERHUB_DATA_DIR` so it never opens your real database.
 * **Provider credentials have no in-app screen, by design** ([PROVISIONING.md](../PROVISIONING.md)). They live in the OS credential store under documented entry names. They are written with the developer-only `cyberhub-keys` tool, which the installers do not include; build it from source with `--features provisioning`. Users of an installed build therefore need that tool or their operating system's credential tools to add keys. A friendlier path for external users would be a product change, outside the open-source preparation.
-* **The project has no license yet:** see the README.
+* **The project license is pending the owner's selection:** see the README. Dependencies must pass the [license policy](DEPENDENCY_LICENSE_POLICY.md), and the notices bundled with every package (`src-tauri/resources/THIRD_PARTY_LICENSES.txt`) must be regenerated when what ships changes.
