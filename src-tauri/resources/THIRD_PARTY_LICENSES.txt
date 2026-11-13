@@ -493,7 +493,7 @@ scripts/license-assets.json and THIRD_PARTY_NOTICES.md. Do not edit by hand.
   @standard-schema/utils 0.3.0  —  MIT  [text 10]
   @swc/helpers 0.5.23  —  Apache-2.0  [text 11]
   @tauri-apps/api 2.12.4  —  Apache-2.0 OR MIT  [text 108, 278, 12]
-  @tauri-apps/plugin-opener 2.7.2  —  MIT OR Apache-2.0  [text 279]
+  @tauri-apps/plugin-opener 2.7.3  —  MIT OR Apache-2.0  [text 279]
   @types/d3-array 3.2.2  —  MIT  [text 320]
   @types/d3-color 3.1.3  —  MIT  [text 320]
   @types/d3-ease 3.0.2  —  MIT  [text 320]
@@ -531,7 +531,7 @@ scripts/license-assets.json and THIRD_PARTY_NOTICES.md. Do not edit by hand.
   internmap 2.0.3  —  ISC  [text 152]
   js-tokens 4.0.0  —  MIT  [text 159]
   loose-envify 1.4.0  —  MIT  [text 175]
-  lucide-react 1.67.0  —  ISC  [text 178]
+  lucide-react 1.71.0  —  ISC  [text 178]
   object-assign 4.1.1  —  MIT  [text 200]
   prop-types 15.8.1  —  MIT  [text 215]
   react 19.3.1  —  MIT  [text 227]
@@ -550,7 +550,7 @@ scripts/license-assets.json and THIRD_PARTY_NOTICES.md. Do not edit by hand.
   scheduler 0.28.0  —  MIT  [text 227]
   tailwind-merge 3.7.0  —  MIT  [text 273]
   tailwind-variants 3.3.1  —  MIT  [text 274]
-  tailwindcss 4.3.4  —  MIT  [text 275]
+  tailwindcss 4.3.5  —  MIT  [text 275]
   tiny-invariant 1.3.3  —  MIT  [text 284]
   tslib 2.3.0  —  0BSD  [text 296]
   tslib 2.3.0  —  0BSD  [text 296]
@@ -12547,7 +12547,7 @@ the following restrictions:
 
 3. This notice may not be removed or altered from any source distribution.
 
------ [text 178] used by: lucide-react 1.67.0 (LICENSE)
+----- [text 178] used by: lucide-react 1.71.0 (LICENSE)
 
 ISC License
 
@@ -17620,7 +17620,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
------ [text 275] used by: tailwindcss 4.3.4 (LICENSE)
+----- [text 275] used by: tailwindcss 4.3.5 (LICENSE)
 
 MIT License
 
@@ -17717,7 +17717,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
------ [text 279] used by: tauri-plugin-dialog 2.8.4 (LICENSE.spdx); tauri-plugin-fs 2.7.1 (LICENSE.spdx); tauri-plugin-opener 2.7.3 (LICENSE.spdx); tauri-plugin-single-instance 2.5.5 (LICENSE.spdx); tauri-plugin-updater 2.14.1 (LICENSE.spdx); @tauri-apps/plugin-opener 2.7.2 (LICENSE.spdx)
+----- [text 279] used by: tauri-plugin-dialog 2.8.4 (LICENSE.spdx); tauri-plugin-fs 2.7.1 (LICENSE.spdx); tauri-plugin-opener 2.7.3 (LICENSE.spdx); tauri-plugin-single-instance 2.5.5 (LICENSE.spdx); tauri-plugin-updater 2.14.1 (LICENSE.spdx); @tauri-apps/plugin-opener 2.7.3 (LICENSE.spdx)
 
 SPDXVersion: SPDX-2.1
 DataLicense: CC0-1.0

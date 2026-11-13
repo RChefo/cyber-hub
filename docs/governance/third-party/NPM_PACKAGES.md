@@ -49,42 +49,42 @@ Runtime packages can end up in the app's web assets: Vite bundles what the front
 | @react-types/color | 3.2.0 | Apache-2.0 | permissive | https://www.npmjs.com/package/@react-types/color | transitive | runtime |
 | @react-types/shared | 3.37.0 | Apache-2.0 | permissive | https://www.npmjs.com/package/@react-types/shared | transitive | runtime |
 | @reduxjs/toolkit | 2.14.0 | MIT | permissive | https://www.npmjs.com/package/@reduxjs/toolkit | transitive | runtime |
-| @rolldown/binding-android-arm-eabi | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-android-arm-eabi | transitive | development only |
-| @rolldown/binding-android-arm64 | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-android-arm64 | transitive | development only |
-| @rolldown/binding-darwin-arm64 | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-darwin-arm64 | transitive | development only |
-| @rolldown/binding-darwin-x64 | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-darwin-x64 | transitive | development only |
-| @rolldown/binding-freebsd-x64 | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-freebsd-x64 | transitive | development only |
-| @rolldown/binding-linux-arm-gnueabihf | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-arm-gnueabihf | transitive | development only |
-| @rolldown/binding-linux-arm64-gnu | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-arm64-gnu | transitive | development only |
-| @rolldown/binding-linux-arm64-musl | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-arm64-musl | transitive | development only |
-| @rolldown/binding-linux-ppc64-gnu | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-ppc64-gnu | transitive | development only |
-| @rolldown/binding-linux-s390x-gnu | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-s390x-gnu | transitive | development only |
-| @rolldown/binding-linux-x64-gnu | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-x64-gnu | transitive | development only |
-| @rolldown/binding-linux-x64-musl | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-x64-musl | transitive | development only |
-| @rolldown/binding-openharmony-arm64 | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-openharmony-arm64 | transitive | development only |
-| @rolldown/binding-win32-arm64-msvc | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-win32-arm64-msvc | transitive | development only |
-| @rolldown/binding-win32-x64-msvc | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-win32-x64-msvc | transitive | development only |
+| @rolldown/binding-android-arm-eabi | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-android-arm-eabi | transitive | development only |
+| @rolldown/binding-android-arm64 | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-android-arm64 | transitive | development only |
+| @rolldown/binding-darwin-arm64 | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-darwin-arm64 | transitive | development only |
+| @rolldown/binding-darwin-x64 | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-darwin-x64 | transitive | development only |
+| @rolldown/binding-freebsd-x64 | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-freebsd-x64 | transitive | development only |
+| @rolldown/binding-linux-arm-gnueabihf | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-arm-gnueabihf | transitive | development only |
+| @rolldown/binding-linux-arm64-gnu | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-arm64-gnu | transitive | development only |
+| @rolldown/binding-linux-arm64-musl | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-arm64-musl | transitive | development only |
+| @rolldown/binding-linux-ppc64-gnu | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-ppc64-gnu | transitive | development only |
+| @rolldown/binding-linux-s390x-gnu | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-s390x-gnu | transitive | development only |
+| @rolldown/binding-linux-x64-gnu | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-x64-gnu | transitive | development only |
+| @rolldown/binding-linux-x64-musl | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-linux-x64-musl | transitive | development only |
+| @rolldown/binding-openharmony-arm64 | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-openharmony-arm64 | transitive | development only |
+| @rolldown/binding-win32-arm64-msvc | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-win32-arm64-msvc | transitive | development only |
+| @rolldown/binding-win32-x64-msvc | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/@rolldown/binding-win32-x64-msvc | transitive | development only |
 | @rolldown/pluginutils | 1.0.1 | MIT | permissive | https://www.npmjs.com/package/@rolldown/pluginutils | transitive | development only |
 | @spectrum-icons/ui | 3.7.2 | Apache-2.0 | permissive | https://www.npmjs.com/package/@spectrum-icons/ui | transitive | runtime |
 | @spectrum-icons/workflow | 4.3.2 | Apache-2.0 | permissive | https://www.npmjs.com/package/@spectrum-icons/workflow | transitive | runtime |
 | @standard-schema/spec | 1.1.0 | MIT | permissive | https://www.npmjs.com/package/@standard-schema/spec | transitive | runtime |
 | @standard-schema/utils | 0.3.0 | MIT | permissive | https://www.npmjs.com/package/@standard-schema/utils | transitive | runtime |
 | @swc/helpers | 0.5.23 | Apache-2.0 | permissive | https://www.npmjs.com/package/@swc/helpers | transitive | runtime |
-| @tailwindcss/node | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/node | transitive | development only |
-| @tailwindcss/oxide | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide | transitive | development only |
-| @tailwindcss/oxide-android-arm64 | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-android-arm64 | transitive | development only |
-| @tailwindcss/oxide-darwin-arm64 | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-darwin-arm64 | transitive | development only |
-| @tailwindcss/oxide-darwin-x64 | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-darwin-x64 | transitive | development only |
-| @tailwindcss/oxide-freebsd-x64 | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-freebsd-x64 | transitive | development only |
-| @tailwindcss/oxide-linux-arm-gnueabihf | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-linux-arm-gnueabihf | transitive | development only |
-| @tailwindcss/oxide-linux-arm64-gnu | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-linux-arm64-gnu | transitive | development only |
-| @tailwindcss/oxide-linux-arm64-musl | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-linux-arm64-musl | transitive | development only |
-| @tailwindcss/oxide-linux-x64-gnu | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-linux-x64-gnu | transitive | development only |
-| @tailwindcss/oxide-linux-x64-musl | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-linux-x64-musl | transitive | development only |
-| @tailwindcss/oxide-wasm32-wasi | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-wasm32-wasi | transitive | development only |
-| @tailwindcss/oxide-win32-arm64-msvc | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-win32-arm64-msvc | transitive | development only |
-| @tailwindcss/oxide-win32-x64-msvc | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-win32-x64-msvc | transitive | development only |
-| @tailwindcss/vite | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/vite | direct (dev) | development only |
+| @tailwindcss/node | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/node | transitive | development only |
+| @tailwindcss/oxide | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide | transitive | development only |
+| @tailwindcss/oxide-android-arm64 | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-android-arm64 | transitive | development only |
+| @tailwindcss/oxide-darwin-arm64 | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-darwin-arm64 | transitive | development only |
+| @tailwindcss/oxide-darwin-x64 | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-darwin-x64 | transitive | development only |
+| @tailwindcss/oxide-freebsd-x64 | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-freebsd-x64 | transitive | development only |
+| @tailwindcss/oxide-linux-arm-gnueabihf | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-linux-arm-gnueabihf | transitive | development only |
+| @tailwindcss/oxide-linux-arm64-gnu | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-linux-arm64-gnu | transitive | development only |
+| @tailwindcss/oxide-linux-arm64-musl | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-linux-arm64-musl | transitive | development only |
+| @tailwindcss/oxide-linux-x64-gnu | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-linux-x64-gnu | transitive | development only |
+| @tailwindcss/oxide-linux-x64-musl | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-linux-x64-musl | transitive | development only |
+| @tailwindcss/oxide-wasm32-wasi | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-wasm32-wasi | transitive | development only |
+| @tailwindcss/oxide-win32-arm64-msvc | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-win32-arm64-msvc | transitive | development only |
+| @tailwindcss/oxide-win32-x64-msvc | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/oxide-win32-x64-msvc | transitive | development only |
+| @tailwindcss/vite | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/@tailwindcss/vite | direct (dev) | development only |
 | @tauri-apps/api | 2.12.4 | Apache-2.0 OR MIT | permissive | https://www.npmjs.com/package/@tauri-apps/api | direct (runtime) | runtime |
 | @tauri-apps/cli | 2.12.4 | Apache-2.0 OR MIT | permissive | https://www.npmjs.com/package/@tauri-apps/cli | direct (dev) | development only |
 | @tauri-apps/cli-darwin-arm64 | 2.12.4 | Apache-2.0 OR MIT | permissive | https://www.npmjs.com/package/@tauri-apps/cli-darwin-arm64 | transitive | development only |
@@ -98,7 +98,7 @@ Runtime packages can end up in the app's web assets: Vite bundles what the front
 | @tauri-apps/cli-win32-arm64-msvc | 2.12.4 | Apache-2.0 OR MIT | permissive | https://www.npmjs.com/package/@tauri-apps/cli-win32-arm64-msvc | transitive | development only |
 | @tauri-apps/cli-win32-ia32-msvc | 2.12.4 | Apache-2.0 OR MIT | permissive | https://www.npmjs.com/package/@tauri-apps/cli-win32-ia32-msvc | transitive | development only |
 | @tauri-apps/cli-win32-x64-msvc | 2.12.4 | Apache-2.0 OR MIT | permissive | https://www.npmjs.com/package/@tauri-apps/cli-win32-x64-msvc | transitive | development only |
-| @tauri-apps/plugin-opener | 2.7.2 | MIT OR Apache-2.0 | permissive | https://www.npmjs.com/package/@tauri-apps/plugin-opener | direct (runtime) | runtime |
+| @tauri-apps/plugin-opener | 2.7.3 | MIT OR Apache-2.0 | permissive | https://www.npmjs.com/package/@tauri-apps/plugin-opener | direct (runtime) | runtime |
 | @tybys/wasm-util | 0.10.3 | MIT | permissive | https://www.npmjs.com/package/@tybys/wasm-util | transitive | development only |
 | @types/chai | 5.2.3 | MIT | permissive | https://www.npmjs.com/package/@types/chai | transitive | development only |
 | @types/d3-array | 3.2.2 | MIT | permissive | https://www.npmjs.com/package/@types/d3-array | transitive | runtime |
@@ -136,7 +136,7 @@ Runtime packages can end up in the app's web assets: Vite bundles what the front
 | @typescript/typescript-sunos-x64 | 7.0.2 | Apache-2.0 | permissive | https://www.npmjs.com/package/@typescript/typescript-sunos-x64 | transitive | development only |
 | @typescript/typescript-win32-arm64 | 7.0.2 | Apache-2.0 | permissive | https://www.npmjs.com/package/@typescript/typescript-win32-arm64 | transitive | development only |
 | @typescript/typescript-win32-x64 | 7.0.2 | Apache-2.0 | permissive | https://www.npmjs.com/package/@typescript/typescript-win32-x64 | transitive | development only |
-| @vitejs/plugin-react | 6.2.1 | MIT | permissive | https://www.npmjs.com/package/@vitejs/plugin-react | direct (dev) | development only |
+| @vitejs/plugin-react | 6.3.0 | MIT | permissive | https://www.npmjs.com/package/@vitejs/plugin-react | direct (dev) | development only |
 | @vitest/mocker | 5.1.0 | MIT | permissive | https://www.npmjs.com/package/@vitest/mocker | transitive | development only |
 | @vitest/spy | 5.1.0 | MIT | permissive | https://www.npmjs.com/package/@vitest/spy | transitive | development only |
 | aria-hidden | 1.2.6 | MIT | permissive | https://www.npmjs.com/package/aria-hidden | transitive | runtime |
@@ -187,7 +187,7 @@ Runtime packages can end up in the app's web assets: Vite bundles what the front
 | lightningcss-win32-arm64-msvc | 1.33.0 | MPL-2.0 | source obligations | https://www.npmjs.com/package/lightningcss-win32-arm64-msvc | transitive | development only |
 | lightningcss-win32-x64-msvc | 1.33.0 | MPL-2.0 | source obligations | https://www.npmjs.com/package/lightningcss-win32-x64-msvc | transitive | development only |
 | loose-envify | 1.4.0 | MIT | permissive | https://www.npmjs.com/package/loose-envify | transitive | runtime |
-| lucide-react | 1.67.0 | ISC | permissive | https://www.npmjs.com/package/lucide-react | direct (runtime) | runtime |
+| lucide-react | 1.71.0 | ISC | permissive | https://www.npmjs.com/package/lucide-react | direct (runtime) | runtime |
 | magic-string | 1.4.5 | MIT | permissive | https://www.npmjs.com/package/magic-string | transitive | development only |
 | nanoid | 3.3.20 | MIT | permissive | https://www.npmjs.com/package/nanoid | transitive | development only |
 | object-assign | 4.1.1 | MIT | permissive | https://www.npmjs.com/package/object-assign | transitive | runtime |
@@ -209,13 +209,13 @@ Runtime packages can end up in the app's web assets: Vite bundles what the front
 | redux | 5.0.1 | MIT | permissive | https://www.npmjs.com/package/redux | transitive | runtime |
 | redux-thunk | 3.1.0 | MIT | permissive | https://www.npmjs.com/package/redux-thunk | transitive | runtime |
 | reselect | 5.2.0 | MIT | permissive | https://www.npmjs.com/package/reselect | transitive | runtime |
-| rolldown | 1.2.16 | MIT | permissive | https://www.npmjs.com/package/rolldown | transitive | development only |
+| rolldown | 1.2.18 | MIT | permissive | https://www.npmjs.com/package/rolldown | transitive | development only |
 | scheduler | 0.28.0 | MIT | permissive | https://www.npmjs.com/package/scheduler | transitive | runtime |
 | source-map-js | 1.2.2 | BSD-3-Clause | permissive | https://www.npmjs.com/package/source-map-js | transitive | development only |
 | std-env | 4.3.0 | MIT | permissive | https://www.npmjs.com/package/std-env | transitive | development only |
 | tailwind-merge | 3.7.0 | MIT | permissive | https://www.npmjs.com/package/tailwind-merge | direct (runtime) | runtime |
 | tailwind-variants | 3.3.1 | MIT | permissive | https://www.npmjs.com/package/tailwind-variants | transitive | runtime |
-| tailwindcss | 4.3.4 | MIT | permissive | https://www.npmjs.com/package/tailwindcss | direct (dev) | runtime |
+| tailwindcss | 4.3.5 | MIT | permissive | https://www.npmjs.com/package/tailwindcss | direct (dev) | runtime |
 | tapable | 2.3.3 | MIT | permissive | https://www.npmjs.com/package/tapable | transitive | development only |
 | tiny-invariant | 1.3.3 | MIT | permissive | https://www.npmjs.com/package/tiny-invariant | transitive | runtime |
 | tinybench | 6.2.3 | MIT | permissive | https://www.npmjs.com/package/tinybench | transitive | development only |
@@ -230,7 +230,7 @@ Runtime packages can end up in the app's web assets: Vite bundles what the front
 | undici-types | 8.9.0 | MIT | permissive | https://www.npmjs.com/package/undici-types | transitive | development only |
 | use-sync-external-store | 1.7.0 | MIT | permissive | https://www.npmjs.com/package/use-sync-external-store | transitive | runtime |
 | victory-vendor | 37.4.1 | MIT AND ISC AND BSD-3-Clause | permissive | https://www.npmjs.com/package/victory-vendor | transitive | runtime |
-| vite | 8.3.5 | MIT | permissive | https://www.npmjs.com/package/vite | direct (dev) | development only |
+| vite | 8.3.7 | MIT | permissive | https://www.npmjs.com/package/vite | direct (dev) | development only |
 | vitest | 5.1.0 | MIT | permissive | https://www.npmjs.com/package/vitest | direct (dev) | development only |
 | why-is-node-running | 3.2.1 | MIT | permissive | https://www.npmjs.com/package/why-is-node-running | transitive | development only |
 | zrender | 6.1.0 | BSD-3-Clause | permissive | https://www.npmjs.com/package/zrender | transitive | runtime |
