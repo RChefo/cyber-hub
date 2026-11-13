@@ -2,7 +2,7 @@
 
 How to present ExploitX: the name, the positioning, the voice, and the rules for the logo. The visual system is described in [VISUAL_IDENTITY.md](VISUAL_IDENTITY.md), its tokens in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md), the files in [ASSET_CATALOG.md](ASSET_CATALOG.md).
 
-Since Mission 13 (2026-11-13) the product is **ExploitX**. It was formerly Cyber Hub. The official website is **https://exploitx.net**. The source repository stays `RChefo/cyber-hub`.
+Since Mission 13 (2026-11-13) the product is **ExploitX**. It was formerly Cyber Hub. The official website is **https://exploitx.net**. The source repository is `RChefo/ExploitX`; the owner renamed it from `RChefo/cyber-hub`, which GitHub redirects (observed 2026-11-13, Mission 14).
 
 ## Name
 

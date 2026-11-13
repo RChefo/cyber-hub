@@ -7,7 +7,7 @@ This is the owner's guide to the signing Cyber Hub needs before its first releas
 * **Update signing** is configured in the release workflow, and its key exists on the owner's computer.
   * The public key next to it, `cyberhub-updater.key.pub`, is the one compiled into the app: `plugins.updater.pubkey` in `tauri.conf.json` is identical to it (key ID `957F3F7D955C72FA`, compared again in Mission 10).
   * The key file is one line with no newline, and the password's Credential Manager entry exists. Neither value was read or printed.
-* **The `release` environment** of `RChefo/cyber-hub` exists (branches `main` and `release/*`, no administrator bypass).
+* **The `release` environment** of `RChefo/ExploitX` exists (branches `main` and `release/*`, no administrator bypass).
   * **`TAURI_SIGNING_PRIVATE_KEY` is stored there.** `gh secret list --env release` shows it updated 2026-11-11 22:13 UTC (Mission 10, from the key file through standard input; the value was never shown).
   * **`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is stored too**, since 2026-11-12 13:47 UTC. The owner authorized the session to store it.
     * The first copy (12:34 UTC) began with a UTF-8 byte-order mark that Windows PowerShell had written into `gh`'s input, and the build failed with "Wrong password for that key".
@@ -183,7 +183,7 @@ All signing material lives only in the `release` environment, never in repositor
 
 UPDATER.md ("Release secrets") gives the commands that copy the update key and its password into the environment without printing them.
 
-**Commands (for `RChefo/cyber-hub`, in Windows PowerShell on the owner's machine).** Neither value appears on a command line or on the screen.
+**Commands (for `RChefo/ExploitX`, in Windows PowerShell on the owner's machine).** Neither value appears on a command line or on the screen.
 * The key file goes through `cmd`'s redirection, which PowerShell lacks. The quoting was tested in Mission 9 on the public key file.
 * The password goes from Credential Manager into `gh`'s standard input as its exact bytes, with no trailing newline and **no byte-order mark**.
   * When the console uses UTF-8, Windows PowerShell's `Process` class writes a UTF-8 byte-order mark into the child's input before anything else, and GitHub stores it as part of the secret.
@@ -192,13 +192,13 @@ UPDATER.md ("Release secrets") gives the commands that copy the update key and i
 
 ```powershell
 [Console]::InputEncoding = New-Object System.Text.UTF8Encoding $false
-cmd /c "gh secret set TAURI_SIGNING_PRIVATE_KEY --env release --repo RChefo/cyber-hub < ""%USERPROFILE%\.cyberhub\updater-signing\cyberhub-updater.key"""
+cmd /c "gh secret set TAURI_SIGNING_PRIVATE_KEY --env release --repo RChefo/ExploitX < ""%USERPROFILE%\.cyberhub\updater-signing\cyberhub-updater.key"""
 [void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime]
 $c = (New-Object Windows.Security.Credentials.PasswordVault).Retrieve('CyberHub.UpdaterSigning','TAURI_SIGNING_PRIVATE_KEY_PASSWORD'); $c.RetrievePassword()
-$psi = New-Object System.Diagnostics.ProcessStartInfo -Property @{ FileName = (Get-Command gh).Source; Arguments = 'secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --env release --repo RChefo/cyber-hub'; UseShellExecute = $false; RedirectStandardInput = $true }
+$psi = New-Object System.Diagnostics.ProcessStartInfo -Property @{ FileName = (Get-Command gh).Source; Arguments = 'secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --env release --repo RChefo/ExploitX'; UseShellExecute = $false; RedirectStandardInput = $true }
 $p = [System.Diagnostics.Process]::Start($psi); if ($p.StandardInput.Encoding.GetPreamble().Length) { $p.Kill(); $c = $null; throw 'the input would start with a byte-order mark' }
 $p.StandardInput.Write($c.Password); $p.StandardInput.Close(); $p.WaitForExit(); $c = $null
-gh secret list --env release --repo RChefo/cyber-hub
+gh secret list --env release --repo RChefo/ExploitX
 ```
 
 **Plan.** Environment secrets work in this private repository on GitHub Free. Mission 10's release run received both in its build job: the key decoded, and the password was checked against it.

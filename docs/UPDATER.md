@@ -94,7 +94,7 @@ npx tauri signer generate -w ~/.cyberhub/updater-signing/cyberhub-updater.key
 
 ### Release secrets
 
-The release workflow reads two secrets, which should be stored in a GitHub **environment** named `release` (not as repository secrets), with required reviewers where the plan offers them. The environment of `RChefo/cyber-hub` exists since Mission 9 (branch policy `main` and `release/*`, no administrator bypass); both secrets are stored since Mission 10:
+The release workflow reads two secrets, which should be stored in a GitHub **environment** named `release` (not as repository secrets), with required reviewers where the plan offers them. The environment of `RChefo/ExploitX` exists since Mission 9 (branch policy `main` and `release/*`, no administrator bypass); both secrets are stored since Mission 10:
 
 | Secret | Value |
 |---|---|

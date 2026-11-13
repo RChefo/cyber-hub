@@ -20,7 +20,7 @@ When stable releases exist, this table will name the versions that receive secur
 
 Report it privately through GitHub:
 
-1. Open the repository's [**Security** tab → **Report a vulnerability**](https://github.com/RChefo/cyber-hub/security/advisories/new). This uses GitHub's private vulnerability reporting.
+1. Open the repository's [**Security** tab → **Report a vulnerability**](https://github.com/RChefo/ExploitX/security/advisories/new). This uses GitHub's private vulnerability reporting.
 2. Only you and the maintainer can see the report. The maintainer can invite you to a private fork to work on the fix.
 
 If you cannot use GitHub's form, open a public issue that says only that you have a security report and need a private channel. Leave out every detail of the vulnerability.

@@ -33,10 +33,11 @@ Data written before the rename keeps its text. Examples: a finding's tool "Cyber
 | File-format identifiers: `cyberhub-osint-graph`, `cyberhub-findings`, `cyberhub-finding-templates`, `cyberhubFindingId/v1`, `cyberhub-no-share` | Export and import formats | Files exported by earlier versions must still import |
 | `cyberhub.releases.v2` (website), `cyber-hub-website` (website package), `cyber-hub: override-mistake patch` (patch marker) | Internal keys | No user sees them; renaming has no benefit |
 
-## 3. Repository references: kept
+## 3. Repository references: renamed by the owner
 
-* `github.com/RChefo/cyber-hub` and its URLs appear in the README, CONTRIBUTING, SECURITY and the issue forms. They also appear in the website's repository configuration, the release workflow (`$GITHUB_REPOSITORY`) and the **updater feed** (`releases/latest/download/latest.json`).
-* The repository is not renamed. GitHub redirects renamed repositories, but the update feed URL is compiled into installed copies, so a rename needs its own decision.
+* Mission 13 kept `github.com/RChefo/cyber-hub`, because the update feed URL is compiled into installed copies and a rename needed its own decision.
+* **The owner has since renamed the repository to `RChefo/ExploitX`** (observed 2026-11-13, Mission 14). GitHub redirects the old name, for the web pages, Git, the API and release downloads, as long as no new repository takes the name `RChefo/cyber-hub`. That redirect keeps the update feed of the two release-candidate drafts working (`https://github.com/RChefo/cyber-hub/releases/latest/download/latest.json`); builds made from now on compile the new name (`$GITHUB_REPOSITORY`). **Never create a new repository named `cyber-hub` under RChefo.**
+* Mission 14 moved the README, CONTRIBUTING, SECURITY, SUPPORT, the issue forms, the procedures and the app's links to the new name, and the website's `VITE_GITHUB_REPOSITORY` to `RChefo/ExploitX`. Its download page offers only assets whose URLs name the configured repository, and GitHub now returns `RChefo/ExploitX` URLs. The historical documents below keep the old name; their links redirect.
 
 ## 4. Historical documentation: kept
 
