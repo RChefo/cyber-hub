@@ -21,16 +21,5 @@
     "Unlicense",
     "Zlib"
   ],
-  "exceptions": [
-    {
-      "ecosystem": "npm-website",
-      "name": "gsap",
-      "reason": "GSAP Standard 'no charge' license (proprietary, free for commercial use, with a field-of-use restriction on tools that compete with Webflow). Used only by the marketing website in website/, which is not part of the desktop app and is not deployed; not redistributed in this repository (installed from npm). See THIRD_PARTY_LICENSE_AUDIT.md."
-    },
-    {
-      "ecosystem": "npm-website",
-      "name": "@gsap/react",
-      "reason": "GSAP Standard license, as gsap above: website only, not part of the app, not redistributed in this repository."
-    }
-  ]
+  "exceptions": []
 }

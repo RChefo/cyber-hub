@@ -132,7 +132,7 @@ The details are in [THIRD_PARTY_LICENSE_AUDIT.md](THIRD_PARTY_LICENSE_AUDIT.md).
 3. Add `LICENSE` at the repository root with the official text. A copy of the official Apache-2.0 text, SHA-256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`, was downloaded from apache.org and is kept outside the repository, uncommitted, for review.
 4. For Apache-2.0, add a `NOTICE` naming ExploitX and pointing to `THIRD_PARTY_NOTICES.md`, and state which files keep their own licenses: the data catalogs and any excluded components.
 5. Declare it in the metadata:
-   * `license` in `src-tauri/Cargo.toml`, `package.json` and `website/package.json`;
+   * `license` in `src-tauri/Cargo.toml` and `package.json` (and in the website repository's `package.json`, RChefo/ExploitX-Web);
    * Tauri's `bundle.license` and `bundle.licenseFile`, so the deb and rpm metadata and the installers show it.
 6. Update the README's "License" section and CONTRIBUTING.md (contributions, DCO), and remove the hold on pull requests.
 7. Ship the third-party notices with the installers (an open item in the audit).

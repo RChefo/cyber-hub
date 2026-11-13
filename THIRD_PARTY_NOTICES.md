@@ -65,8 +65,7 @@ These files were copied or adapted from other projects. Each carries a source no
 | `src/components/vendor/untitledui/FeaturedIcon.tsx` | Untitled UI React, <https://github.com/untitleduico/react> | MIT, Copyright (c) 2025 Untitled UI |
 | `src/components/vendor/evilcharts/echarts-chart.tsx` | EvilCharts, <https://github.com/legions-developer/evilcharts> | MIT, Copyright (c) 2026 Gurbinder |
 | `src/components/vendor/lightswind/DotPattern.tsx` | Lightswind, <https://lightswind.com> (npm package `lightswind` 3.2.5, author @codewithmuhilan) | MIT, as declared in the package metadata; the package publishes no license file and no copyright line |
-| `src/components/vendor/reactbits/BranchedMenu.tsx`, `BranchedMenu.css`, `CountUp.tsx`; `website/src/components/ui/OrbitImages.jsx`, `OrbitImages.css` | React Bits, <https://github.com/DavidHDev/react-bits> | **MIT + Commons Clause License Condition v1.0**, Copyright (c) 2026 David Haz: **not an open-source license**, see below |
-| `website/src/components/ui/ink-orbit-features.tsx` (website only) | Ink Orbit by Kedhareswer Naidu, <https://github.com/Kedhareswer/21stdev-my-components> | **No license found** (checked 2026-11-13): see `docs/governance/THIRD_PARTY_LICENSE_AUDIT.md` |
+| `src/components/vendor/reactbits/BranchedMenu.tsx`, `BranchedMenu.css`, `CountUp.tsx` (the website's `OrbitImages` moved to RChefo/ExploitX-Web with the website, Mission 13) | React Bits, <https://github.com/DavidHDev/react-bits> | **MIT + Commons Clause License Condition v1.0**, Copyright (c) 2026 David Haz: **not an open-source license**, see below |
 
 **The MIT License** (shadcn/ui, Untitled UI React, EvilCharts, Lightswind), with each project's copyright line above:
 

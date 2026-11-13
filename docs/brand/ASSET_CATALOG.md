@@ -9,7 +9,7 @@ Every brand file, its format and what it is for. All paths are relative to the r
 | `design/brand/build/brand.mjs` | The geometry: symbol, wordmark X, lockups, application icon. No dependencies |
 | `design/brand/build/tokens.mjs` | The design tokens |
 | `design/brand/build/wordmark.json` | Outlines of "Exploit" (Archivo SemiBold, OFL-1.1), extracted once by `extract-wordmark.mjs` |
-| `design/brand/build/build.mjs` | Writes every SVG below, `tokens.json`, `tokens.css`, and `logoData.ts` for the app and the website |
+| `design/brand/build/build.mjs` | Writes every SVG below, `tokens.json`, `tokens.css`, and the app's `logoData.ts` (the website repository keeps copies: its `docs/BRAND.md`) |
 | `design/brand/build/export.mjs` | PNG, ICO and favicon exports (headless Chrome); `--tauri` also refreshes `src-tauri/icons/` |
 | `design/brand/build/social.mjs` | Social and marketing images, composed from the logo, the brand fonts and real screenshots |
 | `design/brand/build/illustrations.mjs` | The three example feature illustrations |
@@ -68,18 +68,18 @@ All files are in `design/brand/`. SVG with a transparent background and clear sp
 
 | File | Use |
 |---|---|
-| `design/brand/favicon.svg` → `website/public/favicon.svg`, `public/logo.svg` (the app) | Modern browsers |
-| `design/brand/icons/favicon/favicon.ico` → `website/public/favicon.ico` | Legacy browsers (16, 32, 48) |
-| `design/brand/icons/favicon/apple-touch-icon.png` → `website/public/` | iOS home screen (180 px, opaque) |
-| `design/brand/icons/favicon/icon-192.png`, `icon-512.png` → `website/public/` | `site.webmanifest` |
-| `design/brand/social/website-og.png` → `website/public/og.png` | Open Graph and Twitter image of exploitx.net (1200 × 630) |
+| `design/brand/favicon.svg` → `public/logo.svg` (the app), `public/favicon.svg` (website repository) | Modern browsers |
+| `design/brand/icons/favicon/favicon.ico` → website `public/favicon.ico` | Legacy browsers (16, 32, 48) |
+| `design/brand/icons/favicon/apple-touch-icon.png` → website `public/` | iOS home screen (180 px, opaque) |
+| `design/brand/icons/favicon/icon-192.png`, `icon-512.png` → website `public/` | `site.webmanifest` |
+| `design/brand/social/website-og.png` → website `public/og.png` | Open Graph and Twitter image of exploitx.net (1200 × 630) |
 
 ## Social and marketing (PNG; built from real screenshots with demo data)
 
 | File | Size | Use |
 |---|---|---|
 | `design/brand/social/github-social-preview.png` | 1280 × 640 | GitHub repository social preview. The owner uploads it under Settings → General → Social preview: GitHub's API cannot set it |
-| `design/brand/social/website-og.png` | 1200 × 630 | Website social sharing (also `website/public/og.png`) |
+| `design/brand/social/website-og.png` | 1200 × 630 | Website social sharing (also the website's `public/og.png`) |
 | `design/brand/social/avatar.png` | 1024 × 1024 | Square avatar (organisation, social profiles); safe inside a circle crop |
 | `design/brand/social/banner.png` | 1500 × 500 | Wide banner (X, LinkedIn); the lower-left corner stays clear for a profile picture |
 | `design/brand/social/announcement.png` | 1200 × 675 | Rename announcement ("Cyber Hub is now ExploitX") |
@@ -93,7 +93,7 @@ Nothing here was published. Posting any of these is the owner's decision.
 
 ## Screenshots
 
-`website/src/assets/screens/*.webp` (2880 × 1800) are real screenshots of the rebranded app with demo data in a disposable data folder, captured in Mission 13. The machine's host name is replaced with `ws-01`. They are used by the website and the social images.
+`design/brand/screens/*.webp` (2880 × 1800) are real screenshots of the rebranded app with demo data in a disposable data folder, captured in Mission 13. The machine's host name is replaced with `ws-01`. They are used by the README and the social images here, and copied to the website repository (`src/assets/screens/`).
 
 ## Fonts (not in `design/brand`; bundled through npm)
 

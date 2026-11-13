@@ -4,6 +4,8 @@
 
 **ExploitX's own license:** none selected yet ([LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)). Compatibility below is assessed against the candidates there; it is not final until the owner selects one.
 
+> **Mission 13 (2026-11-13):** the website moved to its own repository, RChefo/ExploitX-Web, with its lockfile, GSAP, the React Bits `OrbitImages` files and the unlicensed Ink Orbit component. The findings about them below are a record of this audit; they now apply to that repository (its THIRD_PARTY_NOTICES.md), and this repository's license check covers the app only.
+
 ## Method
 
 | Part | How it was checked |
@@ -20,7 +22,7 @@
 * `node scripts/licenses.mjs report` regenerates the full inventories:
   * [Rust crates](third-party/RUST_CRATES.md): 649 crates; 333 ship on Windows, 396 on Linux;
   * [npm packages of the app](third-party/NPM_PACKAGES.md): 229 packages, 106 runtime;
-  * [npm packages of the website](third-party/WEBSITE_NPM_PACKAGES.md): 228 packages, 7 runtime.
+  * npm packages of the website: 228 packages, 7 runtime (inventory removed when the website moved).
 
   Each entry gives the version, license, source, whether it is direct or transitive, and where it is used.
 
@@ -153,7 +155,7 @@ What that means for ExploitX:
 | IBM Plex Sans, JetBrains Mono (through `@fontsource`) | OFL-1.1 | Bundled into the interface. OFL allows bundling with software; the font license and copyright must accompany them (now in `THIRD_PARTY_NOTICES.md`). The fonts may not be sold by themselves |
 | Lucide icons (`lucide-react`) | ISC | Bundled into the interface; notice in `THIRD_PARTY_NOTICES.md` |
 | App icons (`src-tauri/icons/`, `public/logo.svg`) | Not recorded | Added in the project's first commit with no third-party source recorded. **The owner should confirm they are original work** |
-| Website screenshots (`website/src/assets/screens/`) | The project's own | Real screenshots of ExploitX with demo data (docs/WEBSITE.md) |
+| Screenshots (`design/brand/screens/`, also in the website repository) | The project's own | Real screenshots of ExploitX with demo data (docs/WEBSITE.md) |
 | OWASP WSTG checklist (`src-tauri/src/methodology/wstg.json`), OWASP ASVS 5.0.0 (`src-tauri/catalog/asvs-5.0.0.json`) | CC BY-SA 4.0 | Attribution and share-alike apply to these data files; in-app attribution exists. They keep CC BY-SA under any ExploitX license |
 | MITRE ATT&CK catalogs (`src-tauri/catalog/attack-*.json`) | MITRE ATT&CK terms of use | Reproduce MITRE's copyright and license; done in `THIRD_PARTY_NOTICES.md` and the app |
 | FIRST CVSS v4.0 lookup data (`src-tauri/src/cvss/v4_lookup.rs`) | BSD-2-Clause (FIRST, Red Hat) | Notice in `THIRD_PARTY_NOTICES.md`; "CVSS is owned by FIRST and used by permission" |

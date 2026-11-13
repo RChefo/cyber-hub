@@ -13,7 +13,7 @@ The inventory of Mission 13 (2026-11-13). It lists what now says ExploitX, what 
 | Window title, package texts | `tauri.conf.json`, `Cargo.toml` | Title "ExploitX"; deb/rpm summary and description; Maintainer "ExploitX contributors" |
 | Linux desktop entry | `src-tauri/linux/exploitx.desktop.hbs` | `Name=ExploitX` (the file name, Exec, Icon and StartupWMClass stay; see 5) |
 | Logo, icons, colours, fonts | New identity | Sidebar logo, `public/logo.svg`, every icon in `src-tauri/icons/`, theme tokens |
-| Website (`website/`) | 70 occurrences in 18 files, plus the logo, metadata and screenshots | Titles, descriptions, Open Graph, JSON-LD, canonical `https://exploitx.net`, favicons, footer |
+| Website (then `website/`, now RChefo/ExploitX-Web) | 70 occurrences in 18 files, plus the logo, metadata and screenshots | Titles, descriptions, Open Graph, JSON-LD, canonical `https://exploitx.net`, favicons, footer |
 | Public and contributor documentation | 215 occurrences in 29 files | README, CONTRIBUTING, SECURITY, SUPPORT, CODE_OF_CONDUCT, THIRD_PARTY_NOTICES, `docs/*.md`, `docs/governance/`, issue forms |
 | Release workflow | Draft titles | New drafts are titled "ExploitX X.Y.Z"; **existing drafts are unchanged** |
 

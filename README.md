@@ -13,11 +13,11 @@
 
 It is for **penetration testers, security analysts, threat-intelligence and OSINT researchers, and AppSec engineers** who want their tools, targets, findings and evidence in one place, with a scoped execution engine that asks before it runs anything.
 
-![The ExploitX dashboard](website/src/assets/screens/dashboard.webp)
+![The ExploitX dashboard](design/brand/screens/dashboard.webp)
 
 | | |
 |---|---|
-| ![An OSINT investigation graph](website/src/assets/screens/osint-graph.webp) | ![The Command Center with a generated Nmap command](website/src/assets/screens/command-center.webp) |
+| ![An OSINT investigation graph](design/brand/screens/osint-graph.webp) | ![The Command Center with a generated Nmap command](design/brand/screens/command-center.webp) |
 
 *Screenshots of the app with demo data.*
 
@@ -114,7 +114,7 @@ Details and accepted risks: [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Documentation
 
-[docs/README.md](docs/README.md) lists every document, grouped for users, for contributors and for internal release engineering. Most used:
+[docs/README.md](docs/README.md) lists every document, grouped for users, for contributors and for internal release engineering. The website (exploitx.net) has its own repository, [RChefo/ExploitX-Web](https://github.com/RChefo/ExploitX-Web). Most used:
 
 * [docs/SECURITY.md](docs/SECURITY.md): the security model;
 * [docs/PLATFORMS.md](docs/PLATFORMS.md): platforms, dependencies and validation status;

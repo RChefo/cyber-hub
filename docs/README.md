@@ -60,4 +60,4 @@ These records are kept for transparency and for the maintainer. **They are not u
 | [autonomous/](autonomous/MISSION_REPORT.md) | The development missions' state, implementation log, reports and backlog |
 | [EXPANSION_PLAN.md](EXPANSION_PLAN.md) | The platform expansion plan and audit (historical) |
 | [research/](research/CYBER_HUB_MARKET_RESEARCH.md) | Market research behind the feature choices |
-| [WEBSITE.md](WEBSITE.md) | The marketing website in `website/` (not deployed) |
+| [WEBSITE.md](WEBSITE.md) | The website's own repository (RChefo/ExploitX-Web) and how the two repositories stay in step |

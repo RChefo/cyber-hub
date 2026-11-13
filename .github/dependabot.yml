@@ -30,20 +30,6 @@ updates:
       npm-minor-and-patch:
         update-types: [minor, patch]
 
-  - package-ecosystem: npm
-    # the marketing website: not part of the app
-    directory: /website
-    schedule:
-      interval: monthly
-    open-pull-requests-limit: 3
-    labels: [dependencies]
-    commit-message:
-      prefix: build
-      include: scope
-    groups:
-      website-minor-and-patch:
-        update-types: [minor, patch]
-
   - package-ecosystem: github-actions
     # actions stay pinned to full commit SHAs; Dependabot updates the SHA and its version comment
     directory: /

@@ -42,7 +42,8 @@ const written = [
   out("tokens.css", tokensCss()),
 ];
 
-// The same geometry for inline use in the app and the website (React components draw it with
+// The same geometry for inline use in the app (and, as a copy, in the website repository RChefo/ExploitX-Web;
+// its docs/BRAND.md says how to sync). React components draw it with
 // CSS colours, so one source serves dark, light and monochrome).
 const logoData = (() => {
   const sym = B.symbolPolygons();
@@ -126,7 +127,7 @@ function brandPreview() {
 }
 
 const repo = join(root, "..", "..");
-for (const rel of ["src/components/brand/logoData.ts", "website/src/components/brand/logoData.ts"]) {
+for (const rel of ["src/components/brand/logoData.ts"]) {
   mkdirSync(dirname(join(repo, rel)), { recursive: true });
   writeFileSync(join(repo, rel), logoData);
   written.push(rel);

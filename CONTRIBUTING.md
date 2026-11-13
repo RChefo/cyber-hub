@@ -2,6 +2,8 @@
 
 Thank you for your interest in ExploitX. This guide covers setting up a development environment, the checks a change must pass, and how changes are reviewed.
 
+This repository holds the desktop app and the brand sources. The website (exploitx.net) has its own repository, [RChefo/ExploitX-Web](https://github.com/RChefo/ExploitX-Web): contribute to the website there ([docs/WEBSITE.md](docs/WEBSITE.md) explains how the two stay in step).
+
 > **Licensing.** The repository is public but **no open-source license has been selected yet**. See the README, section "License". Until the owner selects one, the maintainer may hold pull requests that add substantial code. Issues, bug reports, reproductions, documentation fixes and small fixes are welcome now. The options under consideration are in [docs/governance/LICENSE_COMPARISON.md](docs/governance/LICENSE_COMPARISON.md).
 
 Please also read the [Code of Conduct](CODE_OF_CONDUCT.md). **Never report a security vulnerability in a public issue or pull request:** follow [SECURITY.md](SECURITY.md).

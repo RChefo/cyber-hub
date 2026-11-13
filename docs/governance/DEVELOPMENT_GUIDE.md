@@ -13,7 +13,7 @@ How ExploitX is built, tested and released, for contributors. It complements [CO
 | `src-tauri/capabilities/` | What the web view may call (Tauri capabilities): deliberately minimal |
 | `src-tauri/windows/` | NSIS installer hooks |
 | `scripts/` | Build and maintenance scripts (sidecar staging, catalogs, the update manifest, license and link checks) with their tests |
-| `website/` | The separate marketing site (its own `package.json`); not part of the app, not deployed |
+| `design/brand/` | The ExploitX identity: logos, icons, tokens, social images, screenshots, and the scripts that build them (docs/brand/) |
 | `docs/` | Documentation. See [docs/README.md](../README.md) for which documents are for users, for contributors, and for internal release engineering |
 | `.github/` | CI and release workflows, issue and pull request templates, Dependabot |
 

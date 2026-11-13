@@ -26,7 +26,7 @@ The repository is public, so its **entire history** is public, not only the late
 | Secret scanning of non-provider patterns, validity checks | Off: not applied by GitHub to this account (part of the paid Secret Protection) | |
 | Dependabot alerts, dependency graph | On | |
 | Dependabot security updates | **On** | 2026-11-13 |
-| Dependabot version updates | `.github/dependabot.yml`: weekly, grouped (Cargo, npm, GitHub Actions; the website monthly) | 2026-11-13 |
+| Dependabot version updates | `.github/dependabot.yml`: weekly, grouped (Cargo, npm, GitHub Actions) | 2026-11-13 |
 | Private vulnerability reporting | **On** (SECURITY.md) | 2026-11-13 |
 | Ruleset "Default branch protection" | **Active:** no deletion, no force push, changes through pull requests with resolved conversations, required checks: the five CI jobs and "Repository checks". Repository administrators may bypass (the owner's direct maintenance) | 2026-11-13 |
 | Ruleset "Release tag protection" (`v*`) | **Active:** tags cannot be deleted, moved or force-updated; administrators may bypass, deliberately and visibly | 2026-11-13 |

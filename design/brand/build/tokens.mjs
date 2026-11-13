@@ -1,5 +1,5 @@
 // ExploitX design tokens: the single source for design/brand/tokens.json and tokens.css.
-// The desktop app (src/styles/index.css) and the website (website/src/styles.css) import tokens.css.
+// The desktop app imports tokens.css (src/styles/index.css); the website (RChefo/ExploitX-Web) keeps a copy in src/brand/.
 
 export const tokens = {
   brand: {

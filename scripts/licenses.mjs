@@ -2,7 +2,7 @@
 // Third-party license inventory and policy check (Mission 12). Only Node built-ins and `cargo`.
 //
 //   node scripts/licenses.mjs check    every Rust crate (Cargo.lock, all platforms) and npm package
-//                                      (package-lock.json, website/package-lock.json) has a license
+//                                      (package-lock.json) has a license
 //                                      the policy in scripts/license-policy.json accepts, or a
 //                                      reviewed exception; exits 1 otherwise (CI runs this)
 //   node scripts/licenses.mjs report   writes the per-dependency inventories under
@@ -173,10 +173,10 @@ function check() {
     verdict("cargo", p.name, p.version, p.license);
   }
   let npm = 0;
-  for (const lockfile of ["package-lock.json", "website/package-lock.json"]) {
+  for (const lockfile of ["package-lock.json"]) {
     for (const p of npmPackages(lockfile)) {
       npm++;
-      verdict(lockfile.startsWith("website") ? "npm-website" : "npm", p.name, p.version, p.license);
+      verdict("npm", p.name, p.version, p.license);
     }
   }
   for (const e of POLICY.exceptions) if (!e.reason) problems.push(`the exception for ${e.ecosystem} ${e.name} has no reason`);
@@ -253,10 +253,6 @@ ${body.join("\n")}
       "npm packages of the desktop app: license inventory",
       "Runtime packages can end up in the app's web assets: Vite bundles what the frontend imports. Development packages (Vite, TypeScript, Vitest, the Tauri CLI and their dependencies) build or test the app and are not part of it.",
     ),
-  );
-  writeFileSync(
-    join(OUT, "WEBSITE_NPM_PACKAGES.md"),
-    npmTable("website/package-lock.json", "npm packages of the website: license inventory", "`website/` is the separate marketing site. It is not part of the desktop app or its installers, and it is not deployed."),
   );
   console.log(`wrote ${rows.length} crates and the npm inventories to docs/governance/third-party/`);
 }

@@ -43,7 +43,8 @@ describe("license policy", () => {
 
   it("gives every exception a reason", () => {
     const policy = JSON.parse(readFileSync(new URL("./license-policy.json", import.meta.url), "utf8"));
-    expect(policy.exceptions.length).toBeGreaterThan(0);
+    // the app has no exception since the website (GSAP) moved to its own repository; any future one needs a reason
+    expect(Array.isArray(policy.exceptions)).toBe(true);
     for (const e of policy.exceptions) expect(e.reason.length, e.name).toBeGreaterThan(40);
   });
 });

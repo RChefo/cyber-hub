@@ -1,5 +1,5 @@
 // Social and marketing images of the ExploitX identity, composed from the vector logo, the brand fonts
-// and real screenshots of the app (website/src/assets/screens). The HTML templates are written to a
+// and real screenshots of the app (design/brand/screens). The HTML templates are written to a
 // temporary folder and rendered with headless Chrome to design/brand/social/*.png.
 // usage: node design/brand/build/social.mjs
 import { execFileSync } from "node:child_process";
@@ -16,7 +16,7 @@ const tpl = mkdtempSync(join(tmpdir(), "exploitx-social-"));
 mkdirSync(join(brand, "social"), { recursive: true });
 const CHROME = process.env.CHROME ?? ["C:/Program Files/Google/Chrome/Application/chrome.exe", "/usr/bin/google-chrome", "/usr/bin/chromium"].find((p) => existsSync(p));
 const url = (rel) => pathToFileURL(join(repo, rel)).href;
-const shot = (name) => url(`website/src/assets/screens/${name}.webp`);
+const shot = (name) => url(`design/brand/screens/${name}.webp`);
 const UV = tokens.brand.ultraviolet;
 
 const fonts = `
@@ -66,7 +66,7 @@ const designs = {
     <div class="display" style="position:absolute;left:80px;top:232px;font-size:56px;width:520px">From first signal<br><span class="uv">to final report.</span></div>
     <div class="muted" style="position:absolute;left:80px;top:400px;font-size:22px;line-height:1.45;width:470px">Cybersecurity intelligence and security research platform for Windows and Linux.</div>
     <div class="frame" style="left:640px;top:150px;width:780px"><img src="${shot("osint-graph")}"></div>`],
-  // Website Open Graph / Twitter image (website/public/og.png), 1200 × 630
+  // Website Open Graph / Twitter image (public/og.png in RChefo/ExploitX-Web), 1200 × 630
   "website-og": [1200, 630, `
     ${field(1200, 630, 720, 320)}
     <div class="glow" style="left:500px;top:30px;width:860px;height:620px"></div>
