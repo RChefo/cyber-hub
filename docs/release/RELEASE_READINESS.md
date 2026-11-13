@@ -2,6 +2,11 @@
 
 This is the checklist for the first release. It separates what was verified from what still needs a person, hardware, a GitHub run or a signing key.
 
+**Mission 13 (2026-11-13): ExploitX.** The product is now called ExploitX (website exploitx.net, its code in RChefo/ExploitX-Web). For releases this means:
+* the two drafts (`v0.1.0`, `v0.1.0-rc.2`) are **Cyber Hub builds** and stay as they are; an ExploitX release needs a new candidate built from `02a1285` or later, with updated notes (`docs/releases/0.1.0.md`) and the owner's authorization;
+* the **package identity is unchanged** (productName "Cyber Hub", identifier, MSI upgrade code, package and binary names), so an ExploitX build upgrades existing installations in place; the Windows installer, Start menu and *Apps & features* still show "Cyber Hub" until the owner decides on an identity migration (docs/brand/NAME_MIGRATION.md);
+* new drafts are titled "ExploitX X.Y.Z"; the update feed and signing key are unchanged.
+
 **Mission 12 (2026-11-13): open-source readiness.** The candidates are unchanged. Cyber Hub stays public as an open-source project, the owner's decision.
 
 What changed for releases:

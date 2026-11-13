@@ -502,3 +502,30 @@ The owner decided that Cyber Hub stays public and becomes an open-source project
 | 114 | **Lightswind's license file and the app icons' authorship** | Lightswind declares MIT only in npm metadata; the icons' origin is not recorded. Low |
 | 115 | **Review Dependabot's first pull requests (#1–#8)** | Grouped minor and patch updates, plus majors for `getrandom`, `hmac`, `sha1`, `sha2` and the website's TypeScript 7, which may need code changes. Each needs CI green and a review; none was merged in Mission 12 |
 | 94 (update) | glib and minimatch alerts | Dependabot's automatic security updates end in `security_update_not_possible`: glib's fix (0.20) is out of reach under GTK 0.18 and Tauri; minimatch's would downgrade other dependencies. GitHub shows those runs as failed. Unchanged otherwise |
+
+## Mission 13 (2026-11-13): ExploitX
+
+The owner renamed the product ExploitX (official website exploitx.net) and moved the website to RChefo/ExploitX-Web. Details: MISSION_REPORT.md, "Mission 13"; the identity in docs/brand/.
+
+### Done
+
+| What | Where |
+|---|---|
+| Brand strategy, the Convergence symbol, wordmark, lockups, colour, type, icon and illustration rules | `docs/brand/`, `design/brand/` |
+| Editable SVG logos, PNG exports, Windows ICO and Linux icons, favicons, social images, illustrations | `design/brand/` (ASSET_CATALOG.md) |
+| Design tokens shared by the app and the website | `design/brand/build/tokens.mjs` → `tokens.css`; `src/styles/index.css` |
+| The desktop app rebranded (theme, logo, icons, texts, window title, Linux menu entry, installer icon) with the package identity kept and pinned by tests | `src/`, `src-tauri/`, `ci_tests.rs` |
+| The website rebranded, canonical exploitx.net, and moved to its own repository with its history | RChefo/ExploitX-Web (`8c7fe0d`) |
+| The name inventory and the name and domain research | `docs/brand/NAME_MIGRATION.md`, `BRAND_NAME_RESEARCH.md` |
+
+### New
+
+| # | Item | Why open |
+|---|---|---|
+| 116 | **The package identity** | Windows installer, Start menu, *Apps & features* and the executable's details still say "Cyber Hub", because they derive from `productName`, which the brief keeps. Owner decision: keep it, or migrate before the first public release (NAME_MIGRATION.md lists the steps and tests) |
+| 117 | **Rebuild the release under ExploitX** | The drafts of `v0.1.0` and `v0.1.0-rc.2` are Cyber Hub builds; a new candidate needs a new tag, updated notes and an authorized run |
+| 118 | **Clear the name** | Serious prior uses: the Chennai club and CTF "ExploitX" (exploitx.org), an "ExploitX" game-software shop (exploitx.io, expired), a CTF team, ExploitX Defence; EXPLOIT marks in Italy, Australia, the UK. Attorney review; confirm and lock exploitx.net |
+| 119 | **The website live** | Host, DNS, HTTPS and the build variables (RChefo/ExploitX-Web README, "Deployment"); upload the GitHub social preview |
+| 120 | **Windows VM checks of the rebranded installers** | Install, upgrade from RC2, uninstall, data kept, Start menu and taskbar icons; GNOME and KDE menu entries in real sessions |
+| 121 | **Keep the website's copies in step** | Tokens, logo geometry, favicons, `og.png`, screenshots and the package patterns are copied into RChefo/ExploitX-Web (its docs/BRAND.md); sync when they change |
+| 122 | **Installer wizard artwork** | NSIS header and sidebar images and WiX banners in the ExploitX style (display only); not done |

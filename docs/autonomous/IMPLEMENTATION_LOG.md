@@ -1775,3 +1775,107 @@ The owner decided that Cyber Hub stays public and becomes an open-source project
   None was merged. The security-update runs for glib and minimatch ended in `security_update_not_possible` again.
 * **Each Dependabot pull request ran CI twice:** once for the branch push, once for the pull request. Fixed in `07b5912`: pushes trigger CI only on `main`, `release/**` and `v*` tags, and every pull request still runs it. The fix is pinned by `ci_tests.rs` (7/7 pass), and actionlint 1.7.7 with shellcheck 0.9.0 reports no issue. Cancelling the duplicate runs already queued was not permitted in this session; they were left to finish.
 * **Records:** MISSION_STATE, this log, MISSION_REPORT "Mission 12", FEATURE_BACKLOG, RELEASE_READINESS, and the CI triggers and app pointer in the development guide and REPOSITORY_SECURITY.md.
+
+## Mission 13 (2026-11-13T12:01Z): ExploitX, brand identity and rebranding
+
+The owner renamed the product **ExploitX** (formerly Cyber Hub), with the official website https://exploitx.net. Authorized:
+* a complete visual identity and its application to the app and the website;
+* a mid-mission addition: moving the website to its own repository, RChefo/ExploitX-Web.
+
+Not authorized: changing package identities for branding, publishing, deploying, DNS, purchases, rewriting history or tags.
+
+## 12:01–12:20Z: inspection, research, exploration
+
+* **State.** Branch `release/v0.1.0` at `2d098e1`, clean; tags `v0.1.0` and `v0.1.0-rc.2`; both drafts unchanged. No "THREATIQ" anywhere in the repository.
+* **Name and domain research** was delegated to a subagent (web, RDAP, Wayback Machine, USPTO, TMview, GitHub and package registries): `docs/brand/BRAND_NAME_RESEARCH.md`.
+  * No EXPLOITX trademark was found.
+  * **Serious potential conflicts:**
+    * a Chennai student cybersecurity club and national CTF named ExploitX (exploitx.org);
+    * an "ExploitX" game-software shop at exploitx.io (expired, in redemption);
+    * a CTF team and a security provider using the name;
+    * EXPLOIT-formative marks in Italy, Australia and the UK.
+  * exploitx.net was registered at Namecheap on 2026-11-13 at 11:58 UTC and serves a parking page; the owner should confirm it is theirs.
+* **Exploration** (`design/brand/exploration/`), rendered with headless Chrome:
+  * four symbol directions (Convergence selected; Escape reads as a magnifier, Fault as a glitch, Graph as a generic network icon);
+  * five accent colours (Ultraviolet selected; Ember clashes with High severity, lime with the "neon hacker" look and white backgrounds, aqua is the stock cyber colour);
+  * seven typefaces (Archivo selected).
+
+  A wordmark ending in the full symbol read as "Exploit><", so the X is a drawn letter.
+
+## 12:05–12:45Z: the identity and the app
+
+* **Brand sources** (`design/brand/build/`):
+  * the geometry (`brand.mjs`) and the tokens (`tokens.mjs`);
+  * the outlines of "Exploit" (Archivo SemiBold, OFL-1.1, via opentype.js outside the repository) in `wordmark.json`.
+* **Outputs:**
+  * `build.mjs` writes 18 SVG logos and icons, the tokens and `logoData.ts`;
+  * `export.mjs` writes the PNGs, the Windows ICO (16–256), the Linux hicolor set and the favicons, and refreshes `src-tauri/icons` (`icon.icns` was regenerated with `tauri icon`).
+* **Contrast decisions:**
+  * white on the display Ultraviolet is 3.92:1, so solid fills use 600 (4.89:1) and the hover goes deeper (5.72:1);
+  * placeholders were raised to `#747B8E`.
+* **The app.**
+  * `index.css` maps HeroUI onto `--ex-*` tokens.
+  * Archivo is used for page titles and figures (`@fontsource-variable/archivo` 5.3.0, OFL-1.1).
+  * The sidebar uses `Logo` and `BrandSymbol`, drawn from the generated geometry.
+  * The severity chart, badge, graph canvas `THEME` and graph backgrounds were moved to the tokens. The entity type colours are kept: they also have glyphs and a legend.
+* **The name.**
+  * "Cyber Hub" → "ExploitX" across the interface, backend messages, catalogs and scripts by a rule that skips install paths, file names derived from the package identity and the identity assertions; a second pass caught strings next to `\n` escapes.
+  * Grammar: "an ExploitX …".
+  * Two exporter tests now read their colours from `THEME`.
+* **The package identity stays.**
+  * Kept: `productName` "Cyber Hub", the identifier, the derived publisher, the MSI upgrade code, binary and package names, MCP names.
+  * Display-only changes: window title "ExploitX", deb/rpm descriptions, Maintainer, a desktop-entry template (`Name=ExploitX`, same Exec, Icon and StartupWMClass) and the NSIS installer icon.
+  * `ci_tests.rs`: `the_product_shows_the_exploitx_name_without_changing_the_package_identity`.
+* **Windows:** clippy clean; 649 passed, 29 ignored. Frontend 58 files, 319 tests.
+
+## 12:28–12:40Z: real screens, website, layout
+
+* **Screenshots.** The debug app ran on a copy of the screenshot demo data (`E:\CyberHubQA\m13\shots-data`), with `CYBERHUB_DATA_DIR` set. A CDP driver captured 27 QA screens plus the website set at 2880 × 1800, replacing the host name with `ws-01`.
+  * The real database kept its modification time `2026-11-05T15:58:24.8534883Z`.
+  * NVD answered HTTP 503 during the run: kept as the error-state capture; the website shot came from the local cache.
+* **Layout probe** (Mission 7's): 17 pages at 1920×1040@1, 1536×826@1.25, 1280×688@1.5, 1097×590@1.75, 960×516@2 and 800×480@1: **102/102 without a problem**.
+* **Website** (then `website/`):
+  * the logo, tokens and Archivo;
+  * the hero ("From first signal to final report.");
+  * the MCP count corrected from 49 to 62;
+  * favicons, manifest and `og.png`;
+  * canonical `https://exploitx.net` by default;
+  * the changelog accepts the old release titles.
+  * Verified at 390 px (device emulation, no horizontal scroll), 1440 px full page and with reduced motion; the build has no "Cyber Hub" in visible text.
+* **Social images and illustrations:** six PNGs from real screenshots, and three SVG illustrations.
+
+## 12:40–12:58Z: packages
+
+* **Linux** (container, unsigned debug bundles):
+  * the deb installed over the first candidate's deb as the same package `cyber-hub` 0.1.0;
+  * menu entry "ExploitX", new icon, window title "ExploitX" with class `cyber-hub`;
+  * a data-folder marker survived the upgrade and the removal;
+  * the rpm carries the same entry.
+* **Windows** (host, built and inspected, not installed):
+  * the program's icon is new;
+  * version info and MSI properties keep "Cyber Hub"/"cyberhub", and the MSI upgrade code is `{35C1D9FD-…}`;
+  * the NSIS installer showed the stock NSIS icon, so `installerIcon` was added, pinned by the test, and the installer rebuilt with the ExploitX icon.
+
+## 12:59–13:15Z: commits and the website's repository
+
+* `2f50127` feat(brand), `9d2ab74` feat(app), `b79154e` feat(website), `ddf5ed6` docs. Each staged diff was reviewed and each message checked for attribution metadata (none).
+* **RChefo/ExploitX-Web** (private) was empty when inspected (12:53Z), then received an "Initial commit" (a one-line README) from the GitHub web UI at 12:59Z.
+* **Migration:**
+  * `git subtree split --prefix=website` gave 6 commits, cloned to `E:\CyberHubQA\m13\exploitx-web`;
+  * the clone's copies of the main repository's tags were deleted locally so they were not pushed;
+  * gitleaks over the 6 commits: no leak.
+* **Independence (`f43e9b0`):**
+  * vendored tokens;
+  * the package-pattern parity test holds a copy of the app's patterns;
+  * `@types/node` declared: the type check had found it only in the app repository's `node_modules`;
+  * README, docs/WEBSITE.md, docs/BRAND.md, THIRD_PARTY_NOTICES.md, `.env.example`, `.gitignore`, `.gitattributes`, CI and Dependabot.
+* **Push.** The first push was refused (the remote had the initial commit). The initial commit was merged (`8c7fe0d`, `--allow-unrelated-histories`, keeping the website README) and pushed as a fast-forward `25f080f..8c7fe0d`, with no force.
+* **Website CI run 43431335151: green.** Install, lint, type check, tests, build, SEO output check, runtime audit.
+* **Clean checkout** (`gh repo clone` into a folder with no `node_modules` above it): `npm ci`, lint, type check, 23 tests, build, canonical URLs on every page, robots and sitemap, `npm audit --omit=dev` 0.
+* **Main repository (`02a1285`):**
+  * the screenshots moved to `design/brand/screens`;
+  * `website/` removed;
+  * Dependabot, the license check and its inventory cover the app only (649 crates, 230 npm packages, 0 exceptions; the test about exceptions now checks their shape);
+  * docs/WEBSITE.md explains which repository owns what.
+* **Pushed** `2d098e1..02a1285`; CI run 43431983821 started. Repository descriptions updated; the main repository's homepage `exploitx.net` was already set outside this session.
+* **Main repository CI run 43431983821 on `02a1285`: green.** Windows 649 passed, Ubuntu 24.04 and Debian 12 650 passed, 29 ignored each; 319 frontend tests on each; MSRV 1.90; repository checks (649 crates, 230 npm packages, 0 exceptions, links); gitleaks 229 commits; audits.

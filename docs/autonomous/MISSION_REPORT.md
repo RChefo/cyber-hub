@@ -2949,3 +2949,250 @@ None was merged; they wait for review like any contribution. Before the trigger 
   * two high-severity third-party license issues in the source tree (React Bits' Commons Clause, the unlicensed Ink Orbit component) that a license selection alone does not resolve.
 * Cyber Hub is therefore **publicly visible but not open-source licensed**, and nothing in the repository claims otherwise.
 * **Nothing was published or deleted.** No visibility, name or history changed, nothing was bought, and `RELEASE_PUBLISHING` is unset.
+
+## Mission 13: ExploitX, brand identity and product rebranding (2026-11-13)
+
+**The decision and the authorization.**
+* **The owner's decisions:**
+  * the product is **ExploitX** (formerly Cyber Hub);
+  * the official website is **https://exploitx.net**;
+  * the website moves to its own repository, **RChefo/ExploitX-Web** (added during the mission).
+* **Authorized:** a complete identity, applying it to the app and the website, and migrating and pushing the website.
+* **Not authorized, and not done:**
+  * changing package identities for branding;
+  * a release or new binaries;
+  * deploying, DNS, purchases;
+  * rewriting history, moving tags, renaming repositories.
+
+**Classification: BRAND IDENTITY PARTIALLY COMPLETE.**
+
+**Times:** 2026-11-13T12:01Z to the commit that adds this section.
+
+### A. Executive summary
+
+* **Brand direction:** "Convergence". Two chevrons meet at one point: the operator's input reaching its target, and every signal converging on one finding. ExploitX's symbol is in Ultraviolet `#7C6AFF` and Bone on a graphite, dark-first system, with an Archivo-based wordmark whose X is drawn like the symbol.
+* **Delivered:**
+  * editable vector logos in every required variant, application icons for Windows and Linux, favicons;
+  * design tokens shared by the app and the website;
+  * six social and marketing images from real screenshots, and an illustration style;
+  * five brand documents and the name research.
+* **Rebranding status:**
+  * **Rebranded:** the desktop app's interface, window title, texts, icons and Linux menu entry; the website; the documentation.
+  * **Still "Cyber Hub" on purpose:** the Windows installer and Start menu names, *Apps & features*, the executable's file description and the package file names. They derive from the package identity, which the brief does not allow changing for branding. Changing them is an owner decision with a migration (section D).
+  * **The website** builds and passes CI from RChefo/ExploitX-Web, and the app repository builds without it.
+* **Branch and commits:**
+  * main repository `release/v0.1.0`: `2f50127`, `9d2ab74`, `b79154e`, `ddf5ed6`, `02a1285`, and this record;
+  * website repository `main`: `8c7fe0d`.
+* **CI:**
+  * website run 43431335151, green;
+  * main repository run 43431983821, green.
+
+### B. Brand strategy
+
+* **Positioning:** "ExploitX — cybersecurity intelligence and security research platform." Headline: "From first signal to final report." The whole platform (testing, OSINT, intelligence, detection engineering, reports, MCP), not a scanner.
+* **Personality:** intelligent, technical, confident, precise, modern, professional, security-focused, developer-friendly, trustworthy. The voice rules (no inflated claims, no hacker slang, "authorized" and "in scope") are in BRAND_GUIDELINES.md.
+* **Selected direction:** Convergence.
+  * Reads as an X from 256 down to 16 px; the hairline gap closes at small sizes.
+  * Distinct from the common X marks.
+  * Broad enough for the whole platform.
+* **Rejected directions:**
+
+  | Direction | Reason |
+  |---|---|
+  | Escape | Read as a magnifier, the "search" icon |
+  | Fault | Glitch cliché, close to the X/Twitter mark |
+  | Graph | Generic network icon |
+  | Ember (colour) | Clashes with High severity |
+  | Signal lime as primary | The neon-hacker look the brief rules out, close to Hack The Box, weak on white. Kept as a sparing accent |
+  | Aqua (colour) | Stock cyber colour |
+  | Sora, Manrope, Space Grotesk, Geist, Instrument Sans, Plex (wordmark) | VISUAL_IDENTITY.md gives each reason |
+  | A symbol as the wordmark's X | Read as "Exploit><" |
+
+### C. Visual identity
+
+* **Logo system:**
+  * primary (stacked) and horizontal lockups;
+  * compact (small-size optical version);
+  * symbol, symbol-small and wordmark;
+  * light, dark and monochrome versions;
+  * the application icon (two masters);
+  * favicons.
+
+  Construction, clear space, minimum sizes and misuse rules are in BRAND_GUIDELINES.md and VISUAL_IDENTITY.md.
+* **Colour:**
+  * Ultraviolet 100–900: 500 is the brand, 600 the white-text fills, 700 the colour on light backgrounds;
+  * Bone, Ink and Night, plus graphite neutrals;
+  * Signal lime as an accent;
+  * the semantic and severity scales;
+  * a categorical data-visualisation palette (8 colours) and a sequential one (6).
+  * **Contrast** measured: text 16.95:1, muted 5.8:1, white on 600 4.89:1, critical 4.6:1.
+* **Typography:** Archivo (display), IBM Plex Sans (interface), JetBrains Mono (technical), all OFL-1.1 and bundled through @fontsource.
+* **Iconography:** Lucide only, outline, with the existing meanings kept; severity is never shown by colour alone.
+* **Design tokens:**
+  * `design/brand/build/tokens.mjs` produces `tokens.json` and `tokens.css` (`--ex-*`);
+  * the app maps HeroUI onto them;
+  * the website keeps a copy;
+  * see DESIGN_SYSTEM.md.
+
+### D. Product rebranding
+
+* **Desktop app:**
+  * the theme, the sidebar logo, Archivo page titles and figures;
+  * 98 interface and 316 backend, catalog and script occurrences of the name, among them dialogs, errors, the MCP server title and prompts, report footers and export metadata (SARIF driver, ATT&CK layers, STIX);
+  * the window title, the app icons (`src-tauri/icons`, ICO with tuned small sizes, ICNS);
+  * the NSIS installer icon;
+  * the Linux desktop entry "ExploitX".
+* **Website:**
+  * the logo, tokens and type;
+  * the hero and descriptor;
+  * screenshots of the rebranded app;
+  * metadata, Open Graph and JSON-LD;
+  * favicons, manifest, `og.png`;
+  * canonical `https://exploitx.net`;
+  * the MCP count corrected to 62.
+* **Installer and package metadata:**
+  * deb/rpm summary, description and Maintainer "ExploitX contributors";
+  * new drafts titled "ExploitX X.Y.Z".
+* **Compatibility-sensitive identifiers kept** (all are listed in NAME_MIGRATION.md, sections 2 and 5):
+  * `productName` "Cyber Hub", the identifier `dev.cyberhub.workstation`, the publisher "cyberhub";
+  * the MSI upgrade code;
+  * `cyber-hub` (binary and package), `cyberhub-mcp` and the MCP tool and resource names, `cyberhub-keys`, `CYBERHUB_*`;
+  * `cyberhub.db` and the file-format identifiers;
+  * the updater key and feed.
+* **Consequence:** on Windows the installer, the Start menu, *Apps & features* and the executable's details say "Cyber Hub". Changing that means changing the package identity. NAME_MIGRATION.md lists the exact migration and its tests; it is the owner's decision, best taken before the first public release.
+
+### E. Assets
+
+Exact paths and formats are in `docs/brand/ASSET_CATALOG.md`. In short:
+* **`design/brand/*.svg`:** the logos (primary, horizontal, compact, dark, light, monochrome, symbol, wordmark, previews), the app icon masters and the favicon.
+* **`design/brand/png/`:** transparent PNGs at 1×, 2× and 4×, app icons 16–1024, and `brand-preview.png`.
+* **`design/brand/icons/`:** the Windows ICO, the Linux hicolor icons 16–512, and the favicon set.
+* **`design/brand/social/`:**
+  * `github-social-preview.png` (1280 × 640);
+  * `website-og.png` (1200 × 630);
+  * `avatar.png` (1024²);
+  * `banner.png` (1500 × 500);
+  * `announcement.png` (1200 × 675);
+  * `desktop-promo.png` (1920 × 1080).
+* **`design/brand/illustrations/`:** investigate, detect, report.
+* **`design/brand/screens/`:** 10 screenshots.
+* **Not published:** nothing. Uploading the GitHub social preview needs the web interface; it is an owner step.
+* **No image-generation tool was available.** The artwork is original vector work and real screenshots.
+
+### F. Name migration
+
+* **Replaced:**
+
+  | Area | Occurrences |
+  |---|---|
+  | App interface | 98 in 47 files |
+  | Backend, catalogs, scripts | 316 in 90 files |
+  | Website | 70 in 18 files |
+  | Public and contributor documentation | 215 in 29 files |
+* **Retained identifiers:** see D. The full list with reasons is in NAME_MIGRATION.md.
+* **Historical references preserved:**
+  * `docs/autonomous/`, `docs/release/`, `docs/releases/0.1.0.md` (the notes of the two existing candidates), `docs/research/`, `docs/EXPANSION_PLAN.md`;
+  * the repository URL `RChefo/cyber-hub`, Git history and tags.
+* **THREATIQ:** no occurrence anywhere.
+
+### G. Domain and brand research
+
+`docs/brand/BRAND_NAME_RESEARCH.md`, 2026-11-13. **Not legal advice and no trademark clearance.**
+
+* **Trademarks:** no registered or pending EXPLOITX mark in the USPTO, TMview or Trademarkia. "EXPLOIT…" marks for software and security exist: EXPLOIT in Italy, EXPLOIT SECURITY in Australia, Exploitr in the UK.
+* **Prior use of the same name in cybersecurity** (serious):
+  * the Chennai Institute of Technology's student club and national CTF "ExploitX" (exploitx.org, GitHub, social accounts);
+  * a CTF team;
+  * a security provider "ExploitX Defence".
+* **Reputational:** exploitx.io sold game software (most likely cheats) as "ExploitX" in 2026. It has expired and is in redemption, so anyone may register it.
+* **exploitx.net:**
+  * registered 2026-11-13 11:58 UTC at Namecheap, serving a parking page;
+  * history: only suspended hosting pages (2006–2013);
+  * ownership and DNS were not verified by this session.
+* **Precautions** (the owner's decisions):
+  * a trademark attorney's clearance before launch;
+  * confirm and lock exploitx.net;
+  * consider defensive domains and handles (exploitx.dev and exploitx.app are free);
+  * always pair the name with its descriptor;
+  * check URL-category and antivirus reputation.
+
+### H. Quality assurance
+
+* **Real screens** (debug build, disposable demo data, CDP; `E:\CyberHubQA\m13\qa\`), 28 captures:
+
+  | Area | Captures |
+  |---|---|
+  | Workspace | dashboard, projects, project overview, findings manager, report, investigation graph (empty state), finding library, detection engineering, runs |
+  | Arsenal | Tools Library, Command Center |
+  | Research and integrations | payloads, the OSINT list, overview and link-analysis graph, dorks, Vulnerability Intel (record), Threat Intel, VirusTotal, Security Utilities, MCP |
+  | Settings | settings, the About section |
+  | Interaction states | the command palette, a validation error, an NVD 503 error state |
+  | Window sizes | the smallest window (800 × 480), a 1920 maximized view |
+
+  A text scan of every screen found no old name; two hits were identifiers (`cyberhub-mcp`, the QA data path).
+* **Layout probe:** 17 pages at six window sizes and scales (100–200 % and 800 × 480): **102/102**.
+* **Website:**
+  * 390 px emulated (no horizontal scroll), 768 px, 1440 px full page, reduced motion;
+  * built site: canonical URLs on all four pages, sitemap and robots on exploitx.net, `og.png`; no old name in visible text.
+* **Logo rendering:** 16–1024 px on dark, light and taskbar-like backgrounds.
+* **Packages:**
+  * **Linux** (containers): the deb upgrades the first candidate in place; menu entry and window "ExploitX", class `cyber-hub`; data kept through the upgrade and the removal. The rpm has the same entry.
+  * **Windows** (host, inspected, not installed): new program and installer icons; MSI identity unchanged.
+  * **Not run:** a Windows install, upgrade and uninstall in a VM, and a GNOME or KDE session check of the menu entry.
+* **Regression:**
+  * Windows clippy clean, 649 passed, 29 ignored (Mission 12: 648; one new test);
+  * frontend 58 files, 319 tests;
+  * `ci_tests` 8/8;
+  * license check 649 crates, 230 npm packages;
+  * relative links OK;
+  * website: lint, type check, 23 tests, build.
+* **CI:**
+  * website run 43431335151, green;
+  * main repository run 43431983821 on `02a1285`, **green on all six jobs**: Windows 649 passed, Ubuntu 24.04 and Debian 12 650 passed (29 ignored each; one Unix-only test), 319 frontend tests on each, MSRV 1.90, repository checks (649 crates, 230 npm packages, 0 exceptions, links), gitleaks 229 commits, cargo and npm audit.
+* **The owner's database** kept its modification time `2026-11-05T15:58:24.8534883Z`.
+
+### Website repository separation (the mission's addition)
+
+| Item | Result |
+|---|---|
+| Original location | `website/` in RChefo/cyber-hub (Vite 8, React 19, TypeScript 6, Tailwind 4, GSAP; no Lenis, no Prettier) |
+| Target before migration | Private, created 12:53Z, empty; at 12:59Z the owner's web UI added "Initial commit" (`25f080f`, README "# ExploitX-Web") |
+| History | `git subtree split --prefix=website`: the website's 6 commits, with the same messages and authors. The initial commit was merged with `--allow-unrelated-histories` (`8c7fe0d`); no force push; main repository history unchanged |
+| Migrated | Every file of `website/`: 4 pages, `src/` (components, pages, lib, tests, assets and screenshots), `public/` (favicons, manifest, `og.png`), `seo.ts`, `vite.config.ts`, `tsconfig.json`, `eslint.config.js`, `package.json` and lockfile |
+| Added for independence (`f43e9b0`) | `src/brand/tokens.css` (copy), a copy of the app's package patterns in the parity test, `@types/node` (previously borrowed from the app's `node_modules`), README, docs/WEBSITE.md, docs/BRAND.md, THIRD_PARTY_NOTICES.md, `.env.example`, `.gitignore`, `.gitattributes`, CI, Dependabot |
+| Excluded | App code, Rust, Tauri configuration, the app's dependencies and scripts; `src/updater-manifest.d.ts` (it typed the cross-repository import) |
+| Removed from the main repository (`02a1285`) | `website/` (46 files; the 10 screenshots moved to `design/brand/screens/`); the Dependabot entry for `/website`; the website lockfile in the license check and inventory; the two GSAP exceptions |
+| New repository | `main` at `8c7fe0d`, https://github.com/RChefo/ExploitX-Web |
+| CI | Run 43431335151, green: install, lint, type check, tests, build, SEO output check, `npm audit --omit=dev` |
+| Clean checkout | A fresh clone from GitHub with no `node_modules` above it: `npm ci`, lint, type check, 23 tests, build, canonical URLs, robots and sitemap, runtime audit 0 |
+| Main repository after | Type check, 319 tests, frontend build, license and link checks pass without `website/`; its CI is in section H |
+| Remaining hosting and DNS | Choose a host; build with `VITE_GITHUB_REPOSITORY=RChefo/cyber-hub`; serve the four routes and send `frame-ancestors` as a header; point exploitx.net at it; HTTPS. None of it was done |
+| Risks | The website copies brand files and the app's package patterns (documented in its docs/BRAND.md; a test catches pattern drift once the copy is updated); no formatter configured (ESLint only); the repository is private, so its Actions use the account's minutes; React Bits `OrbitImages` and the unlicensed Ink Orbit component moved with the site and still need a decision |
+
+### I. Remaining work
+
+| # | Item | Owner |
+|---|---|---|
+| 1 | **The package identity:** keep "Cyber Hub" internally, or move to "ExploitX" before the first public release with the migration in NAME_MIGRATION.md (MSI upgrade code pinned, an NSIS pre-install hook, deb/rpm replaces, MCP client paths), tested in VMs | Owner decision |
+| 2 | **Rebuild the release:** the two drafts are Cyber Hub builds. An ExploitX release needs a new tag (for example `v0.1.0-rc.3`), updated notes (`docs/releases/0.1.0.md`) and an authorized release run | Owner |
+| 3 | **Name clearance:** a trademark attorney's review (the Chennai club's prior use, the EXPLOIT marks, the exploitx.io shop); confirm and lock exploitx.net; defensive domains and handles | Owner |
+| 4 | **The website live:** hosting, DNS, HTTPS, the production build variables, the social preview uploaded to GitHub | Owner |
+| 5 | **Windows VM checks:** install, upgrade from RC2, uninstall, data kept, Start menu and taskbar icons; GNOME and KDE menu entries | Next candidate |
+| 6 | **License decision;** React Bits (app: `CountUp`, `BranchedMenu`; website: `OrbitImages`); Ink Orbit (website); AppImage LGPL/GPL; installer license texts | Owner (Mission 12, items 103–107) |
+| 7 | **Dependabot pull requests #1–#8;** the GitHub Apps; Authenticode; physical HiDPI; a stable release | Owner (unchanged) |
+
+### J. Final classification
+
+**BRAND IDENTITY PARTIALLY COMPLETE.**
+
+* **Complete:**
+  * an original, editable logo system, not a placeholder;
+  * icons, favicons, tokens, typography, iconography and illustration rules;
+  * the brand documentation and the social set;
+  * the rebranded app interface, Linux entry and website, verified on real screens;
+  * the website in its own repository, building independently.
+* **Not complete:**
+  * on Windows, the installer, Start menu and *Apps & features* still show "Cyber Hub". That follows the brief's rule against changing package identities for branding, and needs the owner's decision.
+  * The two existing release candidates are Cyber Hub builds.
+  * The name has serious prior uses in cybersecurity that need legal review.
+* **Nothing was published, deployed or bought.** No visibility, repository name, history or tag changed, and `RELEASE_PUBLISHING` is unset.
