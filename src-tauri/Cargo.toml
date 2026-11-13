@@ -77,7 +77,7 @@ rusqlite = { version = "0.41.1", features = ["bundled"] }
 semver = "1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-sha1 = "0.10.7"
+sha1 = "0.11.0"
 sha2 = "0.10.9"
 sysinfo = "0.36.1"
 tauri = { version = "2", features = [] }
