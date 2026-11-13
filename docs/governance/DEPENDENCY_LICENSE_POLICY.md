@@ -1,6 +1,6 @@
 # Dependency license policy
 
-**Since Mission 14 (2026-11-13).** This policy decides which third-party licenses ExploitX may depend on, and what happens when a new one appears. `node scripts/licenses.mjs check` enforces it in CI ("Repository checks"), on every pull request and push. **This is an engineering policy, not legal advice.** ExploitX's own license is not selected yet ([LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)); the policy keeps every candidate there possible.
+**Since Mission 14 (2026-11-13).** This policy decides which third-party licenses ExploitX may depend on, and what happens when a new one appears. `node scripts/licenses.mjs check` enforces it in CI ("Repository checks"), on every pull request and push. **This is an engineering policy, not legal advice.** ExploitX's own license is **Apache-2.0** (Mission 15; [LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)); everything allowed here is compatible with distributing ExploitX under it.
 
 The policy itself is [`scripts/license-policy.json`](../../scripts/license-policy.json). Copied code and bundled data are listed in [`scripts/license-assets.json`](../../scripts/license-assets.json).
 
@@ -73,4 +73,4 @@ Copying code or data into the repository: add an entry to `scripts/license-asset
 * Licenses come from package metadata. A package whose metadata is wrong would pass; the audits in [THIRD_PARTY_LICENSE_AUDIT.md](THIRD_PARTY_LICENSE_AUDIT.md) check the important ones by hand.
 * The license texts in the notices file are the files each package publishes. Nine packages publish none (alloc-stdlib, dlopen2, libappindicator-sys, pratt, selectors, webview2-com, webview2-com-sys, yaml-rust2 and the npm package client-only); for them the notices use the standard text of their declared license (SPDX license list 3.26.0, `scripts/license-texts/`), with the authors the package names, and say so.
 * Native libraries are outside this check: the Windows and deb/rpm packages bundle none, and the AppImage's libraries are handled by `scripts/appimage-licenses.sh` ([DISTRIBUTION_LICENSE_COMPLIANCE.md](DISTRIBUTION_LICENSE_COMPLIANCE.md)).
-* `LicenseRef-ExploitX` in `license-assets.json` marks the project's own files. It stands for whichever license the owner selects; no license has been selected or applied.
+* The project's own files are under **Apache-2.0** (Mission 15): `license-assets.json` marks the project's assets with it, and every project source file declares `SPDX-License-Identifier: Apache-2.0`. Copied code and data declare their own license, which `scripts/licenses.mjs check` compares with their entry. Apache-2.0 is never applied to third-party code or data.

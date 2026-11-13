@@ -26,7 +26,7 @@ It is for **penetration testers, security analysts, threat-intelligence and OSIN
 * **Pre-release, under active development** for **Windows 10/11 x64** and **Linux x64**. macOS is not supported.
 * **No public release and no downloads yet.** Release candidates of 0.1.0 exist only as private drafts for testing. Build from source to try ExploitX.
 * **Not code-signed yet.** The Windows installers built so far are not Authenticode-signed, so Windows SmartScreen warns about them.
-* **Publicly developed; the project license is pending the owner's selection** (see [License](#license)). ExploitX is not yet open-source licensed.
+* **Open source under the [Apache License 2.0](LICENSE)** (see [License](#license)); contributions are signed off under the [Developer Certificate of Origin](DCO).
 
 ## Main capabilities
 
@@ -127,12 +127,15 @@ Please **do not** open a public issue for a vulnerability. Report it privately t
 
 ## Contributing
 
-Bug reports, reproductions and documentation fixes are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md), [SUPPORT.md](SUPPORT.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Larger code contributions may wait until a license is selected.
+Contributions are welcome: bug reports, reproductions, documentation and code. See [CONTRIBUTING.md](CONTRIBUTING.md), [SUPPORT.md](SUPPORT.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Every commit is signed off under the [Developer Certificate of Origin](DCO) (`git commit -s`); there is no contributor license agreement.
 
 ## License
 
-**ExploitX is publicly developed. Its project license is pending the owner's selection.** A public repository is not open source by itself: until the owner selects a license and adds a LICENSE file, no rights to use, modify or redistribute the code are granted beyond what GitHub's Terms of Service allow for public repositories (viewing and forking on GitHub). The options are compared in [docs/governance/LICENSE_COMPARISON.md](docs/governance/LICENSE_COMPARISON.md); Apache-2.0 is recommended and awaits the owner's approval.
+ExploitX is licensed under the **[Apache License, Version 2.0](LICENSE)**. Copyright 2026 The ExploitX Authors; see [NOTICE](NOTICE).
 
-The groundwork is done (Mission 14): no third-party component with a non-open license remains, every dependency is checked against a [license policy](docs/governance/DEPENDENCY_LICENSE_POLICY.md) in CI, and every package ships the license texts of what it contains (`THIRD_PARTY_LICENSES.txt`, shown in Settings > About).
+* **What it covers:** the project's own code, documentation and assets, which say so (`SPDX-License-Identifier: Apache-2.0` at the top of each source file).
+* **What it does not cover:** the third-party code and data the project includes, which keep their own licenses (MIT components under `src/components/vendor/`, the OWASP, MITRE ATT&CK and FIRST data, and the Rust crates and npm packages). Neither does it grant rights to the ExploitX name and logos, beyond Apache-2.0 section 6.
+* **Contributions** are accepted under the same license, each commit signed off under the [Developer Certificate of Origin](DCO) ([CONTRIBUTING.md](CONTRIBUTING.md)).
+* **What the packages carry:** every installed copy contains `LICENSE`, `NOTICE` and `THIRD_PARTY_LICENSES.txt`, the license texts of every bundled component; Settings > About shows them. CI checks every dependency against a [license policy](docs/governance/DEPENDENCY_LICENSE_POLICY.md).
 
 Third-party code, data, fonts and icons keep their own licenses: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), [docs/governance/THIRD_PARTY_LICENSE_AUDIT.md](docs/governance/THIRD_PARTY_LICENSE_AUDIT.md) and, for the Linux packages' system libraries, [docs/governance/DISTRIBUTION_LICENSE_COMPLIANCE.md](docs/governance/DISTRIBUTION_LICENSE_COMPLIANCE.md).

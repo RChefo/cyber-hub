@@ -1,6 +1,6 @@
 # Contribution terms: DCO or CLA
 
-**Status (Mission 14, 2026-11-13): proposed, not enforced.** ExploitX does not yet accept outside pull requests for merging (CONTRIBUTING.md), and no project license is selected ([LICENSE_COMPARISON.md](LICENSE_COMPARISON.md)). This document compares the two usual ways of recording the terms of a contribution and proposes one for the owner to approve together with the license. **It is not legal advice.**
+**Status (Mission 15, 2026-11-13): adopted and enforced.** The owner approved the **Developer Certificate of Origin** for contributions, together with the Apache License 2.0. The certificate is in [`DCO`](../../DCO), the sign-off rules for contributors in [CONTRIBUTING.md](../../CONTRIBUTING.md#sign-off-developer-certificate-of-origin), and CI checks every pull request. There is no contributor license agreement. This document keeps the comparison that led to the choice. **It is not legal advice.**
 
 ## The two options
 
@@ -26,82 +26,37 @@ For ExploitX, with one owner and a permissive license recommended:
 
 The DCO starts when it is adopted: existing commits are not rewritten, and the owner's own commits before adoption need no sign-off.
 
-## Sign-off guide (for CONTRIBUTING.md once adopted)
+## Sign-off guide
 
-The DCO 1.1 text, which a sign-off certifies:
+The guide for contributors is in [CONTRIBUTING.md](../../CONTRIBUTING.md#sign-off-developer-certificate-of-origin). It covers `git commit -s`, fixing a missing sign-off with `git commit --amend -s` or `git rebase --signoff`, editors and web commits, and the noreply address for privacy ([EMAIL_PRIVACY.md](EMAIL_PRIVACY.md)). The certificate's text, DCO 1.1 unmodified (checked identical to <https://developercertificate.org/> on 2026-11-13), is the [`DCO`](../../DCO) file at the repository root.
 
-```
-Developer Certificate of Origin
-Version 1.1
+A sign-off certifies the origin of a contribution. It does not transfer copyright: each contributor keeps it and licenses the contribution under Apache-2.0, as section 5 of that license states.
 
-Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
+## Enforcement
 
-Everyone is permitted to copy and distribute verbatim copies of this
-license document, but changing it is not allowed.
+**RChefo/ExploitX (public).**
+* **The check:** CI's job *Developer Certificate of Origin* runs on every pull request, using `scripts/check-dco.mjs` and its tests in `scripts/check-dco.test.mjs`.
+  * It reads the commits between the pull request's base and head with full history.
+  * It skips merge commits.
+  * It requires on every other commit a `Signed-off-by:` trailer whose email is the commit author's, compared without case.
+* **Automated accounts:**
+  * Dependabot's commits carry `Signed-off-by: dependabot[bot] <support@github.com>`; they pass only in pull requests Dependabot opened itself.
+  * A contributor cannot get a commit through by naming its author "dependabot[bot]".
+* **Safety:**
+  * no secret and no third-party action or app;
+  * the pull request's data reaches the script only through `env`;
+  * the job's token is the workflow's read-only one.
+* **Required:** the job is a required check of the default branch's ruleset, so a pull request with an unsigned commit cannot be merged. The owner's direct pushes to the default branch are not pull requests and are not checked.
+* **Tested:**
+  * unit tests: signed, unsigned, someone else's sign-off, merges, Dependabot and a commit made to look like Dependabot's;
+  * a real repository: `git commit -s`, a merge, an unsigned commit, and its fix with `git rebase --signoff`;
+  * pull requests on GitHub: one signed off (passes), one not (fails), and Dependabot's pull requests (pass). The results are in MISSION_REPORT.md, "Mission 15".
 
+**RChefo/ExploitX-Web (private).**
+* The same script and job run in its CI.
+* A private repository on GitHub's Free plan cannot enforce rulesets or required checks, so there the check reports but does not block a merge; the maintainers review it.
+* The website's code is licensed under Apache-2.0 too, but its repository is private: it is not publicly available source. The license governs what the people who receive the code may do.
 
-Developer's Certificate of Origin 1.1
+## Decision
 
-By making a contribution to this project, I certify that:
-
-(a) The contribution was created in whole or in part by me and I
-    have the right to submit it under the open source license
-    indicated in the file; or
-
-(b) The contribution is based upon previous work that, to the best
-    of my knowledge, is covered under an appropriate open source
-    license and I have the right under that license to submit that
-    work with modifications, whether created in whole or in part
-    by me, under the same open source license (unless I am
-    permitted to submit under a different license), as indicated
-    in the file; or
-
-(c) The contribution was provided directly to me by some other
-    person who certified (a), (b) or (c) and I have not modified
-    it.
-
-(d) I understand and agree that this project and the contribution
-    are public and that a record of the contribution (including all
-    personal information I submit with it, including my sign-off) is
-    maintained indefinitely and may be redistributed consistent with
-    this project or the open source license(s) involved.
-```
-
-How to sign off:
-* **Each commit:** `git commit -s` adds `Signed-off-by: Your Name <your@email>` from `user.name` and `user.email`.
-* **Forgot on the last commit:** `git commit --amend --no-edit -s` (on your own branch, before review).
-* **Several commits on your branch:** `git rebase --signoff <base branch>`, then push your branch again.
-* **Editors:** VS Code has "Git: Always Sign Off" (`git.alwaysSignOff`); most Git clients have a sign-off option.
-* **Commits made on github.com:** the repository can require a sign-off on web commits (Settings > General, "Require contributors to sign off on web-based commits").
-* **Privacy:** the sign-off records the email of the commit. To keep a personal address out of the public history, use your GitHub noreply address (`<id>+<login>@users.noreply.github.com`, shown at <https://github.com/settings/emails>) for `user.email` ([EMAIL_PRIVACY.md](EMAIL_PRIVACY.md)).
-* **Use your real name or a name you are known by consistently;** anonymous contributions cannot be certified.
-
-## Proposed enforcement (not enabled)
-
-When the owner adopts the DCO, add this step to the "Repository checks" job in `.github/workflows/ci.yml`, after the pull request title check. It needs the full history of the pull request (`fetch-depth: 0` on that job's checkout), reads commits as data, and uses no third-party app or secret:
-
-```yaml
-      - name: Developer Certificate of Origin (every commit signed off by its author)
-        if: github.event_name == 'pull_request'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          bad=0
-          for c in $(git rev-list --no-merges "$BASE..$HEAD"); do
-            author=$(git log -1 --format='%an <%ae>' "$c")
-            if ! git log -1 --format='%(trailers:key=Signed-off-by,valueonly)' "$c" | grep -qxF "$author"; then
-              echo "::error::Commit $c has no 'Signed-off-by: $author' (CONTRIBUTING.md, \"Sign-off\")"; bad=1
-            fi
-          done
-          exit "$bad"
-```
-
-The alternative, the "DCO" GitHub App, needs read access to pull requests and write access to checks; the workflow step above needs neither.
-
-Then: enable "Require contributors to sign off on web-based commits", add the sign-off section to CONTRIBUTING.md, and pin the step in `src-tauri/src/ci_tests.rs`.
-
-## Decision requested
-
-Together with the license: **"Contributions under the DCO"** (recommended), or **"a CLA"** (then name the purpose, for example dual licensing, and the agreement is drafted for legal review).
+Approved by the owner for Mission 15 (2026-11-13): **Apache-2.0 for both repositories, contributions under the DCO.** No CLA was introduced.

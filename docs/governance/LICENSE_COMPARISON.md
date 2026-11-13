@@ -1,17 +1,8 @@
 # License comparison for ExploitX
 
-**Status (2026-11-13, re-evaluated in Mission 14): no license has been selected.** ExploitX is publicly developed; its project license is pending the owner's selection. The repository is public, but it has no LICENSE file. Being public on GitHub does not make it open source. Until the owner selects and applies a license:
-* no one is granted rights to use, modify or redistribute the code beyond what GitHub's Terms of Service allow for public repositories (viewing and forking on GitHub);
-* ExploitX must not be described as open-source licensed.
+**Status (Mission 15, 2026-11-13): decided and applied.** The owner approved the **Apache License 2.0** for both repositories (RChefo/ExploitX and RChefo/ExploitX-Web), with contributions under the Developer Certificate of Origin. Mission 15 applied it: `LICENSE` (the official text), `NOTICE`, the license fields of the manifests, an SPDX line in every source file, the README and CONTRIBUTING ("Applying the license", below). This document keeps the comparison and the reasons for the choice. **It is not legal advice.**
 
-**Mission 14 changed the inputs to this decision** (details in "What the dependency audit means for the choice"):
-* the React Bits components (MIT + Commons Clause) and the unlicensed Ink Orbit component are **gone**, replaced by original code in both repositories;
-* every package ships the third-party license texts, and the AppImage ships its libraries' copyright files, with their source published next to it on each release;
-* a dependency license policy now fails CI on any unknown or prohibited license ([DEPENDENCY_LICENSE_POLICY.md](DEPENDENCY_LICENSE_POLICY.md)).
-
-Nothing third-party now stands in the way of any of the four candidates for the app repository. **The recommendation is unchanged: Apache-2.0**; the owner's approval of one exact license is the remaining step ("Decision requested", at the end).
-
-This document prepares the owner's decision. **It is not legal advice.** The summaries below describe the licenses' published texts and widely documented positions (the Open Source Initiative, the Free Software Foundation, the Apache Software Foundation, choosealicense.com). Before applying a license, especially if commercial plans depend on it, consider review by a qualified lawyer.
+The Apache License covers ExploitX's own code, documentation and assets. Third-party code and data keep their own licenses, and the AppImage's system libraries keep theirs, with their obligations ([DISTRIBUTION_LICENSE_COMPLIANCE.md](DISTRIBUTION_LICENSE_COMPLIANCE.md)).
 
 ## What ExploitX is, for licensing purposes
 
@@ -132,30 +123,21 @@ The details are in [THIRD_PARTY_LICENSE_AUDIT.md](THIRD_PARTY_LICENSE_AUDIT.md).
 * **AGPL-3.0 is not recommended:** its network clause does not fit a desktop app, and it reduces adoption.
 * **"MIT OR Apache-2.0"** is a reasonable alternative if compatibility with GPL-2.0 projects matters.
 
-## Applying the license, once selected
+## Applying the license (done in Mission 15)
 
-1. The owner selects the license and how contributions are accepted (DCO or CLA).
-2. ~~Resolve the blockers above~~: done in Mission 14 (React Bits and Ink Orbit replaced).
-3. Add `LICENSE` at the repository root with the official text. A copy of the official Apache-2.0 text, SHA-256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`, was downloaded from apache.org and is kept outside the repository, uncommitted, for review.
-4. For Apache-2.0, add a `NOTICE` naming ExploitX and pointing to `THIRD_PARTY_NOTICES.md`, and state which files keep their own licenses: the data catalogs and any excluded components.
-5. Declare it in the metadata:
-   * `license` in `src-tauri/Cargo.toml` and `package.json` (and in the website repository's `package.json`, RChefo/ExploitX-Web);
-   * Tauri's `bundle.license` and `bundle.licenseFile`, so the deb and rpm metadata and the installers show it.
-6. Update the README's "License" section and CONTRIBUTING.md (contributions, DCO), and remove the hold on pull requests.
-7. ~~Ship the third-party notices with the installers~~: done in Mission 14 (`THIRD_PARTY_LICENSES.txt` in every package; Settings > About shows it).
-8. Enable the DCO check proposed in [CONTRIBUTOR_TERMS.md](CONTRIBUTOR_TERMS.md), if the owner chose the DCO.
-
-Until then: no LICENSE file is committed, and the README says so.
-
-## Decision requested
-
-The owner approves **one exact license**, for example by replying with one line:
-
-| Reply | Effect |
+| Step | Done |
 |---|---|
-| **"Approve Apache-2.0 for RChefo/ExploitX and RChefo/ExploitX-Web, contributions under the DCO"** (recommended) | The steps above are applied in both repositories: the official Apache License 2.0 text as `LICENSE`, a `NOTICE`, `"license": "Apache-2.0"` in the metadata, README and CONTRIBUTING updated, DCO check enabled |
-| "Approve GPL-3.0-or-later for the app; the website separately" | As above with the GPL text; the website needs its own decision because of GSAP |
-| "Approve MIT" / "Approve MIT OR Apache-2.0" | As above with that text; no NOTICE needed for MIT |
-| No reply | Nothing changes: the repositories stay public without a license, and ExploitX is not described as open source |
+| `LICENSE` at the root: the official Apache License 2.0 text | Yes, SHA-256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`, as published at <https://www.apache.org/licenses/LICENSE-2.0.txt>. CI fails if it changes |
+| `NOTICE`: the project's copyright line, what stays under other licenses, the name and logos | Yes |
+| Metadata | Yes: `"license": "Apache-2.0"` in `package.json`; `license = "Apache-2.0"` in `src-tauri/Cargo.toml` and `src-tauri/fuzz/Cargo.toml`. Tauri takes the packages' license field (rpm `License:`) from Cargo.toml. `tauri.conf.json` has the copyright string, shown in the Windows file properties. No `licenseFile`: Apache-2.0 needs no acceptance, so the installers show no license page |
+| SPDX lines | Yes, `SPDX-License-Identifier: Apache-2.0` in every project source file (475 files). Copied code keeps its own: MIT for `src/components/vendor/`, BSD-2-Clause for `src-tauri/src/cvss/v4_lookup.rs`. CI fails on a missing or wrong line (`scripts/licenses.mjs check`) |
+| Data files | Unchanged: OWASP CC BY-SA 4.0, MITRE ATT&CK terms, FIRST BSD-2-Clause, listed in `scripts/license-assets.json` and NOTICE |
+| The packages | `LICENSE` and `NOTICE` installed with every package, next to `THIRD_PARTY_LICENSES.txt` (also in `/usr/share/doc/cyber-hub/` and `/usr/share/licenses/cyber-hub/`); Settings > About names the license |
+| README, CONTRIBUTING, DCO check | Yes ([CONTRIBUTOR_TERMS.md](CONTRIBUTOR_TERMS.md)) |
+| The website repository | The same license, `LICENSE`, `NOTICE`, metadata and SPDX lines; GSAP stays a third-party exception under its own license |
 
-Until that approval: no `LICENSE` file, no `license` field in `package.json`, `Cargo.toml` or `tauri.conf.json`, and no claim that ExploitX is open-source licensed.
+The project's own assets (icons, the brand folder, the favicon) are under Apache-2.0 too (`scripts/license-assets.json`). The ExploitX name and logos are not licensed for other uses beyond what Apache-2.0 section 6 allows. Nothing here is a trademark registration or clearance.
+
+## Decision
+
+Approved by the owner for Mission 15 (2026-11-13): **Apache-2.0 for RChefo/ExploitX and RChefo/ExploitX-Web, contributions under the DCO.**

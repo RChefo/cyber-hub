@@ -29,8 +29,8 @@ ExploitX's documents fall into three groups. Start with the one that fits what y
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Backend and frontend structure, the execution engine, UI libraries |
 | [DATA_MODEL.md](DATA_MODEL.md) | The database schema, migration by migration |
 | [PROVISIONING.md](PROVISIONING.md) | Storing provider credentials for development with the `cyberhub-keys` tool |
-| [governance/LICENSE_COMPARISON.md](governance/LICENSE_COMPARISON.md) | License options and the recommendation (the project license is pending the owner's selection) |
-| [governance/CONTRIBUTOR_TERMS.md](governance/CONTRIBUTOR_TERMS.md) | DCO or CLA: how contributions would be accepted (proposed, not enforced) |
+| [governance/LICENSE_COMPARISON.md](governance/LICENSE_COMPARISON.md) | Why Apache-2.0: the comparison, and how the license was applied (Mission 15) |
+| [governance/CONTRIBUTOR_TERMS.md](governance/CONTRIBUTOR_TERMS.md) | Contributions under the Developer Certificate of Origin: why, and how CI enforces it |
 | [governance/DEPENDENCY_LICENSE_POLICY.md](governance/DEPENDENCY_LICENSE_POLICY.md) | Which dependency licenses are allowed, need a review or are prohibited, and how CI enforces it |
 | [governance/DISTRIBUTION_LICENSE_COMPLIANCE.md](governance/DISTRIBUTION_LICENSE_COMPLIANCE.md) | What each package contains and the license obligations of distributing it, AppImage libraries included |
 | [governance/EMAIL_PRIVACY.md](governance/EMAIL_PRIVACY.md) | Email addresses in commits: findings and the maintainer's steps |
