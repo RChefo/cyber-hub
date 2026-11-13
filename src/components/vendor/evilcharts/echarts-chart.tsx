@@ -1,4 +1,5 @@
 // Vendored from EvilCharts (https://evilcharts.com) — registry item @evilcharts/echarts-chart (src/registry/ui/echarts-chart.tsx). Unmodified.
+// License: MIT (https://github.com/legions-developer/evilcharts); see THIRD_PARTY_NOTICES.md.
 // Shared renderer registration and theme-aware color plumbing for Cyber Hub ECharts modules.
 import { CanvasRenderer, SVGRenderer } from "echarts/renderers";
 import type { ComponentType, ReactNode } from "react";

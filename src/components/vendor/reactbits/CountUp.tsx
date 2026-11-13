@@ -1,4 +1,5 @@
 // Vendored from ReactBits (https://reactbits.dev, MIT + Commons Clause) — src/ts-tailwind/TextAnimations/CountUp/CountUp.tsx. Unmodified.
+// Not covered by Cyber Hub's own license; see THIRD_PARTY_NOTICES.md.
 'use client';
 
 import { animate, cubicBezier, useInView } from 'motion/react';

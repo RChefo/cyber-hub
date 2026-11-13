@@ -3,6 +3,7 @@
 // Component created by Dominik Koch
 // https://x.com/dominikkoch
 // From React Bits (https://reactbits.dev), JavaScript + CSS variant, unmodified.
+// License: MIT + Commons Clause (React Bits). Not covered by Cyber Hub's own license; see THIRD_PARTY_NOTICES.md.
 
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './OrbitImages.css';

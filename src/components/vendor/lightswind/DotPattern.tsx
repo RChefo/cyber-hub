@@ -1,4 +1,5 @@
-// Adapted from Lightswind (https://lightswind.com/components) — registry item `dot-pattern`.
+// Adapted from Lightswind (https://lightswind.com/components) — registry item `dot-pattern`. License: MIT (npm package
+// lightswind); see THIRD_PARTY_NOTICES.md.
 // Changes: typed props (no `any` index signature), `cn` import path, and the motion class
 // removed so the texture is static (restrained motion per the Cyber Hub design brief).
 import { useId, type SVGProps } from "react";

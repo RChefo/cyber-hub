@@ -1,6 +1,8 @@
 // InkOrbitFeatures: a bento of three live diagrams (flow through a hub into a stack of reports,
 // a hub that reaches one tool at a time, a chart you can scrub). Based on the features section of
-// ink-orbit-saas-template.
+// ink-orbit-saas-template (Ink Orbit by Kedhareswer Naidu on 21st.dev, source repository
+// https://github.com/Kedhareswer/21stdev-my-components). No license was found for it (Mission 12):
+// see docs/governance/THIRD_PARTY_LICENSE_AUDIT.md before reusing or redistributing this file.
 //
 // Adapted for the Cyber Hub website, which may only show what the product really does:
 // - the flow diagram's left cluster shows data sources (props) instead of drawn portraits of people;

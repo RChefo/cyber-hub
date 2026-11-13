@@ -1,4 +1,5 @@
 // BranchedMenu from React Bits (https://reactbits.dev), JavaScript + CSS variant, typed for Cyber Hub.
+// License: MIT + Commons Clause (React Bits). Not covered by Cyber Hub's own license; see THIRD_PARTY_NOTICES.md.
 // Changes from the original:
 // - icons are React elements or icon components (Cyber Hub uses lucide-react), so the
 //   @hugeicons packages and the demo's default items are not needed;

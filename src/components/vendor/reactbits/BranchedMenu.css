@@ -1,3 +1,5 @@
+/* BranchedMenu styles from React Bits (https://reactbits.dev), JavaScript + CSS variant.
+   License: MIT + Commons Clause (React Bits). Not covered by Cyber Hub's own license; see THIRD_PARTY_NOTICES.md. */
 .branched-menu {
   --bm-w: 240px;
   --bm-ink: #f5f5f5;
