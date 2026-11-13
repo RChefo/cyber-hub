@@ -1,33 +1,72 @@
 # Cyber Hub
 
-A local-first, cross-platform cybersecurity workstation built with **Tauri 2 (Rust)** and **React 19 + TypeScript**. It brings a curated tools library with real installation detection, a scoped execution engine, command builders, Google Dorks Studio, payloads and wordlists, security utilities, a projects workspace with findings, and CVE intelligence together in one desktop app.
+**Cyber Hub is a cross-platform cybersecurity desktop workspace for security research, assessment, investigation and workflow management.** It is local-first: one app on your own Windows or Linux computer, with no account and no telemetry, built with **Tauri 2 (Rust)** and **React 19 + TypeScript**.
 
-No account and no telemetry. The only background request is the optional update check, which fetches the signed release manifest and never downloads or installs anything by itself. Everything is stored in a local SQLite database and the OS credential store.
+It is for **penetration testers, security analysts, threat-intelligence and OSINT researchers, and AppSec engineers** who want their tools, targets, findings and evidence in one place, with a scoped execution engine that asks before it runs anything.
 
-**Status:** under active development for **Windows 10/11 x64** and **Linux x64**. Cyber Hub is not released: no installers, packages or downloads are published. macOS is not supported.
+![The Cyber Hub dashboard](website/src/assets/screens/dashboard.webp)
 
-## Quick start
+| | |
+|---|---|
+| ![An OSINT investigation graph](website/src/assets/screens/osint-graph.webp) | ![The Command Center with a generated Nmap command](website/src/assets/screens/command-center.webp) |
 
-Prerequisites: Node.js 20.19+ or 22.12+ (required by Vite 8; tested on 22 and 24), Rust 1.90+ (tested on 1.90, 1.94 and 1.99), and the [Tauri 2 system prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS (WebView2 on Windows, WebKitGTK 4.1 + `libdbus-1-dev` on Linux).
+*Screenshots of the app with demo data.*
+
+## Status
+
+* **Pre-release, under active development** for **Windows 10/11 x64** and **Linux x64**. macOS is not supported.
+* **No public release and no downloads yet.** Release candidates of 0.1.0 exist only as private drafts for testing. Build from source to try Cyber Hub.
+* **Not code-signed yet.** The Windows installers built so far are not Authenticode-signed, so Windows SmartScreen warns about them.
+* **License: none selected yet** (see [License](#license)).
+
+## Main capabilities
+
+* **Projects:** scope (domains, CIDRs, URL paths, exclusions), findings with CVSS 4.0/3.1, evidence, scan imports (Nmap, Nuclei, Nessus, OpenVAS, Burp, ZAP, SARIF, Prowler, CSV), OWASP WSTG and ASVS 5.0 assessments, API security, SBOM and dependency analysis, ATT&CK mapping, reports.
+* **A scoped execution engine:** a catalog of 70 tools with real installation detection, command builders, and runs that need a native OS confirmation and stay inside the project's authorized scope.
+* **Threat intelligence and vulnerability intelligence:** VirusTotal, AbuseIPDB, AlienVault OTX, abuse.ch, Shodan, TAXII 2.1 feeds, NVD CVE search, STIX 2.1 export.
+* **OSINT workspace:** investigations with a link-analysis graph, public-source collection with review before import, versions and exports.
+* **Detection engineering:** Sigma and YARA rules with tests, explanations and ATT&CK coverage.
+* **Security utilities:** offline analysers for files, logs, packet captures, containers, cloud and IaC, plus encoders, a JWT inspector, an HTTP request builder and a TLS analyzer.
+* **MCP:** Claude Code, Claude Desktop and other MCP clients can use Cyber Hub's functions, with approvals inside the app.
+
+The full list is below, under [Modules](#modules).
+
+## Installation
+
+There are **no public packages yet**. When releases are published, they will appear on the repository's [Releases](https://github.com/RChefo/cyber-hub/releases) page with SHA-256 checksums and update signatures.
+
+Until then, build and run Cyber Hub from source.
+
+## Building from source
+
+Prerequisites:
+* **Node.js** 20.19+ or 22.12+ (required by Vite 8);
+* **Rust** 1.90+;
+* the [Tauri 2 system prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS: WebView2 on Windows; on Linux `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-1-dev`.
+
+Details: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
+git clone https://github.com/RChefo/cyber-hub.git
+cd cyber-hub
 npm ci                 # also runs scripts/patch-deps.mjs (freezePrototype compatibility, self-tested)
 npm run tauri dev      # run the desktop app with hot reload
 ```
 
-Installers and packages (`npm run tauri build`) are deferred until development is complete; none are built or published. When that step comes, `tauri build` first runs `scripts/build-sidecar.mjs`, which builds the MCP server `cyberhub-mcp` for the target platform and stages it as a Tauri sidecar, so the installers place it next to the app.
+* **Your data.** A build from source uses the same data folder as an installed Cyber Hub. To keep a development build away from your own data, set `CYBERHUB_DATA_DIR` to an empty folder: debug builds honour it.
+* **A local installer:** `npx tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'`. It needs no signing key, and it is unsigned: for your own testing only.
+* `npm run dev` alone starts a browser preview of the interface, without the backend.
 
-Other scripts:
+## Testing
 
-| Command | What it does |
-|---|---|
-| `npm run typecheck` | TypeScript check of the frontend |
-| `npm test` | Frontend unit tests (Vitest) |
-| `cd src-tauri && cargo test` | Backend unit tests: scope engine, target resolution and target files, redaction, process-tree termination, migrations, catalog, NVD parsing, PATH lookup |
-| `node scripts/gen-tools-catalog.mjs` | Regenerate `src-tauri/catalog/tools.json` from the catalog source |
-| `node scripts/build-sidecar.mjs [--target <triple>] [--debug]` | Build and stage the `cyberhub-mcp` sidecar (also run automatically by `tauri build`) |
+```bash
+npx tsc --noEmit -p tsconfig.json                      # TypeScript
+npx vitest run                                         # frontend and script tests
+cd src-tauri && cargo test --locked                    # backend, including upgrades from every database schema
+cargo clippy --locked --all-targets -- -D warnings     # lints (from src-tauri/)
+```
 
-`npm run dev` alone starts a browser preview of the UI. It has no backend, so data-driven views show a "desktop runtime not available" state instead of fake data.
+CI runs these on Windows, Ubuntu 24.04 and Debian 12, plus dependency audits, secret scanning and license and link checks. The automated tests need no network service and no API key. See [CONTRIBUTING.md](CONTRIBUTING.md#checks).
 
 ## Modules
 
@@ -51,20 +90,6 @@ Other scripts:
 | MCP integration | Claude Code, Claude Desktop and other MCP clients can use Cyber Hub's real functionality through `cyberhub-mcp`: 62 tools, 7 resources and 6 prompts, including record search, related records, relationships, the ATT&CK matrix, detection rules and hits, and ASVS assessments; correlation and relationship proposals from a client stay suggestions until you accept them. Sensitive operations (runs, uploads, exports, local writes and, by default, external lookups) wait for your approval inside Cyber Hub, and every call is recorded. The MCP page in the sidebar has the status, Approval Center, clients, tool catalog, permissions, audit log and client setup. See [docs/MCP.md](docs/MCP.md). |
 | Global search | `Ctrl/⌘ + K` across tools, commands, resources, projects, dorks, payloads, wordlists, utilities and pages, and the records of open projects (findings, assets, vulnerabilities, evidence, OSINT entities, tool runs, API endpoints, SBOM components), each opening in its project. |
 
-## Documentation
-
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): layers, data model, execution engine, frontend structure, UI library usage
-- [docs/SECURITY.md](docs/SECURITY.md): threat model, scope enforcement semantics, provider and upload safeguards, privileges, known limitations
-- [docs/OSINT.md](docs/OSINT.md): the OSINT workspace: concepts, collection sources, review, graphs, versions, import/export, reports, limits
-- [docs/PROVIDERS.md](docs/PROVIDERS.md): threat-intelligence providers, their requirements and limits, and deferred candidates
-- [docs/PROVISIONING.md](docs/PROVISIONING.md): how the application owner provisions and checks service credentials
-- [docs/MCP.md](docs/MCP.md): MCP architecture, tools, resources, prompts, approvals, client setup and troubleshooting
-- [docs/PLATFORMS.md](docs/PLATFORMS.md): per-OS dependencies, validation status, platform-specific behavior
-- [docs/WEBSITE.md](docs/WEBSITE.md): the public website (landing and download pages): architecture, release-data integration, configuration, deployment
-- [docs/UPDATER.md](docs/UPDATER.md): signed automatic updates: formats, signing keys and their protection, the release workflow, manifest, staging tests, recovery and key rotation
-- [docs/UPGRADE.md](docs/UPGRADE.md): database upgrades (automatic backup, tested compatibility), manual backups, restoring a backup in the app, rollback and its limits
-- [docs/SIGNING.md](docs/SIGNING.md): Windows Authenticode signing: certificate routes, configuration, secrets, verification, SmartScreen
-
 ## Security at a glance
 
 * Every tool run and installation needs a **native OS confirmation** that page script cannot click.
@@ -78,14 +103,25 @@ Other scripts:
 
 Details and accepted risks: [docs/SECURITY.md](docs/SECURITY.md).
 
-## Implementation status
+## Documentation
 
-Development is ongoing. Current verification (details in [docs/PLATFORMS.md](docs/PLATFORMS.md)):
+[docs/README.md](docs/README.md) lists every document, grouped for users, for contributors and for internal release engineering. Most used:
 
-| Platform | Status |
-|---|---|
-| Windows 10/11 x64 | Verified in the running app on Windows 11: every module, scoped runs incl. target files, native confirmations, cancellation, the frameless window and its controls, VirusTotal file uploads and all threat-intelligence providers against a local mock API, MCP with Claude Code and a scripted client, single-instance behaviour, persistence across restarts. OSINT Workspace: full reliability pass in the GUI (investigations, entities, live public sources, review and import, graph interactions, save and restore across restarts, Save As, Graph Manager, versions, save conflicts, every export and import format through the native dialogs, performance up to 2,000 entities, MCP tools through Claude Code). Durability: crashes during saves and collections, restoration after restart, save conflicts and live collection refresh verified (see docs/PLATFORMS.md). Automated tests: 224 frontend and release-script, 351 backend, 4 provisioning-tool (Windows and Linux each run one platform-only backend test, so both count 351). Final QA audit (November 2026): see docs/EXPANSION_PLAN.md, section 15. Development mission after it (scan import including CSV, finding library, rescan verification, CVSS checked against FIRST's calculators, IOC/STIX, WSTG checklist, exports, backup and restore, MCP tools for these, path-level scope, evidence verification, cross-module reference fixes): see docs/autonomous/ and docs/research/. Updates: an NSIS installation of a test build updated through a local staging feed with signature, downgrade, TLS, cancellation and data-preservation checks (Linux formats and MSI updates untested, see docs/UPDATER.md). |
-| Linux x64 | The real app tested on a virtual X display (Xvfb + Openbox) in Debian 12 and Ubuntu 24.04 containers, driven through Tauri's WebDriver support: every module, window behaviour, native GTK dialogs and file choosers, Secret Service provisioning (Debian), Nmap runs and cancellation, VirusTotal and threat intelligence against mocks, findings and reports, MCP, restart persistence; plus builds and all automated tests. Not tested on a physical GNOME/KDE desktop or under Wayland. The features added after the final QA audit were checked in the Linux GUI on Ubuntu 24.04.5 and Debian 12 (offline containers, 62 checks each): path-level scope (the local target's log shows that refused URLs were never requested); CSV import and CVE tracking through the GTK dialogs; findings, vulnerabilities and evidence verification with checked exports; workflows, OSINT, MCP through the real sidecar, and the settings; backup and restore with the automatic restart; and recovery after SIGKILL. The automated suites passed too: type check, all frontend test files, 351 backend tests and clippy. |
-| macOS | Not supported. |
+* [docs/SECURITY.md](docs/SECURITY.md): the security model;
+* [docs/PLATFORMS.md](docs/PLATFORMS.md): platforms, dependencies and validation status;
+* [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/governance/DEVELOPMENT_GUIDE.md](docs/governance/DEVELOPMENT_GUIDE.md): how it is built;
+* [docs/MCP.md](docs/MCP.md), [docs/OSINT.md](docs/OSINT.md), [docs/PROVIDERS.md](docs/PROVIDERS.md), [docs/UPGRADE.md](docs/UPGRADE.md), [docs/UPDATER.md](docs/UPDATER.md).
 
-No installers or packages exist for the current code.
+## Reporting security issues
+
+Please **do not** open a public issue for a vulnerability. Report it privately through [GitHub's vulnerability reporting](https://github.com/RChefo/cyber-hub/security/advisories/new). Details are in [SECURITY.md](SECURITY.md).
+
+## Contributing
+
+Bug reports, reproductions and documentation fixes are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md), [SUPPORT.md](SUPPORT.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Larger code contributions may wait until a license is selected.
+
+## License
+
+**No license has been selected yet.** The repository is publicly visible, but until the owner selects a license and adds a LICENSE file, no rights to use, modify or redistribute the code are granted beyond what GitHub's Terms of Service allow for public repositories (viewing and forking on GitHub). The options under consideration are compared in [docs/governance/LICENSE_COMPARISON.md](docs/governance/LICENSE_COMPARISON.md).
+
+Third-party code, data, fonts and icons keep their own licenses: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/governance/THIRD_PARTY_LICENSE_AUDIT.md](docs/governance/THIRD_PARTY_LICENSE_AUDIT.md).
