@@ -228,7 +228,7 @@ jobs:
           # Mission 14: the AppImage bundles LGPL and GPL libraries of this system (GTK, WebKitGTK and
           # their dependencies). Their copyright files go into the AppImage, their Debian source
           # packages next to it on the release (docs/governance/DISTRIBUTION_LICENSE_COMPLIANCE.md).
-          codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+          codename=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)
           {
             echo "deb-src http://archive.ubuntu.com/ubuntu $codename main restricted universe multiverse"
             echo "deb-src http://archive.ubuntu.com/ubuntu $codename-updates main restricted universe multiverse"

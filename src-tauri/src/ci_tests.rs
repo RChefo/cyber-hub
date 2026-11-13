@@ -412,8 +412,8 @@ fn the_release_ships_the_notices_and_the_appimage_library_sources() {
     let run = steps[collect]["run"].as_str().unwrap();
     assert!(run.contains("deb-src http://archive.ubuntu.com/ubuntu $codename-updates") && run.contains("deb-src http://security.ubuntu.com/ubuntu $codename-security"), "{run}");
     assert!(run.contains("bash scripts/appimage-licenses.sh \"$RUNNER_TEMP/appimage-licenses\"") && run.contains("--sources \"release-sources/ExploitX-AppImage-library-sources_${VERSION}.tar\"") && run.contains("--tauri-config \"$RUNNER_TEMP/appimage-files.json\""), "{run}");
-    // `. /etc/os-release` in the step's own shell would overwrite VERSION
-    assert!(run.contains("codename=$(. /etc/os-release && echo \"$VERSION_CODENAME\")"), "{run}");
+    // read without sourcing /etc/os-release, which would overwrite VERSION (shellcheck SC2031)
+    assert!(run.contains("codename=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)") && !run.contains(". /etc/os-release"), "{run}");
     let run = steps[build]["run"].as_str().unwrap();
     assert!(run.contains("if [ \"$RUNNER_OS\" = Linux ]; then config+=(--config \"$RUNNER_TEMP/appimage-files.json\"); fi") && run.contains("npx tauri build --ci --bundles \"$BUNDLES\" \"${config[@]}\""), "{run}");
     let run = steps[artifacts]["run"].as_str().unwrap();
