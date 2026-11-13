@@ -4,7 +4,7 @@ Thank you for your interest in ExploitX. This guide covers setting up a developm
 
 This repository holds the desktop app and the brand sources. The website (exploitx.net) has its own repository, [RChefo/ExploitX-Web](https://github.com/RChefo/ExploitX-Web): contribute to the website there ([docs/WEBSITE.md](docs/WEBSITE.md) explains how the two stay in step).
 
-> **Licensing.** ExploitX is publicly developed; **its project license is pending the owner's selection**, so it is not yet open-source licensed. See the README, section "License". Until the owner selects one, the maintainer may hold pull requests that add substantial code. Issues, bug reports, reproductions, documentation fixes and small fixes are welcome now. The options are in [docs/governance/LICENSE_COMPARISON.md](docs/governance/LICENSE_COMPARISON.md); how contributions will be accepted (a Developer Certificate of Origin sign-off is proposed) is in [docs/governance/CONTRIBUTOR_TERMS.md](docs/governance/CONTRIBUTOR_TERMS.md).
+> **Licensing.** ExploitX is open source under the [Apache License 2.0](LICENSE). Contributions are accepted under the same license ("inbound = outbound", Apache-2.0 section 5), and **every commit must be signed off under the [Developer Certificate of Origin](DCO)** (section [Sign-off](#sign-off-developer-certificate-of-origin)). There is no contributor license agreement: you keep the copyright of your contribution, and the sign-off transfers no ownership. Third-party code keeps its own license ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
 
 Please also read the [Code of Conduct](CODE_OF_CONDUCT.md). **Never report a security vulnerability in a public issue or pull request:** follow [SECURITY.md](SECURITY.md).
 
@@ -18,6 +18,7 @@ Please also read the [Code of Conduct](CODE_OF_CONDUCT.md). **Never report a sec
 * [Security-sensitive changes](#security-sensitive-changes)
 * [Dependencies](#dependencies)
 * [Branches, commits and pull requests](#branches-commits-and-pull-requests)
+* [Sign-off (Developer Certificate of Origin)](#sign-off-developer-certificate-of-origin)
 * [Code review](#code-review)
 * [Releases](#releases)
 
@@ -75,7 +76,8 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked                        # includes upgrades from every database schema and the hostile-input sweep
 
 # repository checks (from the repository root)
-node scripts/licenses.mjs check            # dependency licenses against scripts/license-policy.json
+node scripts/licenses.mjs check            # dependency licenses, the license line of every source file, LICENSE
+node scripts/check-dco.mjs origin/release/v0.1.0 HEAD   # your branch's commits are signed off
 node scripts/check-links.mjs               # relative links in the Markdown files
 npm audit --audit-level=high
 ```
@@ -159,7 +161,7 @@ Read [docs/SECURITY.md](docs/SECURITY.md) first. If your change could weaken a c
   * Types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore`, `revert`.
   * The scope is the area, such as `osint`, `projects`, `mcp`, `release` or `installer`.
   * Keep one logical change per commit, and explain *why* in the body when it is not obvious.
-  * Write the messages yourself, without generated footers.
+  * Write the messages yourself, without generated footers, and **sign off every commit** (`git commit -s`, next section).
 * **Pull requests:**
   * a Conventional Commit title (CI checks it), filling in the template: what changed, why, how it was tested;
   * one topic per pull request;
@@ -167,6 +169,33 @@ Read [docs/SECURITY.md](docs/SECURITY.md) first. If your change could weaken a c
   * all checks green;
   * no unrelated reformatting.
 * The default branch is protected: changes arrive through pull requests with passing checks, and history on it is never rewritten.
+
+## Sign-off (Developer Certificate of Origin)
+
+ExploitX accepts contributions under the [Developer Certificate of Origin 1.1](DCO). By signing off a commit, you certify what the DCO says: in short, that you wrote the change or have the right to submit it under the project's open-source license, and that the record of your contribution, sign-off included, is public. The sign-off is a statement about the origin of your change; it does not transfer your copyright to anyone.
+
+**How.** Add a `Signed-off-by:` line with your name and the same email as the commit's author. Git writes it for you:
+
+```
+git commit -s -m "fix(osint): keep graph positions after an import"
+```
+
+which ends the message with
+
+```
+Signed-off-by: Ada Lovelace <ada@example.org>
+```
+
+taken from `user.name` and `user.email`. Use your real name, or a name you are consistently known by. If you do not want your personal address in the public history, set `user.email` to your GitHub noreply address first (<https://github.com/settings/emails>).
+
+**Forgot it?** On your own branch, before review:
+* the last commit: `git commit --amend --no-edit -s`;
+* every commit of the branch: `git rebase --signoff origin/release/v0.1.0`;
+* then `git push --force-with-lease` to **your** branch (never to a shared branch).
+
+**Editors and the web.** VS Code: the setting *Git: Always Sign Off*. Commits made on github.com are signed off when the web form's sign-off option is ticked.
+
+**The check.** CI's *Developer Certificate of Origin* job runs on every pull request (`scripts/check-dco.mjs`). Every commit, merge commits aside, needs a sign-off whose email is the commit author's. A pull request cannot be merged while it fails. Dependabot's own pull requests pass, since its commits carry its sign-off. Background and the reasons for choosing the DCO are in [docs/governance/CONTRIBUTOR_TERMS.md](docs/governance/CONTRIBUTOR_TERMS.md).
 
 ## Code review
 

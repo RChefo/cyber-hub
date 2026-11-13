@@ -447,6 +447,26 @@ fn the_release_ships_the_notices_and_the_appimage_library_sources() {
     assert!(install < licenses);
 }
 
+/// Mission 15: contributions are accepted under the Developer Certificate of Origin. Every pull request
+/// runs the sign-off check, with the full history, no secret and the pull request's data only in `env`.
+#[test]
+fn every_pull_request_checks_the_developer_certificate_of_origin() {
+    let ci = include_str!("../../.github/workflows/ci.yml");
+    let doc = crate::yaml::parse_one(ci).unwrap();
+    let job = &doc["jobs"]["dco"];
+    assert_eq!(job["name"], "Developer Certificate of Origin");
+    assert_eq!(job["if"], "github.event_name == 'pull_request'");
+    assert!(job.get("permissions").is_none() && !job.to_string().contains("secrets."), "the workflow's read-only token, no secret");
+    let steps = job["steps"].as_array().unwrap();
+    assert_eq!(steps[0]["with"]["fetch-depth"], 0);
+    let check = steps.iter().find(|s| s["run"].as_str().is_some_and(|r| r.contains("scripts/check-dco.mjs"))).expect("the DCO step");
+    assert_eq!(check["run"], "node scripts/check-dco.mjs \"$BASE\" \"$HEAD\"");
+    assert_eq!(check["env"]["PR_AUTHOR"], "${{ github.event.pull_request.user.login }}");
+    assert_eq!(check["env"]["HEAD"], "${{ github.event.pull_request.head.sha }}");
+    let dco = include_str!("../../DCO");
+    assert!(dco.starts_with("Developer Certificate of Origin\nVersion 1.1\n") && dco.contains("(d) I understand and agree that this project and the contribution"));
+}
+
 /// Mission 12: the repository is public. A release run's build artifacts could be downloaded by any
 /// signed-in GitHub user, which would make a private draft's binaries public, so they live one day
 /// and the publish job deletes them once the draft holds the files. CI also checks dependency

@@ -197,6 +197,30 @@ jobs:
             exit 1
           fi
 
+  dco:
+    # Mission 15: contributions are accepted under the Developer Certificate of Origin (DCO, CONTRIBUTING.md).
+    # Pull requests only; reads commits as data, no secret, no third-party action.
+    name: Developer Certificate of Origin
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Every commit is signed off by its author
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: node scripts/check-dco.mjs "$BASE" "$HEAD"
+
   msrv:
     # rust-version in src-tauri/Cargo.toml: the locked Tauri 2 crates need 1.90 (Cargo refuses 1.89)
     name: Minimum Rust version (1.90.0)

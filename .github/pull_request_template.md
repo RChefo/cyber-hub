@@ -18,6 +18,7 @@
 ## Checklist
 
 - [ ] The title is a Conventional Commit, for example `fix(osint): keep graph positions after an import`
+- [ ] Every commit is signed off under the [Developer Certificate of Origin](../DCO) (`git commit -s`; CONTRIBUTING.md, "Sign-off")
 - [ ] Documentation is updated where behaviour changed
 - [ ] Database changes add a migration at the end of `MIGRATIONS` and pass the upgrade tests (CONTRIBUTING.md, "Database changes")
 - [ ] Security-sensitive areas (confirmations, scope, IPC, credentials, MCP, updater, TLS, parsers) are named below, with their abuse-case tests
