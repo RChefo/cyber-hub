@@ -212,6 +212,10 @@ fn verification_and_release_stay_apart_and_the_release_names_the_commit_it_built
     // (keys come back sorted)
     let triggers: Vec<&str> = ci_doc["on"].as_object().unwrap().keys().map(String::as_str).collect();
     assert_eq!(triggers, ["pull_request", "push"]);
+    // every pull request runs CI; pushes only on the long-lived branches and tags, so a branch with
+    // a pull request (Dependabot's too) is not checked twice (Mission 12)
+    assert_eq!(ci_doc["on"]["pull_request"], serde_json::Value::Null);
+    assert_eq!(ci_doc["on"]["push"], serde_json::json!({ "branches": ["main", "release/**"], "tags": ["v*"] }));
     assert!(!ci.contains("secrets.") && !ci.contains("write") && !ci.contains("environment:"), "ci.yml reads no secret and writes nothing");
     assert_eq!(ci_doc["permissions"], serde_json::json!({ "contents": "read" }));
     for text in [ci, release] {

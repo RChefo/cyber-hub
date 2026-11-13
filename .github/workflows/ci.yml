@@ -12,7 +12,11 @@ name: CI
 # service outside GitHub other than the package registries.
 
 on:
+  # Pushes to the long-lived branches and version tags. Every other branch, Dependabot's included,
+  # is checked through its pull request, so a change runs CI once, not twice (Mission 12).
   push:
+    branches: [main, "release/**"]
+    tags: ["v*"]
   pull_request:
 
 permissions:
