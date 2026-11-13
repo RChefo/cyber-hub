@@ -8,6 +8,7 @@ import { DESKTOP, gsap, MOTION_OK, useGSAP, useReveal } from "../lib/motion";
 import { CategoryTag, InlineText, Skeleton } from "../components/release";
 import { useReleases } from "../lib/releaseStore";
 import { changelogOf, formatDate, highlights } from "../lib/releases";
+import { BrandSymbol } from "../components/brand/Logo";
 
 function Shot({ src, alt, eager, className = "", ...rest }: { src: string; alt: string; eager?: boolean; className?: string } & Record<`data-${string}`, string>) {
   return (
@@ -78,21 +79,26 @@ function Hero() {
 
   return (
     <section ref={root} className="relative overflow-hidden pt-28 pb-16 md:pt-32 md:pb-20">
-      <div data-hero-glow aria-hidden="true" className="pointer-events-none absolute top-[38%] left-1/2 h-[42rem] w-[70rem] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(76_141_255/0.22),rgb(76_141_255/0.05)_55%,transparent)] blur-2xl" />
+      <div data-hero-glow aria-hidden="true" className="pointer-events-none absolute top-[38%] left-1/2 h-[42rem] w-[70rem] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(124_106_255/0.24),rgb(124_106_255/0.05)_55%,transparent)] blur-2xl" />
       <div className="wrap relative">
-        <h1 className="max-w-[14ch] text-[clamp(2.75rem,6.4vw,5rem)] leading-[0.98] font-semibold tracking-[-0.035em]">
-          <span data-hero-line className="block">Your Cybersecurity</span>
-          <span data-hero-line className="block text-accent-soft">Workspace.</span>
+        <p data-hero-line className="mb-7 inline-flex items-center gap-2.5 rounded-full bg-white/[0.045] py-1.5 pr-4 pl-2.5 text-[0.84rem] text-ink/80">
+          <BrandSymbol height={14} />
+          Cybersecurity intelligence &amp; security research platform
+        </p>
+        <h1 className="max-w-[15ch] text-[clamp(2.6rem,6.2vw,4.9rem)] leading-[0.98] font-semibold tracking-[-0.03em]">
+          <span data-hero-line className="block">From first signal</span>
+          <span data-hero-line className="block text-accent-soft">to final report.</span>
         </h1>
-        <p data-hero-line className="mt-5 max-w-[46ch] text-[1.1rem] leading-relaxed text-muted md:text-[1.2rem]">
-          One powerful workspace to explore, investigate, analyze, and manage your cybersecurity workflow.
+        <p data-hero-line className="mt-6 max-w-[54ch] text-[1.1rem] leading-relaxed text-muted md:text-[1.18rem]">
+          ExploitX brings security testing, OSINT investigations, threat and vulnerability intelligence, detection engineering and reporting into
+          one desktop platform. Tool runs stay inside the authorized scope; projects, findings and evidence stay on your machine.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <a data-hero-cta href="/download/" className="btn btn-primary">
-            Download Cyber Hub
+            Download ExploitX
           </a>
           <a data-hero-cta href="#features" className="btn btn-quiet">
-            Explore features
+            Explore the platform
           </a>
         </div>
         <p data-hero-cta className="mt-4 text-[0.85rem] text-faint">
@@ -100,10 +106,10 @@ function Hero() {
         </p>
 
         <div className="relative mt-12 md:mt-14">
-          <Shot src={screens.dashboard} alt="Cyber Hub dashboard" eager className="hidden w-[78%] opacity-60 md:block" data-hero-back="" />
+          <Shot src={screens.dashboard} alt="ExploitX dashboard" eager className="hidden w-[78%] opacity-60 md:block" data-hero-back="" />
           <div data-hero-front className="relative md:absolute md:top-[18%] md:right-0 md:w-[74%]">
-            <Shot src={screens.osintGraph} alt="Cyber Hub OSINT workspace: link-analysis graph of a domain, its addresses, network blocks, autonomous system and organizations" eager />
-            <span data-hero-scan aria-hidden="true" className="pointer-events-none absolute inset-y-0 w-px bg-accent-soft opacity-0 shadow-[0_0_24px_4px_rgb(76_141_255/0.55)]" />
+            <Shot src={screens.osintGraph} alt="ExploitX OSINT workspace: link-analysis graph of a domain, its addresses, network blocks, autonomous system and organizations" eager />
+            <span data-hero-scan aria-hidden="true" className="pointer-events-none absolute inset-y-0 w-px bg-accent-soft opacity-0 shadow-[0_0_24px_4px_rgb(124_106_255/0.6)]" />
           </div>
           <div className="hidden md:block md:h-[6vw] md:max-h-20" aria-hidden="true" />
         </div>
@@ -139,7 +145,7 @@ function Facts() {
     { scope: root },
   );
   return (
-    <section ref={root} aria-label="Cyber Hub in numbers" className="wrap">
+    <section ref={root} aria-label="ExploitX in numbers" className="wrap">
       <div className="rule" />
       <dl data-reveal-group className="grid grid-cols-2 gap-x-6 gap-y-8 py-10 lg:grid-cols-4">
         {facts.map((f) => (
@@ -193,7 +199,7 @@ function Capabilities() {
         Everything an engagement needs, in one desktop app.
       </h2>
       <p className="mt-5 max-w-[56ch] text-[1.05rem] leading-relaxed text-muted">
-        Cyber Hub puts the tools, the research and the record of what you found side by side, on your machine.
+        ExploitX puts the tools, the research and the record of what you found side by side, on your machine.
       </p>
 
       <div className="mt-20 space-y-28 md:space-y-36">
@@ -251,10 +257,10 @@ function Capabilities() {
 
 function FitsTogether() {
   return (
-    <section className="wrap pt-28 md:pt-36" aria-label="How Cyber Hub fits together">
+    <section className="wrap pt-28 md:pt-36" aria-label="How ExploitX fits together">
       <InkOrbitFeatures
         theme="dark"
-        brand="Cyber Hub"
+        brand="ExploitX"
         className="ch-ink"
         tag="How it fits together"
         title={"Evidence in,\n*reports out.*"}
@@ -320,7 +326,7 @@ function Showcase() {
         <h2 id="showcase-title" className="text-[clamp(1.75rem,3.4vw,2.6rem)] leading-tight font-semibold tracking-[-0.025em]">
           See the real thing.
         </h2>
-        <p className="mt-3 max-w-[60ch] text-muted">Screenshots of Cyber Hub running on Windows 11, with demo data.</p>
+        <p className="mt-3 max-w-[60ch] text-muted">Screenshots of ExploitX running on Windows 11, with demo data.</p>
         <div role="tablist" aria-label="Screens" className="mt-8 flex gap-1 overflow-x-auto pb-2 [scrollbar-width:none]">
           {showcase.map((s, i) => (
             <button
@@ -362,7 +368,7 @@ function Principles() {
             A workspace that asks before it acts.
           </h2>
           <p data-reveal className="mt-5 max-w-[42ch] text-[1.02rem] leading-relaxed text-muted">
-            Cyber Hub launches real security software. Its safeguards are part of how it works, not settings you have to find.
+            ExploitX launches real security software. Its safeguards are part of how it works, not settings you have to find.
           </p>
         </div>
         <ul>
@@ -597,7 +603,7 @@ function Closing() {
             depth={0.6}
             shadow={0.45}
             showPath
-            pathColor="rgba(76,141,255,0.28)"
+            pathColor="rgba(124,106,255,0.3)"
             pathWidth={1.5}
             centerContent={
               <h2 id="closing-title" className="max-w-[16ch] text-center text-[clamp(1.6rem,4.2vw,3.25rem)] leading-[1.02] font-semibold tracking-[-0.03em]">
@@ -610,11 +616,11 @@ function Closing() {
         </div>
         <div className="relative mx-auto max-w-[48ch] text-center">
           <p data-reveal className="mt-4 text-[1.05rem] leading-relaxed text-muted">
-            Install Cyber Hub, scan for the tools you already have, and start a project.
+            Install ExploitX, scan for the tools you already have, and start a project.
           </p>
           <div data-reveal className="mt-8">
             <a href="/download/" className="btn btn-primary">
-              Download Cyber Hub
+              Download ExploitX
             </a>
           </div>
         </div>

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Public website for Cyber Hub (landing page and download page). Independent of the desktop app build.",
+  "description": "Public website for ExploitX (landing page and download page). Independent of the desktop app build.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource-variable/archivo": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "@gsap/react": "^2.1.2",

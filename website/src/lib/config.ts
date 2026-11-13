@@ -4,7 +4,7 @@
 const REPO = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/;
 
 export interface SiteConfig {
-  /** GitHub "owner/repo" that publishes Cyber Hub releases; null until configured */
+  /** GitHub "owner/repo" that publishes ExploitX releases; null until configured */
   repository: string | null;
   /** origin of the GitHub REST API (overridable for local testing only) */
   apiBase: string;

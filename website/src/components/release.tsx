@@ -203,10 +203,10 @@ export function Verification({ release, asset, compact = false }: { release: Rel
                 <a className="text-accent-soft hover:underline" href={asset.signatureUrl}>
                   {asset.name}.sig
                 </a>
-                ) is published for this package. It is verified by Cyber Hub itself, with the public key built into the app, when it installs an update. This page does not check it.
+                ) is published for this package. It is verified by ExploitX itself, with the public key built into the app, when it installs an update. This page does not check it.
               </>
             ) : (
-              "No updater signature is published for this package. Installed copies of Cyber Hub verify updater signatures themselves during an update; this page does not."
+              "No updater signature is published for this package. Installed copies of ExploitX verify updater signatures themselves during an update; this page does not."
             )}
           </p>
         </div>

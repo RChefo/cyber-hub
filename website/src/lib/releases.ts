@@ -138,7 +138,7 @@ export function parseRelease(raw: unknown, repository: string): Release | null {
   return {
     version,
     tag,
-    name: typeof r.name === "string" && r.name.trim() ? r.name.trim() : `Cyber Hub ${version}`,
+    name: typeof r.name === "string" && r.name.trim() ? r.name.trim() : `ExploitX ${version}`,
     publishedAt: typeof r.published_at === "string" && !Number.isNaN(Date.parse(r.published_at)) ? r.published_at : null,
     notes: typeof r.body === "string" ? r.body.slice(0, 40000) : "",
     // a semver pre-release tag is a pre-release even if the flag was forgotten

@@ -161,7 +161,7 @@ export default function ArchivePage() {
           <span className="text-faint"> / Version archive</span>
         </p>
         <h1 className="mt-3 text-[clamp(2.5rem,6vw,4.2rem)] leading-[1] font-semibold tracking-[-0.035em]">Version archive</h1>
-        <p className="mt-4 max-w-[60ch] text-[1.1rem] leading-relaxed text-muted">Every published Cyber Hub release with its packages and checksums. For a new installation, use the latest stable release.</p>
+        <p className="mt-4 max-w-[60ch] text-[1.1rem] leading-relaxed text-muted">Every published ExploitX release with its packages and checksums. For a new installation, use the latest stable release.</p>
 
         {state.kind === "ready" && releases.length > 0 && (
           <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3">

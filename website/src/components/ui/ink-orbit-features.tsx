@@ -4,15 +4,16 @@
 // https://github.com/Kedhareswer/21stdev-my-components). No license was found for it (Mission 12):
 // see docs/governance/THIRD_PARTY_LICENSE_AUDIT.md before reusing or redistributing this file.
 //
-// Adapted for the Cyber Hub website, which may only show what the product really does:
+// Adapted for the ExploitX website, which may only show what the product really does:
 // - the flow diagram's left cluster shows data sources (props) instead of drawn portraits of people;
 // - the report stack shows a fixed label instead of a counter that keeps increasing;
-// - the hub glyph is the Cyber Hub shield, and the hub chip shows the whole brand name;
+// - the hub glyph is the ExploitX symbol, and the hub chip shows the whole brand name;
 // - the integrations status text and the chart labels come from props; the forecast marker is
-//   optional (Cyber Hub makes no forecasts);
+//   optional (ExploitX makes no forecasts);
 // - colours and fonts follow the host page (dark theme tokens are overridable with CSS variables).
 // No dependencies besides React, no assets.
 
+import { BrandSymbol } from "@/components/brand/Logo";
 import React from "react";
 
 export type InkFeatureCopy = { title: string; description: string };
@@ -112,7 +113,7 @@ const D_FEATURES: InkFeatures = {
 
 export default function InkOrbitFeatures({
   theme = "auto",
-  brand = "Cyber Hub",
+  brand = "ExploitX",
   tag = D_FEATURES.tag,
   title = D_FEATURES.title,
   sources = D_SOURCES,
@@ -226,13 +227,8 @@ function Title({ text, className = "ib-h2" }: { text: string; className?: string
 }
 
 function Mark({ size = 18 }: { size?: number }) {
-  // the Cyber Hub shield
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 2.5 19.5 5.5v5.2c0 5-3.2 8.8-7.5 10.5-4.3-1.7-7.5-5.5-7.5-10.5V5.5z" fill="none" stroke="var(--ib-accent)" strokeWidth="1.8" strokeLinejoin="round" />
-      <path d="M8.6 11.5h6.8M12 8.1v6.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
+  // the ExploitX symbol (design/brand): the operator's chevron in Ultraviolet, the target's in the text colour
+  return <BrandSymbol height={size} />;
 }
 
 function ToolGlyph({ index }: { index: number }) {
@@ -538,7 +534,7 @@ function InsightsCard({ copy, uid, reduced }: { copy: InkFeatures["insights"]; u
 
 const IB_CSS = `
 .ib-root{--ib-page:#efefef;--ib-hatch:rgba(0,0,0,.06);--ib-paper:#fbfbfb;--ib-card:#f4f4f4;--ib-raise:#ffffff;--ib-ink:#151515;--ib-soft:#3d3d3d;--ib-muted:#7b7b7b;--ib-faint:#a8a8a8;--ib-line:#e2e2e2;--ib-line-strong:#cfcfcf;--ib-bracket:#c9c9c9;--ib-inv:#161616;--ib-inv-ink:#f5f5f5;--ib-accent:#2f6fe0;--ib-shadow:0 1px 2px rgba(0,0,0,.05),0 8px 24px -12px rgba(0,0,0,.12);--ib-sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--ib-mono:"JetBrains Mono Variable","JetBrains Mono",ui-monospace,Consolas,monospace;position:relative;width:100%;box-sizing:border-box;background-color:var(--ib-page);background-image:repeating-linear-gradient(135deg,var(--ib-hatch) 0 1px,transparent 1px 10px);color:var(--ib-ink);font-family:var(--ib-sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;padding:28px clamp(10px,2.4vw,28px);transition:background-color .45s ease,color .45s ease}
-.ib-root[data-theme="dark"]{--ib-page:#0b0d10;--ib-hatch:rgba(255,255,255,.03);--ib-paper:#0f1216;--ib-card:#14171e;--ib-raise:#1a1e26;--ib-ink:#e8ebf0;--ib-soft:#c3c9d4;--ib-muted:#8a93a3;--ib-faint:#5f6878;--ib-line:#20252f;--ib-line-strong:#2e3542;--ib-bracket:#3a4252;--ib-inv:#e8ebf0;--ib-inv-ink:#0f1216;--ib-accent:#4c8dff;--ib-shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -14px rgba(0,0,0,.7)}
+.ib-root[data-theme="dark"]{--ib-page:#0a0b10;--ib-hatch:rgba(255,255,255,.03);--ib-paper:#0f1216;--ib-card:#14161e;--ib-raise:#1b1e28;--ib-ink:#eceef4;--ib-soft:#c3c9d4;--ib-muted:#8b92a5;--ib-faint:#6e7588;--ib-line:#20252f;--ib-line-strong:#2e3542;--ib-bracket:#3a4252;--ib-inv:#eceef4;--ib-inv-ink:#0f1216;--ib-accent:#7c6aff;--ib-shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -14px rgba(0,0,0,.7)}
 .ib-root :where(*){box-sizing:border-box}
 .ib-root :focus-visible{outline:2px solid var(--ib-accent);outline-offset:2px}
 .ib-root :where(svg){display:block;max-width:none;flex:none}

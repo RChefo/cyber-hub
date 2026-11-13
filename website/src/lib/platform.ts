@@ -82,15 +82,15 @@ export function detectionMessage(d: Detection, release: Release | null): string 
   const has = (os: Os) => !release || release.assets.some((a) => a.os === os);
   switch (d.os) {
     case "windows":
-      if (d.arch === "arm") return "Windows on ARM detected. Cyber Hub is built for x64 only; it may not run on this device.";
+      if (d.arch === "arm") return "Windows on ARM detected. ExploitX is built for x64 only; it may not run on this device.";
       return has("windows") ? "Windows detected. We recommend the Windows x64 installer." : "Windows detected, but this release has no Windows package.";
     case "linux":
-      if (d.arch === "arm") return "Linux on ARM detected. Cyber Hub packages are x64 only.";
+      if (d.arch === "arm") return "Linux on ARM detected. ExploitX packages are x64 only.";
       return has("linux") ? "Linux detected. Pick the package that matches your distribution." : "Linux detected, but this release has no Linux package.";
     case "macos":
-      return "You seem to be on macOS, which Cyber Hub does not support. You can still download for a Windows or Linux computer.";
+      return "You seem to be on macOS, which ExploitX does not support. You can still download for a Windows or Linux computer.";
     case "mobile":
-      return "Cyber Hub is a desktop app for Windows and Linux. You can download it here for another computer.";
+      return "ExploitX is a desktop app for Windows and Linux. You can download it here for another computer.";
     default:
       return "Choose your platform.";
   }

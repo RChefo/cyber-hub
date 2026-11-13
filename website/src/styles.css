@@ -2,22 +2,27 @@
 @import "@fontsource/ibm-plex-sans/500.css";
 @import "@fontsource/ibm-plex-sans/600.css";
 @import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/archivo/wdth.css";
+@import "../../design/brand/tokens.css";
 @import "tailwindcss";
 
-/* Colours are the desktop app's own tokens (src/styles in the app). */
+/* ExploitX colours: the brand tokens (design/brand/tokens.css), shared with the desktop app. */
 @theme {
-  --color-ink: #e8ebf0;
-  --color-muted: #8a93a3;
-  --color-faint: #5f6878;
-  --color-base: #0b0d10;
-  --color-surface: #12151b;
-  --color-raised: #181c24;
-  --color-line: #232834;
-  --color-accent: #4c8dff;
-  --color-accent-soft: #9cc3ff;
-  --color-ok: #3fb68b;
-  --color-warn: #e0a43a;
+  --color-ink: #eceef4;
+  --color-muted: #8b92a5;
+  --color-faint: #6e7588;
+  --color-base: #0a0b10;
+  --color-surface: #14161e;
+  --color-raised: #1b1e28;
+  --color-line: #252836;
+  --color-accent: #6a57f5;
+  --color-accent-soft: #b4a9ff;
+  --color-uv: #7c6aff;
+  --color-signal: #c8f03c;
+  --color-ok: #3cc88f;
+  --color-warn: #e8a93a;
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Archivo Variable", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", Consolas, monospace;
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
 }
@@ -39,10 +44,17 @@
     overflow-x: clip;
   }
   ::selection {
-    background: color-mix(in oklab, var(--color-accent) 40%, transparent);
+    background: color-mix(in oklab, var(--color-uv) 40%, transparent);
+  }
+  /* display type: Archivo, slightly wide, for headings and figures */
+  h1,
+  h2,
+  .font-display {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 106;
   }
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-uv);
     outline-offset: 3px;
     border-radius: 6px;
   }
@@ -97,7 +109,7 @@
     color: #fff;
   }
   .btn-primary:hover {
-    background: #6aa1ff;
+    background: #5e4bea;
   }
   .btn-quiet {
     background: rgb(255 255 255 / 0.05);
@@ -122,5 +134,5 @@
 }
 .ch-ink .ib-sec {
   border-radius: 18px;
-  border-color: #1b2029;
+  border-color: #1b1e28;
 }

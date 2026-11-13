@@ -17,15 +17,15 @@ const INSTALL_TITLE: Record<Format, string> = {
 const STEPS: Record<Format, (a: ReleaseAsset | null) => { text: string; code?: string }[]> = {
   nsis: () => [
     { text: "Download the installer." },
-    { text: "Run it. It installs Cyber Hub for your user account and does not need administrator rights." },
+    { text: "Run it. It installs ExploitX for your user account and does not need administrator rights." },
     { text: "If the Microsoft Edge WebView2 Runtime is missing (it ships with Windows 11 and current Windows 10), the installer downloads it." },
-    { text: "Start Cyber Hub from the Start menu." },
+    { text: "Start it from the Start menu." },
   ],
   msi: () => [
     { text: "Download the MSI package." },
-    { text: "Open it and confirm the administrator prompt: the MSI installs Cyber Hub for all users." },
+    { text: "Open it and confirm the administrator prompt: the MSI installs ExploitX for all users." },
     { text: "Complete the setup." },
-    { text: "Start Cyber Hub from the Start menu." },
+    { text: "Start it from the Start menu." },
   ],
   appimage: (a) => [
     { text: "Download the AppImage and make it executable:", code: `chmod +x ${a?.name ?? "Cyber.Hub_<version>_amd64.AppImage"}` },
@@ -34,12 +34,12 @@ const STEPS: Record<Format, (a: ReleaseAsset | null) => { text: string; code?: s
   ],
   deb: (a) => [
     { text: "Download the package and install it with its dependencies:", code: `sudo apt install ./${a?.name ?? "Cyber.Hub_<version>_amd64.deb"}` },
-    { text: "Start Cyber Hub from your applications menu." },
+    { text: "Start it from your applications menu." },
   ],
   rpm: (a) => [
     { text: "Download the package and install it (Fedora, RHEL and derivatives):", code: `sudo dnf install ./${a?.name ?? "Cyber.Hub-<version>-1.x86_64.rpm"}` },
     { text: "On openSUSE:", code: `sudo zypper install ./${a?.name ?? "Cyber.Hub-<version>-1.x86_64.rpm"}` },
-    { text: "Start Cyber Hub from your applications menu." },
+    { text: "Start it from your applications menu." },
   ],
 };
 
@@ -142,8 +142,8 @@ function Picker({ release }: { release: Release | null }) {
                   const isSuggested = sel.recommended && sel.format === f;
                   return (
                     <li key={f}>
-                      <label className={`flex cursor-pointer gap-3 rounded-[12px] px-4 py-3.5 transition-colors ${sel.format === f ? "bg-raised shadow-[inset_0_0_0_1px_rgb(76_141_255/0.55)]" : "bg-surface hover:bg-raised"}`}>
-                        <input type="radio" name="format" value={f} checked={sel.format === f} onChange={() => setChosenFormat(f)} className="mt-1 size-4 shrink-0 accent-[#4c8dff]" />
+                      <label className={`flex cursor-pointer gap-3 rounded-[12px] px-4 py-3.5 transition-colors ${sel.format === f ? "bg-raised shadow-[inset_0_0_0_1px_rgb(124_106_255/0.55)]" : "bg-surface hover:bg-raised"}`}>
+                        <input type="radio" name="format" value={f} checked={sel.format === f} onChange={() => setChosenFormat(f)} className="mt-1 size-4 shrink-0 accent-[#7c6aff]" />
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                             <span className="text-[0.98rem] text-ink">{FORMAT_LABEL[f]}</span>
@@ -197,7 +197,7 @@ function Picker({ release }: { release: Release | null }) {
               </li>
             ))}
           </ol>
-          <p className="mt-6 text-[0.88rem] leading-relaxed text-faint">After that, Cyber Hub keeps itself current: Settings → Updates checks for signed releases and installs them only when you confirm.</p>
+          <p className="mt-6 text-[0.88rem] leading-relaxed text-faint">After that, ExploitX keeps itself current: Settings → Updates checks for signed releases and installs them only when you confirm.</p>
         </div>
       </div>
     </section>
@@ -321,9 +321,9 @@ export default function DownloadPage() {
       <Nav page="download" />
       <main id="main" className="wrap pt-32 md:pt-40">
         <div ref={hero} className="relative">
-          <div aria-hidden="true" className="pointer-events-none absolute -top-40 -left-40 h-[28rem] w-[44rem] rounded-full bg-[radial-gradient(closest-side,rgb(76_141_255/0.16),transparent)] blur-2xl" />
+          <div aria-hidden="true" className="pointer-events-none absolute -top-40 -left-40 h-[28rem] w-[44rem] rounded-full bg-[radial-gradient(closest-side,rgb(124_106_255/0.16),transparent)] blur-2xl" />
           <h1 data-hero-line className="relative text-[clamp(2.75rem,7vw,5rem)] leading-[0.98] font-semibold tracking-[-0.035em]">
-            Get Cyber Hub.
+            Get ExploitX.
           </h1>
           <p data-hero-line className="relative mt-5 max-w-[46ch] text-[1.1rem] leading-relaxed text-muted md:text-[1.2rem]">
             Bring your cybersecurity workflow into one powerful desktop workspace.
@@ -334,7 +334,7 @@ export default function DownloadPage() {
               <div className="mt-6">
                 <ReleaseStateNotice
                   state={state}
-                  empty="Cyber Hub has not been publicly released yet, so there is nothing to download. Packages appear here automatically as soon as the first stable release is published."
+                  empty="ExploitX has not been publicly released yet, so there is nothing to download. Packages appear here automatically as soon as the first stable release is published."
                 />
                 {state.kind === "ready" && state.releases.length > 0 && (
                   <p className="max-w-[62ch] rounded-[12px] bg-surface px-5 py-4 text-[0.95rem] leading-relaxed text-muted">

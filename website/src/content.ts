@@ -20,7 +20,7 @@ export const facts = [
   { value: 70, label: "tools in the library, across 14 categories" },
   { value: 7, label: "command builders with structured, validated arguments" },
   { value: 7, label: "threat-intelligence sources in one lookup" },
-  { value: 49, label: "MCP tools for Claude and other clients, behind your approval" },
+  { value: 62, label: "MCP tools for Claude and other clients, behind your approval" },
 ];
 
 export const modules: { title: string; body: string }[] = [
@@ -31,7 +31,7 @@ export const modules: { title: string; body: string }[] = [
   { title: "Dorks Studio", body: "A visual Google operator builder with live preview, templates, saved queries and history." },
   { title: "Payloads and Wordlists", body: "Reference detection payloads with encode-on-copy, and an index of the wordlists on your machine with preview and search." },
   { title: "Security Utilities", body: "Encoders, a JWT inspector, hash tools, regex tester, formatters, an IP/CIDR calculator, DNS lookup and an HTTP header analyzer." },
-  { title: "MCP integration", body: "Claude Code, Claude Desktop and other MCP clients can use Cyber Hub through an authenticated local bridge that is off by default. Sensitive requests wait for you." },
+  { title: "MCP integration", body: "Claude Code, Claude Desktop and other MCP clients can use ExploitX through an authenticated local bridge that is off by default. Sensitive requests wait for you." },
 ];
 
 export const principles: { title: string; body: string }[] = [
@@ -39,11 +39,11 @@ export const principles: { title: string; body: string }[] = [
   { title: "Nothing runs without you", body: "Every tool run and installation shows the exact program and arguments in a system dialog that page script cannot click." },
   { title: "Scope is enforced, not suggested", body: "Tools that touch targets run only inside an active project, and every target on the command line and inside target files must be in scope." },
   { title: "No shell in between", body: "Commands start as argument lists, never through a shell, so injected pipes or redirection do nothing. Whole process trees stop when you cancel." },
-  { title: "Updates you can verify", body: "Updates are signed with the Cyber Hub key, checked before installation and installed only after you confirm." },
+  { title: "Updates you can verify", body: "Updates are signed with the ExploitX key, checked before installation and installed only after you confirm." },
 ];
 
 export const showcase = [
-  { id: "dashboard", label: "Dashboard", src: dashboard, alt: "Cyber Hub dashboard with workstation readiness, activity, findings and tasks" },
+  { id: "dashboard", label: "Dashboard", src: dashboard, alt: "ExploitX dashboard with workstation readiness, activity, findings and tasks" },
   { id: "graph", label: "Investigation graph", src: osintGraph, alt: "OSINT link-analysis graph of a domain with IP addresses, network blocks, an autonomous system and organizations" },
   { id: "tools", label: "Tools Library", src: tools, alt: "Tools Library listing security tools with detection status" },
   { id: "command", label: "Command Center", src: commandCenter, alt: "Command Center with the Nmap builder and the generated command" },

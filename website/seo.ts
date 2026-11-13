@@ -1,15 +1,18 @@
 // Build-time SEO for the static pages: canonical URLs, Open Graph / Twitter URLs, sitemap.xml and
-// robots.txt. Everything that needs the public domain is emitted only when SITE_URL is configured,
-// so no domain is ever guessed. A Content-Security-Policy is added to production builds.
+// robots.txt. The official domain is https://exploitx.net (OFFICIAL_SITE_URL); a build can override it
+// with VITE_SITE_URL, for example for a staging host. A Content-Security-Policy is added to production builds.
 import type { Plugin } from "vite";
 
 export interface SeoOptions {
-  /** e.g. https://cyberhub.example — empty until the real domain is known */
+  /** the site's origin, normally OFFICIAL_SITE_URL */
   siteUrl: string;
   /** origin the download page reads release metadata from */
   releasesApiOrigin: string;
   pages: { path: string; file: string }[];
 }
+
+/** The official website (the owner's decision, Mission 13). */
+export const OFFICIAL_SITE_URL = "https://exploitx.net";
 
 export function normalizeSiteUrl(raw: string | undefined): string {
   const v = (raw ?? "").trim().replace(/\/+$/, "");
@@ -22,7 +25,7 @@ export function normalizeSiteUrl(raw: string | undefined): string {
 export function seo({ siteUrl, releasesApiOrigin, pages }: SeoOptions): Plugin {
   let production = false;
   return {
-    name: "cyber-hub-seo",
+    name: "exploitx-seo",
     configResolved(c) {
       production = c.command === "build";
     },
@@ -32,7 +35,13 @@ export function seo({ siteUrl, releasesApiOrigin, pages }: SeoOptions): Plugin {
       if (siteUrl && page) {
         const url = `${siteUrl}${page.path}`;
         tags.push(`<link rel="canonical" href="${url}" />`, `<meta property="og:url" content="${url}" />`);
-        tags.push(`<meta property="og:image" content="${siteUrl}/og.png" />`, `<meta name="twitter:image" content="${siteUrl}/og.png" />`);
+        tags.push(
+          `<meta property="og:image" content="${siteUrl}/og.png" />`,
+          `<meta property="og:image:width" content="1200" />`,
+          `<meta property="og:image:height" content="630" />`,
+          `<meta property="og:image:alt" content="ExploitX: cybersecurity intelligence and security research platform" />`,
+          `<meta name="twitter:image" content="${siteUrl}/og.png" />`,
+        );
       }
       if (production) {
         const csp = [

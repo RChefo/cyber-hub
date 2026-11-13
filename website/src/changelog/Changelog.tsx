@@ -21,7 +21,7 @@ function Entry({ release, latest, filter, open, onToggle }: { release: Release; 
           </h2>
           <ChannelTag release={release} latest={latest} />
         </div>
-        {release.name !== `Cyber Hub ${release.version}` && <p className="mt-2 text-ink/90">{release.name}</p>}
+        {release.name !== `ExploitX ${release.version}` && release.name !== `Cyber Hub ${release.version}` && <p className="mt-2 text-ink/90">{release.name}</p>}
         {log.summary && (
           <p className="mt-3 max-w-[70ch] leading-relaxed text-muted">
             <InlineText v={log.summary} />
@@ -100,7 +100,7 @@ export default function ChangelogPage() {
       <Nav page="changelog" />
       <main id="main" className="wrap pt-32 md:pt-40">
         <h1 className="text-[clamp(2.5rem,6vw,4.2rem)] leading-[1] font-semibold tracking-[-0.035em]">Changelog</h1>
-        <p className="mt-4 max-w-[56ch] text-[1.1rem] leading-relaxed text-muted">Every published Cyber Hub release, newest first, taken from the project's GitHub releases.</p>
+        <p className="mt-4 max-w-[56ch] text-[1.1rem] leading-relaxed text-muted">Every published ExploitX release, newest first, taken from the project's GitHub releases.</p>
 
         {state.kind === "ready" && releases.length > 0 && (
           <div className="mt-10 flex flex-wrap items-center gap-2" role="group" aria-label="Filter changes">
@@ -117,7 +117,7 @@ export default function ChangelogPage() {
             ))}
             {hasPre && (
               <label className="ml-auto flex items-center gap-2 text-[0.88rem] text-muted">
-                <input type="checkbox" checked={showPre} onChange={(e) => setShowPre(e.target.checked)} className="accent-[#4c8dff]" />
+                <input type="checkbox" checked={showPre} onChange={(e) => setShowPre(e.target.checked)} className="accent-[#7c6aff]" />
                 Include pre-releases
               </label>
             )}

@@ -1,16 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { config, repoLinks } from "../lib/config";
-
-export function Logo({ className = "size-8" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-      <rect width="64" height="64" rx="14" fill="#0E1726" />
-      <rect x="0.5" y="0.5" width="63" height="63" rx="13.5" fill="none" stroke="#2B6FD6" strokeOpacity=".45" />
-      <path d="M32 13 47 19v11c0 10-6.4 17.6-15 21-8.6-3.4-15-11-15-21V19z" fill="none" stroke="#5B9BFF" strokeWidth="3.2" strokeLinejoin="round" />
-      <path d="M25 32h14M32 25v14" stroke="#9CC3FF" strokeWidth="3.2" strokeLinecap="round" />
-    </svg>
-  );
-}
+import { Logo } from "./brand/Logo";
 
 type Page = "home" | "download" | "changelog";
 
@@ -62,9 +52,8 @@ export function Nav({ page }: { page: Page }) {
         Skip to content
       </a>
       <div className="wrap flex h-16 items-center justify-between gap-6">
-        <a href="/" className="flex items-center gap-2.5 font-medium tracking-tight" aria-label="Cyber Hub home">
-          <Logo />
-          <span className="text-[1.05rem]">Cyber Hub</span>
+        <a href="/" className="flex items-center text-ink" aria-label="ExploitX home">
+          <Logo capHeight={15} />
         </a>
         <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
           {items.map((i) => (
@@ -125,11 +114,10 @@ export function Footer({ version }: { version?: string | null }) {
     <footer className="mt-24 bg-surface/60">
       <div className="wrap grid gap-10 py-14 md:grid-cols-[1.4fr_1fr_1fr]">
         <div>
-          <a href="/" className="flex items-center gap-2.5 font-medium">
-            <Logo className="size-7" />
-            Cyber Hub
+          <a href="/" className="inline-flex text-ink" aria-label="ExploitX home">
+            <Logo capHeight={15} />
           </a>
-          <p className="mt-3 max-w-sm text-[0.92rem] leading-relaxed text-muted">A local-first desktop workspace for security work, for Windows 10/11 and Linux on x64.</p>
+          <p className="mt-4 max-w-sm text-[0.92rem] leading-relaxed text-muted">Cybersecurity intelligence and security research platform. Local-first, for Windows 10/11 and Linux on x64.</p>
           <p className="mt-4 text-[0.85rem] text-faint">{version ? `Latest release: ${version}` : "No public release yet."}</p>
         </div>
         <nav aria-label="Footer">
@@ -157,7 +145,7 @@ export function Footer({ version }: { version?: string | null }) {
         </nav>
       </div>
       <div className="wrap flex flex-wrap justify-between gap-3 py-6 text-[0.8rem] text-faint">
-        <span>© {year} Cyber Hub contributors</span>
+        <span>© {year} ExploitX contributors</span>
         <span>macOS is not supported.</span>
       </div>
     </footer>
