@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Visual encoding shared by the canvas renderer and the SVG exporter, so an export
  * looks exactly like the workspace. All sizes are in screen pixels at zoom 1.

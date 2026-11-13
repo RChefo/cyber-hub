@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * MD5 (RFC 1321). Self-contained implementation because Web Crypto does not
  * provide MD5. Used for identification/checksums only — MD5 is not collision resistant.

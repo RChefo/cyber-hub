@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Tooltip } from "@heroui/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Copy, Minus, Square, X } from "lucide-react";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import { base64Decode, base64Encode, binaryDecode, binaryEncode, hexDecode, hexEncode, htmlUnescape, rot13, unicodeEscape, unicodeUnescape, urlDecode } from "./encoding";
 import { analyzeHeaders, parseRawHeaders } from "./headers";

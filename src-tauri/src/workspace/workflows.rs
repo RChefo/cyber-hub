@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Workflow definitions: an ordered list of predefined steps with validated parameters. There is
 //! no scripting: every step type is implemented in ExploitX and goes through the same scope
 //! gate, confirmations and limits as the matching manual action. The executor lives in

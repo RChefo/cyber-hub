@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! MCP tools for detection engineering and ASVS assessments (docs/MCP.md): the rule library, a
 //! project's detection hits with their explanations, ASVS assessments, and two writes that wait
 //! for the user's approval (an ASVS status, a hit's review). Plain functions over the database,

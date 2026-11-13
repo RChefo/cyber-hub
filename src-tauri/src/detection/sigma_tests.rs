@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tests of the Sigma engine against the specification (v2.1.0) and its modifier appendix.
 
 use super::*;

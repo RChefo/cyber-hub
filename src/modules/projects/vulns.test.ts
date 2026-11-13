@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { Vulnerability } from "@/lib/types";
 import { countByPriority, formatEpss, isOverdue, needsReason } from "./vulns";

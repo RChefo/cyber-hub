@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! HTTP plumbing shared by all providers.
 //!
 //! * Bases are fixed per provider (see `ti::ProviderId::base`); requests never follow

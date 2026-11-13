@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! TAXII 2.1 feed commands (`ti/taxii.rs`). Every connection is started by the analyst and
 //! confirmed in a native dialog that names the server; the web view never sees a credential (it
 //! only learns whether one is stored). Since Mission 6 the analyst types a server's credential

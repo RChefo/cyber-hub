@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Discovery operations: run a provider in the background, keep its proposed observations for
 //! review, import them (all or a selection) into the investigation, cancel running operations.
 //!

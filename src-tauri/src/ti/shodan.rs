@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Shodan REST API — `GET /shodan/host/{ip}` (exposed services) and `GET /api-info` (plan).
 //!
 //! Shodan's API takes the key as the `key` query parameter. The request URL is therefore

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Project assistant: questions about one project answered by Claude (Anthropic Messages API).
 //!
 //! * The API key is provisioned by the owner with `cyberhub-keys` and read only here; the web

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { OsId, ToolCatalog, ToolDef } from "@/types/catalog";
 import { notify } from "@/lib/actions";

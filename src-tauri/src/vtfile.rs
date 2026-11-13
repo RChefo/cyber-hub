@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! VirusTotal file submission.
 //!
 //! Safety properties (all enforced here, in Rust):

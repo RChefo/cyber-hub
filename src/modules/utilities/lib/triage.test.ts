@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import { beaconFinding, beaconLine, captureFinding, captureSpan, dnsLeadFinding, duration, formatBytes, logFinding } from "./triage";
 

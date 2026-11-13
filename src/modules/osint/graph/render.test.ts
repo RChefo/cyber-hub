@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { forceLayout, mulberry32 } from "./layout";
 import { prepareScene, renderToCanvas, sceneBounds, type RenderView } from "./render";

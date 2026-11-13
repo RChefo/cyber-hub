@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { BackupInfo, RestoreOutcome } from "@/lib/types";
 import { restoreNotice, restoreSummary } from "./restore";

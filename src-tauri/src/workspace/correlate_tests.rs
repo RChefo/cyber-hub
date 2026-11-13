@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tests of the correlation rules: each rule's matches, what must not match, and decisions kept
 //! across runs.
 

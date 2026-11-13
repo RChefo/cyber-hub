@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tests of the scan importers (fixtures follow each tool's documented output).
 
 use super::*;

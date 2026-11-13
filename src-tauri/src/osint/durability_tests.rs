@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Durability of investigations and graph states on a real database file: restart, crash during a
 //! save (process abort and kill), failures inside the save transaction, locked database, full disk.
 //!

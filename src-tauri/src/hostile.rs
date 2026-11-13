@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Hostile-input harness for parser tests (Mission 5).
 //!
 //! * **Generators** of what an attacker or a damaged file supplies: every short prefix and a

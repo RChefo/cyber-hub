@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! When ExploitX cannot start (its database was written by a newer version, is damaged or is
 //! locked), it says why in a native message box before it exits (Mission 7). A release build has no
 //! console, so without this the window would simply never appear.

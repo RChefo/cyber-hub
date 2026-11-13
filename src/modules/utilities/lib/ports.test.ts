@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import { PORTS, portInfo, searchPorts } from "./ports";
 

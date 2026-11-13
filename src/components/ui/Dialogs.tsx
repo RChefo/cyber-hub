@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { AlertDialog, Button, Modal } from "@heroui/react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";

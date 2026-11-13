@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Chip, Tooltip } from "@heroui/react";
 import { CheckCircle2, Info, Plus, ShieldCheck, ShieldX, Trash2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Postinstall patch that keeps Tauri's `freezePrototype` hardening compatible with chart
 // dependencies.
 //

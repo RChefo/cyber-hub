@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Risk acceptance commands (`workspace/risk.rs`): a project's register, recording, renewing and
 //! revoking acceptances. Recording one is the only way to make a finding or a vulnerability an
 //! accepted risk; it happens here, in the app, never through MCP.

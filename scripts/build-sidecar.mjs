@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Builds the `cyberhub-mcp` MCP server for the target and checks it (`--version`), so
 // `tauri build` stops before packaging if the server cannot be built, and stages a copy at
 // src-tauri/binaries/cyberhub-mcp-<target triple>[.exe] for manual use.

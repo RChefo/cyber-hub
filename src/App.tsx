@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Toast } from "@heroui/react";
 import { Component, lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { CommandPalette } from "@/app/CommandPalette";

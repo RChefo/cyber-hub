@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Threat-intelligence providers.
 //!
 //! Each provider has a fixed API base, its own credential (or a shared one, e.g. one abuse.ch

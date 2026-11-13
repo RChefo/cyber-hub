@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // ExploitX brand geometry and SVG builders. No dependencies: the wordmark's letters come from
 // wordmark.json (extract-wordmark.mjs); the symbol and the X are defined here.
 import { readFileSync } from "node:fs";

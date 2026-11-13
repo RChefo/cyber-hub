@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tests of the OCSF import. The fixtures follow the structure of Prowler 5's example outputs
 //! (`examples/output/example_output_*.ocsf.json` in the Prowler repository).
 

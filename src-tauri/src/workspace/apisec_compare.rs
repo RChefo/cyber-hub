@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Two definitions of the same API compared (docs/DATA_MODEL.md, "API security"): endpoints
 //! added, removed and changed, and the changes that matter for security as issues mapped to the
 //! OWASP API Security Top 10 (2023). Endpoints match by method and path; the names of path

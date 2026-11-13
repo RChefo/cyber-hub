@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Vendored from shadcn/ui (MIT; see THIRD_PARTY_NOTICES.md) — https://ui.shadcn.com/charts — apps/v4/registry/new-york-v4/ui/chart.tsx
 // Unmodified except for the `cn` import path. Theming comes from ExploitX tokens via the bridge utilities in styles/index.css.
 "use client"

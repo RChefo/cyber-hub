@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button } from "@heroui/react";
 import { ExternalLink, RefreshCw, ShieldCheck, ShieldQuestion } from "lucide-react";
 import { StatusDot, ToneChip } from "@/components/ui/Badges";

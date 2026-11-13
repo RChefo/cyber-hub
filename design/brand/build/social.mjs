@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Social and marketing images of the ExploitX identity, composed from the vector logo, the brand fonts
 // and real screenshots of the app (design/brand/screens). The HTML templates are written to a
 // temporary folder and rendered with headless Chrome to design/brand/social/*.png.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! OCSF Detection Findings (class 2004), as Prowler writes them with `-M json-ocsf`: a JSON array
 //! with one finding per check and resource (docs/DATA_MODEL.md#scan-import).
 //!

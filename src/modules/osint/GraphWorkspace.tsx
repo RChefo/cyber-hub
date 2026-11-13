@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Link-analysis workspace: an interactive, saved graph of an investigation's entities.
  *

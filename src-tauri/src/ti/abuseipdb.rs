@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! AbuseIPDB APIv2 — `GET /check` (IP reputation from community abuse reports).
 //!
 //! Verdict mapping (the provider gives a 0–100 "abuse confidence score", no verdict):

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** Heuristic hash identification by prefix, length and alphabet. Suggestions, not proof. */
 
 export interface HashCandidate {

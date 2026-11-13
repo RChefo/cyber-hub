@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! HTTPS trust roots and building network clients (Mission 11).
 //!
 //! reqwest checks a server's certificate with `rustls-platform-verifier`:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Commands for the shared project data (docs/DATA_MODEL.md): assets, finding lifecycle and
 //! links, evidence, scope history, scope decisions and the project timeline.
 

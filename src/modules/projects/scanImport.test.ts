@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { CsvInfo, ScanImportPreview } from "@/lib/types";
 import { columnOptions, CSV_FIELDS, importCount, knownCount, nothingToImport, severityScaleText, shownOutcome, withColumn } from "./scanImport";

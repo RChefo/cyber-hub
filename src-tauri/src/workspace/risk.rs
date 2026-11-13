@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Risk acceptance (Mission 5; docs/DATA_MODEL.md#risk-acceptance-schema-27).
 //!
 //! A risk acceptance records who accepted which risk, why, with which compensating controls,

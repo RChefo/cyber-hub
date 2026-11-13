@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Layout probe (Mission 7): renders every page of a running development build at the logical
 // sizes that common display scalings give, and reports horizontal overflow, content that cannot be
 // reached, and dialogs that do not fit. QA only; it changes nothing but the emulated viewport.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Runs layouts in a module Web Worker so large force layouts don't block the UI.
  * Falls back to the main thread when workers are unavailable (tests, CSP failure,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Methodology checklist (docs/DATA_MODEL.md#methodology-checklist-schema-17): the OWASP WSTG
 //! test catalog bundled with the app (`wstg.json`, CC BY-SA 4.0, see THIRD_PARTY_NOTICES.md) and
 //! each project's progress through it.

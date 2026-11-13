@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! OSINT workspace: investigations, entity extraction and resolution, the evidence-backed
 //! relationship graph, discovery providers, saved graphs with versions, analysis, import/export
 //! and reports. See docs/OSINT.md.

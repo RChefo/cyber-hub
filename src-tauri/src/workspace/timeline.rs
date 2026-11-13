@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Project timeline: one chronological view over what already records time (tool runs, finding
 //! history, scope changes, evidence, OSINT events of linked investigations, discovery snapshots)
 //! plus `timeline_events` for event types that have no table of their own. Nothing is copied:

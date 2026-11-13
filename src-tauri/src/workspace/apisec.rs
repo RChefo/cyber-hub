@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! API security (docs/DATA_MODEL.md#api-security-schema-20): the endpoints an API definition
 //! describes, and checks of the definition against the OWASP API Security Top 10 (2023).
 //!

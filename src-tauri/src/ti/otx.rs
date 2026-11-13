@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! AlienVault OTX DirectConnect API — `GET /indicators/{type}/{indicator}/general`.
 //!
 //! OTX does not issue verdicts. It reports the community "pulses" (threat reports) that

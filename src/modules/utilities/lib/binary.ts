@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { BinaryCapability, BinaryReport, FindingInput, Severity, YaraTriageMatch } from "@/lib/types";
 import { yaraString } from "@/modules/detections/detections";
 import { type IocKind, extractIocs } from "./ioc";

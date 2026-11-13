@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! YAML documents read into JSON values, for the files ExploitX analyzes (API definitions,
 //! Kubernetes manifests, Compose files).
 //!

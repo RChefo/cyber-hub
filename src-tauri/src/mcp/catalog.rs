@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! The MCP tool catalogue: names, descriptions, input schemas and the permission category
 //! each tool belongs to. Shared by the stdio server (advertises tools) and the in-app bridge
 //! (enforces the category's policy).

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Typed bridge to the Rust backend. This is the ONLY module that calls `invoke`.
  * The frontend has no shell, filesystem or SQL access of its own.

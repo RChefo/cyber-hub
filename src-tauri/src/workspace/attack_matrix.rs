@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! The ATT&CK matrix of a project (docs/DATA_MODEL.md#attck-matrix-schema-23).
 //!
 //! Three kinds of statement about a technique are kept apart, because they mean different things:

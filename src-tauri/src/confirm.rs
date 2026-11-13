@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Native OS confirmation dialogs.
 //!
 //! The web view can call any registered command, so an in-page "Confirm" button alone

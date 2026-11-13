@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Analysis over data already stored (nothing here contacts a network):
 //!
 //! * IOC correlation: where each indicator (address, domain, URL host, e-mail, file hash) of a

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use super::*;
 
 fn web_line(ip: &str, request: &str, status: u16, ua: &str) -> String {

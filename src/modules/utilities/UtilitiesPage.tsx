@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Tooltip } from "@heroui/react";
 import { CloudUpload, Star } from "lucide-react";
 import type { ComponentType } from "react";

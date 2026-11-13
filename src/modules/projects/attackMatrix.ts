@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { AttackCatalog, AttackDomain, AttackEntry, AttackMatrix, AttackTactic, AttackTechnique } from "@/lib/types";
 
 /** What the project says about a technique, strongest statement first. Findings name techniques

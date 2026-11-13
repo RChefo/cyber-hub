@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { ContainerFileReport, ContainerIssue, FindingInput } from "@/lib/types";
 
 export const LINUX_KIND_LABEL: Record<string, string> = {

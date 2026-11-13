@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Persistence for investigations, entities, relationships, evidence, graphs, versions and the
 //! timeline. Intelligence data is relational and investigation-scoped; a saved graph stores its
 //! own membership (which entities it shows, where, pinned/hidden/grouped) and a workspace

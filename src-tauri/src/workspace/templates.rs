@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Finding library (docs/DATA_MODEL.md#finding-library-schema-14): reusable write-ups that are
 //! applied when a finding is recorded, and by scan imports for findings whose tool rule matches a
 //! template's import rule (`nessus:57582`, `zap:10038`, …). Templates belong to the workstation, not

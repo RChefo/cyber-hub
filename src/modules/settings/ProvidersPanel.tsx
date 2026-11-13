@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Switch } from "@heroui/react";
 import { useEffect, useState } from "react";
 import { useApp } from "@/app/store";

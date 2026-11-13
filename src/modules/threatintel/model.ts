@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { TiLevel, TiProviderResult, TiProviderStatus, TiStatus, TiSummary, VtKind } from "@/lib/types";
 
 export type Tone = "default" | "accent" | "success" | "warning" | "danger";

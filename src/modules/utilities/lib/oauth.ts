@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { FindingInput } from "@/lib/types";
 
 export type OAuthSeverity = "high" | "medium" | "low" | "info";

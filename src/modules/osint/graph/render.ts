@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Canvas 2D renderer shared by the interactive GraphCanvas and the PNG exporter.
  *

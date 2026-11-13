@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Dependency lockfiles read as SBOM components (docs/DATA_MODEL.md, "SBOM analysis"): the exact
 //! versions a project resolves, with package URLs for the OSV.dev check. Recognised by file name;
 //! nothing is contacted. Packages that belong to the project itself (workspace members, path and

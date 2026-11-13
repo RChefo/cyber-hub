@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Windows event log triage (docs/UTILITIES.md, "Log triage"): detections over the events of an
 //! EVTX file (`evtx.rs`), each mapped to a MITRE ATT&CK technique. Event IDs and fields follow
 //! Microsoft's documentation of the Security, System, PowerShell, Defender and Sysmon events.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! MCP operations for the assessment features: CVSS scoring, the finding library and the
 //! methodology checklist (docs/MCP.md). They are plain functions over the database, so they are
 //! tested without the app; `ops` adds the policy, approvals and audit log.

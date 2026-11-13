@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Sigma correlation rules (specification v2.1.0): meta-rules that combine the matches of other
 //! rules over time, separately for each group of events (the same user, the same host…).
 //!

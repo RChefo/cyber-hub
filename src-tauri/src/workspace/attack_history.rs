@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! ATT&CK over time (Mission 5): a technique's history in a project, snapshots of the detection
 //! library's coverage, and the comparison of any two technique sets.
 //!

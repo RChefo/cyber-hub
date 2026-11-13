@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Sigma rules (SigmaHQ's specification v2.1.0 of 2025-08-02, with its value-modifier appendix):
 //! reading, validation and evaluation against events, with an explanation of every match.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Severity distribution (ECharts, built on the vendored EvilCharts core).
  * Severity is ordinal status: every bar carries its name on the category axis and a

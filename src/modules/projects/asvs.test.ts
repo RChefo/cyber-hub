@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { AsvsItem } from "@/lib/types";
 import { ASVS_STATUS, filterItems, progress, statusLabel } from "./asvs";

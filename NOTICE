@@ -1,0 +1,19 @@
+ExploitX
+Copyright 2026 The ExploitX Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It includes third-party software and data that remain under their own licenses and are not covered
+by the Apache License of ExploitX:
+* user-interface components copied from shadcn/ui, Untitled UI React, EvilCharts and Lightswind
+  (MIT), under src/components/vendor/;
+* data from the OWASP Web Security Testing Guide and the OWASP Application Security Verification
+  Standard (CC BY-SA 4.0), MITRE ATT&CK (MITRE's terms of use) and FIRST's CVSS v4.0 calculator
+  (BSD-2-Clause);
+* the Rust crates and npm packages ExploitX is built with.
+Their copyright notices and license texts are in THIRD_PARTY_NOTICES.md and, in every installed copy
+of ExploitX, in THIRD_PARTY_LICENSES.txt. The Linux AppImage also carries the copyright files of the
+system libraries it bundles, in usr/share/doc/exploitx-appimage/.
+
+The name "ExploitX" and the ExploitX logos identify this project. The Apache License does not grant
+permission to use them, except as its section 6 allows.

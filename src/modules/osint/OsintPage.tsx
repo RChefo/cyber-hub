@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * OSINT Workspace: investigations, the link-analysis graph, entities, timeline, data sources
  * and reports. Route params: `id` (open investigation), `tab`, `graph`.

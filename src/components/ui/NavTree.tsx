@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { ChevronDown } from "lucide-react";
 import { type ComponentType, type KeyboardEvent, type ReactNode, useId, useRef, useState } from "react";
 import { initialOpen, nextFocus } from "@/lib/navTree";

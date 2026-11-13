@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Container } from "lucide-react";
 import { api } from "@/lib/ipc";
 import { KIND_LABEL, containerFinding } from "../lib/containers";

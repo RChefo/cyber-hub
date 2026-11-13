@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Checkbox, Dropdown, Label, Tabs, Tooltip } from "@heroui/react";
 import {
   BookMarked,

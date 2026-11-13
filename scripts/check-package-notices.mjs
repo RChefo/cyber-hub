@@ -1,14 +1,17 @@
 #!/usr/bin/env node
-// Every release package carries the third-party notices (Mission 14). The release workflow runs it on
-// the signed packages of each build, before they are uploaded:
+// SPDX-License-Identifier: Apache-2.0
+// Every release package carries ExploitX's license and the third-party notices (Missions 14 and 15).
+// The release workflow runs it on the signed packages of each build, before they are uploaded:
 //
 //   node scripts/check-package-notices.mjs <dir>
 //
 // * Windows: the NSIS installer (listed with 7-Zip) and the MSI (its File table, read through the
-//   Windows Installer API, nothing installed) contain THIRD_PARTY_LICENSES.txt at full size.
+//   Windows Installer API, nothing installed) contain LICENSE, NOTICE and THIRD_PARTY_LICENSES.txt.
 // * Linux: the deb (/usr/share/doc/cyber-hub/), the rpm (/usr/share/licenses/cyber-hub/) and the
-//   AppImage contain it; the AppImage also carries the copyright file of every library it bundles
-//   (scripts/appimage-licenses.sh --check), and the source packages of those libraries are next to it.
+//   AppImage contain them. The AppImage also carries the copyright file of every library it bundles and
+//   the license texts those files refer to, and the source archive next to it holds, at the shipped
+//   versions and with verified checksums, the source package of every GPL/LGPL library
+//   (scripts/appimage-licenses.sh --check).
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,6 +23,15 @@ export const NOTICES = "THIRD_PARTY_LICENSES.txt";
 /** The generated file is about 1 MB; anything much smaller is not the full text. */
 export const MIN_SIZE = 500_000;
 export const LINUX_PATHS = { deb: "/usr/share/doc/cyber-hub/THIRD_PARTY_LICENSES.txt", rpm: "/usr/share/licenses/cyber-hub/THIRD_PARTY_LICENSES.txt" };
+/** Where the deb and rpm also install the license files (Debian's and Fedora's places for them). */
+export const LINUX_DIRS = { deb: "/usr/share/doc/cyber-hub/", rpm: "/usr/share/licenses/cyber-hub/" };
+/** The files every package must carry, with a size below which the file cannot be the full text. */
+export const REQUIRED = [
+  { name: NOTICES, min: MIN_SIZE },
+  // the official Apache License 2.0 text is 11,358 bytes
+  { name: "LICENSE", min: 11_000 },
+  { name: "NOTICE", min: 200 },
+];
 
 /** `7z l -slt` output: one block of `Key = value` lines per entry. */
 export function parse7zSlt(text) {
@@ -69,6 +81,19 @@ export function noticesProblems(pkg, entries, path = null) {
   return [];
 }
 
+/** Problems with one required file among a package's entries (`path`: the exact path to require). */
+export function fileProblems(pkg, entries, { name, min }, path = null) {
+  const hits = entries.filter((e) => (path ? e.path === path : basename(e.path.replace(/\\/g, "/")) === name));
+  if (!hits.length) return [`${pkg} does not contain ${path ?? name}`];
+  if (!hits.some((e) => e.size >= min)) return [`${pkg}: ${name} is ${hits.map((e) => e.size).join(", ")} bytes, too small to be the full text`];
+  return [];
+}
+
+/** Problems with all required files; `dir` (deb, rpm) requires them in that directory. */
+export function packageProblems(pkg, entries, dir = null) {
+  return REQUIRED.flatMap((r) => fileProblems(pkg, entries, r, dir ? dir + r.name : null));
+}
+
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, ...opts });
 
 /** Lists the MSI's File table read-only (database open mode 0); nothing is installed or changed. */
@@ -97,8 +122,8 @@ function windows(dir, files) {
   const msi = files.filter((f) => f.endsWith(".msi"));
   if (!setup.length) problems.push("no NSIS installer (*-setup.exe)");
   if (!msi.length) problems.push("no MSI");
-  for (const f of setup) problems.push(...noticesProblems(f, parse7zSlt(run("7z", ["l", "-slt", join(dir, f)]))));
-  for (const f of msi) problems.push(...noticesProblems(f, msiFiles(join(dir, f))));
+  for (const f of setup) problems.push(...packageProblems(f, parse7zSlt(run("7z", ["l", "-slt", join(dir, f)]))));
+  for (const f of msi) problems.push(...packageProblems(f, msiFiles(join(dir, f))));
   return problems;
 }
 
@@ -113,8 +138,8 @@ function linux(dir, files) {
   const rpm = one(/\.rpm$/, "rpm");
   const appimage = one(/\.AppImage$/, "AppImage");
   const sources = one(/-sources_.*\.tar$/, "source archive of the AppImage's libraries");
-  if (deb) problems.push(...noticesProblems(deb, parseDpkgList(run("dpkg-deb", ["-c", join(dir, deb)])), LINUX_PATHS.deb));
-  if (rpm) problems.push(...noticesProblems(rpm, parseRpmDump(run("rpm", ["-qlp", "--dump", join(dir, rpm)])), LINUX_PATHS.rpm));
+  if (deb) problems.push(...packageProblems(deb, parseDpkgList(run("dpkg-deb", ["-c", join(dir, deb)])), LINUX_DIRS.deb));
+  if (rpm) problems.push(...packageProblems(rpm, parseRpmDump(run("rpm", ["-qlp", "--dump", join(dir, rpm)])), LINUX_DIRS.rpm));
   if (appimage) {
     const work = mkdtempSync(join(tmpdir(), "appimage-"));
     try {
@@ -122,24 +147,22 @@ function linux(dir, files) {
       run("chmod", ["+x", join(work, "app.AppImage")]);
       run(join(work, "app.AppImage"), ["--appimage-extract"], { cwd: work, stdio: ["ignore", "ignore", "inherit"] });
       const root = join(work, "squashfs-root");
-      const found = run("find", [root, "-type", "f", "-name", NOTICES])
+      // the app's resources (usr/lib/<product>/), not the libraries' copyright folder
+      const found = run("find", [join(root, "usr", "lib"), "-maxdepth", "2", "-type", "f", "(", ...REQUIRED.flatMap((r, i) => (i ? ["-o", "-name", r.name] : ["-name", r.name])), ")"])
         .split("\n")
         .filter(Boolean)
         .map((p) => ({ path: p, size: statSync(p).size }));
-      problems.push(...noticesProblems(appimage, found));
+      problems.push(...packageProblems(appimage, found));
       try {
-        process.stdout.write(run("bash", [join(ROOT, "scripts", "appimage-licenses.sh"), "--check", root]));
+        const args = [join(ROOT, "scripts", "appimage-licenses.sh"), "--check", root];
+        if (sources) args.push("--sources", join(dir, sources));
+        process.stdout.write(run("bash", args));
       } catch (e) {
         problems.push(`${appimage}: ${String(e.stderr || e.message).trim()}`);
       }
     } finally {
       rmSync(work, { recursive: true, force: true });
     }
-  }
-  if (sources) {
-    const dsc = run("tar", ["-tf", join(dir, sources)]).split("\n").filter((l) => l.endsWith(".dsc"));
-    if (!dsc.length) problems.push(`${sources} contains no Debian source package (.dsc)`);
-    else console.log(`${sources}: ${dsc.length} source packages`);
   }
   return problems;
 }
@@ -156,5 +179,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     for (const p of problems) console.log(`::error::${p}`);
     process.exit(1);
   }
-  console.log(`every package in ${dir} carries the third-party notices`);
+  console.log(`every package in ${dir} carries LICENSE, NOTICE and the third-party notices`);
 }

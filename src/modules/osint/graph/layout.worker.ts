@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Module worker that runs layouts off the main thread. Loaded by layoutAsync.ts via
  * `new Worker(new URL("./layout.worker.ts", import.meta.url), { type: "module" })`,

@@ -2,8 +2,8 @@ ExploitX 0.1.0: third-party software and data licenses
 ============================================================
 
 ExploitX includes the third-party software and data listed below. Each part is used under its own license;
-the license texts are reproduced in full in section 5, as published by each package. ExploitX's own license is
-pending selection by its owner (see the project README).
+the license texts are reproduced in full in section 5, as published by each package. ExploitX itself is
+licensed under the Apache License, Version 2.0: see LICENSE and NOTICE, installed next to this file.
 
 Source code: every Rust crate in section 1 is published at the version listed on crates.io
 (https://crates.io/crates/<name>/<version>) and is compiled unmodified; this includes the files under the

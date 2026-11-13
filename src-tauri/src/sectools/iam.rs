@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! AWS IAM policy analysis (docs/UTILITIES.md, "Cloud and infrastructure-as-code checks"): one
 //! policy document at a time, as written. Identity policies are checked for administrator access,
 //! service-wide wildcards and the privilege-escalation methods Rhino Security Labs catalogued;

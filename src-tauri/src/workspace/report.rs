@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! HTML assessment report built from the project's data and the options chosen in the report
 //! builder. Everything is escaped; the document carries its own Content-Security-Policy (no
 //! scripts, no remote content), so a saved report is inert in any browser. It prints to PDF from

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! The bridge listener inside the running ExploitX app (see `proto.rs` for the protocol).
 //! It authenticates `cyberhub-mcp` processes and hands each request to a `Dispatcher`
 //! (`ops::AppDispatcher` in the app), which runs it through ExploitX's existing commands.

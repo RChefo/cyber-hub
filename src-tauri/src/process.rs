@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Process manager: spawns catalog-resolved executables with structured argv (never
 //! through a shell), streams stdout/stderr to the frontend over a Tauri channel,
 //! cancels whole process trees, persists redacted execution history and removes

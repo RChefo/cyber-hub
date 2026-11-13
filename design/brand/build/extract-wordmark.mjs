@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // One-time extraction of the ExploitX wordmark outlines. The result, wordmark.json, is committed,
 // so building the brand assets needs neither the font nor opentype.js.
 //

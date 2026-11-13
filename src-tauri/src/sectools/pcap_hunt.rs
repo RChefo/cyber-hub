@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Threat-hunting leads in a packet capture (docs/UTILITIES.md#packet-capture-triage): connections
 //! made on a regular schedule (beacon-like timing) and DNS patterns of tunneling, data carried in
 //! records, and algorithmically generated domains. These are patterns, not verdicts: updaters,

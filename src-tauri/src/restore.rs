@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Restoring the database from a backup (docs/UPGRADE.md#restoring-a-backup).
 //!
 //! The open database cannot be replaced while ExploitX runs, so a restore has two steps:

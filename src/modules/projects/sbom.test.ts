@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { SbomComponent, SbomVuln } from "@/lib/types";
 import { checkable, componentFacts, componentLabel, filterComponents, sbomCompareSummary, vulnRows, vulnSummary } from "./sbom";

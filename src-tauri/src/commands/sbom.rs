@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! SBOM commands (`workspace/sbom.rs`): import an SBOM into a project, read it with its checks,
 //! look its components up on OSV.dev when the analyst asks, and record findings.
 

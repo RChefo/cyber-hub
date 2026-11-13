@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Network utilities (DNS lookup, HTTP header inspection) and vulnerability
 //! intelligence (NVD CVE API 2.0 with a local cache). Every request here is
 //! initiated by an explicit user action; nothing runs in the background.

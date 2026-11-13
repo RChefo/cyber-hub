@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tests of the relationship store: decisions, links, project isolation, archived projects,
 //! deletion, related records and the graph.
 

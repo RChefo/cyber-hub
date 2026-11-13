@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Dropdown } from "@heroui/react";
 import { listen } from "@tauri-apps/api/event";
 import { Ban, Globe, History, MoreHorizontal, Network, Plus, Radar, RotateCcw, ScanSearch, Server, Trash2 } from "lucide-react";

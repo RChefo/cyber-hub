@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Type-specific normalization. `value` is the canonical form shown to the analyst; `key` is the
 //! match key used for deduplication inside an investigation. Normalization is deliberately
 //! conservative: it removes formatting differences (case where the system is case-insensitive,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Findings as an ATT&CK Navigator layer (layer format 4.5, docs/DATA_MODEL.md#findings-export).
 //!
 //! The techniques come from the findings themselves: tags that are technique IDs (`T1059.001`,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Container and Kubernetes configuration checks (docs/UTILITIES.md): Dockerfiles, Compose files
 //! and Kubernetes manifests are read locally and checked against the Kubernetes Pod Security
 //! Standards (baseline and restricted) and the recommendations of the CIS Docker Benchmark.

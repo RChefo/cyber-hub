@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Attack-surface discovery commands (see `workspace::discovery`). Passive and HTTP runs execute
 //! in the background, one per project at a time; service scans are tool runs. The UI follows
 //! progress through the `asm-changed` event.

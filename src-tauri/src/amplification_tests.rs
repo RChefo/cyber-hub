@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Amplification checks of the importers (Mission 6): small hostile files whose cost used to grow
 //! faster than their size: one host copied into every finding, a rule's texts re-read for every
 //! result, quadratic duplicate checks, one database pass per listed evidence id.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use super::*;
 
 fn ev(id: u32, channel: &str, provider: &str, data: &[(&str, &str)]) -> Event {

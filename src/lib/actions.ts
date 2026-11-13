@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { toast } from "@heroui/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, errorMessage, IpcError, runtimeAvailable } from "./ipc";

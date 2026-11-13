@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tool registry, detection, managed installation, GUI launch and execution.
 
 use std::path::PathBuf;

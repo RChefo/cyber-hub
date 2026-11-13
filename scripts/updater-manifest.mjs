@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // Builds and validates the static update manifest (`latest.json`) read by the Tauri updater.
 //
 //   node scripts/updater-manifest.mjs generate --version 0.2.0 --assets <dir> --base-url <https url>

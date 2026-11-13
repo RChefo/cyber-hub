@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** Encode-on-copy transforms for payloads. Pure functions, unit tested. */
 
 export type PayloadEncoding = "none" | "url" | "double-url" | "base64" | "html";

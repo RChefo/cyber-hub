@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button } from "@heroui/react";
 import { FileDown, FileText, RefreshCw } from "lucide-react";
 import { useState } from "react";

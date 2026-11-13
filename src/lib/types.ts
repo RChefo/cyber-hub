@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** DTOs returned by the Rust backend (src-tauri/src/commands/*). Keep in sync. */
 
 export interface AppError {

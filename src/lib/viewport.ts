@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { useSyncExternalStore } from "react";
 
 /** Below this window width (logical pixels) the sidebar shows icons only, whatever the preference:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Adapted from Untitled UI React (https://www.untitledui.com/react/components, MIT; see THIRD_PARTY_NOTICES.md) —
 // components/foundations/featured-icon/featured-icon.tsx, "modern" and "light" themes.
 // Changes: Untitled UI color tokens are mapped onto HeroUI theme tokens so the icon

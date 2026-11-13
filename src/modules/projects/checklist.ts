@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { ChecklistItem, ChecklistStatus, WstgCategory, WstgTest } from "@/lib/types";
 import type { FindingDraft } from "./FindingsTab";
 

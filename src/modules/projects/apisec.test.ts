@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { ApiEndpoint, ApiEndpointScope } from "@/lib/types";
 import { compareSummary, authLabel, builderParams, filterEndpoints, issueSummary } from "./apisec";

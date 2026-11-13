@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! STIX 2.1 export of saved indicators (docs/PROVIDERS.md#stix-21-export).
 //!
 //! Each saved indicator becomes an `indicator` object with a STIX pattern

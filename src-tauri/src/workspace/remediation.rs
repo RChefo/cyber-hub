@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Remediation groups (docs/DATA_MODEL.md#remediation-groups): findings that one fix addresses,
 //! across the modules that reported them. A group is explained by what its findings share: the
 //! same CVE, the same package (package URL without its version), the same check reported on

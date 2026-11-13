@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { RiskAcceptance } from "@/lib/types";
 import { addDays, coverIndex, coverKey, daysUntil, draftProblems, expiryText, newDraft } from "./risk";

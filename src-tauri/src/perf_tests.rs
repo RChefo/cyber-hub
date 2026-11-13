@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Timings of the heavy paths on generated data (Mission 5). Ignored in normal runs; run them in
 //! an optimized build, one per process so the peak memory belongs to the test:
 //! `cargo test --release --lib perf_ -- --ignored --nocapture --test-threads=1`.

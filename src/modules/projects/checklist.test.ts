@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { ChecklistItem, WstgCategory } from "@/lib/types";
 import { coverageOf, filterCatalog, findingDraftFor } from "./checklist";

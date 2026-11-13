@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Shared state of an open investigation: the registry (entity/relationship types, sources),
  * the investigation itself and navigation helpers used by every tab.

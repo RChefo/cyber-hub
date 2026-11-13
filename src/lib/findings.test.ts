@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import { FINDING_STATUS_META } from "@/components/ui/Badges";
 import type { FindingStatus } from "@/lib/types";

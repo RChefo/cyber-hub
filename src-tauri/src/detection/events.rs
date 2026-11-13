@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Events that detection rules run on: Windows event logs (EVTX), JSON and JSON Lines exports
 //! (Sysmon or Winlogbeat output, cloud audit logs), and plain-text logs (one event per line).
 //! Everything is read locally and bounded: at most [`MAX_EVENTS`] events per sample, and long

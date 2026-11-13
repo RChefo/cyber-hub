@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** Wire types of the OSINT workspace commands (mirror src-tauri/src/osint and commands/osint.rs). */
 
 export type Verification = "observed" | "verified" | "inferred" | "disputed" | "rejected";

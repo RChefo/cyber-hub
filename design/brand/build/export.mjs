@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Raster exports of the ExploitX identity: PNG logos, application icons (Windows ICO, Linux hicolor,
 // Tauri's icon set), favicons. Renders the SVG sources with headless Chrome (set CHROME to its path).
 // usage: node design/brand/build/export.mjs [--tauri]   (--tauri also refreshes src-tauri/icons)

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Local SQLite storage. All persistence goes through this module; the frontend
 //! never receives raw SQL access.
 

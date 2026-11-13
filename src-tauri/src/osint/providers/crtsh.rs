@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Certificate Transparency through crt.sh's JSON output.
 
 use std::collections::{BTreeMap, BTreeSet};

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! DNS intelligence for a domain: the main records plus an assessment of e-mail authentication
 //! (SPF, DMARC, common DKIM selectors), CAA and DNSSEC. Queries go to the system resolver only.
 

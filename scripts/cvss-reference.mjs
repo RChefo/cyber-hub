@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Reference data for the CVSS scorer in src-tauri/src/cvss (docs/DATA_MODEL.md#cvss).
 //
 // Scores CVSS vectors with FIRST's own calculators, so the Rust scorer can be compared with them:

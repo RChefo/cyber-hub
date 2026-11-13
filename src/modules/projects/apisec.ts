@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { ApiComparison, ApiEndpoint, ApiEndpointScope, ApiSpecSummary } from "@/lib/types";
 import type { Tone } from "@/components/ui/Badges";
 

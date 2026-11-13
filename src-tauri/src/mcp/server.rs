@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! `cyberhub-mcp`: the MCP server (stdio transport, official `rmcp` SDK).
 //!
 //! It holds no credentials and implements no business logic: tool calls and resource reads are

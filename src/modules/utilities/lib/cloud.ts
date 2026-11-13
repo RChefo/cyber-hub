@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { ContainerFileReport, ContainerIssue, FindingInput } from "@/lib/types";
 import { shortPath } from "./containers";
 

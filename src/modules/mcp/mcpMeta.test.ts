@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { McpCatalogTool, McpPending } from "@/lib/types";
 import { formatCountdown, gateLabel, groupTools, requestTarget, resultMeta, secondsLeft, shortTool, tabFromParams } from "./mcpMeta";

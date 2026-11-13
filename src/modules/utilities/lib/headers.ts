@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** Security header analysis. Pure: input is a list of [name, value] pairs. */
 
 export type CheckLevel = "pass" | "warn" | "fail" | "info";

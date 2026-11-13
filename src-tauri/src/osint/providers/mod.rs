@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Discovery providers. Each provider takes one entity (type + value) and returns proposed
 //! observations; nothing is written to the investigation until the analyst imports them (or
 //! chose automatic import when starting the operation).

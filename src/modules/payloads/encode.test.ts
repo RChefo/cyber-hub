@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import { base64Encode, doubleUrlEncode, encodePayload, htmlEntityEncode, urlEncode } from "./encode";
 

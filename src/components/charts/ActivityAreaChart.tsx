@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/vendor/shadcn/chart";
 

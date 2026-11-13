@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Dropdown, Label, Popover, Tooltip } from "@heroui/react";
 import { Activity as ActivityIcon, Bell, ChevronDown, Search, Settings, SquareTerminal, UserRound } from "lucide-react";
 import { Kbd } from "@/components/ui/Code";

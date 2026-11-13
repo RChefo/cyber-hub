@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! TLS analyzer: handshake details, supported protocol versions, the certificate chain and its
 //! trust, with plain-language issues. The chain is recorded by a verifier that also runs the
 //! real trust check (system roots), so untrusted certificates can still be analyzed.

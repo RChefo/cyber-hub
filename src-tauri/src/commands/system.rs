@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! System information, terminal integration and OS-keychain secret storage.
 
 use std::path::PathBuf;

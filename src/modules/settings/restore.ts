@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { BackupInfo, RestoreOutcome } from "@/lib/types";
 import { formatBytes, formatDateTime, pluralize } from "@/lib/utils";
 

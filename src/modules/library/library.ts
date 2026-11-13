@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { Evidence, FindingTemplate, FindingTemplateInput, Severity } from "@/lib/types";
 
 export const SEVERITY_CHOICES: { id: Severity; label: string }[] = [

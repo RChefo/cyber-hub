@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Secrets scanner: finds credentials in pasted text or in local files and folders chosen with a
 //! native dialog. Runs locally; matches are returned masked (the full value is never returned to
 //! the web view or stored).

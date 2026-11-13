@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! One entry point for scope decisions of new operations (assets, workflows, utilities, monitors).
 //!
 //! * **Active** operations contact the target. They need an active project whose authorized scope

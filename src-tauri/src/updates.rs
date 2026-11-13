@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Application updates through the official Tauri updater plugin.
 //!
 //! The whole flow runs in the backend; the web view has no updater permission and only calls the

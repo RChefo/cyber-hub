@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Threat intelligence (VirusTotal, AbuseIPDB, OTX, URLhaus, MalwareBazaar, ThreatFox, Shodan)
 //! through ExploitX's existing integration, and NVD records for vulnerabilities. Keys, caching,
 //! provider enablement and rate limits are those of the existing integration; this module only

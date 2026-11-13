@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! MCP integration (see docs/MCP.md).
 //!
 //! * `server` + `client` run in the `cyberhub-mcp` process launched by an MCP client (stdio).

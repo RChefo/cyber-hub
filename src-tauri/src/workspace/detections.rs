@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! The detection library (docs/DATA_MODEL.md#detection-engineering-schema-24): rules with their
 //! versions, collections, test samples with expectations, test runs, analyst feedback, and per
 //! project the matches of rules run on the project's evidence.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { PayloadCategory, PayloadDef } from "@/types/catalog";
 
 export const PAYLOAD_CATEGORY_LABELS: Record<PayloadCategory, string> = {

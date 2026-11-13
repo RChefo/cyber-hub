@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 # License notices and corresponding source for the libraries ExploitX's AppImage bundles (Mission 14).
 #
 #   scripts/appimage-licenses.sh <out-dir> [--sources <file.tar>] [--tauri-config <file.json>]

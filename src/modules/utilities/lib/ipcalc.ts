@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** IPv4 / IPv6 address and CIDR calculations using BigInt. Pure functions. */
 
 export type IpVersion = 4 | 6;

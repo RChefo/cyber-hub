@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button } from "@heroui/react";
 import { ChevronLeft, ChevronRight, Database, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

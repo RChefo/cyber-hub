@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tests of the SBOM comparison, with lockfiles read by the importer.
 
 use std::cmp::Ordering::*;

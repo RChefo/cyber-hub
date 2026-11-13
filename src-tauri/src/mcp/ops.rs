@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! MCP operations, executed inside the running ExploitX app.
 //!
 //! Every tool is implemented by calling the same functions the GUI uses (scope engine,

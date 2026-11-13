@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! OWASP ASVS assessments (docs/DATA_MODEL.md#asvs-assessments-schema-25).
 //!
 //! The requirement list is the official ASVS 5.0.0 JSON (`catalog/asvs-5.0.0.json`, © OWASP

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Tabs, Tooltip } from "@heroui/react";
 import { BookMarked, ExternalLink, History, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Chip } from "@heroui/react";
 import { ExternalLink, FolderPlus } from "lucide-react";
 import { useEffect, useState } from "react";

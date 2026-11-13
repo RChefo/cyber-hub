@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! VirusTotal API v3 provider.
 //!
 //! * Reputation lookups are read-only GET requests (`/ip_addresses`, `/domains`, `/urls/{id}`,

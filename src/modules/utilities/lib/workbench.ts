@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** Workbench (recipe) operations. Each op maps a string to a string (sync or async). */
 import {
   base64Decode,

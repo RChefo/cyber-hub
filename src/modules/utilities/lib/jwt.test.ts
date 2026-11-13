@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import { base64Encode } from "./encoding";
 import { decodeJwt } from "./jwt";

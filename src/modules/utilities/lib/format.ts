@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** JSON / XML / HTML formatting helpers (pure, local). */
 
 export class FormatError extends Error {

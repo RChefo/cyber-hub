@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button } from "@heroui/react";
 import { Copy, FileSearch, FolderSearch, Globe, History, Lock, Plus, Radar, Send, ServerCog, ShieldAlert, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * In-memory buffer of live process output. The Tauri Channel callback keeps firing
  * after the dialog that started a run is closed, so output is collected here and

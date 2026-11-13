@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Redaction of credentials before anything is persisted (run history, command
 //! history, activity log, stored process output). Tool-independent and pattern based.
 //! Redaction is lossy by design: the original values are never written to disk.

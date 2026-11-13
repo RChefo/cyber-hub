@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tool catalog — compiled into the binary from `catalog/tools.json`.
 //! The catalog is the registry that adapters (detection, install, launch, run) work from.
 

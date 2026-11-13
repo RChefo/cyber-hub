@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Entity and relationship inspector: a non-modal side panel (the graph stays usable) with
  * verification decisions, evidence, relationships, metadata and history. All collected text

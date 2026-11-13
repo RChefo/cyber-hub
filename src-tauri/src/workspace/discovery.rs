@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Attack-surface discovery. Three sources fill the asset inventory, each run grouped in a
 //! discovery snapshot:
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, ProgressBar } from "@heroui/react";
 import { listen } from "@tauri-apps/api/event";
 import { Download, RefreshCw, RotateCcw, ShieldCheck, TriangleAlert, X } from "lucide-react";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Dropdown } from "@heroui/react";
 import { listen } from "@tauri-apps/api/event";
 import { ArrowDown, ArrowUp, ChevronDown, Pencil, Play, Plus, Square, Trash2, Workflow as WorkflowIcon, X } from "lucide-react";

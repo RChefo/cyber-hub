@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { GraphEdge, GraphNode } from "@/modules/osint/graph";
 import type { InvestigationGraph, RecordKind, RecordRef, Relation, RelationOrigin, RelationVerification } from "@/lib/types";
 

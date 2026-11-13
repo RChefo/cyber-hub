@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Graph layout algorithms. Pure, deterministic and DOM-free: they run in node tests,
  * on the main thread, or inside layout.worker.ts unchanged.

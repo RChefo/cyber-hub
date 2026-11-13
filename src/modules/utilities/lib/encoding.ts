@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** Pure, UTF-8 safe encoding helpers shared by the individual utilities and the workbench. */
 
 const enc = new TextEncoder();

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { HttpResponseOut } from "@/lib/types";
 import { HISTORY_BODY_LIMIT, HISTORY_LIMIT, diffHeaders, diffLines, parseRawRequest, repeaterHistory, targetOf, toCurl, toRawRequest } from "./repeater";

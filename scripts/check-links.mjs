@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // Relative links in the repository's Markdown files (Mission 12): every link to a file in the
 // repository must point to a file that exists, and a link to a heading (`file.md#heading` or
 // `#heading`) to a heading that exists, using GitHub's anchor rules. External links (http, https,

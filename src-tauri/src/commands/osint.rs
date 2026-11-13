@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! OSINT workspace commands. Thin wrappers over `crate::osint`: validation and data rules live
 //! there; this layer adds transactions, native file dialogs and change notifications.
 

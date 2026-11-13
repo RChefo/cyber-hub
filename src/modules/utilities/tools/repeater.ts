@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Repeater helpers for the HTTP request builder: raw requests, cURL, response comparison and the
  * session history. Pure functions except the history store. Sending stays in the backend

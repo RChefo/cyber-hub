@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** Small regex-based User-Agent parser (no dependencies). Order of checks matters. */
 
 export interface ParsedUA {

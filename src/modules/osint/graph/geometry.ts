@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Pure geometry helpers: coordinate conversion, hit testing, zooming and hulls.
  * Everything here is DOM-free so it can be unit-tested in node.

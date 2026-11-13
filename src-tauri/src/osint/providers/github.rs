@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! GitHub public data through the REST API without authentication: repository search (name,
 //! description, README) and public user profiles. Code search requires a token and is not used.
 

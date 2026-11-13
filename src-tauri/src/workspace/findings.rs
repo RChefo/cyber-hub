@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Findings lifecycle: statuses, the history of every change, and links to the records a finding
 //! is based on (assets, runs, evidence, OSINT entities). History rows are never edited; they are
 //! removed only together with their finding.

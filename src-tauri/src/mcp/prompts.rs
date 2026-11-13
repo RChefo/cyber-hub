@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Built-in MCP prompts. They guide an AI client through ExploitX's tools and always require
 //! working inside an authorized project scope. None of them encourages testing anything the
 //! user is not authorized to test.

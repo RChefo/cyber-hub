@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { McpAuditResult, McpCatalogTool, McpPending, McpPolicy } from "@/lib/types";
 
 export type Tone = "default" | "accent" | "success" | "warning" | "danger";

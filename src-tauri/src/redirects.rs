@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Whether an external tool follows HTTP redirects in a run, from its options.
 //!
 //! A run whose URLs are authorized only by path (URL scope entries), or that sit on a host with an

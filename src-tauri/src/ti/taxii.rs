@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! TAXII 2.1 feeds (OASIS TAXII 2.1, 2021-06-10) of STIX 2.1 indicators (Mission 5;
 //! docs/PROVIDERS.md#taxii-21-feeds).
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { Tone } from "@/components/ui/Badges";
 import type { WorkflowDefinition, WorkflowNodeSpec, WorkflowRunStatus, WorkflowRunStep, WorkflowStep } from "@/lib/types";
 

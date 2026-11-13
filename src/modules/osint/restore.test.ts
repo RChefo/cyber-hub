@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import { initState, nodeStates, parseWorkspace, positionsFrom, type Workspace } from "./model";
 import type { GraphData, GraphMeta, GraphNodeState } from "./types";

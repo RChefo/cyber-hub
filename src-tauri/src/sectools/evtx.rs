@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Windows XML Event Log files (EVTX) read without Windows APIs, after Microsoft's MS-EVEN6: the
 //! file header, 64 KB chunks, event records, and their binary XML with templates, substitutions
 //! and nested fragments. Only what triage needs is kept: the System fields and the EventData or

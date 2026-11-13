@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { TiProviderResult, TiReport } from "@/lib/types";
 import { availability, compareRows, correlate, parseConfidence, RELIABILITY, savedStanding, sortResults, summaryParts } from "./model";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Threat-intelligence commands: provider status, multi-provider lookups, history, saved
 //! indicators and report export.
 //!

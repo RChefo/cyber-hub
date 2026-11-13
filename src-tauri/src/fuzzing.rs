@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Entry points for coverage-guided fuzzing (`src-tauri/fuzz`, cargo-fuzz). Compiled only with the
 //! `fuzzing` feature, which application builds and installers never enable. Each function feeds
 //! arbitrary bytes to one parser of untrusted input and ignores the result: a parser may refuse

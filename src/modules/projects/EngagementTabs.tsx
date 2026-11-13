@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Dropdown } from "@heroui/react";
 import { ChevronDown, ClipboardCopy, Download, FileDown, FilePlus2, FileText, History, Link2, NotebookPen, Printer, Save, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";

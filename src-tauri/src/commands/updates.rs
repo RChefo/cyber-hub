@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Update Center commands. The updater plugin itself grants the web view nothing; these commands
 //! are the only way the page reaches it (see `updates`).
 

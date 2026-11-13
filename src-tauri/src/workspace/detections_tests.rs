@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tests of the detection library: versions, collections, tests with expectations, feedback,
 //! project hits and their promotion, and ATT&CK coverage.
 

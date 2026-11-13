@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Cloud } from "lucide-react";
 import { api } from "@/lib/ipc";
 import { CLOUD_KIND_LABEL, cloudFinding } from "../lib/cloud";

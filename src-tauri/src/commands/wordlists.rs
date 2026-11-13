@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Wordlist management. Files are indexed by reference (large lists stay where they
 //! are) or copied into the managed directory inside the app data folder.
 

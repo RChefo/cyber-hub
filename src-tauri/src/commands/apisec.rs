@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! API security commands (`workspace/apisec.rs`): import an API definition, Postman collection or
 //! HAR capture into a project's inventory, read it with its checks and scope status, and record an
 //! issue as a finding. Nothing here contacts a network.

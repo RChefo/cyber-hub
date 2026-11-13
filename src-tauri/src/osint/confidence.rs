@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Confidence assessment. Confidence is qualitative and traceable: it is derived only from the
 //! evidence attached to an element and from analyst decisions, and every result carries the
 //! reason that produced it.

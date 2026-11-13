@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Cross-module tests: one project followed through scope, discovery, vulnerabilities, findings,
 //! evidence, workflows' records, analysis, timeline and reports, plus a volume check.
 

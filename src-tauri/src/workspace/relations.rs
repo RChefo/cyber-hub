@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Relationships between records of different modules (docs/DATA_MODEL.md#investigation-layer-schema-22).
 //!
 //! A relationship joins two references, each a record kind and its stable identifier (a finding, an

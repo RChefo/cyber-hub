@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! MITRE ATT&CK in projects (docs/DATA_MODEL.md#attck): the catalogs bundled with the app
 //! (`catalog/attack-{enterprise,mobile,ics}.json`, built by `scripts/attack-catalog.mjs` from MITRE's
 //! STIX data; © The MITRE Corporation, see THIRD_PARTY_NOTICES.md), and the techniques a project's

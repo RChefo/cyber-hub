@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tool detection adapter: PATH lookup, known install locations, dependency checks
 //! and (optionally) a version probe using fixed, catalog-defined arguments.
 

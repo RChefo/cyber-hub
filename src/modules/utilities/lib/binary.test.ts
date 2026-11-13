@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { BinaryReport } from "@/lib/types";
 import { capabilityFinding, hardeningSummary, stringIndicators, yaraFinding } from "./binary";

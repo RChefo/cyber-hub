@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Kubernetes RBAC: the rules of a Role or ClusterRole that open a way to more privileges, and who
 //! receives them through RoleBindings and ClusterRoleBindings. The list follows the Kubernetes
 //! documentation "Role Based Access Control Good Practices"; matching follows the API server's

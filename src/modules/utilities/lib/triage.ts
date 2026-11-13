@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { CaptureBeacon, CaptureDnsLead, CaptureIssue, ChainProcess, FindingInput, LogDetection, ProcessChain } from "@/lib/types";
 
 const cap = (s: string, n = 200) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);

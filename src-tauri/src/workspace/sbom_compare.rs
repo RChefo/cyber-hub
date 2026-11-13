@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Two SBOMs or lockfiles of the same software compared (docs/DATA_MODEL.md#sbom-comparison):
 //! components added, removed, upgraded and downgraded, the vulnerabilities that came or went, and
 //! the changes that matter for the supply chain.

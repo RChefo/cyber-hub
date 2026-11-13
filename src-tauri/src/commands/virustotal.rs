@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! VirusTotal commands. All requests are made here, in Rust, with the API key read from
 //! the OS credential store. The key is never returned, logged or stored in the database.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! CVSS v3.1 and v4.0 vectors: validation, canonical form and scores (docs/DATA_MODEL.md#cvss).
 //!
 //! * **v3.1** follows the FIRST specification (section 7 and Appendix A, including its `Roundup`).

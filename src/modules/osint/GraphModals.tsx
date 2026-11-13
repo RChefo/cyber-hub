@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** Graph Manager, Save As, version history and comparison dialogs of the link-analysis workspace. */
 import { Button, Checkbox, Label } from "@heroui/react";
 import { Copy, FolderOpen, History, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";

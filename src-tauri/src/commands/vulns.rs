@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Vulnerability management and bulk finding commands (see `workspace::vulns`).
 
 use rusqlite::{params, OptionalExtension};

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! SBOM analysis (docs/DATA_MODEL.md#sbom-analysis-schema-21): the components a software bill of
 //! materials lists, their licenses, the known vulnerabilities that affect them, and how complete
 //! the SBOM is.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { RiskAcceptance, RiskDraft, RiskItemKind, RiskStanding } from "@/lib/types";
 
 export const RISK_STANDING: Record<RiskStanding, { label: string; tone: "default" | "accent" | "success" | "warning" | "danger" }> = {

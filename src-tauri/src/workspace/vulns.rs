@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Vulnerability management: CVEs tracked per project (optionally per asset), a transparent
 //! priority computed from stated factors, remediation and verification, and an append-only
 //! history. EPSS (FIRST.org) is an optional input; priorities say whether it was available.

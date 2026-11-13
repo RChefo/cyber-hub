@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Tooltip } from "@heroui/react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { dragRegion } from "@/lib/dragRegion";

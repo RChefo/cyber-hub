@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { acceptable, exceptionProblems, leaves, tokenize, verdictOf } from "./licenses.mjs";
+import { PROJECT_LICENSE, acceptable, declaredLicense, exceptionProblems, expectedLicense, leaves, tokenize, verdictOf } from "./licenses.mjs";
 
 // The dependency license policy (Mission 12): SPDX expressions are evaluated, not matched as text.
 describe("license policy", () => {
@@ -107,5 +108,26 @@ describe("license categories", () => {
     expect(exceptionProblems({ ...good, reason: "ok" }, "2026-11-13")).toHaveLength(1);
     expect(exceptionProblems({ ...good, reviewed: "soon" }, "2026-11-13")).toHaveLength(1);
     expect(exceptionProblems({ ...good, reviewBy: undefined }, "2026-11-13")).toHaveLength(1);
+  });
+});
+
+// Mission 15: ExploitX is Apache-2.0; every source file says which license it is under.
+describe("source file license lines", () => {
+  it("reads the identifier from the usual comment forms, after a shebang too", () => {
+    expect(declaredLicense("// SPDX-License-Identifier: Apache-2.0\nfn main() {}")).toBe("Apache-2.0");
+    expect(declaredLicense("/* SPDX-License-Identifier: Apache-2.0 */\n:root {}")).toBe("Apache-2.0");
+    expect(declaredLicense("#!/usr/bin/env bash\n# SPDX-License-Identifier: MIT\nset -e")).toBe("MIT");
+    expect(declaredLicense("// Copyright (c) 2023 FIRST.ORG\r\n// SPDX-License-Identifier: BSD-2-Clause\r\n")).toBe("BSD-2-Clause");
+    expect(declaredLicense("// a file without one\nexport const x = 1;")).toBeNull();
+    expect(declaredLicense(`${"//\n".repeat(10)}// SPDX-License-Identifier: Apache-2.0`)).toBeNull();
+  });
+
+  it("expects the project's license, except for copied code and data, which keep theirs", () => {
+    expect(PROJECT_LICENSE).toBe("Apache-2.0");
+    expect(expectedLicense("src-tauri/src/main.rs")).toBe("Apache-2.0");
+    expect(expectedLicense("src/components/vendor/shadcn/chart.tsx")).toBe("MIT");
+    expect(expectedLicense("src-tauri/src/cvss/v4_lookup.rs")).toBe("BSD-2-Clause");
+    // project assets (icons, brand, favicon) are the project's own, under its license
+    expect(expectedLicense("design/brand/build/build.mjs")).toBe("Apache-2.0");
   });
 });

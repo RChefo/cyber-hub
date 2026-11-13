@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Process chains in Windows event logs (Mission 6): processes from Security 4688 and Sysmon 1
 //! linked to their parents, and a few parent → child relationships that are rare in normal use.
 //!

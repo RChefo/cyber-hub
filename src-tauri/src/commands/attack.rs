@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! ATT&CK matrix commands (`workspace/attack_matrix.rs`): the bundled catalog, a project's
 //! matrix, the analyst's assessments, imported Navigator layers and the layer export. Files are
 //! chosen in native dialogs; nothing here contacts a network.

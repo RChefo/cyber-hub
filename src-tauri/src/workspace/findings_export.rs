@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Findings export (CSV and JSON) for spreadsheets, ticket systems and other tools
 //! (docs/DATA_MODEL.md#findings-export).
 //!

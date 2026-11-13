@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Projects workspace: assessments, authorized scope, findings.
 
 use rusqlite::{params, Connection, OptionalExtension};

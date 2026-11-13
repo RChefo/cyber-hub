@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Packet capture triage (docs/UTILITIES.md): a pcap or pcapng file is read on this device and
 //! summarized: hosts, conversations, DNS names, HTTP requests, TLS server names and credentials
 //! sent in cleartext. Nothing is contacted or replayed.

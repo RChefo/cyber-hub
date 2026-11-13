@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tests of the ATT&CK matrix: what findings name, assessments, imported layers and the export.
 
 use super::*;

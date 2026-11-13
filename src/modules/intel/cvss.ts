@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { severityFromCvss } from "@/components/ui/Badges";
 import type { CveRecord, CvssScore, Severity } from "@/lib/types";
 

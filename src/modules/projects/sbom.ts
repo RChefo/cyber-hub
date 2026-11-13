@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { Tone } from "@/components/ui/Badges";
 import type { SbomChange, SbomComparison, SbomComponent, SbomSummary, SbomVuln } from "@/lib/types";
 

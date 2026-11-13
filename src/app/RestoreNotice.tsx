@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { useEffect } from "react";
 import { toast } from "@heroui/react";
 import { api } from "@/lib/ipc";

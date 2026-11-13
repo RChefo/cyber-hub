@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Search over the records of one project or of every project (docs/DATA_MODEL.md#search):
 //! findings, assets, vulnerabilities, evidence, OSINT entities of linked investigations, API
 //! endpoints, SBOM components, tool runs, projects, and ATT&CK techniques. Results are references

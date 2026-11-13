@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { FindingStatus } from "@/lib/types";
 
 /** Statuses that still need attention; mirrors `OPEN_SQL` in src-tauri/src/workspace/findings.rs. */

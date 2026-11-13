@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, EmptyState, Skeleton, Spinner } from "@heroui/react";
 import { AlertTriangle, MonitorX, RotateCw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";

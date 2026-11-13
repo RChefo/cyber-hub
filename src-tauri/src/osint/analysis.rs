@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Graph analysis over an investigation's relationships (or a graph's membership). Results are
 //! structural facts with the relationships that support them; they never label an entity as
 //! malicious or related in ownership — high connectivity only means "many links".

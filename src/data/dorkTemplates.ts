@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { DorkCategory, DorkTemplate } from "@/types/catalog";
 
 export const DORK_CATEGORY_LABELS: Record<DorkCategory, string> = {

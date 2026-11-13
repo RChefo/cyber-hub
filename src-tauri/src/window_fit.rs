@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! The main window's first size on the screen it opens on (Mission 7).
 //!
 //! Sizes are logical pixels. At 150 % or 200 % scaling a 1920 × 1080 screen offers about

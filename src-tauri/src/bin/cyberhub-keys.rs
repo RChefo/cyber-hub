@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Developer-only credential provisioning tool. Built only with `--features provisioning`;
 //! never part of the application or its installers. See docs/PROVISIONING.md.
 

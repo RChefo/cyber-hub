@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Builds the compact MITRE ATT&CK catalogs bundled with ExploitX (src-tauri/catalog/attack-*.json)
 // from the official ATT&CK STIX 2.1 bundles (docs/DATA_MODEL.md#attck):
 //

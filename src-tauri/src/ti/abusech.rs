@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! abuse.ch community APIs — URLhaus, MalwareBazaar and ThreatFox (one Auth-Key for all).
 //!
 //! These databases only contain malicious items, so a match is reported as Malicious with

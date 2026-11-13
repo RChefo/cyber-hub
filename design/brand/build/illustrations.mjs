@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Feature illustrations: the ExploitX illustration style, as three examples (investigate, detect, report).
 // Rules (docs/brand/VISUAL_IDENTITY.md): a night tile, hairline strokes in Bone at low opacity, one
 // element in Ultraviolet that carries the idea (the "signal"), the symbol's convergence where it fits,

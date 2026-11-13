@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Correlation rules over a project's records (docs/DATA_MODEL.md#correlation): explainable
 //! matches between results of different modules, stored as suggestions for the analyst
 //! (`relations::suggest`). Every rule compares exact or normalized values (hosts, addresses, URLs,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! HTTP request builder: one request, built by the analyst, to an in-scope target. Redirects are
 //! followed only when the analyst asks, at most [`MAX_REDIRECTS`], and every hop is checked like
 //! the first request (scope, path, DNS) before it is sent. Requests and responses are

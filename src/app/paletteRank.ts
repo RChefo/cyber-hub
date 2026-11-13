@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** Ranking of the command palette's results (Ctrl+K). */
 
 export interface Rankable {

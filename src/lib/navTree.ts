@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Pure helpers of NavTree (src/components/ui/NavTree.tsx), Mission 14. Original code; it replaces the React
 // Bits BranchedMenu component, whose MIT + Commons Clause license is not an open-source license.
 

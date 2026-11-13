@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { Asset, DiscoverySnapshot, Project } from "@/lib/types";
 import { certaintyOf, latestBySource, matchesFilter, suggestedScanTargets, summarize } from "./asm";

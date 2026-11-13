@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Importers for data ExploitX already holds: tool runs (Nmap output is parsed; other tools'
 //! output is scanned for indicators), stored threat-intelligence lookups, cached CVE records,
 //! project findings and authorized scope entries. No request leaves the computer.

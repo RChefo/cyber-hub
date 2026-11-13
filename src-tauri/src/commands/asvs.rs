@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! OWASP ASVS assessment commands (`workspace/asvs.rs`). Nothing here contacts a network.
 
 use rusqlite::params;

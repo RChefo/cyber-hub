@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
 import { useApp } from "@/app/store";
 import { ToneChip } from "@/components/ui/Badges";

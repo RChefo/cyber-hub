@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** Offline reference of common ports: what usually runs there and what to check. */
 export interface PortInfo {
   port: number;

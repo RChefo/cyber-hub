@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tool-independent target resolution for the execution engine.
 //!
 //! Every argument value of a scope-required run is examined without relying on

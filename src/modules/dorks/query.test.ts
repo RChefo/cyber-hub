@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import { applyTemplate, buildQuery, buildRow, googleUrl, isValidDate, isValidDomain, quoteValue, type OperatorRow } from "./query";
 

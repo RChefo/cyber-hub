@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Tabs } from "@heroui/react";
 import { CloudUpload, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";

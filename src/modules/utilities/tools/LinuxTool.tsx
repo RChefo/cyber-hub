@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { SquareTerminal } from "lucide-react";
 import { api } from "@/lib/ipc";
 import { LINUX_KIND_LABEL, linuxFinding } from "../lib/linux";

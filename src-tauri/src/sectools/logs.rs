@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Log triage (docs/UTILITIES.md): web server access logs (Apache and Nginx, combined or common
 //! format) and OpenSSH authentication logs are read on this device and searched for attacks,
 //! scans and password guessing. Nothing is contacted.

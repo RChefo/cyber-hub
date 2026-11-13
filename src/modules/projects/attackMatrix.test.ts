@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { AttackCatalog, AttackEntry, AttackMatrix } from "@/lib/types";
 import { ATTACK_DOMAINS, buildColumns, domainLabel, gaps, mitreUrl, outside, stateOf, STATE_STYLE } from "./attackMatrix";

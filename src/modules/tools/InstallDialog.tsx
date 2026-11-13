@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button } from "@heroui/react";
 import { Download, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";

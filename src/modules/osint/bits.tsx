@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** Small presentational pieces shared by the OSINT tabs. Collected values are rendered as text only. */
 import { useEffect, useState } from "react";
 import { ToneChip } from "@/components/ui/Badges";

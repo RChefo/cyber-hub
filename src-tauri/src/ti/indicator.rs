@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Indicator detection shared by every threat-intelligence provider.
 //!
 //! Detection is pure (no I/O). Private / reserved IP addresses, URLs on such addresses,

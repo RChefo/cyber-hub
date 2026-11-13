@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { useEffect, useState } from "react";
 
 /** Rows rendered per step in long lists (thousands of rows would block the window). */

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Authorized-scope enforcement.
 //!
 //! Semantics (documented in docs/SECURITY.md#scope):

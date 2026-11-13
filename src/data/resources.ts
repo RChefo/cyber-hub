@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { Resource, ResourceCategory } from "@/types/catalog";
 
 export const RESOURCE_CATEGORY_LABELS: Record<ResourceCategory, string> = {

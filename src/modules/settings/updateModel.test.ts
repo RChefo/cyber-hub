@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import type { UpdateStatus } from "@/lib/types";
 import { PHASE_META, progressPercent, updateActions } from "./updateModel";

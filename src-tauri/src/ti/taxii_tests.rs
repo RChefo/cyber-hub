@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! TAXII 2.1 against a local mock server (127.0.0.1, accepted over HTTP in debug builds only).
 
 use std::collections::HashMap;

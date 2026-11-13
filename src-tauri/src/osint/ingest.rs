@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! The mapping pipeline. Every source (discovery providers, imported tool runs and lookups,
 //! analyst edits, graph imports) hands an `Observation` to `ingest`, which:
 //!

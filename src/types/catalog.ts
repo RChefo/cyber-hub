@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Static catalog contracts. Static catalogs ship with the app (versioned in git);
  * user-created data lives in SQLite. The tools catalog JSON lives in

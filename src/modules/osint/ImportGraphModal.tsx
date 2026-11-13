@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button } from "@heroui/react";
 import { FileUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * PNG and SVG export with the same visual encoding as the interactive canvas.
  * Labels, ids and colours are untrusted (they come from investigated data), so the SVG

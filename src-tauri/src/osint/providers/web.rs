@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Web server fingerprint: one HEAD (or GET) request to the site. SSRF protections: http(s)
 //! only, every resolved address must be public, the connection is pinned to the checked
 //! addresses (no DNS rebinding between check and connect), redirects are recorded but never

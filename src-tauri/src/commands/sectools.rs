@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Commands of the security utilities (see `sectools`). Utilities that contact a target (TLS
 //! analysis, HTTP requests) need a project and pass the active scope gate; DNS intelligence is a
 //! passive lookup through the system resolver; the secrets scanner and the port reference are local.

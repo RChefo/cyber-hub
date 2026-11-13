@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Upgrades from every earlier schema version, with a row in every table.
 //!
 //! * Every version from 1 to the latest − 1 is built as a file, the way ExploitX's own

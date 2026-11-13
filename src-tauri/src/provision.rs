@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! `cyberhub-keys` — developer-only credential provisioning and diagnostics.
 //!
 //! Compiled only with the `provisioning` Cargo feature, so it is not part of the application

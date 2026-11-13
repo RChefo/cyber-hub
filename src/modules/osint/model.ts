@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Pure helpers of the OSINT workspace: visual encoding of entity types, conversion of stored
  * graph data to the canvas model, persisted workspace state (layout, viewport, filters,

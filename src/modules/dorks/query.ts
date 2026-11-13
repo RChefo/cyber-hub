@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Pure query builder for Dorks Studio. No I/O — fully unit tested in query.test.ts.
  */

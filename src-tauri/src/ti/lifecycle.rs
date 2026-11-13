@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! The lifecycle of saved indicators (docs/PROVIDERS.md#saved-indicators): where an indicator
 //! came from and how reliable that source is, how confident the analyst is, until when it is
 //! valid, and whether it was revoked or found to be a false positive. Every change is kept.

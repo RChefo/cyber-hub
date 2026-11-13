@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Dropdown, Tabs } from "@heroui/react";
 import { ArrowLeft, ChevronDown, FileDown, FileText, Pencil, Play, Save, SquareTerminal, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

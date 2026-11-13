@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! DNS records (system resolver) and IP-to-ASN mapping (Team Cymru, also over DNS).
 
 use std::net::IpAddr;

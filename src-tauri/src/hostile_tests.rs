@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Every parser of untrusted input through the hostile-input harness (`hostile.rs`): truncations
 //! and seeded mutations of a valid file, random bytes, hostile text, oversized lines and deep
 //! nesting. A parser may refuse anything; it must not panic, overflow its stack or hang.

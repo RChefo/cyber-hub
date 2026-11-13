@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // Third-party license policy, inventory and notices (Mission 12; categories, assets and notices since
 // Mission 14). Only Node built-ins and `cargo`.
 //
@@ -29,6 +30,12 @@ const CAT = Object.fromEntries(Object.entries(POLICY.categories).map(([k, v]) =>
 const ALLOWED = new Set([...CAT.permissive, ...CAT.attribution, ...CAT.sourceObligations]);
 const OUT = join(ROOT, "docs", "governance", "third-party");
 export const NOTICES_FILE = join(ROOT, "src-tauri", "resources", "THIRD_PARTY_LICENSES.txt");
+/** ExploitX's own license, approved by the owner (Mission 15). */
+export const PROJECT_LICENSE = "Apache-2.0";
+/** SHA-256 of the official text, https://www.apache.org/licenses/LICENSE-2.0.txt, which LICENSE must be. */
+export const APACHE_LICENSE_SHA256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30";
+/** Source files that carry an SPDX-License-Identifier line. */
+export const SOURCE_FILE = /\.(rs|ts|tsx|mjs|js|cjs|css|sh)$/;
 const PLATFORMS = { windows: "x86_64-pc-windows-msvc", linux: "x86_64-unknown-linux-gnu" };
 
 /* ───────────── SPDX expressions ───────────── */
@@ -129,6 +136,44 @@ export function verdictOf(expr, { data = false, policy = CAT } = {}) {
   const unknown = names.filter((n) => !known.has(n) && !known.has(n.split(" WITH ")[0]));
   if (unknown.length) return { status: "unknown", reason: `"${expr}" names a license the policy does not know (${unknown.join(", ")})` };
   return { status: "prohibited", reason: `"${expr}" is prohibited by the policy` };
+}
+
+/** The SPDX identifier a source file declares in its first 10 lines, or null. */
+export function declaredLicense(text) {
+  for (const line of text.split(/\r?\n/).slice(0, 10)) {
+    const m = /SPDX-License-Identifier:\s*([^*\s][^*]*?)\s*(\*\/)?\s*$/.exec(line);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+/**
+ * What a tracked source file must declare: the license of the copied-code or data entry that covers
+ * it, or the project's license.
+ */
+export function expectedLicense(file, entries = ASSETS.entries) {
+  const e = entries.find((x) => x.kind !== "project" && (x.path.endsWith("/") ? file.startsWith(x.path) : file === x.path));
+  return e ? e.license : PROJECT_LICENSE;
+}
+
+/** Every source file declares its license; LICENSE is the official text; the manifests name it. */
+function projectLicenseProblems() {
+  const problems = [];
+  const files = execFileSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8" }).split("\n").filter((f) => SOURCE_FILE.test(f));
+  for (const f of files) {
+    if (!existsSync(join(ROOT, f))) continue;
+    const got = declaredLicense(readFileSync(join(ROOT, f), "utf8"));
+    const want = expectedLicense(f);
+    if (got !== want) problems.push(`${f}: ${got ? `declares ${got}` : "declares no SPDX-License-Identifier"}; it must declare ${want}`);
+  }
+  const license = existsSync(join(ROOT, "LICENSE")) ? createHash("sha256").update(readFileSync(join(ROOT, "LICENSE"))).digest("hex") : "";
+  if (license !== APACHE_LICENSE_SHA256) problems.push("LICENSE is not the official Apache License 2.0 text (https://www.apache.org/licenses/LICENSE-2.0.txt)");
+  if (!existsSync(join(ROOT, "NOTICE"))) problems.push("NOTICE is missing");
+  if (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).license !== PROJECT_LICENSE) problems.push(`package.json: "license" must be "${PROJECT_LICENSE}"`);
+  for (const manifest of ["src-tauri/Cargo.toml", "src-tauri/fuzz/Cargo.toml"]) {
+    if (!new RegExp(`^license = "${PROJECT_LICENSE}"$`, "m").test(readFileSync(join(ROOT, manifest), "utf8"))) problems.push(`${manifest}: license must be "${PROJECT_LICENSE}"`);
+  }
+  return { problems, files: files.length };
 }
 
 /** Problems with an exception: it needs the license it covers, a reason, and review dates not in the past. */
@@ -233,7 +278,7 @@ function assetProblems() {
   for (const e of ASSETS.entries) {
     if (!existsSync(join(ROOT, e.path))) problems.push(`scripts/license-assets.json: ${e.path} does not exist`);
     if (e.kind === "project") {
-      if (e.license !== "LicenseRef-ExploitX") problems.push(`${e.path}: project files are under the project's license (LicenseRef-ExploitX)`);
+      if (e.license !== PROJECT_LICENSE) problems.push(`${e.path}: project files are under the project's license (${PROJECT_LICENSE})`);
       continue;
     }
     if (!e.source || !e.copyright) problems.push(`${e.path}: name its source and copyright`);
@@ -267,17 +312,19 @@ function check() {
   }
   for (const e of POLICY.exceptions) problems.push(...exceptionProblems(e));
   problems.push(...assetProblems());
+  const own = projectLicenseProblems();
+  problems.push(...own.problems);
   // the bundled notices must describe what ships now
   const expected = buildNotices();
   const actual = existsSync(NOTICES_FILE) ? readFileSync(NOTICES_FILE, "utf8") : "";
   if (actual !== expected) problems.push(`${NOTICES_FILE.slice(ROOT.length + 1).replace(/\\/g, "/")} is out of date: run \`node scripts/licenses.mjs notices\` and commit it`);
-  console.log(`checked ${crates} Rust crates, ${npm} npm packages and ${ASSETS.entries.length} asset entries against scripts/license-policy.json (${POLICY.exceptions.length} reviewed exceptions, ${counts.exception} in use)`);
+  console.log(`checked ${crates} Rust crates, ${npm} npm packages, ${ASSETS.entries.length} asset entries and the license lines of ${own.files} source files against scripts/license-policy.json (${POLICY.exceptions.length} reviewed exceptions, ${counts.exception} in use)`);
   if (problems.length) {
     for (const p of problems) console.log(`::error::${p}`);
     console.log("A new license needs a review: see docs/governance/DEPENDENCY_LICENSE_POLICY.md.");
     process.exit(1);
   }
-  console.log("every dependency and asset has an accepted license, and the bundled notices are up to date");
+  console.log("every dependency and asset has an accepted license, every source file declares its license, LICENSE is the official Apache-2.0 text, and the bundled notices are up to date");
 }
 
 /* ───────────── notices ───────────── */
@@ -344,8 +391,8 @@ export function buildNotices() {
     "=".repeat(60),
     "",
     "ExploitX includes the third-party software and data listed below. Each part is used under its own license;",
-    "the license texts are reproduced in full in section 5, as published by each package. ExploitX's own license is",
-    "pending selection by its owner (see the project README).",
+    "the license texts are reproduced in full in section 5, as published by each package. ExploitX itself is",
+    "licensed under the Apache License, Version 2.0: see LICENSE and NOTICE, installed next to this file.",
     "",
     "Source code: every Rust crate in section 1 is published at the version listed on crates.io",
     "(https://crates.io/crates/<name>/<version>) and is compiled unmodified; this includes the files under the",

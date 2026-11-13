@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! OSINT data model: entity types, the relationship registry, verification and confidence.
 //!
 //! Intelligence (entities, relationships, evidence) belongs to an investigation. Saved graphs are

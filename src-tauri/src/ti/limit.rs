@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Client-side sliding-window rate limiter (per provider).
 
 use std::collections::VecDeque;

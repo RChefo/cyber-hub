@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Pending approvals for sensitive MCP requests.
 //!
 //! An approval is created by the bridge when an MCP client asks for a sensitive operation. It

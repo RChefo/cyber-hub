@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Evidence registry: one list of a project's evidence that *references* what already exists
 //! (tool runs, OSINT evidence) and stores new files exactly once.
 //!

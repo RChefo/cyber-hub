@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Every path that can change a finding's or a vulnerability's status meets the risk acceptance
 //! rule; acceptances are validated, expire without changing anything by themselves, renew,
 //! revoke and keep their history.

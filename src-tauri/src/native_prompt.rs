@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! A credential typed into a native operating-system dialog (Mission 6), so that it never passes
 //! through the web view: on Windows the system's credential dialog (CredUI), on Linux a GTK dialog
 //! in the app's own UI process. The web view can only ask for the dialog; the value goes from the

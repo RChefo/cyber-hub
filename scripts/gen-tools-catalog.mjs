@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Generates src-tauri/catalog/tools.json
 import { writeFileSync } from "node:fs";
 

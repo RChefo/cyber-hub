@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Tooltip } from "@heroui/react";
 import { ArrowLeftRight, FileUp, Send, ShieldCheck, ShieldUser } from "lucide-react";
 import { useRef, useState } from "react";

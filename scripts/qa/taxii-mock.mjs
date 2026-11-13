@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // A local TAXII 2.1 server for the manual credential test (docs/release/TAXII_CREDENTIAL_TEST.md).
 //
 //   node scripts/qa/taxii-mock.mjs [--port 18556] [--log taxii-mock.log]

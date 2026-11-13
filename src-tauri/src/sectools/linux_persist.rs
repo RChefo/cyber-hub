@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Persistence triage of a Linux file system: a mounted or copied disk image, or the files a triage
 //! collection gathered (UAC's `[root]` folder, CatScale). Files are only read: symbolic links are
 //! never followed (in an image they point into the analyst's own system) and nothing is run.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Local bridge protocol between the `cyberhub-mcp` stdio server and the running ExploitX app.
 //!
 //! * Transport: TCP on the IPv4 loopback interface only (`127.0.0.1`, random port), opened only

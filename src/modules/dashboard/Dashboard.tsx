@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button } from "@heroui/react";
 import { ArrowDown, ArrowUp, LayoutGrid, RotateCcw } from "lucide-react";
 import { useState, type ComponentType } from "react";

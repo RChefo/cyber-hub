@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Description, FieldError, Input, Label, ListBox, SearchField, Select, Switch, TextArea, TextField } from "@heroui/react";
 import type { Key, ReactNode } from "react";
 import { cn } from "@/lib/utils";

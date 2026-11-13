@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use super::*;
 use crate::detection::events::{Event, Kind as SampleKind, Sample};
 use crate::detection::sigma;

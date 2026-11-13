@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Investigation layer commands (`workspace/relations.rs`, `workspace/correlate.rs`): correlation,
 //! the review of its suggestions, links made by hand, related records, the investigation graph and
 //! the filtered timeline. Nothing here contacts a network.

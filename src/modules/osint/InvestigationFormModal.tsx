@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button } from "@heroui/react";
 import { useEffect, useMemo, useState } from "react";
 import { AppModal } from "@/components/ui/Dialogs";

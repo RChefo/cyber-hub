@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Chip, Tooltip } from "@heroui/react";
 import type { OsId } from "@/types/catalog";
 import type { DetectionStatus, ExecutionStatus, FindingStatus, ProjectStatus, Severity } from "@/lib/types";

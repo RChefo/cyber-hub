@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Cloud infrastructure as code (docs/UTILITIES.md, "Cloud and infrastructure-as-code checks"):
 //! Terraform (HCL, JSON configuration and `terraform show -json` plans), AWS CloudFormation (JSON,
 //! YAML) and IAM policy documents (single policies, AWS CLI output and the output of

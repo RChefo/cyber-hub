@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! User libraries: custom resources and visits, saved commands and history,
 //! saved dorks and history, custom payloads.
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Project asset inventory: one record per real asset (normalized key), with every observation kept
 //! for change detection. Assets link to OSINT entities instead of duplicating them.
 

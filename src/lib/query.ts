@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Minimal data-fetching layer: `useQuery` re-runs when any of its tags is
  * invalidated via `invalidate(tag)`. Avoids pulling in a query library for a

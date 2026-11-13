@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Checkbox, Label } from "@heroui/react";
 import { FileSearch, Network, ScrollText, ShieldCheck } from "lucide-react";
 import { useState } from "react";

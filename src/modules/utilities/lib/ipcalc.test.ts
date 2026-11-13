@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import { calculate, compressIpv6, expandIpv6, parseIpv4, parseIpv6 } from "./ipcalc";
 

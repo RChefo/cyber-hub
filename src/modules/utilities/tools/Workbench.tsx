@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Dropdown, Switch, Tooltip } from "@heroui/react";
 import { ArrowDown, ArrowDownUp, ArrowUp, Plus, RotateCcw, Trash2, Workflow } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

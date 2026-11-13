@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! ASVS compliance views over an assessment (Mission 5): the gaps chapter by chapter with their
 //! exceptions and the remediation state of the linked findings, compliant requirements that no
 //! evidence supports, and the comparison of two assessments of a project.

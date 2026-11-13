@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Shared data foundation for the project workspace (docs/DATA_MODEL.md): assets, findings
 //! lifecycle, evidence, scope decisions and the project timeline. Commands live in
 //! `commands::workspace`; the logic here takes a `&Connection` so it can be tested and reused.

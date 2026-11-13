@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! CSV findings with a column mapping (docs/DATA_MODEL.md#csv-findings).
 //!
 //! Any CSV file with a header row: a spreadsheet of findings, or a CSV export of Nessus, Qualys or

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { TaxiiServer, TaxiiServerInput } from "@/lib/types";
 
 /** The scheme, host and port a credential is sent to; null for an address that does not parse. */

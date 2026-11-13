@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Wrench } from "lucide-react";
 import { useApp } from "@/app/store";
 import { SeverityBadge, ToneChip } from "@/components/ui/Badges";

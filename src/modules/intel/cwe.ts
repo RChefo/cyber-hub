@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** Names for frequently referenced CWE entries (MITRE CWE list). Others link out without a name. */
 export const CWE_NAMES: Record<string, string> = {
   "CWE-20": "Improper Input Validation",

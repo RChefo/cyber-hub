@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Static file triage (docs/UTILITIES.md, "File triage"): what a PE or ELF file is and what it
 //! can do, read without running it. Hashes (with the PE import hash), sections with entropy,
 //! imports, hardening flags, packer traces, capabilities inferred from imported functions (with

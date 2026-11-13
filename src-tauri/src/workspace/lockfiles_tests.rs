@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use super::*;
 use crate::workspace::sbom::{audit, parse_file, Issue};
 

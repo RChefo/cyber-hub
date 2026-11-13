@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Results of the assessment utilities recorded in a project with their evidence
 //! (docs/DATA_MODEL.md#utility-results): the analysed file goes into the evidence vault, the
 //! analysis is kept as text evidence derived from it, the findings are linked to the file, and the

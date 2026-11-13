@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Import of scanner output into a project (docs/DATA_MODEL.md#scan-import).
 //!
 //! Supported files: Nmap XML, Nuclei JSON lines (or its JSON array export), Nessus v2 (`.nessus`),

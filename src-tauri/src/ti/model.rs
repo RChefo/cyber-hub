@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Normalized provider results.
 //!
 //! Every provider keeps its own verdict wording (`Verdict::label`) and its own scores.

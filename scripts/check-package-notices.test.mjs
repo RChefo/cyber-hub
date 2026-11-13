@@ -1,5 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
-import { LINUX_PATHS, MIN_SIZE, noticesProblems, parse7zSlt, parseDpkgList, parseMsiFiles, parseRpmDump } from "./check-package-notices.mjs";
+import { LINUX_DIRS, LINUX_PATHS, MIN_SIZE, REQUIRED, noticesProblems, packageProblems, parse7zSlt, parseDpkgList, parseMsiFiles, parseRpmDump } from "./check-package-notices.mjs";
 
 // Mission 14: the release checks that every package carries THIRD_PARTY_LICENSES.txt. The listings
 // below are real output of the tools on the debug packages built from this tree (2026-11-13).
@@ -79,5 +80,28 @@ describe("notices in a package", () => {
     const onlyResource = parseDpkgList(DEB).filter((e) => !e.path.startsWith("/usr/share/doc/"));
     expect(noticesProblems("x.deb", onlyResource, LINUX_PATHS.deb)).toHaveLength(1);
     expect(noticesProblems("x.msi", [{ path: "THIRD_PARTY_LICENSES.txt", size: MIN_SIZE - 1 }])[0]).toMatch(/not the full notices/);
+  });
+});
+
+// Mission 15: every package also carries ExploitX's own LICENSE (Apache-2.0) and NOTICE.
+describe("license files in a package", () => {
+  const withLicense = (entries, dir = "") => [...entries, { path: `${dir}LICENSE`, size: 11358 }, { path: `${dir}NOTICE`, size: 1066 }];
+
+  it("requires LICENSE, NOTICE and the notices, in the deb's and rpm's license folders", () => {
+    expect(packageProblems("x.deb", withLicense(parseDpkgList(DEB), LINUX_DIRS.deb), LINUX_DIRS.deb)).toEqual([]);
+    expect(packageProblems("x.rpm", withLicense(parseRpmDump(RPM), LINUX_DIRS.rpm), LINUX_DIRS.rpm)).toEqual([]);
+    expect(packageProblems("setup.exe", withLicense(parse7zSlt(NSIS)))).toEqual([]);
+    expect(packageProblems("x.msi", withLicense(parseMsiFiles(MSI)))).toEqual([]);
+  });
+
+  it("names each missing or truncated file", () => {
+    expect(packageProblems("x.msi", parseMsiFiles(MSI))).toEqual(["x.msi does not contain LICENSE", "x.msi does not contain NOTICE"]);
+    expect(packageProblems("x.deb", withLicense(parseDpkgList(DEB), "/usr/lib/Cyber Hub/"), LINUX_DIRS.deb)).toEqual([
+      "x.deb does not contain /usr/share/doc/cyber-hub/LICENSE",
+      "x.deb does not contain /usr/share/doc/cyber-hub/NOTICE",
+    ]);
+    const short = [...parseMsiFiles(MSI), { path: "LICENSE", size: 1000 }, { path: "NOTICE", size: 1066 }];
+    expect(packageProblems("x.msi", short)).toEqual(["x.msi: LICENSE is 1000 bytes, too small to be the full text"]);
+    expect(REQUIRED.map((r) => r.name)).toEqual(["THIRD_PARTY_LICENSES.txt", "LICENSE", "NOTICE"]);
   });
 });

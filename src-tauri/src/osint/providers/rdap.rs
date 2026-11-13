@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! RDAP (RFC 9082/9083) through the IANA bootstrap registries (RFC 9224). The authoritative
 //! registry server is chosen from the bootstrap file and queried directly; redirects are not
 //! followed and only HTTPS servers with public host names are used.

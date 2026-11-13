@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! ExploitX — Tauri backend.
 //!
 //! Layers: frontend → Tauri commands (`commands/*`) → domain modules

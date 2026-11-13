@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! YARA rules on boreal 1.4, a YARA 4.5 evaluator written in Rust (no C library, no JIT
 //! compiler). A rule file is compiled from its text only: `include` is refused, so a rule never
 //! reads another file, and the console, magic and cuckoo modules are absent. Scans run on bytes

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button } from "@heroui/react";
 import { ArchiveRestore, DatabaseBackup, FolderOpen, ShieldCheck, Trash2 } from "lucide-react";
 import { useApp } from "@/app/store";
@@ -264,6 +265,14 @@ export default function SettingsPage() {
               <dd>{catalog ? `v${catalog.version} · ${catalog.tools.length} tools` : "—"}</dd>
               <dt className="text-muted">Memory in use</dt>
               <dd>{system ? `${formatBytes(system.usedMemory)} of ${formatBytes(system.totalMemory)}` : "—"}</dd>
+              <dt className="text-muted">License</dt>
+              <dd className="min-w-0">
+                <span className="block">Apache License 2.0</span>
+                <span className="block text-[12.5px] text-muted">ExploitX is open source. LICENSE and NOTICE are installed with the app.</span>
+                <Button variant="ghost" size="sm" className="mt-1 -ml-2 h-7 px-2 text-[12.5px]" onPress={() => openExternal("https://github.com/RChefo/ExploitX/blob/HEAD/LICENSE")}>
+                  View the license online
+                </Button>
+              </dd>
               <dt className="text-muted">Third-party licenses</dt>
               <dd className="min-w-0">
                 <span className="block text-muted">The licenses of the software and data ExploitX includes.</span>

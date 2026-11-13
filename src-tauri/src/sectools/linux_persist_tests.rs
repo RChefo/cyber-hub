@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Tests of the Linux persistence triage. The SSH fingerprint was checked with `ssh-keygen -l`.
 
 use super::*;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! The MCP page: bridge status and start/stop, the server catalogue, clients, permission
 //! policy, pending approvals (decided only here, by the user), audit log and client
 //! configuration snippets.

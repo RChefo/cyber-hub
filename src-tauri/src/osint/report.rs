@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Markdown investigation reports and deterministic next-step suggestions.
 //!
 //! Both are computed only from stored data: no external service and no model is involved. Every

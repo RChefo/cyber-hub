@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { isOpenFinding } from "@/lib/findings";
 import type { Finding, Severity } from "@/lib/types";
 

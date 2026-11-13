@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Graph export (native JSON, GraphML, CSV) and import (native JSON, GraphML) with validation.
 //!
 //! Imports never overwrite anything: they create a new graph (and, if requested, a new

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Bridge client used by the `cyberhub-mcp` process. Connects lazily, verifies that the peer
 //! is the real ExploitX app (mutual HMAC), multiplexes concurrent requests and reconnects
 //! after the app restarts.

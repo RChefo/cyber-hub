@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Declarative command builders. Each builder turns form values into a structured
  * argv (never a shell string) plus the explicit targets that the backend checks

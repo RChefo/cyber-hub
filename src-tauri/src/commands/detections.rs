@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Detection engineering commands (`workspace/detections.rs`, `detection/`): the rule library,
 //! import and export through native dialogs, test samples kept by content hash in the app's data
 //! folder, tests and regression re-tests, and runs over a project's evidence. Nothing here

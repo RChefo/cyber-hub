@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { AsvsItem, AsvsStatus, AsvsSummary } from "@/lib/types";
 
 /** Status labels and tones; "compliant" is only ever the analyst's call. */
