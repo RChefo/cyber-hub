@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest a new capability or an improvement to an existing one.
+title: "feat: "
+labels: [enhancement, needs triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cyber Hub is a local-first security workstation for Windows and Linux. Requests that fit its scope have the best chance; see the README's module list.
+
+        **Security vulnerabilities must not be reported here** (see SECURITY.md).
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what makes it hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The change you propose
+      description: How should Cyber Hub behave? Mention the module (Projects, OSINT, Threat Intel, Tools Library, MCP, …).
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and scope
+      description: Would the feature start programs, reach the network, upload data or touch credentials? Cyber Hub asks for a native confirmation before running anything and keeps active work inside a project's authorized scope.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched the existing issues, including closed ones.
+          required: true

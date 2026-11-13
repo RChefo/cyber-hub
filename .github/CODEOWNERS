@@ -1,0 +1,8 @@
+# The maintainer reviews every change (Mission 12). The release and CI configuration, the
+# security-sensitive code and the license policy are listed so that changes to them stand out.
+*                                   @RChefo
+/.github/                           @RChefo
+/scripts/license-policy.json        @RChefo
+/src-tauri/tauri.conf.json          @RChefo
+/src-tauri/capabilities/            @RChefo
+/src-tauri/windows/                 @RChefo

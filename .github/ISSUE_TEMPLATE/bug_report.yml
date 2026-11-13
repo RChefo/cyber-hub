@@ -1,0 +1,105 @@
+name: Bug report
+description: Something in Cyber Hub does not work as documented.
+title: "bug: "
+labels: [bug, needs triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug.
+
+        **Security vulnerabilities must not be reported here.** Use the private form instead (see SECURITY.md).
+
+        Before you attach anything, remove credentials, API keys, tokens, personal data and data about the systems you assessed. Cyber Hub's projects, findings and logs can contain them.
+  - type: input
+    id: version
+    attributes:
+      label: Cyber Hub version
+      description: Settings shows the version. For a build from source, give the commit (`git rev-parse --short HEAD`).
+      placeholder: 0.1.0 (commit abc1234)
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11 x64
+        - Windows 10 x64
+        - Ubuntu (give the version below)
+        - Debian (give the version below)
+        - Fedora (give the version below)
+        - Other Linux x64 (give the distribution below)
+    validations:
+      required: true
+  - type: input
+    id: os-details
+    attributes:
+      label: Operating system details
+      description: Version and build, desktop environment and session on Linux (for example GNOME 46 on Wayland), and the display scale if the problem is visual.
+      placeholder: Ubuntu 24.04.5, GNOME 46, Wayland, 150 %
+  - type: dropdown
+    id: format
+    attributes:
+      label: Installation format
+      options:
+        - NSIS installer (.exe)
+        - MSI
+        - deb
+        - rpm
+        - AppImage
+        - Built from source (npm run tauri dev)
+        - Built from source (local package)
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps that shows the problem, starting from a fresh start of the app.
+      placeholder: |
+        1. Open Projects and create a project with the scope example.com
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead, with the exact error message if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots (secrets removed)
+      description: Error messages, the relevant part of a log, screenshots. Remove credentials, tokens, personal data and target data first.
+      render: text
+  - type: dropdown
+    id: clean
+    attributes:
+      label: Does it happen with a fresh data folder?
+      description: For example a build from source with `CYBERHUB_DATA_DIR` pointing at an empty folder (see CONTRIBUTING.md), or a new user account.
+      options:
+        - "Yes"
+        - "No, only with my existing data"
+        - Not tried
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched the existing issues, including closed ones.
+          required: true
+        - label: This is not a security vulnerability (those go through SECURITY.md).
+          required: true
+        - label: I removed credentials, personal data and target data from what I attached.
+          required: true
