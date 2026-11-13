@@ -14,6 +14,10 @@ updates:
       prefix: build
       include: scope
     groups:
+      # the RustCrypto hashes share the `digest` traits: a new digest line only compiles when they
+      # move together (Mission 14: sha1, sha2 and hmac alone failed against digest 0.11)
+      rustcrypto:
+        patterns: [digest, sha1, sha2, md-5, hmac]
       rust-minor-and-patch:
         update-types: [minor, patch]
 
